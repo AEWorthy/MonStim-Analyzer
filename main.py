@@ -9,7 +9,7 @@ OUTPUT_PATH = 'output'
 
 
 ## Process CSV files in "\files_to_analyze" into pickle files formatted for downstream analysis.
-#csv_to_pickle.pickle_dataset(DATA_PATH, OUTPUT_PATH)
+csv_to_pickle.pickle_dataset(DATA_PATH, OUTPUT_PATH)
 
 
 ## Analysis for a single session.
