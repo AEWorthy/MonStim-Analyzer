@@ -19,6 +19,8 @@ pickled_test_data = 'output/240404-4_data.pickle' #'output/040224rec1_data.pickl
 
 single_session_analysis.session_parameters(pickled_test_data)
 single_session_analysis.plot_EMG(pickled_test_data)
+# add channel name list
+
 single_session_analysis.plot_emg_rectified(pickled_test_data)
 single_session_analysis.plot_EMG_suspectedH(pickled_test_data, h_threshold=0.05)
 
