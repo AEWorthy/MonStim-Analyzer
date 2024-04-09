@@ -47,12 +47,13 @@ def session_parameters (pickled_data):
     print(f"Stimulus interval (s): {stim_interval}")
     print(f"EMG amp gains: {emg_amp_gains}")
 
-def plot_EMG (pickled_data, time_window_ms=10):
+def plot_EMG (pickled_data, time_window_ms=10, channel_names=[]):
     """Plots EMG data from a Pickle file for a specified time window.
 
     Args:
         pickled_data (str): Path to the Pickle file containing session data.
         time_window_ms (float, optional): Time window to plot in milliseconds. Defaults to first 10ms.
+        channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
 
     """
 
@@ -65,6 +66,15 @@ def plot_EMG (pickled_data, time_window_ms=10):
     scan_rate = session_info['scan_rate']
     num_samples = session_info['num_samples']
     num_channels = session_info['num_channels']
+
+    # Handle custom channel names parameter if specified.
+    customNames = False
+    if len(channel_names) == 0:
+        pass
+    elif len(channel_names) != num_channels:
+        print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {num_channels} channels were recorded.")
+    elif len(channel_names) == num_channels:
+        customNames = True
 
     # Access recordings and sort by stimulus_value
     recordings = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
@@ -83,21 +93,35 @@ def plot_EMG (pickled_data, time_window_ms=10):
         fig, ax = plt.subplots(figsize=(8, 4))
         axes = [ax]
     else:
-        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(16, 4), sharey=True)
+        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(12, 4), sharey=True)
 
     # Plot the EMG arrays for each channel, only for the first 10ms
-    for recording in recordings:
-        for channel_index, channel_data in enumerate(recording['channel_data']):
-            if num_channels == 1:
-                ax.plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                ax.set_title('Channel 0')
-                ax.grid(True)
-                #ax.legend()
-            else:
-                axes[channel_index].plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                axes[channel_index].set_title(f'Channel {channel_index}')
-                axes[channel_index].grid(True)
-                #axes[channel_index].legend()
+    if customNames:
+        for recording in recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                if num_channels == 1:
+                    ax.plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    ax.set_title(f'{channel_names[0]}')
+                    ax.grid(True)
+                    #ax.legend()
+                else:
+                    axes[channel_index].plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                    axes[channel_index].grid(True)
+                    #axes[channel_index].legend()
+    else:
+        for recording in recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                if num_channels == 1:
+                    ax.plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    ax.set_title('Channel 0')
+                    ax.grid(True)
+                    #ax.legend()
+                else:
+                    axes[channel_index].plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    axes[channel_index].set_title(f'Channel {channel_index}')
+                    axes[channel_index].grid(True)
+                    #axes[channel_index].legend()
 
     # Set labels and title
     if num_channels == 1:
@@ -110,12 +134,21 @@ def plot_EMG (pickled_data, time_window_ms=10):
         fig.supylabel('EMG (mV)')
 
         # Adjust subplot spacing
-        plt.subplots_adjust(wspace=0.2)
+        plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
 
     # Show the plot
     plt.show()
 
-def plot_emg_rectified (pickled_data, time_window_ms=10):
+def plot_emg_rectified (pickled_data, time_window_ms=10, channel_names=[]):
+    """Plots rectified EMG data from a Pickle file for a specified time window.
+
+    Args:
+        pickled_data (str): Path to the Pickle file containing session data.
+        time_window_ms (float, optional): Time window to plot in milliseconds. Defaults to first 10ms.
+        channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+
+    """
+
     # Load the session data from the pickle file
     with open(pickled_data, 'rb') as pickle_file:
         session_data = pickle.load(pickle_file)
@@ -125,6 +158,15 @@ def plot_emg_rectified (pickled_data, time_window_ms=10):
     scan_rate = session_info['scan_rate']
     num_samples = session_info['num_samples']
     num_channels = session_info['num_channels']
+
+    # Handle custom channel names parameter if specified.
+    customNames = False
+    if len(channel_names) == 0:
+        pass
+    elif len(channel_names) != num_channels:
+        print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {num_channels} channels were recorded.")
+    elif len(channel_names) == num_channels:
+        customNames = True
 
     # Access recordings and sort by stimulus_value
     recordings = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
@@ -144,22 +186,37 @@ def plot_emg_rectified (pickled_data, time_window_ms=10):
         fig, ax = plt.subplots(figsize=(8, 4))
         axes = [ax]
     else:
-        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(16, 4), sharey=True)
+        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(12, 4), sharey=True)
 
     # Plot the rectified EMG arrays for each channel, only for the first 10ms
-    for recording in recordings:
-        for channel_index, channel_data in enumerate(recording['channel_data']):
-            rectified_channel_data = emg_transform.rectify_emg(channel_data)
-            if num_channels == 1:
-                ax.plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                ax.set_title('Channel 0 (Rectified)')
-                ax.grid(True)
-                #ax.legend()
-            else:
-                axes[channel_index].plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                axes[channel_index].set_title(f'Channel {channel_index} (Rectified)')
-                axes[channel_index].grid(True)
-                #axes[channel_index].legend()
+    if customNames:
+        for recording in recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                rectified_channel_data = emg_transform.rectify_emg(channel_data)
+                if num_channels == 1:
+                    ax.plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    ax.set_title(f'{channel_names[0]} (Rectified)')
+                    ax.grid(True)
+                    #ax.legend()
+                else:
+                    axes[channel_index].plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    axes[channel_index].set_title(f'{channel_names[channel_index]} (Rectified)')
+                    axes[channel_index].grid(True)
+                    #axes[channel_index].legend()
+    else:
+        for recording in recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                rectified_channel_data = emg_transform.rectify_emg(channel_data)
+                if num_channels == 1:
+                    ax.plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    ax.set_title('Channel 0 (Rectified)')
+                    ax.grid(True)
+                    #ax.legend()
+                else:
+                    axes[channel_index].plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    axes[channel_index].set_title(f'Channel {channel_index} (Rectified)')
+                    axes[channel_index].grid(True)
+                    #axes[channel_index].legend()
 
     # Set labels and title
     if num_channels == 1:
@@ -172,17 +229,17 @@ def plot_emg_rectified (pickled_data, time_window_ms=10):
         fig.supylabel('Rectified EMG (mV)')
 
         # Adjust subplot spacing
-        plt.subplots_adjust(wspace=0.2)
-
+        plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
     # Show the plot
     plt.show()
 
-def plot_EMG_suspectedH (pickled_data, time_window_ms=10, h_start=5.5, h_end=10, h_threshold=0.3, plot_legend=False):
+def plot_EMG_suspectedH (pickled_data, time_window_ms=10, channel_names=[], h_start=5.5, h_end=10, h_threshold=0.3, plot_legend=False):
     """Detects session recordings with potential H-reflexes and plots them.
 
     Args:
         pickled_data (str): Path to the Pickle file containing session data.
         time_window_ms (float, optional): Time window to plot in milliseconds. Defaults to first 10ms.
+        channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
         h_start (float, optional): Start time of the suspected H-reflex in milliseconds. Defaults to 5.5ms.
         h_end (float, optional): End time of the suspected H-reflex in milliseconds. Defaults to 10ms.
         h_threshold (float, optional): Detection threshold of the average rectified EMG response in millivolts in the H-relfex window. Defaults to 0.3mV.
@@ -204,6 +261,15 @@ def plot_EMG_suspectedH (pickled_data, time_window_ms=10, h_start=5.5, h_end=10,
     num_samples = session_info['num_samples']
     num_channels = session_info['num_channels']
 
+    # Handle custom channel names parameter if specified.
+    customNames = False
+    if len(channel_names) == 0:
+        pass
+    elif len(channel_names) != num_channels:
+        print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {num_channels} channels were recorded.")
+    elif len(channel_names) == num_channels:
+        customNames = True
+
     # Access recordings and sort by stimulus_value
     recordings = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
 
@@ -222,27 +288,43 @@ def plot_EMG_suspectedH (pickled_data, time_window_ms=10, h_start=5.5, h_end=10,
         fig, ax = plt.subplots(figsize=(8, 4))
         axes = [ax]
     else:
-        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(10, 4), sharey=True)
+        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(12, 4), sharey=True)
 
     # Plot the EMG arrays for each channel, only for the first 10ms
-    for recording in recordings:
-        for channel_index, channel_data in enumerate(recording['channel_data']):
-            if num_channels == 1:
-                h_window = recording['channel_data'][channel_index][int(h_start * scan_rate / 1000):int(h_end * scan_rate / 1000)]
-                if max(h_window) - min(h_window) > 0.3:  # Check amplitude variation within 5-10ms window
-                    ax.plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                    ax.set_title('Channel 0')
-                    ax.grid(True)
-                    if plot_legend:
-                        ax.legend()
-            else:
+    if customNames:
+        for recording in recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
                 h_window = recording['channel_data'][channel_index][int(h_start * scan_rate / 1000):int(h_end * scan_rate / 1000)]
                 if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
-                    axes[channel_index].plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                    axes[channel_index].set_title(f'Channel {channel_index}')
-                    axes[channel_index].grid(True)
-                    if plot_legend:
-                        axes[channel_index].legend()
+                    if num_channels == 1:
+                        ax.plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title(f'{channel_names[0]}')
+                        ax.grid(True)
+                        if plot_legend:
+                            ax.legend()
+                    else:
+                        axes[channel_index].plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                        axes[channel_index].grid(True)
+                        if plot_legend:
+                            axes[channel_index].legend()
+    else:
+        for recording in recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                h_window = recording['channel_data'][channel_index][int(h_start * scan_rate / 1000):int(h_end * scan_rate / 1000)]
+                if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
+                    if num_channels == 1:
+                        ax.plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title('Channel 0')
+                        ax.grid(True)
+                        if plot_legend:
+                            ax.legend()
+                    else:
+                        axes[channel_index].plot(time_window_ms, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'Channel {channel_index}')
+                        axes[channel_index].grid(True)
+                        if plot_legend:
+                            axes[channel_index].legend()
 
     # Set labels and title
     if num_channels == 1:
@@ -255,13 +337,22 @@ def plot_EMG_suspectedH (pickled_data, time_window_ms=10, h_start=5.5, h_end=10,
         fig.supylabel('EMG (mV)')
 
         # Adjust subplot spacing
-        plt.subplots_adjust(wspace=0.1)
+        plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
 
     # Show the plot
     plt.show()
 
-def plot_reflex_curves (pickled_data, m_start_ms=2, m_end_ms=4, h_start_ms=4, h_end_ms=7):
-    
+def plot_reflex_curves (pickled_data, channel_names=[], m_start_ms=2.0, m_end_ms=4.0, h_start_ms=4.0, h_end_ms=7.0):
+    """Plots overlayed M-response and H-reflex curves for each recorded channel.
+
+    Args:
+        pickled_data (str): Path to the Pickle file containing session data.
+        channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+        m_start_ms (float, optional): Start time of the M-response window in milliseconds. Defaults to 2.0 ms.
+        m_end_ms (float, optional): End time of the M-response window in milliseconds. Defaults to 4.0 ms.
+        h_start_ms (float, optional): Start time of the suspected H-reflex window in milliseconds. Defaults to 4.0 ms.
+        h_end_ms (float, optional): End time of the suspected H-reflex window in milliseconds. Defaults to 7.0 ms.
+    """
     # Load the session data from the pickle file
     with open(pickled_data, 'rb') as pickle_file:
         session_data = pickle.load(pickle_file)
@@ -271,6 +362,15 @@ def plot_reflex_curves (pickled_data, m_start_ms=2, m_end_ms=4, h_start_ms=4, h_
     scan_rate = session_info['scan_rate']
     num_channels = session_info['num_channels']
 
+    # Handle custom channel names parameter if specified.
+    customNames = False
+    if len(channel_names) == 0:
+        pass
+    elif len(channel_names) != num_channels:
+        print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {num_channels} channels were recorded.")
+    elif len(channel_names) == num_channels:
+        customNames = True
+
     # Access recordings and sort by stimulus_value
     recordings = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
 
@@ -279,7 +379,7 @@ def plot_reflex_curves (pickled_data, m_start_ms=2, m_end_ms=4, h_start_ms=4, h_
         fig, ax = plt.subplots(figsize=(8, 4))
         axes = [ax]
     else:
-        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(15, 4), sharey=True)
+        fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=(12, 4), sharey=True)
 
     # Plot the M-wave and H-response amplitudes for each channel
     for channel_index in range(num_channels):
@@ -302,21 +402,35 @@ def plot_reflex_curves (pickled_data, m_start_ms=2, m_end_ms=4, h_start_ms=4, h_
             ax.scatter(stimulus_voltages, m_wave_amplitudes, color='r', label='M-wave', marker='o')
             ax.scatter(stimulus_voltages, h_response_amplitudes, color='b', label='H-response', marker='o')
             ax.set_title('Channel 0')
-            ax.set_xlabel('Stimulus Voltage (V)')
-            ax.set_ylabel('Amplitude (mV)')
+            #ax.set_xlabel('Stimulus Voltage (V)')
+            #ax.set_ylabel('Amplitude (mV)')
             ax.grid(True)
             ax.legend()
+            if customNames:
+                ax.set_title(f'{channel_names[0]}')
         else:
             axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color='r', label='M-wave', marker='o')
             axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color='b', label='H-response', marker='o')
             axes[channel_index].set_title(f'Channel {channel_index}')
-            axes[channel_index].set_xlabel('Stimulus Voltage (V)')
+            #axes[channel_index].set_xlabel('Stimulus Voltage (V)')
+            #axes[0].set_ylabel('Amplitude (mV)')
             axes[channel_index].grid(True)
             axes[channel_index].legend()
+            if customNames:
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
+    
+    # Set labels and title
+    if num_channels == 1:
+        ax.set_xlabel('Stimulus Voltage (V)')
+        ax.set_ylabel('EMG Amplitude (mV)')
+        fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
+    else:
+        fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
+        fig.supxlabel('Stimulus Voltage (V)')
+        fig.supylabel('EMG Amplitude (mV)')
 
-    # Adjust subplot spacing (only if there are multiple channels)
-    if num_channels > 1:
-        plt.subplots_adjust(wspace=0.1)
+        # Adjust subplot spacing
+        plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
 
     # Show the plot
     plt.show()
