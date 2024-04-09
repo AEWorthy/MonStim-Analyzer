@@ -1,26 +1,31 @@
 # MonStim_CSV_Analysis - main.py
 
 import csv_to_pickle
-import single_session_analysis
-import multi_session_analysis
+import EMG_Utils
 
 DATA_PATH = 'files_to_analyze'
 OUTPUT_PATH = 'output'
+
+pickled_test_session = 'output/240404-4_data.pickle' #'output/040224rec1_data.pickle'
+pickled_test_dataset = ['output/240404-1_data.pickle','output/240404-2_data.pickle','output/240404-3_data.pickle','output/240404-4_data.pickle','output/240404-5_data.pickle']
 
 
 ## Process CSV files in "\files_to_analyze" into pickle files formatted for downstream analysis.
 #csv_to_pickle.pickle_dataset(DATA_PATH, OUTPUT_PATH)
 
 
-## Analysis for a single session.
-
-# Files for single-session analysis
-pickled_test_data = 'output/240404-4_data.pickle' #'output/040224rec1_data.pickle'
-single_session_analysis.session_parameters(pickled_test_data)
-
-single_session_analysis.plot_EMG(pickled_test_data, channel_names=["LG", "TA"])
-single_session_analysis.plot_emg_rectified(pickled_test_data, channel_names=["LG", "TA"])
-single_session_analysis.plot_EMG_suspectedH(pickled_test_data, h_threshold=0.05, channel_names=["LG", "TA"])
-single_session_analysis.plot_reflex_curves(pickled_test_data, channel_names=["LG", "TA"])
+## Analysis for a single session using class-based method
+session = EMG_Utils.EMGSession(pickled_test_session)
+session.session_parameters()
+session.plot_emg()
+session.plot_emg_rectified(channel_names=["LG"])
+session.plot_emg_suspectedH(h_threshold=0.05)
+session.plot_reflex_curves(channel_names=["LG", "TA"])
 
 ## Analysis for multiple sessions.
+sessions = []
+for session in pickled_test_dataset:
+    sessions.append(EMG_Utils.EMGSession(session))
+
+dataset = EMG_Utils.EMGDataset(sessions)
+dataset.plot_reflex_curves(channel_names=["LG", "TA"])
