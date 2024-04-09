@@ -18,8 +18,8 @@ pickled_test_dataset = ['output/240404-1_data.pickle','output/240404-2_data.pick
 session = EMG_Utils.EMGSession(pickled_test_session)
 session.session_parameters()
 session.plot_emg()
-session.plot_emg_rectified(channel_names=["LG"])
-session.plot_emg_suspectedH(h_threshold=0.05)
+session.plot_emg_rectified(channel_names=["LG", "TA"])
+session.plot_emg_suspectedH(channel_names=["LG", "TA"], h_threshold=0.03)
 session.plot_reflex_curves(channel_names=["LG", "TA"])
 
 ## Analysis for multiple sessions.

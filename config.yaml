@@ -1,0 +1,9 @@
+# Basic Parameters.
+bin_size: 0.05 # bins for stimulus voltages (in V).
+time_window: 10.0 # window of EMG time to plot (in ms).
+
+# Reflex Parameters
+m_start: 2.0 # (in ms).
+m_end: 4.0 # (in ms).
+h_start: 4.0 # (in ms).
+h_end: 7.0 # (in ms).
