@@ -40,9 +40,21 @@ class EMGSession:
         self.h_end = config['h_end']
         self.time_window_ms = config['time_window']
 
-        self.m_color = 'blue'
-        self.h_color = 'orange'
+        self.m_color = 'red'
+        self.h_color = 'blue'
         self.flag_style = ':'
+        self.tick_font_size = 12
+        self.axis_label_font_size = 16
+
+        # Set font size and weight for the figure title
+        plt.rcParams.update({'figure.titlesize': 16})
+        # Set font size for axis labels
+        plt.rcParams.update({'figure.labelsize': 16, 'figure.labelweight': 'bold'})
+        # Set font size for axis titles
+        plt.rcParams.update({'axes.titlesize': 16, 'axes.titleweight': 'bold'})
+        # Set font size for tick labels
+        plt.rcParams.update({'xtick.labelsize': 14, 'ytick.labelsize': 14})
+        
     
     def load_session_data(self, pickled_data):
         # Load the session data from the pickle file
@@ -139,11 +151,23 @@ class EMGSession:
                         ax.set_title('Channel 0')
                         ax.grid(True)
                         #ax.legend()
+                        if m_flags:
+                            ax.axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)                         
+                        if h_flags:
+                            ax.axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)  
                     else:
                         axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         axes[channel_index].set_title(f'Channel {channel_index}')
                         axes[channel_index].grid(True)
                         #axes[channel_index].legend()
+                        if m_flags:
+                            axes[channel_index].axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)
+                        if h_flags:
+                            axes[channel_index].axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)
 
         # Set labels and title
         if self.num_channels == 1:
@@ -380,8 +404,8 @@ class EMGSession:
                 stimulus_voltages.append(stimulus_v)
 
             if self.num_channels == 1:
-                ax.scatter(stimulus_voltages, m_wave_amplitudes, color='r', label='M-wave', marker='o')
-                ax.scatter(stimulus_voltages, h_response_amplitudes, color='b', label='H-response', marker='o')
+                ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.m_color, label='M-wave', marker='o')
+                ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.h_color, label='H-response', marker='o')
                 ax.set_title('Channel 0')
                 #ax.set_xlabel('Stimulus Voltage (V)')
                 #ax.set_ylabel('Amplitude (mV)')
@@ -390,8 +414,8 @@ class EMGSession:
                 if customNames:
                     ax.set_title(f'{channel_names[0]}')
             else:
-                axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color='r', label='M-wave', marker='o')
-                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color='b', label='H-response', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.m_color, label='M-wave', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.h_color, label='H-response', marker='o')
                 axes[channel_index].set_title(f'Channel {channel_index}')
                 #axes[channel_index].set_xlabel('Stimulus Voltage (V)')
                 #axes[0].set_ylabel('Amplitude (mV)')
@@ -403,12 +427,12 @@ class EMGSession:
         # Set labels and title
         if self.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
-            ax.set_ylabel('EMG Amplitude (mV)')
+            ax.set_ylabel('Avg. Rect. Reflex EMG (mV)')
             fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
         else:
             fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
             fig.supxlabel('Stimulus Voltage (V)')
-            fig.supylabel('EMG Amplitude (mV)')
+            fig.supylabel('Avg. Rect. Reflex EMG (mV)')
 
             # Adjust subplot spacing
             plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
@@ -446,6 +470,9 @@ class EMGDataset:
         self.h_start = config['h_start']
         self.h_end = config['h_end']
         self.bin_size = config['bin_size']
+
+        self.m_color = 'red'
+        self.h_color = 'blue'
 
     def plot_reflex_curves(self, channel_names=[]):
         """
@@ -494,9 +521,9 @@ class EMGDataset:
                 h_response_stds.append(h_response_std)
 
             if self.num_channels == 1:
-                ax.plot(stimulus_voltages, m_wave_means, color='r', label='M-wave')
+                ax.plot(stimulus_voltages, m_wave_means, color=self.m_color, label='M-wave')
                 ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
-                ax.plot(stimulus_voltages, h_response_means, color='b', label='H-response')
+                ax.plot(stimulus_voltages, h_response_means, color=self.h_color, label='H-response')
                 ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
                 ax.set_title('Channel 0')
                 if customNames:
@@ -504,9 +531,9 @@ class EMGDataset:
                 ax.grid(True)
                 ax.legend()
             else:
-                axes[channel_index].plot(stimulus_voltages, m_wave_means, color='r', label='M-wave')
+                axes[channel_index].plot(stimulus_voltages, m_wave_means, color=self.m_color, label='M-wave')
                 axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
-                axes[channel_index].plot(stimulus_voltages, h_response_means, color='b', label='H-response')
+                axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.h_color, label='H-response')
                 axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
                 axes[channel_index].set_title(f'Channel {channel_index}' if not channel_names else channel_names[channel_index])
                 if customNames:
@@ -517,12 +544,12 @@ class EMGDataset:
         # Set labels and title
         if self.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
-            ax.set_ylabel('EMG Amplitude (mV)')
+            ax.set_ylabel('Avg. Rect. Reflex EMG (mV)')
             fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
         else:
             fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
             fig.supxlabel('Stimulus Voltage (V)')
-            fig.supylabel('EMG Amplitude (mV)')
+            fig.supylabel('Avg. Rect. Reflex EMG (mV)')
 
             # Adjust subplot spacing
             plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)

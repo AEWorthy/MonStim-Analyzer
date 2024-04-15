@@ -18,16 +18,16 @@ cper_dataset = ['output/240404-6_data.pickle','output/240404-8_data.pickle','out
 # csv_to_pickle.pickle_dataset(DATA_PATH, OUTPUT_PATH)
 
 ## Analysis for a single session using class-based method
-session = EMG_Utils.EMGSession(ex_tibial_stim_session)
+session = EMG_Utils.EMGSession(ex_sciatic_stim_session)
 session.session_parameters()
 session.plot_emg(channel_names=["LG", "TA"])
 session.plot_emg_rectified(channel_names=["LG", "TA"], m_flags=True, h_flags=True)
 # session.plot_emg_suspectedH(channel_names=["LG", "TA"], h_threshold=0.05)
-session.plot_reflex_curves(channel_names=["LG", "TA"])
+# session.plot_reflex_curves(channel_names=["LG", "TA"])
 
 ## Analysis for multiple sessions.
 sessions = []
-for session in tibial_dataset:
+for session in sciatic_dataset:
     sessions.append(EMG_Utils.EMGSession(session))
 
 dataset = EMG_Utils.EMGDataset(sessions)
