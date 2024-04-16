@@ -1,9 +1,17 @@
 # Basic Parameters.
-bin_size: 0.2 # bins for stimulus voltages (in V). default is 0.5.
+bin_size: 0.05 # bins for stimulus voltages (in V). default is 0.05.
 time_window: 10.0 # window of EMG time to plot (in ms). default is 10.
 
+# Plot Style Parameters.
+title_font_size : 16
+axis_label_font_size : 16
+tick_font_size : 14
+m_color : 'red' # (str) color of M-response flags and plots.
+h_color : 'blue' # (str) color of H-reflex flags and plots.
+flag_style : ':' # (str) matplotlib linestyle character(s) for H/M-response flags.
+
 # Reflex Parameters
-m_start: 3.0 # (in ms). default is 2.0.
-m_end: 5.0 # (in ms). default is 4.0.
-h_start: 5.0 # (in ms). default is 4.1.
-h_end: 6.5 # (in ms). default is 7.0.
+m_start: 2.0 # (in ms). default is 2.0.
+m_end: 4.0 # (in ms). default is 4.0.
+h_start: 4.1 # (in ms). default is 4.1.
+h_end: 7.0 # (in ms). default is 7.0.

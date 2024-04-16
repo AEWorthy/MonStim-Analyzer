@@ -40,20 +40,18 @@ class EMGSession:
         self.h_end = config['h_end']
         self.time_window_ms = config['time_window']
 
-        self.m_color = 'red'
-        self.h_color = 'blue'
-        self.flag_style = ':'
-        self.tick_font_size = 12
-        self.axis_label_font_size = 16
+        self.flag_style = config['flag_style']
+        self.m_color = config['m_color']
+        self.h_color = config['h_color']
+        self.title_font_size = config['title_font_size']
+        self.axis_label_font_size = config['axis_label_font_size']
+        self.tick_font_size = config['tick_font_size']
 
-        # Set font size and weight for the figure title
-        plt.rcParams.update({'figure.titlesize': 16})
-        # Set font size for axis labels
-        plt.rcParams.update({'figure.labelsize': 16, 'figure.labelweight': 'bold'})
-        # Set font size for axis titles
-        plt.rcParams.update({'axes.titlesize': 16, 'axes.titleweight': 'bold'})
-        # Set font size for tick labels
-        plt.rcParams.update({'xtick.labelsize': 14, 'ytick.labelsize': 14})
+        #Set plot font/style defaults for returned graphs
+        plt.rcParams.update({'figure.titlesize': self.title_font_size})
+        plt.rcParams.update({'figure.labelsize': self.axis_label_font_size, 'figure.labelweight': 'bold'})
+        plt.rcParams.update({'axes.titlesize': self.axis_label_font_size, 'axes.titleweight': 'bold'})
+        plt.rcParams.update({'xtick.labelsize': self.tick_font_size, 'ytick.labelsize': self.tick_font_size})
         
     
     def load_session_data(self, pickled_data):
@@ -173,9 +171,9 @@ class EMGSession:
         if self.num_channels == 1:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('EMG (mV)')
-            fig.suptitle('EMG Overlay for Channel 0 (all recordings)', fontsize=16)
+            fig.suptitle('EMG Overlay for Channel 0 (all recordings)')
         else:
-            fig.suptitle('EMG Overlay for All Channels (all recordings)', fontsize=16)
+            fig.suptitle('EMG Overlay for All Channels (all recordings)')
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
@@ -264,9 +262,9 @@ class EMGSession:
         if self.num_channels == 1:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Rectified EMG (mV)')
-            fig.suptitle('Rectified EMG Overlay for Channel 0 (all recordings)', fontsize=16)
+            fig.suptitle('Rectified EMG Overlay for Channel 0 (all recordings)')
         else:
-            fig.suptitle('Rectified EMG Overlay for All Channels (all recordings)', fontsize=16)
+            fig.suptitle('Rectified EMG Overlay for All Channels (all recordings)')
             fig.supxlabel('Time (ms)')
             fig.supylabel('Rectified EMG (mV)')
 
@@ -350,9 +348,9 @@ class EMGSession:
         if self.num_channels == 1:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('EMG (mV)')
-            fig.suptitle(f'EMG Overlay for Channel 0 (H-reflex Amplitude Variability > {h_threshold} mV)', fontsize=16)
+            fig.suptitle(f'EMG Overlay for Channel 0 (H-reflex Amplitude Variability > {h_threshold} mV)')
         else:
-            fig.suptitle(f'EMG Overlay for All Channels (H-reflex Amplitude Variability > {h_threshold} mV)', fontsize=16)
+            fig.suptitle(f'EMG Overlay for All Channels (H-reflex Amplitude Variability > {h_threshold} mV)')
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
@@ -428,9 +426,9 @@ class EMGSession:
         if self.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel('Avg. Rect. Reflex EMG (mV)')
-            fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
+            fig.suptitle(f'M-response and H-reflex Curves')
         else:
-            fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
+            fig.suptitle(f'M-response and H-reflex Curves')
             fig.supxlabel('Stimulus Voltage (V)')
             fig.supylabel('Avg. Rect. Reflex EMG (mV)')
 
@@ -471,8 +469,17 @@ class EMGDataset:
         self.h_end = config['h_end']
         self.bin_size = config['bin_size']
 
-        self.m_color = 'red'
-        self.h_color = 'blue'
+        self.m_color = config['m_color']
+        self.h_color = config['h_color']
+        self.title_font_size = config['title_font_size']
+        self.axis_label_font_size = config['axis_label_font_size']
+        self.tick_font_size = config['tick_font_size']
+
+        #Set plot font/style defaults for returned graphs
+        plt.rcParams.update({'figure.titlesize': self.title_font_size})
+        plt.rcParams.update({'figure.labelsize': self.axis_label_font_size, 'figure.labelweight': 'bold'})
+        plt.rcParams.update({'axes.titlesize': self.axis_label_font_size, 'axes.titleweight': 'bold'})
+        plt.rcParams.update({'xtick.labelsize': self.tick_font_size, 'ytick.labelsize': self.tick_font_size})
 
     def plot_reflex_curves(self, channel_names=[]):
         """
@@ -545,9 +552,9 @@ class EMGDataset:
         if self.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel('Avg. Rect. Reflex EMG (mV)')
-            fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
+            fig.suptitle(f'M-response and H-reflex Curves')
         else:
-            fig.suptitle(f'M-response and H-reflex Curves', fontsize=16)
+            fig.suptitle(f'M-response and H-reflex Curves')
             fig.supxlabel('Stimulus Voltage (V)')
             fig.supylabel('Avg. Rect. Reflex EMG (mV)')
 

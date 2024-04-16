@@ -6,9 +6,9 @@ import EMG_Utils
 DATA_PATH = 'files_to_analyze'
 OUTPUT_PATH = 'output'
 
-pickled_test_session = 'output/240304 mcurve4 ii_data.pickle' #'output/040224rec1_data.pickle'
-# pickled_test_dataset = ['output/240304 hcurve1_data.pickle','output/240304 hcurve2_data.pickle','output/240304 h3_data.pickle','output/240304 h4 1k_data.pickle']
-pickled_test_dataset = ['output/240304 mcurve2 ii_data.pickle','output/240304 mcurve3 ii_data.pickle','output/240304 mcurve4 ii_data.pickle']
+pickled_test_session = 'output/240304 hcurve1_data.pickle'
+pickled_test_dataset = ['output/240304 hcurve1_data.pickle','output/240304 hcurve2_data.pickle','output/240304 h3_data.pickle','output/240304 h4 1k_data.pickle']
+# pickled_test_dataset = ['output/240304 mcurve2 ii_data.pickle','output/240304 mcurve3 ii_data.pickle','output/240304 mcurve4 ii_data.pickle']
 
 
 ## Process CSV files in "\files_to_analyze" into pickle files formatted for downstream analysis.
