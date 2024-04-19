@@ -1,5 +1,10 @@
 # MonStim_CSV_Analysis - main.py
 
+### Things to fix:
+    # Detect time recorded before stimulation.
+    # Fix start of plots/data so that 0 is actually the moment of stimulation.
+    # Make the time before stimulation negative time.
+
 import csv_to_pickle
 import EMG_Utils
 
