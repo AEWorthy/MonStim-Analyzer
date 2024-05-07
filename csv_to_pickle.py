@@ -13,7 +13,7 @@ import os
 import re
 import pickle
 
-def pickle_csv_dataset(dataset, csv_paths, output_path):
+def pickle_csv(dataset, csv_paths, output_path):
 
     """Helper function to do create a pickle file from a CSV dataset.
     
@@ -131,9 +131,9 @@ def pickle_csv_dataset(dataset, csv_paths, output_path):
     num_csv_success = len(csv_paths) - len(unsaved_data_files)
     return num_csvs, num_csv_success
 
-def pickle_dataset (data_path, output_path):
+def pickle_single_session (data_path, output_path):
 
-    """Converts CSV files in the specified data directory to Pickle files.
+    """Converts CSV files of a single recording session in the specified data directory to Pickle files.
     
     Args:
         data_path (str): Path to the /files_to_analyze folder or other input folder.
@@ -158,7 +158,39 @@ def pickle_dataset (data_path, output_path):
             continue
 
         # Call function to extract dataset CSVs into a pickle file.
-        num_csvs, num_csv_success = pickle_csv_dataset(dataset, csv_paths, output_path)
+        num_csvs, num_csv_success = pickle_csv(dataset, csv_paths, output_path)
         print(f'> {num_csv_success} of {num_csvs} CSVs processed from dataset "{dataset}".')
+
+    print('Processing complete.')
+
+def pickle_dataset (dataset_path, output_path):
+    """Converts CSV files of a dataset of recording sessions in the specified data directory into Pickle files for each individual session. Returns .
+    
+    Args:
+        data_path (str): Path to the /files_to_analyze folder or other input folder.
+        output_path (str): Path to the /output folder or other location for Pickle files to be saved.
+    """
+
+    # Process "\files_to_analyze" into Pickle files
+    datasets = [dir for dir in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, dir))] # list all datasets in "files_to_analyze" folder
+    print(f'Datasets to process: {datasets}')
+
+    # Create a pickle file for each dataset in files_to_analyze
+    for dataset in datasets:
+        dataset_path = os.path.join(data_path, dataset)#.replace('\\', '/')
+        
+        csv_regex = re.compile(r'.*\.csv$') #regex to match CSV files only.
+        csv_names = [item for item in os.listdir(dataset_path) if csv_regex.match(item)] #list of CSV filenames in dataset_path.
+        csv_paths = [os.path.join(dataset_path, csv_name) for csv_name in csv_names]
+
+        # check if there are CSVs in this dataset.
+        if len(csv_paths) <= 0:
+            print(f'>! Error: no CSV files detected in "{dataset}." Make sure you converted STMs to CSVs.')
+            continue
+
+        # Call function to extract dataset CSVs into a pickle file.
+        num_csvs, num_csv_success = pickle_csv(dataset, csv_paths, output_path)
+        print(f'> {num_csv_success} of {num_csvs} CSVs processed from dataset "{dataset}".')
+
 
     print('Processing complete.')
