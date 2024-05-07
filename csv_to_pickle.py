@@ -131,9 +131,9 @@ def pickle_csv(dataset, csv_paths, output_path):
     num_csv_success = len(csv_paths) - len(unsaved_data_files)
     return num_csvs, num_csv_success
 
-def pickle_single_session (data_path, output_path):
+def pickle_single_sessions (data_path, output_path):
 
-    """Converts CSV files of a single recording session in the specified data directory to Pickle files.
+    """Converts CSV files of a single recording sessions in the specified data directory to Pickle files.
     
     Args:
         data_path (str): Path to the /files_to_analyze folder or other input folder.
