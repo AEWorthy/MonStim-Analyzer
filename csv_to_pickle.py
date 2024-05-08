@@ -148,7 +148,8 @@ def pickle_dataset(dataset, csv_paths, output_path):
     # Gather session_info from the first CSV of a dataset
     first_csv = csv_paths[0]
     session_id = None
-    channel_error = False # flag for future checkpoint
+    channel_error = False # flag for test of number of channels
+   
     with open(first_csv, 'r') as file:
         lines = file.readlines() # load .csv data lines into memory
 
@@ -284,6 +285,6 @@ def pickle_data (data_path, output_path):
         
         # If you didn't save the dataset because there were multiple sessions, tries again
         if multipleSessions:
-            num_csvs, num_csv_success, multipleSessions = pickle_dataset(dataset, csv_paths, output_path)
+            num_csvs, num_csv_success = pickle_dataset(dataset, csv_paths, output_path)
             print(f'> {num_csv_success} of {num_csvs} CSVs processed from dataset "{dataset}".')
     print('Processing complete.')
