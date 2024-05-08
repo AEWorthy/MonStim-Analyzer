@@ -5,12 +5,12 @@
     # Fix start of plots/data so that 0 is actually the moment of stimulation.
     # Make the time before stimulation negative time.
 
-import csv_to_pickle
+from csv_to_pickle import pickle_data
 import EMG_Utils
 
 DATA_PATH = 'files_to_analyze'
 OUTPUT_PATH = 'output'
-csv_to_pickle.pickle_single_sessions(DATA_PATH, OUTPUT_PATH)
+pickle_data(DATA_PATH, OUTPUT_PATH)
 
 # pickled_test_session = 'output/240304 hcurve1_data.pickle'
 # pickled_test_dataset = ['output/240304 hcurve1_data.pickle','output/240304 hcurve2_data.pickle','output/240304 h3_data.pickle','output/240304 h4 1k_data.pickle']
