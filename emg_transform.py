@@ -6,6 +6,16 @@ Helper functions for EMG calculations and transformations.
 
 import numpy as np
 
+def correct_emg_to_baseline(recording, scan_rate, stim_delay):
+    # Correct EMG data relative to pre-stim. baseline amplitude.
+    adjusted_recording = []
+    for channel in recording:
+        baseline_emg = calculate_average_amplitude_unrectified(channel, 0, stim_delay, scan_rate)
+        adjusted_channel = channel - baseline_emg
+        adjusted_recording.append(adjusted_channel)
+
+    return adjusted_recording
+
 def rectify_emg(emg_array):
     """
     Rectify EMG data by taking the absolute value.
@@ -20,6 +30,16 @@ def calculate_average_amplitude(emg_data, start_ms, end_ms, scan_rate):
     end_index = int(end_ms * scan_rate / 1000)
     emg_window = emg_data[start_index:end_index]
     rectified_emg_window = rectify_emg(emg_window)
+    return np.mean(rectified_emg_window)
+
+def calculate_average_amplitude_unrectified (emg_data, start_ms, end_ms, scan_rate):
+    """
+    Calculate the average unrectified EMG amplitude between start_ms and end_ms.
+    """
+    start_index = int(start_ms * scan_rate / 1000)
+    end_index = int(end_ms * scan_rate / 1000)
+    emg_window = emg_data[start_index:end_index]
+    rectified_emg_window = emg_window
     return np.mean(rectified_emg_window)
 
 def calculate_mean_std(recordings, stimulus_value, channel_index, m_start_ms, m_end_ms, h_start_ms, h_end_ms, bin_size, scan_rate):

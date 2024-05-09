@@ -82,6 +82,7 @@ def pickle_session(dir, session_name, csv_paths, output_path):
         scan_rate = float(next(line.split(',')[1] for line in lines if line.startswith('Scan Rate (Hz),')))
         num_samples = float(next(line.split(',')[1] for line in lines if line.startswith('Samples/Channel,')))
         
+        stim_delay = float(next(line.split(',')[1] for line in lines if line.startswith('Pre-Stim Acq. time (ms),')))
         stim_duration = float(next(line.split(',')[1] for line in lines if line.startswith('Stimulus duration (ms),')))
         stim_interval = float(next(line.split(',')[1] for line in lines if line.startswith('Inter-Stim delay (sec),')))
         
@@ -97,6 +98,7 @@ def pickle_session(dir, session_name, csv_paths, output_path):
             'num_channels': num_channels,
             'scan_rate': int(scan_rate),
             'num_samples': int(num_samples),
+            'stim_delay' : stim_delay,
             'stim_duration' : stim_duration,
             'stim_interval' : stim_interval,
             'emg_amp_gains': emg_amp_gains

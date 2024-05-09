@@ -65,10 +65,15 @@ class EMGSession:
         self.num_channels = session_info['num_channels']
         self.scan_rate = session_info['scan_rate']
         self.num_samples = session_info['num_samples']
+        self.stim_delay = session_info['stim_delay']
         self.stim_duration = session_info['stim_duration']
         self.stim_interval = session_info['stim_interval']
         self.emg_amp_gains = session_info['emg_amp_gains']
         self.recordings = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
+        
+        # Adjust EMG recording data to the pre-stim baseline amplitude.
+        for recording in self.recordings:
+                recording['channel_data'] = emg_transform.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
 
     def session_parameters (self):
         """
@@ -78,6 +83,7 @@ class EMGSession:
         print(f"# of Channels: {self.num_channels}")
         print(f"Scan rate (Hz): {self.scan_rate}")
         print(f"Samples/Channel: {self.num_samples}")
+        print(f"Stimulus delay (ms): {self.stim_delay}")
         print(f"Stimulus duration (ms): {self.stim_duration}")
         print(f"Stimulus interval (s): {self.stim_interval}")
         print(f"EMG amp gains: {self.emg_amp_gains}")
@@ -106,7 +112,7 @@ class EMGSession:
         num_samples_time_window = int(self.time_window_ms * self.scan_rate / 1000)  # Convert time window to number of samples
 
         # Slice the time array for the time window
-        time_axis = time_values_ms[:num_samples_time_window]
+        time_axis = time_values_ms[:num_samples_time_window] - self.stim_delay
 
         # Create a figure and axis
         if self.num_channels == 1:
@@ -207,7 +213,7 @@ class EMGSession:
         num_samples_time_window = int(self.time_window_ms * self.scan_rate / 1000)  # Convert time window to number of samples
 
         # Slice the time array for the time window
-        time_axis = time_values_ms[:num_samples_time_window]
+        time_axis = time_values_ms[:num_samples_time_window] - self.stim_delay
 
         # Create a figure and axis
         if self.num_channels == 1:
@@ -299,7 +305,7 @@ class EMGSession:
         num_samples_time_window = int(self.time_window_ms * self.scan_rate / 1000)  # Convert time window to number of samples
 
         # Slice the time array for the time window
-        time_axis = time_values_ms[:num_samples_time_window]
+        time_axis = time_values_ms[:num_samples_time_window] - self.stim_delay
 
         # Create a figure and axis
         if self.num_channels == 1:
@@ -394,8 +400,8 @@ class EMGSession:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
 
-                m_wave_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.m_start, self.m_end, self.scan_rate)
-                h_response_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.h_start, self.h_end, self.scan_rate)
+                m_wave_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.m_start + self.stim_delay, self.m_end + self.stim_delay, self.scan_rate)
+                h_response_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.h_start + self.stim_delay, self.h_end + self.stim_delay, self.scan_rate)
 
                 m_wave_amplitudes.append(m_wave_amplitude)
                 h_response_amplitudes.append(h_response_amplitude)
