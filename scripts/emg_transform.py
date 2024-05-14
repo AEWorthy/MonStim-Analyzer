@@ -5,6 +5,19 @@ Helper functions for EMG calculations and transformations.
 """
 
 import numpy as np
+from scipy import signal
+
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = signal.butter(order, [low, high], btype='band')
+    return b, a
+
+def butter_bandpass_filter(data, fs, lowcut=100, highcut=3500, order=4):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = signal.filtfilt(b, a, data)
+    return y
 
 def correct_emg_to_baseline(recording, scan_rate, stim_delay):
     # Correct EMG data relative to pre-stim. baseline amplitude.

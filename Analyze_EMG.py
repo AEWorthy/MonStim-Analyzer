@@ -9,8 +9,9 @@ import matplotlib.pyplot as plt
 import scripts.emg_transform as emg_transform
 import scripts.yaml_config as yaml_config
 import scripts.utils as utils
+import copy
 
-config = yaml_config.load_config('config.yaml')
+config = yaml_config.load_config('config.yml')
 
 class EMGSession:
     """
@@ -35,7 +36,7 @@ class EMGSession:
             pickled_session_data (str): filepath of .pickle session data file for this session.
         """
         self.load_session_data(pickled_session_data)
-        self.m_start = reflex_times['m_start']
+        self.m_start = config['m_start']
         self.m_end = config['m_end']
         self.h_start = config['h_start']
         self.h_end = config['h_end']
@@ -70,15 +71,15 @@ class EMGSession:
         self.stim_duration = session_info['stim_duration']
         self.stim_interval = session_info['stim_interval']
         self.emg_amp_gains = session_info['emg_amp_gains']
-        self.recordings = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
+        self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v']).copy()
+        self.recordings_processed = copy.deepcopy(self.recordings_raw)
         
-        # Adjust EMG recording data to the pre-stim baseline amplitude.
-        for recording in self.recordings:
+        # Adjust EMG recording data to the pre-stim baseline amplitude. Apply bandpass filter.
+        for recording in self.recordings_processed:
+                for i, channel_emg in enumerate(recording['channel_data']):
+                    filtered_emg = emg_transform.butter_bandpass_filter(channel_emg, self.scan_rate)
+                    recording['channel_data'][i] = filtered_emg
                 recording['channel_data'] = emg_transform.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
-
-    def initialize_reflex_times(self):
-        reflex_times = {'m/h_start/end': [5,6]} # pull list of value from config.yaml
-        return reflex_times
 
     def session_parameters (self):
         """
@@ -92,6 +93,107 @@ class EMGSession:
         print(f"Stimulus duration (ms): {self.stim_duration}")
         print(f"Stimulus interval (s): {self.stim_interval}")
         print(f"EMG amp gains: {self.emg_amp_gains}")
+
+    def plot_emg_raw (self, channel_names=[], m_flags = False, h_flags = False):
+        """
+        Plots EMG data from a Pickle file for a specified time window.
+
+        Args:
+            channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+        """
+
+        # Handle custom channel names parameter if specified.
+        customNames = False
+        if len(channel_names) == 0:
+            pass
+        elif len(channel_names) != self.num_channels:
+            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.num_channels} channels were recorded.")
+        elif len(channel_names) == self.num_channels:
+            customNames = True
+
+        # Calculate time values based on the scan rate
+        time_values_ms = np.arange(self.num_samples) * 1000 / self.scan_rate  # Time values in milliseconds
+
+        # Determine the number of samples for the desired time window in ms
+        num_samples_time_window = int(self.time_window_ms * self.scan_rate / 1000)  # Convert time window to number of samples
+
+        # Slice the time array for the time window
+        time_axis = time_values_ms[:num_samples_time_window] - self.stim_delay
+
+        # Create a figure and axis
+        if self.num_channels == 1:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            axes = [ax]
+        else:
+            fig, axes = plt.subplots(nrows=1, ncols=self.num_channels, figsize=(12, 4), sharey=True)
+
+        # Plot the EMG arrays for each channel, only for the first 10ms
+        if customNames:
+            for recording in self.recordings_raw:
+                for channel_index, channel_data in enumerate(recording['channel_data']):
+                    if self.num_channels == 1:
+                        ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title(f'{channel_names[0]}')
+                        ax.grid(True)
+                        #ax.legend()
+                        if m_flags:
+                            ax.axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)                         
+                        if h_flags:
+                            ax.axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)                       
+                    else:
+                        axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                        axes[channel_index].grid(True)
+                        #axes[channel_index].legend()
+                        if m_flags:
+                            axes[channel_index].axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
+                        if h_flags:
+                            axes[channel_index].axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
+        else:
+            for recording in self.recordings_raw:
+                for channel_index, channel_data in enumerate(recording['channel_data']):
+                    if self.num_channels == 1:
+                        ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title('Channel 0')
+                        ax.grid(True)
+                        #ax.legend()
+                        if m_flags:
+                            ax.axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)                         
+                        if h_flags:
+                            ax.axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)  
+                    else:
+                        axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'Channel {channel_index}')
+                        axes[channel_index].grid(True)
+                        #axes[channel_index].legend()
+                        if m_flags:
+                            axes[channel_index].axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
+                        if h_flags:
+                            axes[channel_index].axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
+
+        # Set labels and title
+        if self.num_channels == 1:
+            ax.set_xlabel('Time (ms)')
+            ax.set_ylabel('EMG (mV)')
+            fig.suptitle('EMG Overlay for Channel 0 (all recordings)')
+        else:
+            fig.suptitle('EMG Overlay for All Channels (all recordings)')
+            fig.supxlabel('Time (ms)')
+            fig.supylabel('EMG (mV)')
+
+            # Adjust subplot spacing
+            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+
+        # Show the plot
+        plt.show()
 
     def plot_emg (self, channel_names=[], m_flags = False, h_flags = False):
         """
@@ -128,7 +230,7 @@ class EMGSession:
 
         # Plot the EMG arrays for each channel, only for the first 10ms
         if customNames:
-            for recording in self.recordings:
+            for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
                     if self.num_channels == 1:
                         ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
@@ -136,24 +238,24 @@ class EMGSession:
                         ax.grid(True)
                         #ax.legend()
                         if m_flags:
-                            ax.axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
-                            ax.axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)                         
+                            ax.axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)                         
                         if h_flags:
-                            ax.axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
-                            ax.axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)                       
+                            ax.axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)                       
                     else:
                         axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         axes[channel_index].set_title(f'{channel_names[channel_index]}')
                         axes[channel_index].grid(True)
                         #axes[channel_index].legend()
                         if m_flags:
-                            axes[channel_index].axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
-                            axes[channel_index].axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
                         if h_flags:
-                            axes[channel_index].axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
-                            axes[channel_index].axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
         else:
-            for recording in self.recordings:
+            for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
                     if self.num_channels == 1:
                         ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
@@ -161,22 +263,22 @@ class EMGSession:
                         ax.grid(True)
                         #ax.legend()
                         if m_flags:
-                            ax.axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
-                            ax.axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)                         
+                            ax.axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)                         
                         if h_flags:
-                            ax.axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
-                            ax.axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)  
+                            ax.axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)  
                     else:
                         axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         axes[channel_index].set_title(f'Channel {channel_index}')
                         axes[channel_index].grid(True)
                         #axes[channel_index].legend()
                         if m_flags:
-                            axes[channel_index].axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
-                            axes[channel_index].axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
                         if h_flags:
-                            axes[channel_index].axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
-                            axes[channel_index].axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
 
         # Set labels and title
         if self.num_channels == 1:
@@ -229,7 +331,7 @@ class EMGSession:
 
         # Plot the rectified EMG arrays for each channel, only for the first 10ms
         if customNames:
-            for recording in self.recordings:
+            for recording in self.recordings_raw:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
                     rectified_channel_data = emg_transform.rectify_emg(channel_data)
                     if self.num_channels == 1:
@@ -238,24 +340,114 @@ class EMGSession:
                         ax.grid(True)
                         #ax.legend()
                         if m_flags:
-                            ax.axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
-                            ax.axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
                         if h_flags:
-                            ax.axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
-                            ax.axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
                     else:
                         axes[channel_index].plot(time_axis, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         axes[channel_index].set_title(f'{channel_names[channel_index]} (Rectified)')
                         axes[channel_index].grid(True)
                         #axes[channel_index].legend()
                         if m_flags:
-                            axes[channel_index].axvline(self.m_start, color=self.m_color, linestyle=self.flag_style)
-                            axes[channel_index].axvline(self.m_end, color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
                         if h_flags:
-                            axes[channel_index].axvline(self.h_start, color=self.h_color, linestyle=self.flag_style)
-                            axes[channel_index].axvline(self.h_end, color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
         else:
-            for recording in self.recordings:
+            for recording in self.recordings_raw:
+                for channel_index, channel_data in enumerate(recording['channel_data']):
+                    rectified_channel_data = emg_transform.rectify_emg(channel_data)
+                    if self.num_channels == 1:
+                        ax.plot(time_axis, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title('Channel 0 (Rectified)')
+                        ax.grid(True)
+                        #ax.legend()
+                    else:
+                        axes[channel_index].plot(time_axis, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'Channel {channel_index} (Rectified)')
+                        axes[channel_index].grid(True)
+                        #axes[channel_index].legend()
+
+        # Set labels and title
+        if self.num_channels == 1:
+            ax.set_xlabel('Time (ms)')
+            ax.set_ylabel('Rectified EMG (mV)')
+            fig.suptitle('Rectified EMG Overlay for Channel 0 (all recordings)')
+        else:
+            fig.suptitle('Rectified EMG Overlay for All Channels (all recordings)')
+            fig.supxlabel('Time (ms)')
+            fig.supylabel('Rectified EMG (mV)')
+
+            # Adjust subplot spacing
+            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Show the plot
+        plt.show()
+
+    def plot_emg_rectified (self, channel_names=[], m_flags = False, h_flags = False):
+        """
+        Plots rectified EMG data from a Pickle file for a specified time window.
+
+        Args:
+            channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+        """
+
+        # Handle custom channel names parameter if specified.
+        customNames = False
+        if len(channel_names) == 0:
+            pass
+        elif len(channel_names) != self.num_channels:
+            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.num_channels} channels were recorded.")
+        elif len(channel_names) == self.num_channels:
+            customNames = True
+
+        # Calculate time values based on the scan rate
+        time_values_ms = np.arange(self.num_samples) * 1000 / self.scan_rate  # Time values in milliseconds
+
+        # Determine the number of samples for the first 10ms
+        num_samples_time_window = int(self.time_window_ms * self.scan_rate / 1000)  # Convert time window to number of samples
+
+        # Slice the time array for the time window
+        time_axis = time_values_ms[:num_samples_time_window] - self.stim_delay
+
+        # Create a figure and axis
+        if self.num_channels == 1:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            axes = [ax]
+        else:
+            fig, axes = plt.subplots(nrows=1, ncols=self.num_channels, figsize=(12, 4), sharey=True)
+
+        # Plot the rectified EMG arrays for each channel, only for the first 10ms
+        if customNames:
+            for recording in self.recordings_processed:
+                for channel_index, channel_data in enumerate(recording['channel_data']):
+                    rectified_channel_data = emg_transform.rectify_emg(channel_data)
+                    if self.num_channels == 1:
+                        ax.plot(time_axis, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title(f'{channel_names[0]} (Rectified)')
+                        ax.grid(True)
+                        #ax.legend()
+                        if m_flags:
+                            ax.axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            ax.axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
+                        if h_flags:
+                            ax.axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            ax.axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
+                    else:
+                        axes[channel_index].plot(time_axis, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'{channel_names[channel_index]} (Rectified)')
+                        axes[channel_index].grid(True)
+                        #axes[channel_index].legend()
+                        if m_flags:
+                            axes[channel_index].axvline(self.m_start[channel_index], color=self.m_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.m_end[channel_index], color=self.m_color, linestyle=self.flag_style)
+                        if h_flags:
+                            axes[channel_index].axvline(self.h_start[channel_index], color=self.h_color, linestyle=self.flag_style)
+                            axes[channel_index].axvline(self.h_end[channel_index], color=self.h_color, linestyle=self.flag_style)
+        else:
+            for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
                     rectified_channel_data = emg_transform.rectify_emg(channel_data)
                     if self.num_channels == 1:
@@ -321,9 +513,9 @@ class EMGSession:
 
         # Plot the EMG arrays for each channel, only for the first 10ms
         if customNames:
-            for recording in self.recordings:
+            for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
-                    h_window = recording['channel_data'][channel_index][int(self.h_start * self.scan_rate / 1000):int(self.h_end * self.scan_rate / 1000)]
+                    h_window = recording['channel_data'][channel_index][int(self.h_start[channel_index] * self.scan_rate / 1000):int(self.h_end[channel_index] * self.scan_rate / 1000)]
                     if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
                         if self.num_channels == 1:
                             ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
@@ -338,9 +530,9 @@ class EMGSession:
                             if plot_legend:
                                 axes[channel_index].legend()
         else:
-            for recording in self.recordings:
+            for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
-                    h_window = recording['channel_data'][channel_index][int(self.h_start * self.scan_rate / 1000):int(self.h_end * self.scan_rate / 1000)]
+                    h_window = recording['channel_data'][channel_index][int(self.h_start[channel_index] * self.scan_rate / 1000):int(self.h_end[channel_index] * self.scan_rate / 1000)]
                     if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
                         if self.num_channels == 1:
                             ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
@@ -401,12 +593,12 @@ class EMGSession:
             h_response_amplitudes = []
             stimulus_voltages = []
 
-            for recording in self.recordings:
+            for recording in self.recordings_processed:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
 
-                m_wave_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.m_start + self.stim_delay, self.m_end + self.stim_delay, self.scan_rate)
-                h_response_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.h_start + self.stim_delay, self.h_end + self.stim_delay, self.scan_rate)
+                m_wave_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
+                h_response_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
 
                 m_wave_amplitudes.append(m_wave_amplitude)
                 h_response_amplitudes.append(h_response_amplitude)
@@ -471,8 +663,8 @@ class EMGDataset:
             emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
         """
         self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert and file location strings into EMGSession instances.
-        self.scan_rate = emg_sessions[0].scan_rate
-        self.num_channels = emg_sessions[0].num_channels
+        self.scan_rate = self.emg_sessions[0].scan_rate
+        self.num_channels = self.emg_sessions[0].num_channels
 
         self.m_start = config['m_start']
         self.m_end = config['m_end']
@@ -512,7 +704,7 @@ class EMGDataset:
         # Unpack session recordings.
         recordings = []
         for session in self.emg_sessions:
-            recordings.extend(session.recordings)
+            recordings.extend(session.recordings_processed)
         sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
 
         # Create a figure and axis
@@ -532,7 +724,7 @@ class EMGDataset:
             h_response_means = []
             h_response_stds = []
             for stimulus_v in stimulus_voltages:
-                m_wave_mean, m_wave_std, h_response_mean, h_response_std = emg_transform.calculate_mean_std(sorted_recordings, stimulus_v, channel_index, self.m_start, self.m_end, self.h_start, self.h_end, self.bin_size, self.scan_rate)
+                m_wave_mean, m_wave_std, h_response_mean, h_response_std = emg_transform.calculate_mean_std(sorted_recordings, stimulus_v, channel_index, self.m_start[channel_index], self.m_end[channel_index], self.h_start[channel_index], self.h_end[channel_index], self.bin_size, self.scan_rate)
                 m_wave_means.append(m_wave_mean)
                 m_wave_stds.append(m_wave_std)
                 h_response_means.append(h_response_mean)

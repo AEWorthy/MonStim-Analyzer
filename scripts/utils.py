@@ -32,13 +32,15 @@ def unpackEMGSessions(emg_sessions):
         emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
     """
     # Check if list dtype is EMGSession. If it is, convert it to a new EMGSession instance and replace the string in the list.
-    for i, object in enumerate(emg_sessions):
-        if isinstance(object, str): # If list object is dtype(string), then convert to an EMGSession
-            session = MakeSession(object)
-            emg_sessions[i] = session
+    pickled_sessions = []
+    for i, session in enumerate(emg_sessions):
+        if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
+            session = MakeSession(session) # replace the string with an actual session object.
+            pickled_sessions.append(session)
+        elif isinstance(session, MakeSession):
+            pickled_sessions.append(session)
+            print(session)
+        else:
+            raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
 
-        for item in emg_sessions:
-            if not isinstance(object, str):
-                raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {item}, {type(item)}")
-
-    return emg_sessions
+    return pickled_sessions
