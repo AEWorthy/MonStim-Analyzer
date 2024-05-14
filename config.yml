@@ -19,7 +19,7 @@ m_end: # (in ms). default is 4.0.
   - 3.3 
 h_start: # (in ms). default is 4.1.
   - 4.5
-  - 3.4
+  - 3.8
 h_end: # (in ms). default is 7.0.
   - 6
-  - 5
+  - 4.5

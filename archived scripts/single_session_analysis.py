@@ -15,7 +15,7 @@ Functions:
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import scripts.emg_transform as emg_transform
+import emg_transform as emg_transform
 
 def session_parameters (pickled_data):
     """Extracts and prints EMG recording session parameters from a Pickle file.

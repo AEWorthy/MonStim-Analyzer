@@ -1,6 +1,6 @@
 # MonStim_CSV_Analysis - example0.py
 
-import scripts.csv_to_pickle as csv_to_pickle
+import csv_to_pickle as csv_to_pickle
 import Analyze_EMG
 
 DATA_PATH = 'files_to_analyze'

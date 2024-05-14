@@ -5,7 +5,7 @@
     # Fix start of plots/data so that 0 is actually the moment of stimulation.
     # Make the time before stimulation negative time.
 
-from scripts.csv_to_pickle import pickle_data
+from csv_to_pickle import pickle_data
 import Analyze_EMG
 
 DATA_PATH = 'files_to_analyze'

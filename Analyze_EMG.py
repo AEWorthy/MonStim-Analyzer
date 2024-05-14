@@ -6,9 +6,9 @@ Classes to analyze and plot EMG data from individual sessions or an entire datas
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import scripts.emg_transform as emg_transform
-import scripts.yaml_config as yaml_config
-import scripts.utils as utils
+import emg_transform as emg_transform
+import yaml_config as yaml_config
+import utils as utils
 import copy
 
 config = yaml_config.load_config('config.yml')
@@ -296,7 +296,7 @@ class EMGSession:
         # Show the plot
         plt.show()
 
-    def plot_emg_rectified (self, channel_names=[], m_flags = False, h_flags = False):
+    def plot_emg_rectified_raw (self, channel_names=[], m_flags = False, h_flags = False):
         """
         Plots rectified EMG data from a Pickle file for a specified time window.
 
