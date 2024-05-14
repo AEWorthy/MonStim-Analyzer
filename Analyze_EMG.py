@@ -6,10 +6,11 @@ Classes to analyze and plot EMG data from individual sessions or an entire datas
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import emg_transform
-import utils
+import scripts.emg_transform as emg_transform
+import scripts.yaml_config as yaml_config
+import scripts.utils as utils
 
-config = utils.load_config('config.yaml')
+config = yaml_config.load_config('config.yaml')
 
 class EMGSession:
     """
@@ -34,7 +35,7 @@ class EMGSession:
             pickled_session_data (str): filepath of .pickle session data file for this session.
         """
         self.load_session_data(pickled_session_data)
-        self.m_start = config['m_start']
+        self.m_start = reflex_times['m_start']
         self.m_end = config['m_end']
         self.h_start = config['h_start']
         self.h_end = config['h_end']
@@ -74,6 +75,10 @@ class EMGSession:
         # Adjust EMG recording data to the pre-stim baseline amplitude.
         for recording in self.recordings:
                 recording['channel_data'] = emg_transform.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+
+    def initialize_reflex_times(self):
+        reflex_times = {'m/h_start/end': [5,6]} # pull list of value from config.yaml
+        return reflex_times
 
     def session_parameters (self):
         """
@@ -463,9 +468,9 @@ class EMGDataset:
         Initialize an EMGDataset instance from a list of EMGSession instances for multi-session analyses and plotting.
 
         Args:
-            emg_sessions (list): a list of instances of the class EMGSession.
+            emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
         """
-        self.emg_sessions = emg_sessions
+        self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert and file location strings into EMGSession instances.
         self.scan_rate = emg_sessions[0].scan_rate
         self.num_channels = emg_sessions[0].num_channels
 

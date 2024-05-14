@@ -1,7 +1,7 @@
 # MonStim_CSV_Analysis - example1.py
 
-import csv_to_pickle
-import EMG_Utils
+import scripts.csv_to_pickle as csv_to_pickle
+import Analyze_EMG
 
 DATA_PATH = 'files_to_analyze'
 OUTPUT_PATH = 'output'
@@ -25,7 +25,7 @@ cper_dataset_m1 = ['output/240404-6_data.pickle','output/240404-8_data.pickle','
 # csv_to_pickle.pickle_dataset(DATA_PATH, OUTPUT_PATH)
 
 ## Analysis for a single session using class-based method
-session = EMG_Utils.EMGSession(ex_cper_stim_session_m1)
+session = Analyze_EMG.EMGSession(ex_cper_stim_session_m1)
 session.session_parameters()
 session.plot_emg(channel_names=["LG"])
 session.plot_emg_rectified(channel_names=["LG"], m_flags=True, h_flags=True)
@@ -35,7 +35,7 @@ session.plot_reflex_curves(channel_names=["LG"])
 ## Analysis for multiple sessions.
 sessions = []
 for session in tibial_dataset_m2:
-    sessions.append(EMG_Utils.EMGSession(session))
+    sessions.append(Analyze_EMG.EMGSession(session))
 
-dataset = EMG_Utils.EMGDataset(sessions)
+dataset = Analyze_EMG.EMGDataset(sessions)
 dataset.plot_reflex_curves(channel_names=["LG"])

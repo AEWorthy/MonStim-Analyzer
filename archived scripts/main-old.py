@@ -5,8 +5,8 @@
     # Fix start of plots/data so that 0 is actually the moment of stimulation.
     # Make the time before stimulation negative time.
 
-import csv_to_pickle
-import EMG_Utils
+import scripts.csv_to_pickle as csv_to_pickle
+import Analyze_EMG
 
 DATA_PATH = 'files_to_analyze'
 OUTPUT_PATH = 'output'
@@ -20,7 +20,7 @@ pickled_test_dataset = ['output/240304 hcurve1_data.pickle','output/240304 hcurv
 # csv_to_pickle.pickle_dataset(DATA_PATH, OUTPUT_PATH)
 
 ## Analysis for a single session using class-based method
-session = EMG_Utils.EMGSession(pickled_test_session)
+session = Analyze_EMG.EMGSession(pickled_test_session)
 session.session_parameters()
 session.plot_emg(channel_names=["LG"], m_flags=True, h_flags=True)
 session.plot_emg_rectified(channel_names=["LG"], m_flags=True, h_flags=True)
@@ -30,7 +30,7 @@ session.plot_reflex_curves(channel_names=["LG"])
 ## Analysis for multiple sessions.
 sessions = []
 for session in pickled_test_dataset:
-    sessions.append(EMG_Utils.EMGSession(session))
+    sessions.append(Analyze_EMG.EMGSession(session))
 
-dataset = EMG_Utils.EMGDataset(sessions)
+dataset = Analyze_EMG.EMGDataset(sessions)
 dataset.plot_reflex_curves(channel_names=["LG"])
