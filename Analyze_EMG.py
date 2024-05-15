@@ -662,7 +662,7 @@ class EMGDataset:
         Args:
             emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
         """
-        self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert and file location strings into EMGSession instances.
+        self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
         self.scan_rate = self.emg_sessions[0].scan_rate
         self.num_channels = self.emg_sessions[0].num_channels
 
