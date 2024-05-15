@@ -515,8 +515,8 @@ class EMGSession:
         if customNames:
             for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
-                    h_window = recording['channel_data'][channel_index][int(self.h_start[channel_index] * self.scan_rate / 1000):int(self.h_end[channel_index] * self.scan_rate / 1000)]
-                    if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
+                    h_window = channel_data[int(self.h_start[channel_index] * self.scan_rate / 1000):int(self.h_end[channel_index] * self.scan_rate / 1000)]
+                    if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within H-reflex window
                         if self.num_channels == 1:
                             ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                             ax.set_title(f'{channel_names[0]}')
@@ -532,7 +532,7 @@ class EMGSession:
         else:
             for recording in self.recordings_processed:
                 for channel_index, channel_data in enumerate(recording['channel_data']):
-                    h_window = recording['channel_data'][channel_index][int(self.h_start[channel_index] * self.scan_rate / 1000):int(self.h_end[channel_index] * self.scan_rate / 1000)]
+                    h_window = channel_data[int(self.h_start[channel_index] * self.scan_rate / 1000):int(self.h_end[channel_index] * self.scan_rate / 1000)]
                     if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
                         if self.num_channels == 1:
                             ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
@@ -597,8 +597,8 @@ class EMGSession:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
 
-                m_wave_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
-                h_response_amplitude = emg_transform.calculate_average_amplitude(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
+                m_wave_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
+                h_response_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
 
                 m_wave_amplitudes.append(m_wave_amplitude)
                 h_response_amplitudes.append(h_response_amplitude)

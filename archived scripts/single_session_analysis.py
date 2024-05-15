@@ -391,8 +391,8 @@ def plot_reflex_curves (pickled_data, channel_names=[], m_start_ms=2.0, m_end_ms
             channel_data = recording['channel_data'][channel_index]
             stimulus_v = recording['stimulus_v']
 
-            m_wave_amplitude = emg_transform.calculate_average_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
-            h_response_amplitude = emg_transform.calculate_average_amplitude(channel_data, h_start_ms, h_end_ms, scan_rate)
+            m_wave_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
+            h_response_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, h_start_ms, h_end_ms, scan_rate)
 
             m_wave_amplitudes.append(m_wave_amplitude)
             h_response_amplitudes.append(h_response_amplitude)

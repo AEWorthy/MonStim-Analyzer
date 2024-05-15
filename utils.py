@@ -4,6 +4,7 @@ Misc. helper functions.
 
 import os
 from Analyze_EMG import EMGSession as MakeSession
+from Analyze_EMG import EMGDataset as MakeDataset
 
 def unpackPickleOutput (output_path):
     """
@@ -22,7 +23,31 @@ def unpackPickleOutput (output_path):
         else:
             session_name = dataset.split('-')[0]
             dataset_pickles_dict[session_name] = os.path.join(output_path, dataset).replace('\\', '/')
-    return dataset_pickles_dict
+    # Get dict keys
+    dataset_dict_keys = list(dataset_pickles_dict.keys())
+    return dataset_pickles_dict, dataset_dict_keys
+
+
+def dataset_oi (dataset_dict, datasets, dataset_idx):
+    """
+    Defines a session of interest for downstream analysis.
+
+    Args:
+        output_path (str): location of the output folder containing dataset directories/Pickle files.
+    """
+    dataset_oi = MakeDataset(dataset_dict[datasets[dataset_idx]])
+    return dataset_oi
+
+def session_oi (dataset_dict, datasets, dataset_idx, session_idx):
+    """
+    Defines a dataset of interest for downstream analysis.
+
+    Args:
+        output_path (str): location of the output folder containing dataset directories/Pickle files.
+    """
+    dataset_oi = dataset_dict[datasets[dataset_idx]]
+    session_oi = MakeSession(dataset_oi[session_idx])
+    return session_oi
 
 def unpackEMGSessions(emg_sessions):
     """

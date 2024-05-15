@@ -35,7 +35,7 @@ def rectify_emg(emg_array):
     """
     return np.abs(emg_array)
 
-def calculate_average_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate):
     """
     Calculate the average rectified EMG amplitude between start_ms and end_ms.
     """
@@ -65,8 +65,8 @@ def calculate_mean_std(recordings, stimulus_value, channel_index, m_start_ms, m_
         binned_stimulus_v = round(recording['stimulus_v'] / bin_size) * bin_size
         if binned_stimulus_v == stimulus_value:
             channel_data = recording['channel_data'][channel_index]
-            m_wave_amplitude = calculate_average_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
-            h_response_amplitude = calculate_average_amplitude(channel_data, h_start_ms, h_end_ms, scan_rate)
+            m_wave_amplitude = calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
+            h_response_amplitude = calculate_average_amplitude_rectified(channel_data, h_start_ms, h_end_ms, scan_rate)
             m_wave_amplitudes.append(m_wave_amplitude)
             h_response_amplitudes.append(h_response_amplitude)
     m_wave_mean = np.mean(m_wave_amplitudes)
