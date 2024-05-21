@@ -6,3 +6,4 @@ scripts/__pycache__/emg_transform.cpython-312.pyc
 scripts/__pycache__/utils.cpython-312.pyc
 scripts/__pycache__/utils.cpython-312.pyc
 *.pyc
+/files_to_analyze

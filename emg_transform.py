@@ -125,13 +125,13 @@ def calculate_mean_std(recordings, stimulus_value, channel_index, m_start_ms, m_
 
             if method == 'rms':
                 m_wave_amplitude = calculate_rms_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
-                h_response_amplitude = calculate_rms_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
+                h_response_amplitude = calculate_rms_amplitude(channel_data, h_start_ms, h_end_ms, scan_rate)
             elif method == 'avg_rectified':
                 m_wave_amplitude = calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
-                h_response_amplitude = calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
+                h_response_amplitude = calculate_average_amplitude_rectified(channel_data, h_start_ms, h_end_ms, scan_rate)
             elif method == 'peak_to_trough':
                 m_wave_amplitude = calculate_peak_to_trough_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
-                h_response_amplitude = calculate_peak_to_trough_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
+                h_response_amplitude = calculate_peak_to_trough_amplitude(channel_data, h_start_ms, h_end_ms, scan_rate)
             else:
                 print(f">! Error: method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
                 return
