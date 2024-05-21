@@ -48,6 +48,7 @@ class EMGSession:
         self.title_font_size = config['title_font_size']
         self.axis_label_font_size = config['axis_label_font_size']
         self.tick_font_size = config['tick_font_size']
+        self.subplot_adjust_args = config['subplot_adjust_args']
 
         #Set plot font/style defaults for returned graphs
         plt.rcParams.update({'figure.titlesize': self.title_font_size})
@@ -55,7 +56,6 @@ class EMGSession:
         plt.rcParams.update({'axes.titlesize': self.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.tick_font_size, 'ytick.labelsize': self.tick_font_size})
         
-    
     def load_session_data(self, pickled_data):
         # Load the session data from the pickle file
         with open(pickled_data, 'rb') as pickle_file:
@@ -189,8 +189,8 @@ class EMGSession:
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
 
         # Show the plot
         plt.show()
@@ -290,8 +290,8 @@ class EMGSession:
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
 
         # Show the plot
         plt.show()
@@ -381,8 +381,9 @@ class EMGSession:
             fig.supxlabel('Time (ms)')
             fig.supylabel('Rectified EMG (mV)')
 
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
+        
         # Show the plot
         plt.show()
 
@@ -471,8 +472,9 @@ class EMGSession:
             fig.supxlabel('Time (ms)')
             fig.supylabel('Rectified EMG (mV)')
 
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
+        
         # Show the plot
         plt.show()
 
@@ -557,13 +559,13 @@ class EMGSession:
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
 
         # Show the plot
         plt.show()
 
-    def plot_reflex_curves (self, channel_names=[]):
+    def plot_reflex_curves (self, channel_names=[], method='rms'):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
 
@@ -596,9 +598,19 @@ class EMGSession:
             for recording in self.recordings_processed:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
-
-                m_wave_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
-                h_response_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
+                
+                if method == 'rms':
+                    m_wave_amplitude = emg_transform.calculate_rms_amplitude(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
+                    h_response_amplitude = emg_transform.calculate_rms_amplitude(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
+                elif method == 'avg_rectified':
+                    m_wave_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
+                    h_response_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
+                elif method == 'peak_to_trough':
+                    m_wave_amplitude = emg_transform.calculate_peak_to_trough_amplitude(channel_data, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.scan_rate)
+                    h_response_amplitude = emg_transform.calculate_peak_to_trough_amplitude(channel_data, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.scan_rate)
+                else:
+                    print(f">! Error: method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
+                    return
 
                 m_wave_amplitudes.append(m_wave_amplitude)
                 h_response_amplitudes.append(h_response_amplitude)
@@ -630,13 +642,14 @@ class EMGSession:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel('Avg. Rect. Reflex EMG (mV)')
             fig.suptitle(f'M-response and H-reflex Curves')
+            # Adjust subplot spacing
         else:
             fig.suptitle(f'M-response and H-reflex Curves')
             fig.supxlabel('Stimulus Voltage (V)')
             fig.supylabel('Avg. Rect. Reflex EMG (mV)')
-
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
 
         # Show the plot
         plt.show()
@@ -655,6 +668,7 @@ class EMGDataset:
             h_end_ms (float, optional): End time of the suspected H-reflex window in milliseconds. Defaults to 7.0 ms.
             bin_size (float, optional): Bin size for the x-axis (in V). Defaults to 0.05V.
     """
+    
     def __init__(self, emg_sessions):
         """
         Initialize an EMGDataset instance from a list of EMGSession instances for multi-session analyses and plotting.
@@ -665,6 +679,7 @@ class EMGDataset:
         self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
         self.scan_rate = self.emg_sessions[0].scan_rate
         self.num_channels = self.emg_sessions[0].num_channels
+        self.stim_delay = self.emg_sessions[0].stim_delay
 
         self.m_start = config['m_start']
         self.m_end = config['m_end']
@@ -677,6 +692,7 @@ class EMGDataset:
         self.title_font_size = config['title_font_size']
         self.axis_label_font_size = config['axis_label_font_size']
         self.tick_font_size = config['tick_font_size']
+        self.subplot_adjust_args = config['subplot_adjust_args']
 
         #Set plot font/style defaults for returned graphs
         plt.rcParams.update({'figure.titlesize': self.title_font_size})
@@ -684,13 +700,20 @@ class EMGDataset:
         plt.rcParams.update({'axes.titlesize': self.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.tick_font_size, 'ytick.labelsize': self.tick_font_size})
 
-    def plot_reflex_curves(self, channel_names=[]):
+    def dataset_parameters (self):
+        """
+        Prints EMG dataset parameters.
+        """
+        print(f"# EMG Sessions: {len(self.emg_sessions)}")
+
+    def plot_reflex_curves(self, channel_names=[], method='rms'):
         """
         Plots average M-response and H-reflex curves for a dataset of EMG sessions along with the standard deviation. 
         Because the stimulus voltages for subsequent trials/session vary slightly in their intensity, slight binning is required to plot a smooth curve.
 
         Args:
             channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+            method (string, optional): Method for calculating the amplitude of the M-wave and H-reflex. Options are 'rms', 'avg_rectified', or 'peak_to_trough'. Defaults to 'rms'.
         """
         # Handle custom channel names parameter if specified.
         customNames = False
@@ -724,7 +747,7 @@ class EMGDataset:
             h_response_means = []
             h_response_stds = []
             for stimulus_v in stimulus_voltages:
-                m_wave_mean, m_wave_std, h_response_mean, h_response_std = emg_transform.calculate_mean_std(sorted_recordings, stimulus_v, channel_index, self.m_start[channel_index], self.m_end[channel_index], self.h_start[channel_index], self.h_end[channel_index], self.bin_size, self.scan_rate)
+                m_wave_mean, m_wave_std, h_response_mean, h_response_std = emg_transform.calculate_mean_std(sorted_recordings, stimulus_v, channel_index, self.m_start[channel_index] + self.stim_delay, self.m_end[channel_index] + self.stim_delay, self.h_start[channel_index] + self.stim_delay, self.h_end[channel_index] + self.stim_delay, self.bin_size, self.scan_rate, method=method)
                 m_wave_means.append(m_wave_mean)
                 m_wave_stds.append(m_wave_std)
                 h_response_means.append(h_response_mean)
@@ -761,8 +784,8 @@ class EMGDataset:
             fig.supxlabel('Stimulus Voltage (V)')
             fig.supylabel('Avg. Rect. Reflex EMG (mV)')
 
-            # Adjust subplot spacing
-            plt.subplots_adjust(wspace=0.1,left=0.1, right=0.9, top=0.85, bottom=0.15)
+        # Adjust subplot spacing
+        plt.subplots_adjust(**self.subplot_adjust_args)
 
         # Show the plot
         plt.show()

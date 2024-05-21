@@ -20,8 +20,9 @@ def unpackPickleOutput (output_path):
             pickles = os.listdir(os.path.join(output_path, dataset))
             pickle_paths = [os.path.join(output_path, dataset, pickle).replace('\\', '/') for pickle in pickles]
             dataset_pickles_dict[dataset] = pickle_paths
-        else:
-            session_name = dataset.split('-')[0]
+        else: # if this is a single session instead...
+            split_parts = dataset.split('-') # Split the string at the hyphens
+            session_name = '-'.join(split_parts[:-1]) # Select the portion before the last hyphen to drop the "-SessionData.pickle" portion.
             dataset_pickles_dict[session_name] = os.path.join(output_path, dataset).replace('\\', '/')
     # Get dict keys
     dataset_dict_keys = list(dataset_pickles_dict.keys())
