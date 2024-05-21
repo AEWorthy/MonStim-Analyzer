@@ -659,14 +659,14 @@ class EMGDataset:
     Class for a dataset of EMGSession instances for multi-session analyses and plotting.
 
     This module provides functions for analyzing a full dataset of EMGSessions. This code assumes all session have the same recording parameters and number of channels.
-    The class must be instatiated with a list of EMGSession instances.
+    The class must be instantiated with a list of EMGSession instances.
 
     Attributes:
-            m_start_ms (float, optional): Start time of the M-response window in milliseconds. Defaults to 2.0 ms.
-            m_end_ms (float, optional): End time of the M-response window in milliseconds. Defaults to 4.0 ms.
-            h_start_ms (float, optional): Start time of the suspected H-reflex window in milliseconds. Defaults to 4.0 ms.
-            h_end_ms (float, optional): End time of the suspected H-reflex window in milliseconds. Defaults to 7.0 ms.
-            bin_size (float, optional): Bin size for the x-axis (in V). Defaults to 0.05V.
+        m_start_ms (float, optional): Start time of the M-response window in milliseconds. Defaults to 2.0 ms.
+        m_end_ms (float, optional): End time of the M-response window in milliseconds. Defaults to 4.0 ms.
+        h_start_ms (float, optional): Start time of the suspected H-reflex window in milliseconds. Defaults to 4.0 ms.
+        h_end_ms (float, optional): End time of the suspected H-reflex window in milliseconds. Defaults to 7.0 ms.
+        bin_size (float, optional): Bin size for the x-axis (in V). Defaults to 0.05V.
     """
     
     def __init__(self, emg_sessions):
@@ -674,7 +674,7 @@ class EMGDataset:
         Initialize an EMGDataset instance from a list of EMGSession instances for multi-session analyses and plotting.
 
         Args:
-            emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
+            emg_sessions (list): A list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
         """
         self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
         self.scan_rate = self.emg_sessions[0].scan_rate
@@ -694,13 +694,13 @@ class EMGDataset:
         self.tick_font_size = config['tick_font_size']
         self.subplot_adjust_args = config['subplot_adjust_args']
 
-        #Set plot font/style defaults for returned graphs
+        # Set plot font/style defaults for returned graphs
         plt.rcParams.update({'figure.titlesize': self.title_font_size})
         plt.rcParams.update({'figure.labelsize': self.axis_label_font_size, 'figure.labelweight': 'bold'})
         plt.rcParams.update({'axes.titlesize': self.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.tick_font_size, 'ytick.labelsize': self.tick_font_size})
 
-    def dataset_parameters (self):
+    def dataset_parameters(self):
         """
         Prints EMG dataset parameters.
         """
