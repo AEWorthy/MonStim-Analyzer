@@ -5,6 +5,7 @@ Classes to analyze and plot EMG data from individual sessions or an entire datas
 
 import pickle
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 import matplotlib.pyplot as plt
 import emg_transform as emg_transform
 import yaml_config as yaml_config
@@ -50,6 +51,8 @@ class EMGSession:
         self.tick_font_size = config['tick_font_size']
         self.subplot_adjust_args = config['subplot_adjust_args']
 
+        self.butter_filter_args = config['butter_filter_args']
+
         #Set plot font/style defaults for returned graphs
         plt.rcParams.update({'figure.titlesize': self.title_font_size})
         plt.rcParams.update({'figure.labelsize': self.axis_label_font_size, 'figure.labelweight': 'bold'})
@@ -73,29 +76,43 @@ class EMGSession:
         self.emg_amp_gains = session_info['emg_amp_gains']
 
         # Access the raw EMG recordings. Sort by stimulus voltage.
-        self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v']).copy()
-        
-        # Apply bandpass filter.
-        self.recordings_filtered = copy.deepcopy(self.recordings_raw)
-        for recording in self.recordings_filtered:
-                for i, channel_emg in enumerate(recording['channel_data']):
-                    filtered_emg = emg_transform.butter_bandpass_filter(channel_emg, self.scan_rate)
-                    recording['channel_data'][i] = filtered_emg
-                # recording['channel_data'] = emg_transform.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+        self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
 
-        # Rectify the raw EMG data
-        self.recordings_rectified_raw = copy.deepcopy(self.recordings_raw)
-        for recording in self.recordings_rectified_raw:
-                for i, channel_emg in enumerate(recording['channel_data']):
+    def process_emg_data(self, apply_filter=False, rectify=False):
+        """
+        Process EMG data by applying a bandpass filter and/or rectifying the data.
+
+        Args:
+            recordings (list): List of recordings to process.
+            apply_filter (bool, optional): Whether to apply a bandpass filter to the data. Defaults to False.
+            rectify (bool, optional): Whether to rectify the data. Defaults to False.
+        """
+        def process_single_recording(recording):
+            for i, channel_emg in enumerate(recording['channel_data']):
+                if apply_filter:
+                    filtered_emg = emg_transform.butter_bandpass_filter(channel_emg, self.scan_rate, **self.butter_filter_args)
+                    if rectify:
+                        recording['channel_data'][i] = emg_transform.rectify_emg(filtered_emg)
+                    else:
+                        recording['channel_data'][i] = filtered_emg
+                elif rectify:
                     rectified_emg = emg_transform.rectify_emg(channel_emg)
                     recording['channel_data'][i] = rectified_emg
+                
+                # Apply baseline correction to the processed data if a filter was applied.
+                if apply_filter:
+                    recording['channel_data'] = emg_transform.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+            return recording
         
-        # Rectify the processed EMG data
-        self.recordings_rectified_processed = copy.deepcopy(self.recordings_filtered)
-        for recording in self.recordings_rectified_processed:
-                for i, channel_emg in enumerate(recording['channel_data']):
-                    rectified_emg = emg_transform.rectify_emg(channel_emg)
-                    recording['channel_data'][i] = rectified_emg
+        # Copy recordings if deep copy is needed.
+        processed_recordings = copy.deepcopy(self.recordings_raw) if apply_filter or rectify else self.recordings_raw
+
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor() as executor:
+            processed_recordings = list(executor.map(process_single_recording, processed_recordings))
+
+        return processed_recordings
+
 
     def session_parameters (self):
         """
@@ -145,13 +162,13 @@ class EMGSession:
 
         # Establish type of EMG data to plot
         if data_type == 'filtered':
-            emg_recordings = self.recordings_filtered
+            emg_recordings = self.process_emg_data(apply_filter=True, rectify=False)
         elif data_type == 'raw':
-            emg_recordings = self.recordings_raw
+            emg_recordings = self.process_emg_data(apply_filter=False, rectify=False)
         elif data_type == 'rectified_raw':
-            emg_recordings = self.recordings_rectified_raw
+            emg_recordings = self.process_emg_data(apply_filter=False, rectify=True)
         elif data_type == 'rectified_filtered':
-            emg_recordings = self.recordings_rectified_processed
+            emg_recordings = self.process_emg_data(apply_filter=True, rectify=True)
         else:
             print(f">! Error: data type {data_type} is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
             return
@@ -341,7 +358,7 @@ class EMGSession:
             h_response_amplitudes = []
             stimulus_voltages = []
 
-            for recording in self.recordings_filtered:
+            for recording in self.process_emg_data(apply_filter=True, rectify=False):
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
                 

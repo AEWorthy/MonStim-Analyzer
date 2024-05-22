@@ -59,7 +59,7 @@ def unpackEMGSessions(emg_sessions):
     """
     # Check if list dtype is EMGSession. If it is, convert it to a new EMGSession instance and replace the string in the list.
     pickled_sessions = []
-    for i, session in enumerate(emg_sessions):
+    for session in emg_sessions:
         if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
             session = MakeSession(session) # replace the string with an actual session object.
             pickled_sessions.append(session)

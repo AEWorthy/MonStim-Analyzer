@@ -4,6 +4,12 @@
 bin_size: 0.02 # bins for stimulus voltages (in V). default is 0.05.
 time_window: 12.0 # window of EMG time to plot (in ms). default is 10.
 
+# EMG Filter Parameters.
+butter_filter_args: # dict for butter_bandpass_filter() function. default is below.
+  lowcut: 100 # (int) lowcut frequency (in Hz).
+  highcut: 3500 # (int) highcut frequency (in Hz).
+  order: 4 # (int) order of the filter.
+
 # Plot Style Parameters.
 title_font_size : 16 # (int) font size of the plot title.
 axis_label_font_size : 16 # (int) font size of the axis labels.
