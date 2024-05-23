@@ -83,9 +83,27 @@ class EMGSession:
         Process EMG data by applying a bandpass filter and/or rectifying the data.
 
         Args:
-            recordings (list): List of recordings to process.
             apply_filter (bool, optional): Whether to apply a bandpass filter to the data. Defaults to False.
             rectify (bool, optional): Whether to rectify the data. Defaults to False.
+
+        Returns:
+            list: List of processed recordings.
+
+        Raises:
+            None
+
+        Examples:
+            # Process EMG data without applying any filters or rectification
+            processed_data = process_emg_data()
+
+            # Process EMG data with bandpass filter applied
+            processed_data = process_emg_data(apply_filter=True)
+
+            # Process EMG data with rectification applied
+            processed_data = process_emg_data(rectify=True)
+
+            # Process EMG data with both bandpass filter and rectification applied
+            processed_data = process_emg_data(apply_filter=True, rectify=True)
         """
         def process_single_recording(recording):
             for i, channel_emg in enumerate(recording['channel_data']):
@@ -113,7 +131,6 @@ class EMGSession:
 
         return processed_recordings
 
-
     def session_parameters (self):
         """
         Prints EMG recording session parameters from a Pickle file.
@@ -132,7 +149,13 @@ class EMGSession:
         Plots EMG data from a Pickle file for a specified time window.
 
         Args:
-            channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+            channel_names (list, optional): List of custom channel names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+            m_flags (bool, optional): Flag to indicate whether to plot markers for muscle onset and offset. Default is False.
+            h_flags (bool, optional): Flag to indicate whether to plot markers for hand onset and offset. Default is False.
+            data_type (str, optional): Type of EMG data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'. Default is 'filtered'.
+
+        Returns:
+            None
         """
 
         # Handle custom channel names parameter if specified.
@@ -162,13 +185,19 @@ class EMGSession:
 
         # Establish type of EMG data to plot
         if data_type == 'filtered':
-            emg_recordings = self.process_emg_data(apply_filter=True, rectify=False)
+            if not hasattr(self, 'recordings_processed'):
+                self.recordings_processed = self.process_emg_data(apply_filter=True, rectify=False)
+            emg_recordings = self.recordings_processed
         elif data_type == 'raw':
-            emg_recordings = self.process_emg_data(apply_filter=False, rectify=False)
+            emg_recordings = self.recordings_raw
         elif data_type == 'rectified_raw':
-            emg_recordings = self.process_emg_data(apply_filter=False, rectify=True)
+            if not hasattr(self, 'recordings_rectified_raw'):
+                self.recordings_rectified_raw = self.process_emg_data(apply_filter=False, rectify=True)
+            emg_recordings = self.recordings_rectified_raw
         elif data_type == 'rectified_filtered':
-            emg_recordings = self.process_emg_data(apply_filter=True, rectify=True)
+            if not hasattr(self, 'recordings_rectified_filtered'):
+                self.recordings_rectified_filtered = self.process_emg_data(apply_filter=True, rectify=True)
+            emg_recordings = self.recordings_rectified_filtered
         else:
             print(f">! Error: data type {data_type} is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
             return
@@ -334,7 +363,11 @@ class EMGSession:
 
         Args:
             channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
+            method (str, optional): The method used to calculate the mean and standard deviation. Options are 'rms', 'avg_rectified', or 'peak_to_trough'. Default is 'rms'.
         """
+        # Process EMG data if not already done.
+        if not hasattr(self, 'recordings_processed'):
+            self.recordings_processed = self.process_emg_data(apply_filter=True, rectify=False)
 
         # Handle custom channel names parameter if specified.
         customNames = False
@@ -358,7 +391,7 @@ class EMGSession:
             h_response_amplitudes = []
             stimulus_voltages = []
 
-            for recording in self.process_emg_data(apply_filter=True, rectify=False):
+            for recording in self.recordings_processed:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
                 
@@ -440,6 +473,12 @@ class EMGDataset:
             emg_sessions (list): A list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
         """
         self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
+        
+        # Generate processed recordings for each session if not already done.
+        for session in self.emg_sessions:
+            if not hasattr(session, 'recordings_processed'):
+                session.recordings_processed = session.process_emg_data(apply_filter=True, rectify=False)
+
         self.scan_rate = self.emg_sessions[0].scan_rate
         self.num_channels = self.emg_sessions[0].num_channels
         self.stim_delay = self.emg_sessions[0].stim_delay
@@ -471,13 +510,16 @@ class EMGDataset:
 
     def plot_reflex_curves(self, channel_names=[], method='rms'):
         """
-        Plots average M-response and H-reflex curves for a dataset of EMG sessions along with the standard deviation. 
-        Because the stimulus voltages for subsequent trials/session vary slightly in their intensity, slight binning is required to plot a smooth curve.
+        Plots the M-response and H-reflex curves for each channel.
 
         Args:
-            channel_names (string, optional): List of custom channels names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
-            method (string, optional): Method for calculating the amplitude of the M-wave and H-reflex. Options are 'rms', 'avg_rectified', or 'peak_to_trough'. Defaults to 'rms'.
+            channel_names (list): A list of custom channel names. If specified, the channel names will be used in the plot titles.
+            method (str): The method used to calculate the mean and standard deviation. Options are 'rms', 'avg_rectified', or 'peak_to_trough'. Default is 'rms'.
+
+        Returns:
+            None
         """
+
         # Handle custom channel names parameter if specified.
         customNames = False
         if len(channel_names) == 0:
@@ -486,7 +528,7 @@ class EMGDataset:
             print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.num_channels} channels were recorded.")
         elif len(channel_names) == self.num_channels:
             customNames = True
-        
+
         # Unpack session recordings.
         recordings = []
         for session in self.emg_sessions:
