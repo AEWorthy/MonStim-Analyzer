@@ -5,7 +5,7 @@
     # Fix start of plots/data so that 0 is actually the moment of stimulation.
     # Make the time before stimulation negative time.
 
-import csv_to_pickle as csv_to_pickle
+import csv_to_pickle_05242024 as csv_to_pickle_05242024
 import Analyze_EMG
 
 DATA_PATH = 'files_to_analyze'
