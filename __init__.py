@@ -7,7 +7,6 @@ __title__ = 'monstim_analysis'
 __description__ = 'Convert MonStim CSV files to Pickle files.'
 __author__ = 'Andrew Worthy'
 __email__ = 'aeworth@emory.edu'
-__license__ = 'MIT'
 
 # Import functions
 
