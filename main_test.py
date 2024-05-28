@@ -1,7 +1,7 @@
 # MonStim_CSV_Analysis - main.py
 
 from monstim_to_pickle import pickle_data
-import utils
+import pickle_utils
 import Analyze_EMG
 
 DATA_PATH = 'files_to_analyze'
@@ -11,19 +11,19 @@ OUTPUT_PATH = 'output'
 pickle_data(DATA_PATH, OUTPUT_PATH)
 
 # Create dictionaries of Pickle datasets and single sessions that are in the 'output' directory.
-dataset_dict, datasets = utils.unpackPickleOutput(OUTPUT_PATH)
+dataset_dict, datasets = pickle_utils.unpackPickleOutput(OUTPUT_PATH)
 for idx, dataset in enumerate(datasets):
     print(f'dataset index {idx}: {dataset}')
 
 # Define dataset of interest for downstream analysis.
 dataset_idx = 10
-dataset_oi = utils.dataset_oi(dataset_dict, datasets, dataset_idx)
+dataset_oi = pickle_utils.dataset_oi(dataset_dict, datasets, dataset_idx)
 dataset_oi.dataset_parameters()
 
 
 # Define session of interest for downstream analysis.
 session_idx = 0
-session_oi = utils.session_oi(dataset_dict, datasets, dataset_idx, session_idx)
+session_oi = pickle_utils.session_oi(dataset_dict, datasets, dataset_idx, session_idx)
 session_oi.session_parameters()
 
 # Visualize single EMG session raw and filtered

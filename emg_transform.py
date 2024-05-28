@@ -25,6 +25,7 @@ Note: This module requires the numpy and scipy libraries to be installed.
 
 import numpy as np
 from scipy import signal
+import pandas as pd
 
 
 def butter_bandpass(lowcut, highcut, fs, order):
@@ -196,50 +197,56 @@ def calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rat
     rectified_emg_window = emg_window
     return np.mean(rectified_emg_window)
 
-def calculate_mean_std(recordings, stimulus_value, channel_index, m_start_ms, m_end_ms, h_start_ms, h_end_ms, bin_size, scan_rate, method='rms'):
+def detect_plateau(x, y, window_size, threshold, report=True):
     """
-    Calculate the M-responses and H-reflexes over multiple sessions for a given stimulus voltage, binning the stimulus voltages.
+    Detects the plateau region in a reflex curve.
 
-    Parameters:
-    recordings (list): A list of recordings containing stimulus voltages and channel data.
-    stimulus_value (float): The stimulus voltage to calculate M-responses and H-reflexes for.
-    channel_index (int): The index of the channel to analyze in the recordings.
-    m_start_ms (float): The start time (in milliseconds) for calculating the M-wave amplitude.
-    m_end_ms (float): The end time (in milliseconds) for calculating the M-wave amplitude.
-    h_start_ms (float): The start time (in milliseconds) for calculating the H-reflex amplitude.
-    h_end_ms (float): The end time (in milliseconds) for calculating the H-reflex amplitude.
-    bin_size (float): The bin size for grouping stimulus voltages.
-    scan_rate (float): The scan rate (samples per second) of the recorded data.
-    method (str): The method to use for calculating the reflex amplitude. Options are 'rms', 'avg_rectified', or 'peak_to_trough'.
+    Args:
+        x (array-like): The x-coordinates of the data points.
+        y (array-like): The y-coordinates of the data points.
+        window_size (int): The size of the sliding window used for plateau detection.
+        threshold (float): The threshold value used to determine if the standard deviation of the window is below the threshold.
+        report (bool, optional): Whether to print a report when a plateau region is detected. Defaults to True.
 
     Returns:
-    tuple: A tuple containing the mean and standard deviation of the M-wave amplitudes, and the mean and standard deviation of the H-reflex amplitudes.
+        tuple or None: A tuple containing the start and end indices of the plateau region, or None if no plateau region is detected.
     """
-    m_wave_amplitudes = []
-    h_response_amplitudes = []
-    for recording in recordings:
-        binned_stimulus_v = round(recording['stimulus_v'] / bin_size) * bin_size
-        if binned_stimulus_v == stimulus_value:
-            channel_data = recording['channel_data'][channel_index]
+    plateau_start_idx = None
+    plateau_end_idx = None
 
-            if method == 'rms':
-                m_wave_amplitude = calculate_rms_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
-                h_response_amplitude = calculate_rms_amplitude(channel_data, h_start_ms, h_end_ms, scan_rate)
-            elif method == 'avg_rectified':
-                m_wave_amplitude = calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
-                h_response_amplitude = calculate_average_amplitude_rectified(channel_data, h_start_ms, h_end_ms, scan_rate)
-            elif method == 'peak_to_trough':
-                m_wave_amplitude = calculate_peak_to_trough_amplitude(channel_data, m_start_ms, m_end_ms, scan_rate)
-                h_response_amplitude = calculate_peak_to_trough_amplitude(channel_data, h_start_ms, h_end_ms, scan_rate)
-            else:
-                print(f">! Error: method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
-                return
-
-            m_wave_amplitudes.append(m_wave_amplitude)
-            h_response_amplitudes.append(h_response_amplitude)    
+    for i in range(len(y) - window_size):
+        window = y[i:i+window_size]
+        if np.std(window) < threshold:
+            # Calculate the slope of the window
+            if plateau_start_idx is None:
+                plateau_start_idx = i
+            plateau_end_idx = i + window_size
+        else:
+            plateau_start_idx = None
+            plateau_end_idx = None
     
-    m_wave_mean = np.mean(m_wave_amplitudes)
-    m_wave_std = np.std(m_wave_amplitudes)
-    h_response_mean = np.mean(h_response_amplitudes)
-    h_response_std = np.std(h_response_amplitudes)
-    return m_wave_mean, m_wave_std, h_response_mean, h_response_std
+    if plateau_start_idx and plateau_end_idx is not None:
+        if report:
+            print(f"Plateau region detected with window size {window_size}. Threshold: {threshold} times SD.")
+        return plateau_start_idx, plateau_end_idx
+    # Shrink the window size and retry if no plateau region is detected.
+    elif window_size > 5:
+        return detect_plateau(x, y, window_size-1, threshold, report=report)
+    else:
+        return None, None
+
+def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, threshold=0.2, slope_threshold=0.1, report=False):
+    """
+    Get the M-wave amplitude and stimulus voltage at M-max.
+    """
+    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, threshold, report=report)
+
+    if plateau_start_idx is not None and plateau_end_idx is not None:
+        plateau_data = m_wave_amplitudes[plateau_start_idx:plateau_end_idx]
+        m_max = np.mean(plateau_data)
+        if report:
+            print(f"\tM-max amplitude: {m_max}")
+        return m_max
+    else:
+        print("No clear plateau region detected. Try adjusting the threshold values.")
+        return None

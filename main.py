@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 import os
 from monstim_to_pickle import pickle_data
-import utils
+import pickle_utils
 import Analyze_EMG
 
 class EMGAnalysisGUI(tk.Tk):
@@ -96,12 +96,12 @@ class EMGAnalysisGUI(tk.Tk):
 
             # If pickled files exist and overwrite is not selected, load them directly
             if pickled_files and not self.overwrite_var.get():
-                self.dataset_dict, self.datasets = utils.unpackPickleOutput(output_dir)
+                self.dataset_dict, self.datasets = pickle_utils.unpackPickleOutput(output_dir)
                 self.update_dataset_combo()
             else:
                 # If pickled files don't exist or overwrite is selected, process the CSV files
                 pickle_data(input_dir, output_dir)
-                self.dataset_dict, self.datasets = utils.unpackPickleOutput(output_dir)
+                self.dataset_dict, self.datasets = pickle_utils.unpackPickleOutput(output_dir)
                 self.update_dataset_combo()
 
     def update_dataset_combo(self):
@@ -117,8 +117,8 @@ class EMGAnalysisGUI(tk.Tk):
         session_idx = self.session_combo.current()
 
         if dataset_idx >= 0 and session_idx >= 0:
-            dataset_oi = utils.dataset_oi(self.dataset_dict, self.datasets, dataset_idx)
-            session_oi = utils.session_oi(self.dataset_dict, self.datasets, dataset_idx, session_idx)
+            dataset_oi = pickle_utils.dataset_oi(self.dataset_dict, self.datasets, dataset_idx)
+            session_oi = pickle_utils.session_oi(self.dataset_dict, self.datasets, dataset_idx, session_idx)
 
             # Add your analysis code here
             # For example:
