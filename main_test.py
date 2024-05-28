@@ -1,6 +1,6 @@
 # MonStim_CSV_Analysis - main.py
 
-from csv_to_pickle import pickle_data
+from monstim_to_pickle import pickle_data
 import utils
 import Analyze_EMG
 

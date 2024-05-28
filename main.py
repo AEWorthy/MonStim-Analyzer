@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, ttk
 import os
-from csv_to_pickle import pickle_data
+from monstim_to_pickle import pickle_data
 import utils
 import Analyze_EMG
 
