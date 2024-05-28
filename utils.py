@@ -3,8 +3,20 @@ Misc. helper functions.
 """
 
 import os
+import yaml
 from Analyze_EMG import EMGSession as MakeSession
 from Analyze_EMG import EMGDataset as MakeDataset
+
+def load_config(config_file):
+    """
+    Loads the config.yaml file into a YAML object that can be used to reference hard-coded configurable constants.
+
+    Args:
+        config_file (str): location of the 'config.yaml' file.
+    """
+    with open(config_file, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
 
 def unpackPickleOutput (output_path):
     """
@@ -28,7 +40,6 @@ def unpackPickleOutput (output_path):
     dataset_dict_keys = list(dataset_pickles_dict.keys())
     return dataset_pickles_dict, dataset_dict_keys
 
-
 def dataset_oi (dataset_dict, datasets, dataset_idx):
     """
     Defines a session of interest for downstream analysis.
@@ -49,24 +60,3 @@ def session_oi (dataset_dict, datasets, dataset_idx, session_idx):
     dataset_oi = dataset_dict[datasets[dataset_idx]]
     session_oi = MakeSession(dataset_oi[session_idx])
     return session_oi
-
-def unpackEMGSessions(emg_sessions):
-    """
-    Unpacks a list of EMG session Pickle files and outputs a list of EMGSession instances for those pickles. If a list of EMGSession instances is passed, will return that same list.
-
-    Args:
-        emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
-    """
-    # Check if list dtype is EMGSession. If it is, convert it to a new EMGSession instance and replace the string in the list.
-    pickled_sessions = []
-    for session in emg_sessions:
-        if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
-            session = MakeSession(session) # replace the string with an actual session object.
-            pickled_sessions.append(session)
-        elif isinstance(session, MakeSession):
-            pickled_sessions.append(session)
-            print(session)
-        else:
-            raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
-
-    return pickled_sessions

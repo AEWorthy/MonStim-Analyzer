@@ -8,11 +8,10 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import matplotlib.pyplot as plt
 import emg_transform as emg_transform
-import yaml_config as yaml_config
 import utils as utils
 import copy
 
-config = yaml_config.load_config('config.yml')
+config = utils.load_config('config.yml')
 
 class EMGSession:
     """
@@ -472,7 +471,7 @@ class EMGDataset:
         Args:
             emg_sessions (list): A list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
         """
-        self.emg_sessions = utils.unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
+        self.emg_sessions = self.unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
         
         # Generate processed recordings for each session if not already done.
         for session in self.emg_sessions:
@@ -501,6 +500,27 @@ class EMGDataset:
         plt.rcParams.update({'figure.labelsize': self.axis_label_font_size, 'figure.labelweight': 'bold'})
         plt.rcParams.update({'axes.titlesize': self.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.tick_font_size, 'ytick.labelsize': self.tick_font_size})
+
+    def unpackEMGSessions(emg_sessions):
+        """
+        Unpacks a list of EMG session Pickle files and outputs a list of EMGSession instances for those pickles. If a list of EMGSession instances is passed, will return that same list.
+
+        Args:
+            emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
+        """
+        # Check if list dtype is EMGSession. If it is, convert it to a new EMGSession instance and replace the string in the list.
+        pickled_sessions = []
+        for session in emg_sessions:
+            if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
+                session = EMGSession(session) # replace the string with an actual session object.
+                pickled_sessions.append(session)
+            elif isinstance(session, EMGSession):
+                pickled_sessions.append(session)
+                print(session)
+            else:
+                raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
+
+        return pickled_sessions
 
     def dataset_parameters(self):
         """
