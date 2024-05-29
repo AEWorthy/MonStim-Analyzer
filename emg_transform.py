@@ -25,6 +25,7 @@ Note: This module requires the numpy and scipy libraries to be installed.
 
 import numpy as np
 from scipy import signal
+from sklearn.linear_model import LinearRegression
 import pandas as pd
 
 
@@ -197,14 +198,21 @@ def calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rat
     rectified_emg_window = emg_window
     return np.mean(rectified_emg_window)
 
-def detect_plateau(x, y, window_size, threshold, report=True):
+def savgol_filter_y (y, polyorder=3):
+    # Smoothen the data using Savitzky-Golay filtering
+    window_length = int((len(y) / 100) * 25)
+    y_filtered = signal.savgol_filter(y, window_length, polyorder)
+    return y_filtered
+
+def detect_plateau(x, y, max_window_size, min_window_size, threshold, report=True):
     """
     Detects the plateau region in a reflex curve.
 
     Args:
         x (array-like): The x-coordinates of the data points.
         y (array-like): The y-coordinates of the data points.
-        window_size (int): The size of the sliding window used for plateau detection.
+        max_window_size (int): The maximum size of the sliding window used for plateau detection.
+        min_window_size (int): The minimum size of the sliding window used for plateau detection.
         threshold (float): The threshold value used to determine if the standard deviation of the window is below the threshold.
         report (bool, optional): Whether to print a report when a plateau region is detected. Defaults to True.
 
@@ -214,39 +222,50 @@ def detect_plateau(x, y, window_size, threshold, report=True):
     plateau_start_idx = None
     plateau_end_idx = None
 
-    for i in range(len(y) - window_size):
-        window = y[i:i+window_size]
+    y_filtered = savgol_filter_y(y)
+
+    for i in range(len(y_filtered) - max_window_size):
+        window = y_filtered[i:i+max_window_size]
         if np.std(window) < threshold:
             # Calculate the slope of the window
             if plateau_start_idx is None:
                 plateau_start_idx = i
-            plateau_end_idx = i + window_size
+            plateau_end_idx = i + max_window_size
         else:
             plateau_start_idx = None
             plateau_end_idx = None
-    
+
     if plateau_start_idx and plateau_end_idx is not None:
         if report:
-            print(f"Plateau region detected with window size {window_size}. Threshold: {threshold} times SD.")
+            print(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
         return plateau_start_idx, plateau_end_idx
     # Shrink the window size and retry if no plateau region is detected.
-    elif window_size > 5:
-        return detect_plateau(x, y, window_size-1, threshold, report=report)
+    elif max_window_size > min_window_size:
+        return detect_plateau(x, y, max_window_size-1, min_window_size, threshold, report=report)
     else:
         return None, None
 
-def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, threshold=0.2, slope_threshold=0.1, report=False):
+def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, report=False):
     """
     Get the M-wave amplitude and stimulus voltage at M-max.
     """
-    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, threshold, report=report)
+    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, min_window_size, threshold, report=report)
 
     if plateau_start_idx is not None and plateau_end_idx is not None:
         plateau_data = m_wave_amplitudes[plateau_start_idx:plateau_end_idx]
         m_max = np.mean(plateau_data)
+        
+        # Adjust the M-max amplitude by adding the standard deviation of the M-wave amplitudes above the putative M-max
+        if m_max < max(m_wave_amplitudes):
+            m_max = np.mean(plateau_data) + np.mean(np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data))
+        
         if report:
             print(f"\tM-max amplitude: {m_max}")
         return m_max
     else:
         print("No clear plateau region detected. Try adjusting the threshold values.")
         return None
+
+
+
+
