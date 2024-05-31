@@ -255,9 +255,11 @@ def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_
         plateau_data = m_wave_amplitudes[plateau_start_idx:plateau_end_idx]
         m_max = np.mean(plateau_data)
         
-        # Adjust the M-max amplitude by adding the standard deviation of the M-wave amplitudes above the putative M-max
+        # Adjust the M-max amplitude by adding the average difference between the plateau data and the outlier data.
         if m_max < max(m_wave_amplitudes):
-            m_max = np.mean(plateau_data) + np.mean(np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data))
+            m_max = m_max + np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)
+            if report:
+                print(f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)}")
         
         if report:
             print(f"\tM-max amplitude: {m_max}")
