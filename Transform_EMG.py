@@ -1,4 +1,7 @@
 # emg_transform.py
+# Created 2024-05-31 by Andrew Worthy
+# Last updated 2024-05-31 by Andrew Worthy
+# Version 1.0
 
 """
 Helper functions for EMG calculations and transformations.
@@ -18,16 +21,15 @@ Functions:
 - calculate_peak_to_trough_amplitude: Calculate the peak-to-trough EMG amplitude between start and end times.
 - calculate_rms_amplitude: Calculate the average RMS EMG amplitude between start and end times.
 - calculate_average_amplitude_unrectified: Calculate the average unrectified EMG amplitude between start and end times.
-- calculate_mean_std: Calculate the mean and standard deviation of M-wave amplitudes and H-reflex amplitudes over multiple sessions.
+- savgol_filter_y: Smoothen the data using Savitzky-Golay filtering.
+- detect_plateau: Detect the plateau region in a reflex curve.
+- get_avg_mmax: Get the M-wave amplitude and stimulus voltage at M-max. 
 
 Note: This module requires the numpy and scipy libraries to be installed.
 """
 
 import numpy as np
 from scipy import signal
-from sklearn.linear_model import LinearRegression
-import pandas as pd
-
 
 def butter_bandpass(lowcut, highcut, fs, order):
     """

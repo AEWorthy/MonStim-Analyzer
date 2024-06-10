@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
-import emg_transform as emg_transform
+import Transform_EMG
 
 
 
@@ -189,18 +189,18 @@ class EMGSession:
         def process_single_recording(recording):
             for i, channel_emg in enumerate(recording['channel_data']):
                 if apply_filter:
-                    filtered_emg = emg_transform.butter_bandpass_filter(channel_emg, self.scan_rate, **self.butter_filter_args)
+                    filtered_emg = Transform_EMG.butter_bandpass_filter(channel_emg, self.scan_rate, **self.butter_filter_args)
                     if rectify:
-                        recording['channel_data'][i] = emg_transform.rectify_emg(filtered_emg)
+                        recording['channel_data'][i] = Transform_EMG.rectify_emg(filtered_emg)
                     else:
                         recording['channel_data'][i] = filtered_emg
                 elif rectify:
-                    rectified_emg = emg_transform.rectify_emg(channel_emg)
+                    rectified_emg = Transform_EMG.rectify_emg(channel_emg)
                     recording['channel_data'][i] = rectified_emg
                 
                 # Apply baseline correction to the processed data if a filter was applied.
                 if apply_filter:
-                    recording['channel_data'] = emg_transform.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+                    recording['channel_data'] = Transform_EMG.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
             return recording
         
         # Copy recordings if deep copy is needed.
