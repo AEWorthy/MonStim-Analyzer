@@ -3,6 +3,7 @@
 # Basic Parameters.
 bin_size: 0.02 # bins for stimulus voltages (in V). default is 0.05.
 time_window: 8.0 # window of EMG time to plot (in ms). default is 10.
+default_method: 'rms' # (str) default method for EMG analysis. default is 'rms'.
 
 # EMG Filter Parameters.
 butter_filter_args: # dict for butter_bandpass_filter() function. default is below.
@@ -15,7 +16,6 @@ m_max_args: # dict for get_avg_mmax() function. default is below.
   max_window_size: 15 # (int) maximum floating window size for M-max detection (in datapoints).
   min_window_size: 3 # (int) minimum floating window size for M-max detection (in datapoints).
   threshold: 0.05  # (float) standard deviation threshold for M-max detection, default is 0.2.
-  report: True # (bool) if True, print M-max detection information. default is False.
 
 # Plot Style Parameters.
 title_font_size : 16 # (int) font size of the plot title.

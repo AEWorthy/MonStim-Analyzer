@@ -15,7 +15,7 @@ Functions:
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import emg_transform as emg_transform
+import EMG_Transformer as EMG_Transformer
 
 def session_parameters (pickled_data):
     """Extracts and prints EMG recording session parameters from a Pickle file.
@@ -192,7 +192,7 @@ def plot_emg_rectified (pickled_data, time_window_ms=10, channel_names=[]):
     if customNames:
         for recording in recordings:
             for channel_index, channel_data in enumerate(recording['channel_data']):
-                rectified_channel_data = emg_transform.rectify_emg(channel_data)
+                rectified_channel_data = EMG_Transformer.rectify_emg(channel_data)
                 if num_channels == 1:
                     ax.plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     ax.set_title(f'{channel_names[0]} (Rectified)')
@@ -206,7 +206,7 @@ def plot_emg_rectified (pickled_data, time_window_ms=10, channel_names=[]):
     else:
         for recording in recordings:
             for channel_index, channel_data in enumerate(recording['channel_data']):
-                rectified_channel_data = emg_transform.rectify_emg(channel_data)
+                rectified_channel_data = EMG_Transformer.rectify_emg(channel_data)
                 if num_channels == 1:
                     ax.plot(time_window_ms, rectified_channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     ax.set_title('Channel 0 (Rectified)')
@@ -391,8 +391,8 @@ def plot_reflex_curves (pickled_data, channel_names=[], m_start_ms=2.0, m_end_ms
             channel_data = recording['channel_data'][channel_index]
             stimulus_v = recording['stimulus_v']
 
-            m_wave_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
-            h_response_amplitude = emg_transform.calculate_average_amplitude_rectified(channel_data, h_start_ms, h_end_ms, scan_rate)
+            m_wave_amplitude = EMG_Transformer._calculate_average_amplitude_rectified(channel_data, m_start_ms, m_end_ms, scan_rate)
+            h_response_amplitude = EMG_Transformer._calculate_average_amplitude_rectified(channel_data, h_start_ms, h_end_ms, scan_rate)
 
             m_wave_amplitudes.append(m_wave_amplitude)
             h_response_amplitudes.append(h_response_amplitude)

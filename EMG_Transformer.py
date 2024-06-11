@@ -1,4 +1,4 @@
-# emg_transform.py
+# emg_transformer.py
 # Created 2024-05-31 by Andrew Worthy
 # Last updated 2024-05-31 by Andrew Worthy
 # Version 1.0
@@ -89,7 +89,7 @@ def correct_emg_to_baseline(recording, scan_rate, stim_delay):
     """
     adjusted_recording = []
     for channel in recording:
-        baseline_emg = calculate_average_amplitude_unrectified(channel, 0, stim_delay, scan_rate)
+        baseline_emg = _calculate_average_amplitude_unrectified(channel, 0, stim_delay, scan_rate)
         adjusted_channel = channel - baseline_emg
         adjusted_recording.append(adjusted_channel)
 
@@ -101,7 +101,7 @@ def rectify_emg(emg_array):
     """
     return np.abs(emg_array)
 
-def calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate):
     """
     Calculate the average rectified EMG amplitude between start_ms and end_ms.
 
@@ -125,7 +125,7 @@ def calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate)
     rectified_emg_window = rectify_emg(emg_window)
     return np.mean(rectified_emg_window)
 
-def calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
     """
     Calculate the peak-to-trough EMG amplitude between start_ms and end_ms.
 
@@ -159,7 +159,7 @@ def calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
     
     return peak_to_trough_amplitude
 
-def calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
     """
     Calculate the average RMS EMG amplitude between start_ms and end_ms.
     """
@@ -181,7 +181,7 @@ def calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
     
     return rms_value
 
-def calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rate):
     """
     Calculate the average unrectified EMG amplitude between start_ms and end_ms.
 
@@ -199,6 +199,42 @@ def calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rat
     emg_window = emg_data[start_index:end_index]
     rectified_emg_window = emg_window
     return np.mean(rectified_emg_window)
+
+def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
+    """
+    Calculate the EMG amplitude using the specified method.
+
+    Parameters:
+    - emg_data: numpy array
+        The EMG data.
+    - start_ms: float
+        The start time in milliseconds.
+    - end_ms: float
+        The end time in milliseconds.
+    - scan_rate: int
+        The scan rate in samples per second.
+    - method: str
+        The calculation method to use. Must be one of 'average_rectified',
+        'peak_to_trough', 'rms', or 'average_unrectified'.
+
+    Returns:
+    - amplitude: float
+        The calculated EMG amplitude based on the specified method.
+    """
+    methods = {
+        'average_rectified': _calculate_average_amplitude_rectified,
+        'peak_to_trough': _calculate_peak_to_trough_amplitude,
+        'rms': _calculate_rms_amplitude,
+        'average_unrectified': _calculate_average_amplitude_unrectified,
+    }
+
+    if method not in methods:
+        raise ValueError(f"Invalid method '{method}'. Must be one of {', '.join(methods.keys())}")
+
+    calculation_function = methods[method]
+    amplitude = calculation_function(emg_data, start_ms, end_ms, scan_rate)
+
+    return amplitude
 
 def savgol_filter_y (y, polyorder=3):
     # Smoothen the data using Savitzky-Golay filtering
@@ -247,25 +283,36 @@ def detect_plateau(x, y, max_window_size, min_window_size, threshold, report=Tru
     else:
         return None, None
 
-def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, report=False):
+def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, mmax_report=False, return_mmax_stim_range=False):
     """
     Get the M-wave amplitude and stimulus voltage at M-max.
     """
-    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, min_window_size, threshold, report=report)
+    # Convert the lists to numpy arrays.
+    m_wave_amplitudes = np.array(m_wave_amplitudes)
 
+    # Detect the plateau region in the reflex curve.
+    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, min_window_size, threshold, report=mmax_report)
+
+    # Calculate the M-max amplitude using the plateau region m_wave_amplitudes.
     if plateau_start_idx is not None and plateau_end_idx is not None:
         plateau_data = m_wave_amplitudes[plateau_start_idx:plateau_end_idx]
+        plateau_data = np.array(plateau_data)
+        
         m_max = np.mean(plateau_data)
         
         # Adjust the M-max amplitude by adding the average difference between the plateau data and the outlier data.
         if m_max < max(m_wave_amplitudes):
-            m_max = m_max + np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)
-            if report:
+            m_max = m_max + np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data[plateau_data < np.max(plateau_data)])
+            if mmax_report:
                 print(f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)}")
         
-        if report:
+        # Return (and optionally print) the M-max amplitude.
+        if mmax_report:
             print(f"\tM-max amplitude: {m_max}")
-        return m_max
+        if return_mmax_stim_range:
+            return m_max, stimulus_voltages[plateau_start_idx], stimulus_voltages[plateau_end_idx]
+        else:    
+            return m_max
     else:
         print("No clear plateau region detected. Try adjusting the threshold values.")
         return None
