@@ -1,6 +1,6 @@
 # monstim_to_pickle/__init__.py
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 # Metadata
 __title__ = 'monstim_to_pickle'
