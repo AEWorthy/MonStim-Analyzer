@@ -1,132 +1,124 @@
 import tkinter as tk
 from tkinter import filedialog, ttk
 import os
-from monstim_to_pickle import pickle_data
-import pickle_utils
-import Analyze_EMG
+import io
+from Analyze_EMG import EMGSession, EMGDataset, unpackPickleOutput, getDatasetInfo, dataset_oi
 
 class EMGAnalysisGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("EMG Analysis GUI")
         self.geometry("800x600")
-        
-        # Get the script directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # Set default input and output paths
-        self.default_input_path = os.path.join(script_dir, 'files_to_analyze')
-        self.default_output_path = os.path.join(script_dir, 'output')
+        # Set the output folder path
+        self.output_folder = os.path.join(os.getcwd(), "output")
 
-        self.create_widgets()
+        # Unpack the pickled outputs
+        self.dataset_dict, self.dataset_names = unpackPickleOutput(self.output_folder)
 
-    def create_widgets(self):
-        # Create frames
-        input_frame = tk.Frame(self)
-        input_frame.pack(pady=10)
+        # Create tabs
+        self.tabControl = ttk.Notebook(self)
+        self.session_tab = ttk.Frame(self.tabControl)
+        self.dataset_tab = ttk.Frame(self.tabControl)
+        self.tabControl.add(self.session_tab, text="Session Analysis")
+        self.tabControl.add(self.dataset_tab, text="Dataset Analysis")
+        self.tabControl.pack(expand=1, fill="both")
 
-        output_frame = tk.Frame(self)
-        output_frame.pack(pady=10)
+        # Create widgets for Session Analysis tab
+        self.session_label = ttk.Label(self.session_tab, text="Select a session:")
+        self.session_label.pack(pady=10)
+        self.session_combo = ttk.Combobox(self.session_tab, values=self.get_all_sessions(), state="readonly")
+        self.session_combo.pack()
+        self.session_analyze_button = ttk.Button(self.session_tab, text="Analyze Session", command=self.analyze_session)
+        self.session_analyze_button.pack(pady=10)
+        self.session_output = tk.Text(self.session_tab, height=10, width=60)
+        self.session_output.pack(pady=10)
 
-        analysis_frame = tk.Frame(self)
-        analysis_frame.pack(pady=10)
+        # Create widgets for plotting session data
+        self.session_plot_frame = ttk.Frame(self.session_tab)
+        self.session_plot_frame.pack(pady=10)
+        self.session_plot_type_label = ttk.Label(self.session_plot_frame, text="Plot Type:")
+        self.session_plot_type_label.grid(row=0, column=0, padx=5)
+        self.session_plot_type_combo = ttk.Combobox(self.session_plot_frame, values=["emg", "suspectedH", "mmax", "reflexCurves"], state="readonly")
+        self.session_plot_type_combo.grid(row=0, column=1, padx=5)
+        self.session_plot_button = ttk.Button(self.session_plot_frame, text="Plot Data", command=self.plot_session_data)
+        self.session_plot_button.grid(row=0, column=2, padx=5)
 
-        # Input frame widgets
-        input_label = tk.Label(input_frame, text="Input Directory:")
-        input_label.pack(side=tk.LEFT)
+        # Create widgets for Dataset Analysis tab
+        self.dataset_label = ttk.Label(self.dataset_tab, text="Select a dataset:")
+        self.dataset_label.pack(pady=10)
+        self.dataset_combo = ttk.Combobox(self.dataset_tab, values=self.dataset_names, state="readonly")
+        self.dataset_combo.pack()
+        self.dataset_analyze_button = ttk.Button(self.dataset_tab, text="Analyze Dataset", command=self.analyze_dataset)
+        self.dataset_analyze_button.pack(pady=10)
+        self.dataset_output = tk.Text(self.dataset_tab, height=10, width=60)
+        self.dataset_output.pack(pady=10)
 
-        self.input_entry = tk.Entry(input_frame, width=40)
-        self.input_entry.pack(side=tk.LEFT)
+        # Create widgets for plotting dataset data
+        self.dataset_plot_frame = ttk.Frame(self.dataset_tab)
+        self.dataset_plot_frame.pack(pady=10)
+        self.dataset_plot_type_label = ttk.Label(self.dataset_plot_frame, text="Plot Type:")
+        self.dataset_plot_type_label.grid(row=0, column=0, padx=5)
+        self.dataset_plot_type_combo = ttk.Combobox(self.dataset_plot_frame, values=["reflexCurves", "mmax", "maxH"], state="readonly")
+        self.dataset_plot_type_combo.grid(row=0, column=1, padx=5)
+        self.dataset_plot_button = ttk.Button(self.dataset_plot_frame, text="Plot Data", command=self.plot_dataset_data)
+        self.dataset_plot_button.grid(row=0, column=2, padx=5)
 
-        input_button = tk.Button(input_frame, text="Browse", command=self.browse_input_dir)
-        input_button.pack(side=tk.LEFT)
+    def get_all_sessions(self):
+        all_sessions = []
+        for dataset in self.dataset_dict.values():
+            for session in dataset:
+                all_sessions.append(session)
+        return all_sessions
 
-        # Output frame widgets
-        output_label = tk.Label(output_frame, text="Output Directory:")
-        output_label.pack(side=tk.LEFT)
+    def analyze_session(self):
+        session_file = self.session_combo.get()
+        if session_file:
+            session = EMGSession(session_file)
+            self.session_output.delete('1.0', tk.END)
+            self.session_output.insert(tk.END, f"Analyzing session: {session.session_name}\n\n")
+            # Capture the output of session_parameters
+            captured_output = io.StringIO()
+            original_stdout = sys.stdout
+            sys.stdout = captured_output
+            session.session_parameters()
+            sys.stdout = original_stdout
+            output_str = captured_output.getvalue()
+            self.session_output.insert(tk.END, output_str)
 
-        self.output_entry = tk.Entry(output_frame, width=40)
-        self.output_entry.pack(side=tk.LEFT)
+    def plot_session_data(self):
+        session_file = self.session_combo.get()
+        if session_file:
+            session = EMGSession(session_file)
+            plot_type = str(self.session_plot_type_combo.get())
+            session.plot(plot_type=plot_type)
 
-        output_button = tk.Button(output_frame, text="Browse", command=self.browse_output_dir)
-        output_button.pack(side=tk.LEFT)
+    def analyze_dataset(self):
+        selected_dataset = self.dataset_combo.get()
+        if selected_dataset:
+            date, animal_id, condition = getDatasetInfo(selected_dataset)
+            dataset = dataset_oi(self.dataset_dict, self.dataset_names, self.dataset_names.index(selected_dataset))
+            self.dataset_output.delete('1.0', tk.END)
+            self.dataset_output.insert(tk.END, f"Analyzing dataset: {selected_dataset}\n\n")
+            # Capture the output of dataset_parameters
+            captured_output = io.StringIO()
+            original_stdout = sys.stdout
+            sys.stdout = captured_output
+            dataset.dataset_parameters()
+            sys.stdout = original_stdout
+            output_str = captured_output.getvalue()
+            self.dataset_output.insert(tk.END, output_str)
 
-        # Set default values for input and output entries
-        self.input_entry.insert(0, self.default_input_path)
-        self.output_entry.insert(0, self.default_output_path)
-
-        # Analysis frame widgets
-        process_button = tk.Button(analysis_frame, text="Process Data", command=self.process_data)
-        process_button.pack(side=tk.LEFT)
-
-        self.dataset_combo = ttk.Combobox(analysis_frame, state="readonly")
-        self.dataset_combo.pack(side=tk.LEFT)
-
-        self.session_combo = ttk.Combobox(analysis_frame, state="readonly")
-        self.session_combo.pack(side=tk.LEFT)
-
-        analyze_button = tk.Button(analysis_frame, text="Analyze", command=self.analyze_data)
-        analyze_button.pack(side=tk.LEFT)
-
-        # Add a checkbox for overwriting pickled files
-        self.overwrite_var = tk.BooleanVar()
-        overwrite_checkbox = tk.Checkbutton(analysis_frame, text="Overwrite Pickled Files", variable=self.overwrite_var)
-        overwrite_checkbox.pack(side=tk.LEFT)
-
-    def browse_input_dir(self):
-        input_dir = filedialog.askdirectory()
-        self.input_entry.delete(0, tk.END)
-        self.input_entry.insert(0, input_dir)
-
-    def browse_output_dir(self):
-        output_dir = filedialog.askdirectory()
-        self.output_entry.delete(0, tk.END)
-        self.output_entry.insert(0, output_dir)
-
-    def process_data(self):
-        input_dir = self.input_entry.get()
-        output_dir = self.output_entry.get()
-
-        if input_dir and output_dir:
-
-            # Check if the output directory and its subdirectories contain pickled files
-            pickled_files = []
-            for root, _, files in os.walk(output_dir):
-                pickled_files.extend([os.path.join(root, f) for f in files if f.endswith('.pickle')])
-
-            # If pickled files exist and overwrite is not selected, load them directly
-            if pickled_files and not self.overwrite_var.get():
-                self.dataset_dict, self.datasets = pickle_utils.unpackPickleOutput(output_dir)
-                self.update_dataset_combo()
-            else:
-                # If pickled files don't exist or overwrite is selected, process the CSV files
-                pickle_data(input_dir, output_dir)
-                self.dataset_dict, self.datasets = pickle_utils.unpackPickleOutput(output_dir)
-                self.update_dataset_combo()
-
-    def update_dataset_combo(self):
-        self.dataset_combo["values"] = [f"Dataset {idx}: {dataset}" for idx, dataset in enumerate(self.datasets)]
-
-    def update_session_combo(self, dataset_idx):
-        dataset = self.dataset_dict[self.datasets[dataset_idx]]
-        sessions = [session.name for session in dataset.sessions]
-        self.session_combo["values"] = sessions
-
-    def analyze_data(self):
-        dataset_idx = self.dataset_combo.current()
-        session_idx = self.session_combo.current()
-
-        if dataset_idx >= 0 and session_idx >= 0:
-            dataset_oi = pickle_utils.dataset_oi(self.dataset_dict, self.datasets, dataset_idx)
-            session_oi = pickle_utils.session_oi(self.dataset_dict, self.datasets, dataset_idx, session_idx)
-
-            # Add your analysis code here
-            # For example:
-            channel_names = ["LG", "TA"]
-            session_oi.plot_emg(channel_names=channel_names, m_flags=True, h_flags=True, data_type='filtered')
-            session_oi.plot_reflex_curves(channel_names=channel_names, method='rms')
-            dataset_oi.plot_reflex_curves(channel_names=channel_names, method='rms')
+    def plot_dataset_data(self):
+        selected_dataset = self.dataset_combo.get()
+        if selected_dataset:
+            date, animal_id, condition = getDatasetInfo(selected_dataset)
+            dataset = dataset_oi(self.dataset_dict, self.dataset_names, self.dataset_names.index(selected_dataset))
+            plot_type = str(self.dataset_plot_type_combo.get())
+            dataset.plot(plot_type=plot_type)
 
 if __name__ == "__main__":
+    import sys
+    channel_names = []
     app = EMGAnalysisGUI()
     app.mainloop()
