@@ -188,8 +188,7 @@ class EMGSession(EMGData):
                 stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
                 m_wave_amplitudes = [EMG_Transformer.calculate_emg_amplitude(recording['channel_data'][channel_idx], self.m_start[channel_idx], self.m_end[channel_idx], self.scan_rate, method=self.default_method) for recording in self.recordings_processed]                
                 
-                _adjusted_m_max_args = {**self.m_max_args, 'report': False}
-                channel_mmax = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **_adjusted_m_max_args)
+                channel_mmax = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=False, **self.m_max_args)
                 m_max.append(channel_mmax)
             
             self._m_max = m_max

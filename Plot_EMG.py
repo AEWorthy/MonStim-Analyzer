@@ -364,7 +364,7 @@ class EMGSessionPlotter(EMGPlotter):
             stimulus_voltages = np.array(stimulus_voltages)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
-            m_max, mmax_low_stim, _ = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report **self.session.m_max_args, return_mmax_stim_range=True)
+            m_max, mmax_low_stim, _ = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report, return_mmax_stim_range=True, **self.session.m_max_args)
             # print(f'M-max for channel {channel_index}: {m_max:.2f}mV; between {mmax_low_stim:.2f}V and {mmax_high_stim:.2f}V')
             
             # Filter out M-wave amplitudes below the M-max stimulus threshold.
@@ -783,7 +783,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 if manual_mmax is not None:
                     m_max = manual_mmax
                 else:
-                    m_max = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_means, mmax_report=mmax_report **self.dataset.m_max_args)
+                    m_max = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_means, mmax_report=mmax_report, **self.dataset.m_max_args)
                 m_wave_means = [amplitude / m_max for amplitude in m_wave_means]
                 m_wave_stds = [amplitude / m_max for amplitude in m_wave_stds]
                 h_response_means = [amplitude / m_max for amplitude in h_response_means]
