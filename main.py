@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 import os
 import io
-from Analyze_EMG import EMGSession, EMGDataset, unpackPickleOutput, getDatasetInfo, dataset_oi
+from Analyze_EMG import EMGSession, EMGDataset, unpackPickleOutput, getDatasetInfo, dataset_from_dataset_dict
 
 class EMGAnalysisGUI(tk.Tk):
     def __init__(self):
@@ -97,7 +97,7 @@ class EMGAnalysisGUI(tk.Tk):
         selected_dataset = self.dataset_combo.get()
         if selected_dataset:
             date, animal_id, condition = getDatasetInfo(selected_dataset)
-            dataset = dataset_oi(self.dataset_dict, self.dataset_names, self.dataset_names.index(selected_dataset))
+            dataset = dataset_from_dataset_dict(self.dataset_dict, self.dataset_names, self.dataset_names.index(selected_dataset))
             self.dataset_output.delete('1.0', tk.END)
             self.dataset_output.insert(tk.END, f"Analyzing dataset: {selected_dataset}\n\n")
             # Capture the output of dataset_parameters
@@ -113,7 +113,7 @@ class EMGAnalysisGUI(tk.Tk):
         selected_dataset = self.dataset_combo.get()
         if selected_dataset:
             date, animal_id, condition = getDatasetInfo(selected_dataset)
-            dataset = dataset_oi(self.dataset_dict, self.dataset_names, self.dataset_names.index(selected_dataset))
+            dataset = dataset_from_dataset_dict(self.dataset_dict, self.dataset_names, self.dataset_names.index(selected_dataset))
             plot_type = str(self.dataset_plot_type_combo.get())
             dataset.plot(plot_type=plot_type)
 
