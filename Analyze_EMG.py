@@ -338,10 +338,9 @@ class EMGSession(EMGData):
             # Plot the reflex curves for each channel
             session.plot(plot_type='reflexCurves')
         """
-        if plot_type is None:
-            plot_type = 'emg'
+
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{plot_type}')(channel_names=channel_names, **kwargs)
+        getattr(self.plotter, f'plot_{'emg' if not plot_type else plot_type}')(channel_names=channel_names, **kwargs)
 
 class EMGDataset(EMGData):
     """
@@ -489,10 +488,9 @@ class EMGDataset(EMGData):
             # Plot the reflex curves for each channel and print the M-max details.
             dataset.plot(plot_type='reflexCurves', mmax_report=True)
         """
-        if plot_type is None:
-            plot_type = 'reflexCurves'
+
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{plot_type}')(channel_names=channel_names, **kwargs)
+        getattr(self.plotter, f'plot_{'reflexCurves' if not plot_type else plot_type}')(channel_names=channel_names, **kwargs)
 
     # User methods for manipulating the EMGSession instances in the dataset.
     def add_session(self, session : Union[EMGSession, str]):
