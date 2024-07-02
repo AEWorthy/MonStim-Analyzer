@@ -1,4 +1,3 @@
-
 """
 Classes to analyze and plot EMG data from individual sessions or an entire dataset of sessions.
 """
@@ -143,7 +142,7 @@ class EMGSession(EMGData):
         # Access the raw EMG recordings. Sort by stimulus voltage.
         self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
     
-    def process_emg_data(self, apply_filter=False, rectify=False):
+    def _process_emg_data(self, apply_filter=False, rectify=False):
         """
         Process EMG data by applying a bandpass filter and/or rectifying the data.
 
@@ -182,9 +181,12 @@ class EMGSession(EMGData):
                     rectified_emg = EMG_Transformer.rectify_emg(channel_emg)
                     recording['channel_data'][i] = rectified_emg
                 
-                # Apply baseline correction to the processed data if a filter was applied.
-                if apply_filter:
-                    recording['channel_data'] = EMG_Transformer.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+                #!# I decided to remove the baseline correction code for now. It's best not to transform the data more than necessary.
+                
+                # # Code to apply baseline correction to the processed data if a filter was applied.
+                # if apply_filter:
+                #     recording['channel_data'] = EMG_Transformer.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+            
             return recording
         
         # Copy recordings if deep copy is needed.
@@ -199,7 +201,7 @@ class EMGSession(EMGData):
     @property
     def recordings_processed (self):
         if self._recordings_processed is None:
-            self._recordings_processed = self.process_emg_data(apply_filter=True, rectify=False)
+            self._recordings_processed = self._process_emg_data(apply_filter=True, rectify=False)
         return self._recordings_processed
 
     @property
@@ -514,7 +516,7 @@ class EMGDataset(EMGData):
             else:
                 try:
                     self.emg_sessions.append(EMGSession(session))
-                except:
+                except:  # noqa: E722
                     raise TypeError("Expected an instance of EMGSession or a file path to a pickled EMGSession.")
             
             # Check that all sessions have the same parameters.

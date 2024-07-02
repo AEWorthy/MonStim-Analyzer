@@ -45,7 +45,7 @@ def butter_bandpass(lowcut, highcut, fs, order):
     b (ndarray): The numerator coefficients of the filter transfer function.
     a (ndarray): The denominator coefficients of the filter transfer function.
     """
-    nyquist = 0.5 * fs
+    nyquist = 0.5 * fs # Nyquist frequency is half the sampling rate
     low = lowcut / nyquist
     high = highcut / nyquist
     b, a = signal.butter(order, [low, high], btype='band')
@@ -239,7 +239,7 @@ def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
 def savgol_filter_y (y, polyorder=3):
     # Smoothen the data using Savitzky-Golay filtering
     window_length = int((len(y) / 100) * 25)
-    y_filtered = signal.savgol_filter(y, window_length, polyorder)
+    y_filtered = signal.savgol_filter(y, window_length, min(polyorder, window_length-1))
     return y_filtered
 
 def detect_plateau(x, y, max_window_size, min_window_size, threshold, report=True):

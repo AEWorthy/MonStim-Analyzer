@@ -141,11 +141,11 @@ class EMGSessionPlotter(EMGPlotter):
             emg_recordings = self.session.recordings_raw
         elif data_type == 'rectified_raw':
             if not hasattr(self.session, 'recordings_rectified_raw'):
-                self.session.recordings_rectified_raw = self.session.process_emg_data(apply_filter=False, rectify=True)
+                self.session.recordings_rectified_raw = self.session._process_emg_data(apply_filter=False, rectify=True)
             emg_recordings = self.session.recordings_rectified_raw
         elif data_type == 'rectified_filtered':
             if not hasattr(self.session, 'recordings_rectified_filtered'):
-                self.session.recordings_rectified_filtered = self.session.process_emg_data(apply_filter=True, rectify=True)
+                self.session.recordings_rectified_filtered = self.session._process_emg_data(apply_filter=True, rectify=True)
             emg_recordings = self.session.recordings_rectified_filtered
         else:
             print(f">! Error: data type {data_type} is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
@@ -401,7 +401,7 @@ class EMGSessionPlotter(EMGPlotter):
     
 
         # Set labels and title
-        fig.suptitle(f'Average M-response values at M-max for each channel')
+        fig.suptitle('Average M-response values at M-max for each channel')
         if self.session.num_channels == 1:
             # ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
@@ -508,7 +508,7 @@ class EMGSessionPlotter(EMGPlotter):
                     axes[channel_index].set_title(f'{channel_names[channel_index]}')
         
         # Set labels and title
-        fig.suptitle(f'M-response and H-reflex Curves')
+        fig.suptitle('M-response and H-reflex Curves')
         if self.session.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
@@ -623,7 +623,7 @@ class EMGSessionPlotter(EMGPlotter):
                     axes[channel_index].set_title(f'{channel_names[channel_index]}')
         
         # Set labels and title
-        fig.suptitle(f'M-response and H-reflex Curves')
+        fig.suptitle('M-response and H-reflex Curves')
         if self.session.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
@@ -811,7 +811,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 axes[channel_index].legend()
 
         # Set labels and title
-        fig.suptitle(f'M-response and H-reflex Curves')
+        fig.suptitle('M-response and H-reflex Curves')
         if self.dataset.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
@@ -991,7 +991,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 axes[channel_index].set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
         
         # Set labels and title
-        fig.suptitle(f'EMG Responses at Max H-reflex Stimulation')
+        fig.suptitle('EMG Responses at Max H-reflex Stimulation')
         if self.dataset.num_channels == 1:
             ax.set_xlabel('Response Type')
             ax.set_ylabel(f'EMG Amp. (mV, {method})')
