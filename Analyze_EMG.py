@@ -24,9 +24,9 @@ class EMGData:
         _config = self.load_config(config_file)
 
         self.m_start = _config['m_start']
-        self.m_end = _config['m_end']
+        self.m_end = [(time + _config['m_duration']) for time in _config['m_start']]
         self.h_start = _config['h_start']
-        self.h_end = _config['h_end']
+        self.h_end = [(time + _config['h_duration']) for time in _config['h_start']]
         self.time_window_ms = _config['time_window']
         self.bin_size = _config['bin_size']
 

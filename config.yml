@@ -33,16 +33,14 @@ subplot_adjust_args: # dict fot subplots_adjust() function. default is below.
   hspace : 0.5
 
 # Reflex Parameters
-m_start: # (in ms). default is 2.0.
+m_start: # (in ms). default is 1.0.
   - 1.1
   - 1
-m_end: # (in ms). default is 4.0.
-  - 3.1
-  - 3
+m_duration: 2 # (in ms). default is 2.0.
+
 h_start: # (in ms). default is 4.1.
   - 3.3
   - 3.4
-h_end: # (in ms). default is 7.0.
-  - 4.3
-  - 4.4
+h_duration: 1 # (in ms). default is 1.0.
+
 
