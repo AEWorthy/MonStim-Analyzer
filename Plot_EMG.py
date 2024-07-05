@@ -784,10 +784,10 @@ class EMGDatasetPlotter(EMGPlotter):
                     m_max = manual_mmax
                 else:
                     m_max = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_means, mmax_report=mmax_report, **self.dataset.m_max_args)
-                m_wave_means = [amplitude / m_max for amplitude in m_wave_means]
-                m_wave_stds = [amplitude / m_max for amplitude in m_wave_stds]
-                h_response_means = [amplitude / m_max for amplitude in h_response_means]
-                h_response_stds = [amplitude / m_max for amplitude in h_response_stds]
+                m_wave_means = [(amplitude / m_max) for amplitude in m_wave_means]
+                m_wave_stds = [(amplitude / m_max) for amplitude in m_wave_stds]
+                h_response_means = [(amplitude / m_max) for amplitude in h_response_means]
+                h_response_stds = [(amplitude / m_max) for amplitude in h_response_stds]
 
             if self.dataset.num_channels == 1:
                 ax.plot(stimulus_voltages, m_wave_means, color=self.dataset.m_color, label='M-wave')
