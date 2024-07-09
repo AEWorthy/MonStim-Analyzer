@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
+
 def read_csv(file_path):
     """Helper function to read a CSV file and return its lines."""
     with open(file_path, 'r') as file:
@@ -128,10 +129,18 @@ def getDatasetSessionDict(dataset_path):
     dataset_session_dict = {session: [csv_paths[i] for i in range(len(csv_paths)) if session_names[i] == session] for session in unique_session_names}
     return dataset_session_dict
 
-def pickle_data(data_path, output_path):
+def pickle_data(data_path, output_path, progress_callback=None, is_canceled_callback=None):
     """Main module function to create Pickle files from EMG datasets."""
+    if progress_callback is None:
+        progress_callback = lambda x: None  # noqa: E731
+    if is_canceled_callback is None:
+        is_canceled_callback = lambda: False  # noqa: E731
+
     datasets = [dir for dir in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, dir))]
-    print(f'Datasets to process ({len(datasets)}): {datasets}')
+    total_datasets = len(datasets)
+    processed_datasets = 0
+
+    print(f'Datasets to process ({total_datasets}): {datasets}')
 
     def process_sessions_for_dataset(dataset_dir):
         dataset_path = os.path.join(data_path, dataset_dir)
@@ -150,15 +159,23 @@ def pickle_data(data_path, output_path):
         with ThreadPoolExecutor() as executor:
             futures = []
             for session_name, csv_paths in dataset_session_dict.items():
+                if is_canceled_callback():
+                    return
                 futures.append(executor.submit(process_session, dataset_dir, session_name, csv_paths, dataset_output_path))
             
             for future in as_completed(futures):
+                if is_canceled_callback():
+                    return
                 try:
                     future.result()
                 except Exception as exc:
                     print(f'>! Error in processing session: {exc}')
 
     for dataset_dir in datasets:
+        if is_canceled_callback():
+            break
         process_sessions_for_dataset(dataset_dir)
+        processed_datasets += 1
+        progress_callback(int((processed_datasets / total_datasets) * 100))
 
     print('Processing complete.')

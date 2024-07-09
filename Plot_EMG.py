@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 import EMG_Transformer
 
@@ -13,6 +14,7 @@ class EMGPlotter:
     """
     def __init__(self, data):
         self.data = data
+        # plt.switch_backend('QtAgg')
         
     def set_plot_defaults(self):
         """
@@ -22,7 +24,6 @@ class EMGPlotter:
         plt.rcParams.update({'figure.labelsize': self.data.axis_label_font_size, 'figure.labelweight': 'bold'})
         plt.rcParams.update({'axes.titlesize': self.data.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.data.tick_font_size, 'ytick.labelsize': self.data.tick_font_size})
-
 
 class EMGSessionPlotter(EMGPlotter):
     """
@@ -92,7 +93,7 @@ class EMGSessionPlotter(EMGPlotter):
         print(help_text)
 
     # EMGSession plotting functions
-    def plot_emg (self, channel_names=[], all_flags = False, m_flags = False, h_flags = False, data_type='filtered'):
+    def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, data_type='filtered', canvas=None):
         """
         Plots EMG data from a Pickle file for a specified time window.
 
@@ -109,14 +110,7 @@ class EMGSessionPlotter(EMGPlotter):
             m_flags = True
             h_flags = True
 
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.session.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.session.num_channels} channels were recorded.")
-        elif len(channel_names) == self.session.num_channels:
-            customNames = True
+        channel_names = self.session.channel_names
 
         # Calculate time values based on the scan rate
         time_values_ms = np.arange(self.session.num_samples) * 1000 / self.session.scan_rate  # Time values in milliseconds
@@ -152,56 +146,30 @@ class EMGSessionPlotter(EMGPlotter):
             return
         
         # Plot the EMG arrays for each channel, only for the first 10ms
-        if customNames:
-            for recording in emg_recordings:
-                for channel_index, channel_data in enumerate(recording['channel_data']):
-                    if self.session.num_channels == 1:
-                        ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                        ax.set_title(f'{channel_names[0]}')
-                        ax.grid(True)
-                        #ax.legend()
-                        if m_flags:
-                            ax.axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                            ax.axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)                         
-                        if h_flags:
-                            ax.axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-                            ax.axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)                       
-                    else:
-                        axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                        axes[channel_index].set_title(f'{channel_names[channel_index]}')
-                        axes[channel_index].grid(True)
-                        #axes[channel_index].legend()
-                        if m_flags:
-                            axes[channel_index].axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                            axes[channel_index].axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                        if h_flags:
-                            axes[channel_index].axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-                            axes[channel_index].axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-        else:
-            for recording in emg_recordings:
-                for channel_index, channel_data in enumerate(recording['channel_data']):
-                    if self.session.num_channels == 1:
-                        ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                        ax.set_title('Channel 0')
-                        ax.grid(True)
-                        #ax.legend()
-                        if m_flags:
-                            ax.axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                            ax.axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)                         
-                        if h_flags:
-                            ax.axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-                            ax.axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)  
-                    else:
-                        axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                        axes[channel_index].set_title(f'Channel {channel_index}')
-                        axes[channel_index].grid(True)
-                        #axes[channel_index].legend()
-                        if m_flags:
-                            axes[channel_index].axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                            axes[channel_index].axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                        if h_flags:
-                            axes[channel_index].axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-                            axes[channel_index].axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
+        for recording in emg_recordings:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                if self.session.num_channels == 1:
+                    ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    ax.set_title(f'{channel_names[0]}')
+                    ax.grid(True)
+                    #ax.legend()
+                    if m_flags:
+                        ax.axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
+                        ax.axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)                         
+                    if h_flags:
+                        ax.axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
+                        ax.axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)                       
+                else:
+                    axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                    axes[channel_index].grid(True)
+                    #axes[channel_index].legend()
+                    if m_flags:
+                        axes[channel_index].axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
+                        axes[channel_index].axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
+                    if h_flags:
+                        axes[channel_index].axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
+                        axes[channel_index].axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
 
         # Set labels and title
         if self.session.num_channels == 1:
@@ -217,9 +185,12 @@ class EMGSessionPlotter(EMGPlotter):
         plt.subplots_adjust(**self.session.subplot_adjust_args)
 
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.draw()
+        else:
+            plt.show()
 
-    def plot_suspectedH (self, channel_names=[], h_threshold=0.3, plot_legend=False):
+    def plot_suspectedH (self, h_threshold=0.3, plot_legend=False, canvas= None):
         """
         Detects session recordings with potential H-reflexes and plots them.
 
@@ -228,14 +199,8 @@ class EMGSessionPlotter(EMGPlotter):
             h_threshold (float, optional): Detection threshold of the average rectified EMG response in millivolts in the H-relfex window. Defaults to 0.3mV.
             plot_legend (bool, optional): Whether to plot legends. Defaults to False.
         """
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.session.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.session.num_channels} channels were recorded.")
-        elif len(channel_names) == self.session.num_channels:
-            customNames = True
+
+        channel_names = self.session.channel_names
 
         # Calculate time values based on the scan rate
         time_values_ms = np.arange(self.session.num_samples) * 1000 / self.session.scan_rate  # Time values in milliseconds
@@ -254,40 +219,22 @@ class EMGSessionPlotter(EMGPlotter):
             fig, axes = plt.subplots(nrows=1, ncols=self.session.num_channels, figsize=(12, 4), sharey=True)
 
         # Plot the EMG arrays for each channel, only for the first 10ms
-        if customNames:
-            for recording in self.session.recordings_processed:
-                for channel_index, channel_data in enumerate(recording['channel_data']):
-                    h_window = channel_data[int(self.session.h_start[channel_index] * self.session.scan_rate / 1000):int(self.session.h_end[channel_index] * self.session.scan_rate / 1000)]
-                    if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within H-reflex window
-                        if self.session.num_channels == 1:
-                            ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                            ax.set_title(f'{channel_names[0]}')
-                            ax.grid(True)
-                            if plot_legend:
-                                ax.legend()
-                        else:
-                            axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                            axes[channel_index].set_title(f'{channel_names[channel_index]}')
-                            axes[channel_index].grid(True)
-                            if plot_legend:
-                                axes[channel_index].legend()
-        else:
-            for recording in self.session.recordings_processed:
-                for channel_index, channel_data in enumerate(recording['channel_data']):
-                    h_window = channel_data[int(self.session.h_start[channel_index] * self.session.scan_rate / 1000):int(self.session.h_end[channel_index] * self.session.scan_rate / 1000)]
-                    if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within 5-10ms window
-                        if self.session.num_channels == 1:
-                            ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                            ax.set_title('Channel 0')
-                            ax.grid(True)
-                            if plot_legend:
-                                ax.legend()
-                        else:
-                            axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                            axes[channel_index].set_title(f'Channel {channel_index}')
-                            axes[channel_index].grid(True)
-                            if plot_legend:
-                                axes[channel_index].legend()
+        for recording in self.session.recordings_processed:
+            for channel_index, channel_data in enumerate(recording['channel_data']):
+                h_window = channel_data[int(self.session.h_start[channel_index] * self.session.scan_rate / 1000):int(self.session.h_end[channel_index] * self.session.scan_rate / 1000)]
+                if max(h_window) - min(h_window) > h_threshold:  # Check amplitude variation within H-reflex window
+                    if self.session.num_channels == 1:
+                        ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.set_title(f'{channel_names[0]}')
+                        ax.grid(True)
+                        if plot_legend:
+                            ax.legend()
+                    else:
+                        axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                        axes[channel_index].grid(True)
+                        if plot_legend:
+                            axes[channel_index].legend()
 
         # Set labels and title
         if self.session.num_channels == 1:
@@ -303,9 +250,12 @@ class EMGSessionPlotter(EMGPlotter):
         plt.subplots_adjust(**self.session.subplot_adjust_args)
 
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.draw()
+        else:
+            plt.show()
 
-    def plot_mmax(self, channel_names=[], method=None, mmax_report=False):
+    def plot_mmax(self, method=None, mmax_report=False, canvas=None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
 
@@ -317,14 +267,7 @@ class EMGSessionPlotter(EMGPlotter):
         if method is None:
             method = self.session.default_method
 
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.session.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.session.num_channels} channels were recorded.")
-        elif len(channel_names) == self.session.num_channels:
-            customNames = True
+        channel_names = self.session.channel_names
 
         # Create a figure and axis
         if self.session.num_channels == 1:
@@ -381,9 +324,7 @@ class EMGSessionPlotter(EMGPlotter):
                 ax.errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticklabels(['M-response'])
-                ax.set_title('Channel 0')
-                if customNames:
-                    ax.set_title(f'{channel_names[0]}')
+                ax.set_title(f'{channel_names[0]}')                    
                 ax.set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
@@ -391,14 +332,11 @@ class EMGSessionPlotter(EMGPlotter):
                 axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nM-max: {m_max:.2f}mV\nStim.: above {mmax_low_stim:.2f}V', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
                 axes[channel_index].errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
 
-                axes[channel_index].set_title(f'Channel {channel_index}' if not channel_names else channel_names[channel_index])
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].set_xticks([m_x])
-                axes[channel_index].set_xticklabels(['M-response'])
-                if customNames:
-                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                axes[channel_index].set_xticklabels(['M-response'])                    
                 axes[channel_index].set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
                 axes[channel_index].set_ylim(0, 1.1 * max(all_m_max_amplitudes))
-    
 
         # Set labels and title
         fig.suptitle('Average M-response values at M-max for each channel')
@@ -414,9 +352,12 @@ class EMGSessionPlotter(EMGPlotter):
         plt.subplots_adjust(**self.session.subplot_adjust_args)
 
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.draw()
+        else:
+            plt.show()
 
-    def plot_reflexCurves (self, channel_names=[], method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False):
+    def plot_reflexCurves (self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False, canvas=None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
 
@@ -428,14 +369,7 @@ class EMGSessionPlotter(EMGPlotter):
         if method is None:
             method = self.session.default_method
 
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.session.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.session.num_channels} channels were recorded.")
-        elif len(channel_names) == self.session.num_channels:
-            customNames = True
+        channel_names = self.session.channel_names
 
         # Create a figure and axis
         if self.session.num_channels == 1:
@@ -489,23 +423,17 @@ class EMGSessionPlotter(EMGPlotter):
             if self.session.num_channels == 1:
                 ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
                 ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
-                ax.set_title('Channel 0')
-                #ax.set_xlabel('Stimulus Voltage (V)')
-                #ax.set_ylabel('Amplitude (mV)')
+                ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 ax.legend()
-                if customNames:
-                    ax.set_title(f'{channel_names[0]}')
+                    
             else:
                 axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
                 axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
-                axes[channel_index].set_title(f'Channel {channel_index}')
-                #axes[channel_index].set_xlabel('Stimulus Voltage (V)')
-                #axes[0].set_ylabel('Amplitude (mV)')
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 axes[channel_index].legend()
-                if customNames:
-                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                    
         
         # Set labels and title
         fig.suptitle('M-response and H-reflex Curves')
@@ -524,9 +452,12 @@ class EMGSessionPlotter(EMGPlotter):
         plt.subplots_adjust(**self.session.subplot_adjust_args)
 
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.draw()
+        else:
+            plt.show()
 
-    def plot_m_curves_smoothened (self, channel_names=[], method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False):
+    def plot_m_curves_smoothened (self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False, canvas=None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
         This plot is smoothened using a Savitzky-Golay filter, which therefore emulates the transformation used before calculating M-max in the EMG analysis.
@@ -539,14 +470,7 @@ class EMGSessionPlotter(EMGPlotter):
         if method is None:
             method = self.session.default_method
 
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.session.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.session.num_channels} channels were recorded.")
-        elif len(channel_names) == self.session.num_channels:
-            customNames = True
+        channel_names = self.session.channel_names
 
         # Create a figure and axis
         if self.session.num_channels == 1:
@@ -604,24 +528,16 @@ class EMGSessionPlotter(EMGPlotter):
             if self.session.num_channels == 1:
                 ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
                 ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
-                ax.set_title('Channel 0')
-                #ax.set_xlabel('Stimulus Voltage (V)')
-                #ax.set_ylabel('Amplitude (mV)')
+                ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
-                ax.legend()
-                if customNames:
-                    ax.set_title(f'{channel_names[0]}')
+                ax.legend()    
             else:
                 axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
                 axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
-                axes[channel_index].set_title(f'Channel {channel_index}')
-                #axes[channel_index].set_xlabel('Stimulus Voltage (V)')
-                #axes[0].set_ylabel('Amplitude (mV)')
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 axes[channel_index].legend()
-                if customNames:
-                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
-        
+                    
         # Set labels and title
         fig.suptitle('M-response and H-reflex Curves')
         if self.session.num_channels == 1:
@@ -639,7 +555,10 @@ class EMGSessionPlotter(EMGPlotter):
         plt.subplots_adjust(**self.session.subplot_adjust_args)
 
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.draw()
+        else:
+            plt.show()
 
 class EMGDatasetPlotter(EMGPlotter):
     """
@@ -689,7 +608,7 @@ class EMGDatasetPlotter(EMGPlotter):
         print(help_text)
 
     # EMGDataset plotting functions
-    def plot_reflexCurves(self, channel_names=[], method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False):
+    def plot_reflexCurves(self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False):
         """
         Plots the M-response and H-reflex curves for each channel.
 
@@ -703,15 +622,8 @@ class EMGDatasetPlotter(EMGPlotter):
         # Set method to default if not specified.
         if method is None:
             method = self.dataset.default_method
+        channel_names = self.dataset.channel_names
 
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.dataset.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.dataset.num_channels} channels were recorded.")
-        elif len(channel_names) == self.dataset.num_channels:
-            customNames = True
 
         # Unpack processed session recordings.
         recordings = []
@@ -794,9 +706,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
                 ax.plot(stimulus_voltages, h_response_means, color=self.dataset.h_color, label='H-response')
                 ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
-                ax.set_title('Channel 0')
-                if customNames:
-                    ax.set_title(f'{channel_names[0]}')
+                ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 ax.legend()
             else:
@@ -804,9 +714,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
                 axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.dataset.h_color, label='H-response')
                 axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
-                axes[channel_index].set_title(f'Channel {channel_index}' if not channel_names else channel_names[channel_index])
-                if customNames:
-                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 axes[channel_index].legend()
 
@@ -829,7 +737,7 @@ class EMGDatasetPlotter(EMGPlotter):
         # Show the plot
         plt.show()
 
-    def plot_maxH(self, channel_names=[], method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False):
+    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=False):
         """
         Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
 
@@ -846,15 +754,7 @@ class EMGDatasetPlotter(EMGPlotter):
         # Set method to default if not specified.
         if method is None:
             method = self.dataset.default_method
-
-        # Handle custom channel names parameter if specified.
-        customNames = False
-        if len(channel_names) == 0:
-            pass
-        elif len(channel_names) != self.dataset.num_channels:
-            print(f">! Error: list of custom channel names does not match the number of recorded channels. The entered list is {len(channel_names)} names long, but {self.dataset.num_channels} channels were recorded.")
-        elif len(channel_names) == self.dataset.num_channels:
-            customNames = True
+        channel_names = self.dataset.channel_names
 
         # Unpack processed session recordings.
         recordings = []
@@ -970,9 +870,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(['M-response', 'H-reflex'])
-                ax.set_title('Channel 0')
-                if customNames:
-                    ax.set_title(f'{channel_names[0]}')
+                ax.set_title(f'{channel_names[0]} ({round(max_h_reflex_voltage + self.dataset.bin_size / 2, 2)} ± {self.dataset.bin_size/2}V)')
                 ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
             else:
                 axes[channel_index].plot(m_x, [m_wave_amplitudes_max_h], color=self.dataset.m_color, marker='o', markersize=5)
@@ -983,11 +881,9 @@ class EMGDatasetPlotter(EMGPlotter):
                 axes[channel_index].annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.dataset.h_color)
                 axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes_max_h), yerr=np.std(h_response_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
                 
-                axes[channel_index].set_title(f'Channel {channel_index}' if not channel_names else channel_names[channel_index])
+                axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage + self.dataset.bin_size / 2, 2)} ± {self.dataset.bin_size/2}V)')
                 axes[channel_index].set_xticks([m_x, h_x])
                 axes[channel_index].set_xticklabels(['M-response', 'H-reflex'])
-                if customNames:
-                    axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage + self.dataset.bin_size / 2, 2)} ± {self.dataset.bin_size/2}V)')
                 axes[channel_index].set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
         
         # Set labels and title
@@ -1130,4 +1026,9 @@ class EMGDatasetPlotter(EMGPlotter):
     #     plt.show()
 
 
-
+# Custom Matplotlib canvas class for embedding plots in PyQt5 applications. Not currently used.
+class MatplotlibCanvas(FigureCanvas):
+    def __init__(self, parent=None):
+        self.fig, self.ax = plt.subplots()
+        super().__init__(self.fig)
+        self.setParent(parent)

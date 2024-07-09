@@ -4,6 +4,9 @@
 bin_size: 0.05 # bins for stimulus voltages (in V). default is 0.05.
 time_window: 8.0 # window of EMG time to plot (in ms). default is 10.
 default_method: 'rms' # (str) default method for EMG analysis. default is 'rms'.
+default_channel_names: # (list) default channel names for EMG analysis. default is ['LG', 'TA'].
+  - 'LG'
+  - 'TA'
 
 # EMG Filter Parameters.
 butter_filter_args: # dict for butter_bandpass_filter() function. default is below.

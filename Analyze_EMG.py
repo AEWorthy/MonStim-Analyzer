@@ -3,16 +3,16 @@ Classes to analyze and plot EMG data from individual sessions or an entire datas
 """
 
 import os
+import sys
 import pickle
 import copy
 import re
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional, Union
+from typing import List, Union
 
 import yaml
-import tkinter as tk
-from tkinter import ttk
+from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
 from Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
 import EMG_Transformer
@@ -41,7 +41,9 @@ class EMGData:
 
         self.butter_filter_args = _config['butter_filter_args']
         self.default_method = _config['default_method']
-    
+
+        self.default_channel_names = _config['default_channel_names']
+
     def load_config(self, config_file):
         """
         Loads the config.yaml file into a YAML object that can be used to reference hard-coded configurable constants.
@@ -130,15 +132,18 @@ class EMGSession(EMGData):
 
         # Access session-wide information
         session_info = session_data['session_info']
-        self.session_name = session_info['session_name']
+        self.session_id = session_info['session_name']
         self.num_channels = session_info['num_channels']
+        self.channel_names = [self.default_channel_names[i] if i < len(self.default_channel_names) 
+                              else 'Channel ' + str(i) for i in range(self.num_channels)]
         self.scan_rate = session_info['scan_rate']
         self.num_samples = session_info['num_samples']
         self.stim_delay = session_info['stim_delay']
         self.stim_duration = session_info['stim_duration']
         self.stim_interval = session_info['stim_interval']
-        self.emg_amp_gains = session_info['emg_amp_gains']
-
+        self.emg_amp_gains = [gain for index, gain in enumerate(session_info['emg_amp_gains']) 
+                              if index < self.num_channels] # only include gains for the number of recorded channels.
+        
         # Access the raw EMG recordings. Sort by stimulus voltage.
         self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
     
@@ -198,6 +203,23 @@ class EMGSession(EMGData):
 
         return processed_recordings
 
+    def rename_channels(self, new_names : dict[str]):
+        """
+        Renames a channel in the session.
+    
+        Args:
+            new_names (dict[str]): A dictionary mapping old channel names to new channel names.
+        """
+        try:
+            # Rename the channels in the session.
+            for old_name, new_name in new_names.items():
+                channel_idx = self.channel_names.index(old_name)
+                self.channel_names[channel_idx] = new_name
+        except IndexError:
+            print("Error: The number of new names does not match the number of channels in the session.")
+        except ValueError:
+            print("Error: The channel name to be replaced does not exist in the session.")
+
     @property
     def recordings_processed (self):
         if self._recordings_processed is None:
@@ -220,88 +242,122 @@ class EMGSession(EMGData):
         return self._m_max
 
     # User methods for EMGSession class
-    def m_max_report(self, channel_names: Optional[List[str]] = None):
+    def m_max_report(self):
         """
         Prints the M-wave amplitudes for each channel in the session.
         """
-        if channel_names is None:
-            for i, channel_m_max in enumerate(self.m_max):
-                print(f"Channel {i}: M-max amplitude = {channel_m_max:.2f} V")
-        else:
-            for i, channel_m_max in enumerate(self.m_max):
-                print(f"{channel_names[i]}: M-max amplitude = {channel_m_max:.2f} V")
+        report = []
+        for i, channel_m_max in enumerate(self.m_max):
+            try:
+                line = f"- {self.channel_names[i]}: M-max amplitude = {channel_m_max:.2f} V"
+                report.append(line)
+            except TypeError:
+                line = f"- Channel {i} does not have a valid M-max amplitude."
+                report.append(line)
+
+        for line in report:
+            print(line)
+        return report
 
     def update_window_settings(self):
         """
-        Opens a GUI to manually update the M-wave and H-reflex window settings for each channel.
+        Opens a GUI to manually update the M-wave and H-reflex window settings for each channel using PyQt.
+
+        This function should only be used if you are working in a Jupyter notebook or an interactive Python environment. Do not call this function in any other GUI environment.
         """
-        def save_settings():
-            for i, (m_start_entry, m_end_entry, h_start_entry, h_end_entry) in enumerate(entry_fields):
+        class ReflexSettings(QWidget):
+            def __init__(self, parent):
+                super().__init__()
+                self.parent = parent
+                self.initUI()
+
+            def initUI(self):
+                self.setWindowTitle(f"Update Reflex Window Settings: Session {self.parent.session_id}")
+                layout = QVBoxLayout()
+
+                duration_layout = QHBoxLayout()
+                duration_layout.addWidget(QLabel("m_duration:"))
+                self.m_duration_entry = QLineEdit(str(self.parent.m_end[0] - self.parent.m_start[0]))
+                duration_layout.addWidget(self.m_duration_entry)
+
+                duration_layout.addWidget(QLabel("h_duration:"))
+                self.h_duration_entry = QLineEdit(str(self.parent.h_end[0] - self.parent.h_start[0]))
+                duration_layout.addWidget(self.h_duration_entry)
+
+                layout.addLayout(duration_layout)
+
+                self.entries = []
+                for i in range(self.parent.num_channels):
+                    channel_layout = QHBoxLayout()
+                    channel_layout.addWidget(QLabel(f"Channel {i}:"))
+
+                    channel_layout.addWidget(QLabel("m_start:"))
+                    m_start_entry = QLineEdit(str(self.parent.m_start[i]))
+                    channel_layout.addWidget(m_start_entry)
+
+                    channel_layout.addWidget(QLabel("h_start:"))
+                    h_start_entry = QLineEdit(str(self.parent.h_start[i]))
+                    channel_layout.addWidget(h_start_entry)
+
+                    layout.addLayout(channel_layout)
+                    self.entries.append((m_start_entry, h_start_entry))
+
+                save_button = QPushButton("Confirm")
+                save_button.clicked.connect(self.save_settings)
+                layout.addWidget(save_button)
+
+                self.setLayout(layout)
+
+            def save_settings(self):
                 try:
-                    self.m_start[i] = float(m_start_entry.get())
-                    self.m_end[i] = float(m_end_entry.get())
-                    self.h_start[i] = float(h_start_entry.get())
-                    self.h_end[i] = float(h_end_entry.get())
+                    m_duration = float(self.m_duration_entry.text())
+                    h_duration = float(self.h_duration_entry.text())
                 except ValueError:
-                    print(f"Invalid input for channel {i}. Skipping.")
-            window.destroy()
+                    print("Invalid input for durations. Please enter valid numbers.")
+                    return
 
-        window = tk.Tk()
-        window.title(f"Update Reflex Window Settings: Session {self.session_name}")
+                for i, (m_start_entry, h_start_entry) in enumerate(self.entries):
+                    try:
+                        m_start = float(m_start_entry.text())
+                        h_start = float(h_start_entry.text())
 
-        frame = ttk.Frame(window, padding=10)
-        frame.grid()
+                        self.parent.m_start[i] = m_start
+                        self.parent.m_end[i] = m_start + m_duration
+                        self.parent.h_start[i] = h_start
+                        self.parent.h_end[i] = h_start + h_duration
+                    except ValueError:
+                        print(f"Invalid input for channel {i}. Skipping.")
 
-        entry_fields = []
-        for i in range(self.num_channels):
-            channel_label = ttk.Label(frame, text=f"Channel {i}:")
-            channel_label.grid(row=i, column=0, sticky=tk.W)
+                self.close()
 
-            m_start_label = ttk.Label(frame, text="m_start:")
-            m_start_label.grid(row=i, column=1, sticky=tk.W)
-            m_start_entry = ttk.Entry(frame)
-            m_start_entry.insert(0, str(self.m_start[i]))
-            m_start_entry.grid(row=i, column=2)
-
-            m_end_label = ttk.Label(frame, text="m_end:")
-            m_end_label.grid(row=i, column=3, sticky=tk.W)
-            m_end_entry = ttk.Entry(frame)
-            m_end_entry.insert(0, str(self.m_end[i]))
-            m_end_entry.grid(row=i, column=4)
-
-            h_start_label = ttk.Label(frame, text="h_start:")
-            h_start_label.grid(row=i, column=5, sticky=tk.W)
-            h_start_entry = ttk.Entry(frame)
-            h_start_entry.insert(0, str(self.h_start[i]))
-            h_start_entry.grid(row=i, column=6)
-
-            h_end_label = ttk.Label(frame, text="h_end:")
-            h_end_label.grid(row=i, column=7, sticky=tk.W)
-            h_end_entry = ttk.Entry(frame)
-            h_end_entry.insert(0, str(self.h_end[i]))
-            h_end_entry.grid(row=i, column=8)
-
-            entry_fields.append((m_start_entry, m_end_entry, h_start_entry, h_end_entry))
-
-        save_button = ttk.Button(frame, text="Confirm", command=save_settings)
-        save_button.grid(row=self.num_channels, columnspan=9)
-
-        window.mainloop()
+        app = QApplication.instance()  # Check if there's an existing QApplication instance
+        if not app:
+            app = QApplication(sys.argv)
+            window = ReflexSettings(self)
+            window.show()
+            app.exec()
+        else:
+            window = ReflexSettings(self)
+            window.show()
 
     def session_parameters (self):
         """
         Prints EMG recording session parameters from a Pickle file.
         """
-        print(f"Session Name: {self.session_name}")
-        print(f"# of Channels: {self.num_channels}")
-        print(f"Scan rate (Hz): {self.scan_rate}")
-        print(f"Samples/Channel: {self.num_samples}")
-        print(f"Stimulus delay (ms): {self.stim_delay}")
-        print(f"Stimulus duration (ms): {self.stim_duration}")
-        print(f"Stimulus interval (s): {self.stim_interval}")
-        print(f"EMG amp gains: {self.emg_amp_gains}")
+        report = [f"Session ID: {self.session_id}", 
+                  f"# of Channels: {self.num_channels}",
+                  f"Scan Rate (Hz): {self.scan_rate}",
+                  f"Samples/Channel: {self.num_samples}",
+                  f"Stimulus Delay (ms): {self.stim_delay}",
+                  f"Stimulus Duration (ms): {self.stim_duration}",
+                  f"Stimulus Interval (s): {self.stim_interval}",
+                  f"EMG Amp Gains: {self.emg_amp_gains}"]        
+        
+        for line in report:
+            print(line)
+        return report
 
-    def plot(self, plot_type: str = None, channel_names: Optional[List[str]] = None, **kwargs):
+    def plot(self, plot_type: str = None, **kwargs):
         """
         Plots EMG data from a single session using the specified plot_type.
 
@@ -342,7 +398,7 @@ class EMGSession(EMGData):
         """
 
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{'emg' if not plot_type else plot_type}')(channel_names=channel_names, **kwargs)
+        getattr(self.plotter, f'plot_{'emg' if not plot_type else plot_type}')(**kwargs)
 
 class EMGDataset(EMGData):
     """
@@ -380,7 +436,7 @@ class EMGDataset(EMGData):
         self.emg_sessions = self.__unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
         if len(emg_sessions_to_exclude) > 0:
             print(f"Excluding the following sessions from the dataset: {emg_sessions_to_exclude}")
-            self.emg_sessions = [session for session in self.emg_sessions if session.session_name not in emg_sessions_to_exclude]
+            self.emg_sessions = [session for session in self.emg_sessions if session.session_id not in emg_sessions_to_exclude]
             self._num_sessions_excluded = len(emg_sessions) - len(self.emg_sessions)
         else:
             self._num_sessions_excluded = 0
@@ -398,6 +454,7 @@ class EMGDataset(EMGData):
             self.scan_rate = self.emg_sessions[0].scan_rate
             self.num_channels = self.emg_sessions[0].num_channels
             self.stim_delay = self.emg_sessions[0].stim_delay
+            self.channel_names = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
 
     def __unpackEMGSessions(self, emg_sessions):
         """
@@ -425,7 +482,7 @@ class EMGDataset(EMGData):
             else:
                 raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
             
-            pickled_sessions = sorted(pickled_sessions, key=lambda x: x.session_name)
+            pickled_sessions = sorted(pickled_sessions, key=lambda x: x.session_id)
         
         return pickled_sessions
 
@@ -443,11 +500,11 @@ class EMGDataset(EMGData):
 
         for session in self.emg_sessions[1:]:
             if session.scan_rate != reference_scan_rate:
-                return False, f"Inconsistent scan_rate for {session.session_name}: {session.scan_rate} != {reference_scan_rate}."
+                return False, f"Inconsistent scan_rate for {session.session_id}: {session.scan_rate} != {reference_scan_rate}."
             if session.num_channels != reference_num_channels:
-                return False, f"Inconsistent num_channels for {session.session_name}: {session.num_channels} != {reference_num_channels}."
+                return False, f"Inconsistent num_channels for {session.session_id}: {session.num_channels} != {reference_num_channels}."
             if session.stim_delay != reference_stim_delay:
-                return False, f"Inconsistent stim_delay for {session.session_name}: {session.stim_delay} != {reference_stim_delay}."
+                return False, f"Inconsistent stim_delay for {session.session_id}: {session.stim_delay} != {reference_stim_delay}."
 
         return True, "All sessions have consistent parameters"
 
@@ -455,13 +512,16 @@ class EMGDataset(EMGData):
         """
         Prints EMG dataset parameters.
         """
-        session_names = [session.session_name for session in self.emg_sessions]
-        print(f"EMG Sessions ({len(self.emg_sessions)}): {session_names}.")
-        print(f"Date: {self.date}")
-        print(f"Animal ID: {self.animal_id}")
-        print(f"Condition: {self.condition}")
+        report = [f"EMG Sessions ({len(self.emg_sessions)}): {[session.session_id for session in self.emg_sessions]}.",
+                    f"Date: {self.date}",
+                    f"Animal ID: {self.animal_id}",
+                    f"Condition: {self.condition}"]
 
-    def plot(self, plot_type: str = None, channel_names: Optional[List[str]] = None, **kwargs):
+        for line in report:
+            print(line)
+        return report
+
+    def plot(self, plot_type: str = None, **kwargs):
         """
         Plots EMG data from a single session using the specified plot_type.
 
@@ -492,7 +552,7 @@ class EMGDataset(EMGData):
         """
 
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{'reflexCurves' if not plot_type else plot_type}')(channel_names=channel_names, **kwargs)
+        getattr(self.plotter, f'plot_{'reflexCurves' if not plot_type else plot_type}')(**kwargs)
 
     # User methods for manipulating the EMGSession instances in the dataset.
     def add_session(self, session : Union[EMGSession, str]):
@@ -505,13 +565,13 @@ class EMGDataset(EMGData):
         Raises:
             TypeError: If the session is neither an instance of EMGSession nor a valid file path to a pickled EMGSession.
         """
-        if session in [session.session_name for session in self.emg_sessions]:
-            print(f">! Error: session {session.session_name} is already in the dataset.")
+        if session in [session.session_id for session in self.emg_sessions]:
+            print(f">! Error: session {session.session_id} is already in the dataset.")
         else:
             if isinstance(session, EMGSession):
                 # Add the session to the dataset.
                 self.emg_sessions.append(session)
-                self.emg_sessions = sorted(self.emg_sessions, key=lambda x: x.session_name)
+                self.emg_sessions = sorted(self.emg_sessions, key=lambda x: x.session_id)
                 
             else:
                 try:
@@ -536,16 +596,37 @@ class EMGDataset(EMGData):
         Args:
             session_name (str): The name of the session to be removed.
         """
-        if session_name not in [session.session_name for session in self.emg_sessions]:
+        if session_name not in [session.session_id for session in self.emg_sessions]:
             print(f">! Error: session {session_name} not found in the dataset.")
         else:
-            self.emg_sessions = [session for session in self.emg_sessions if session.session_name != session_name]
+            self.emg_sessions = [session for session in self.emg_sessions if session.session_id != session_name]
 
     def get_session(self, session_idx: int) -> EMGSession:
         """
         Returns the EMGSession object at the specified index.
         """
         return self.emg_sessions[session_idx]
+
+    def rename_channels(self, new_names : dict[str]):
+        """
+        Renames a channel in the dataset.
+
+        Args:
+            old_name (str): The current name of the channel.
+            new_name (str): The new name to assign to the channel.
+        """
+        try:
+            # Rename the channels in each session.
+            for session in self.emg_sessions:
+                session.rename_channels(new_names)
+            # Rename the channels in the dataset.
+            for old_name, new_name in new_names.items():
+                channel_idx = self.channel_names.index(old_name)
+                self.channel_names[channel_idx] = new_name
+        except IndexError:
+            print("Error: The number of new names does not match the number of channels in the dataset.")
+        except ValueError:
+            print("Error: The channel name to be replaced does not exist in the dataset.")
 
     # Save and load the dataset object.
     def save_dataset(self, filename=None):
@@ -633,3 +714,56 @@ class EMGExperiment(EMGData):
             pass
 
 
+if __name__ == '__main__':
+    from monstim_to_pickle import pickle_data  # noqa: F401
+    from Analyze_EMG import EMGData,EMGDataset
+    from monstim_utils import DATA_PATH, OUTPUT_PATH, SAVED_DATASETS_PATH  # noqa: F401
+
+    #Process CSVs into Pickle files: 'files_to_analyze' --> 'output'
+    # pickle_data(DATA_PATH, OUTPUT_PATH) # If pickles are already created, comment this line out.
+
+    # Create dictionaries of Pickle datasets and single sessions that are in the 'output' directory.
+    dataset_dict, datasets = EMGData.unpackPickleOutput(OUTPUT_PATH)
+    for idx, dataset in enumerate(datasets):
+        print(f'dataset index {idx}: {dataset}')
+
+    # Define dataset of interest for downstream analysis.
+    sessions_to_exclude = [] # Add any sessions to exclude from the dataset here.
+    dataset_idx = int(input('Dataset of Interest (index):')) # pick the dataset index of interest from the generate list above.
+    dataset_oi = EMGDataset.dataset_from_dataset_dict(dataset_dict, datasets, dataset_idx, sessions_to_exclude)
+    
+    # Display dataset parameters.
+    dataset_oi.dataset_parameters()
+
+    # Define session of interest for downstream analysis.
+    session_idx = int(input('Session of Interest (index):')) # pick the session index of interest from the generate list above
+    session_oi = dataset_oi.get_session(session_idx)
+
+    # Display session parameters.
+    session_oi.session_parameters()
+
+    # Visualize single EMG session raw and filtered
+    session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='filtered')
+    # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='raw')
+    session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='rectified_filtered')
+    # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='rectified_raw')
+
+    # Use the update_window_settings method to temporarily change the reflex window settings and then replot. Otherwise comment out.
+    # session_oi.update_window_settings()
+    # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='filtered')
+
+    # Inspect session reflex curves and suspected H-reflex trials with these methods.
+    session_oi.plot(plot_type='reflexCurves')
+    session_oi.plot(plot_type='reflexCurves', relative_to_mmax=True)
+
+    # M-max analysis and visualization.
+    session_oi.m_max_report()
+    session_oi.plot(plot_type = 'mmax')
+
+    # Visualize the entire dataset's avereaged reflex curves with these methods of the dataset object.
+    dataset_oi.plot(plot_type = 'reflexCurves', relative_to_mmax=True, mmax_report=True)
+
+    # Visualize the entire dataset's avereaged reflex values at H-max with this method of the dataset object.
+    dataset_oi.plot(plot_type = 'maxH', relative_to_mmax=True)
+
+    print('Done!')
