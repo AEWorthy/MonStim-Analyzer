@@ -60,7 +60,7 @@ def extract_recording_data(lines, num_channels):
         data_lines.append([float(value) for value in stripped_line.split(',')])
     
     if not data_lines:
-        print(f'>! Error: no data lines found in CSV file.')
+        print('>! Error: no data lines found in CSV file.')
         return np.zeros((num_channels, 0)), stimulus_v
 
     data_lines_transposed = list(zip(*data_lines))  # Transpose the data lines

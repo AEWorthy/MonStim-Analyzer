@@ -4,7 +4,7 @@
 # Version 1.0
 
 """
-Helper functions for EMG calculations and transformations.
+Functions for calculations and transformations of EMG data.
 
 This module provides various functions for processing and analyzing EMG (electromyography) data. 
 It includes functions for bandpass filtering, baseline correction, rectification, 
