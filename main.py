@@ -1,15 +1,16 @@
 import sys
 import os
+import multiprocessing
 import pickle
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QFileDialog, QComboBox, QMessageBox, QRadioButton, QButtonGroup,
                              QDialog, QMenuBar, QMenu, QGroupBox, QProgressDialog)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt
 
 
 from Analyze_EMG import EMGData, EMGDataset, EMGSession
 from dialogs import ChangeChannelNamesDialog, ReflexSettingsDialog
-from monstim_to_pickle import pickle_data
+from monstim_to_pickle import DataProcessingThread
 from monstim_utils import DATA_PATH, OUTPUT_PATH, SAVED_DATASETS_PATH, format_report  # noqa: F401
 
 
@@ -93,9 +94,9 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a session first.")
 
     def import_csv_data(self):
-        self.csv_path = QFileDialog.getExistingDirectory(self, "Select CSV Directory")
+        # self.csv_path = QFileDialog.getExistingDirectory(self, "Select CSV Directory")
         if self.csv_path:
-            self.output_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+            # self.output_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
             if self.output_path:
                 progress_dialog = QProgressDialog("Processing data...", "Cancel", 0, 100, self)
                 progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
@@ -103,12 +104,15 @@ class EMGAnalysisGUI(QMainWindow):
                 progress_dialog.setAutoReset(False)
                 progress_dialog.show()
 
-                self.thread = DataProcessingThread(self.csv_path, self.output_path)
+                max_workers = max(1, multiprocessing.cpu_count() - 1)
+
+                self.thread = DataProcessingThread(self.csv_path, self.output_path, max_workers=max_workers)
                 self.thread.progress.connect(progress_dialog.setValue)
                 self.thread.finished.connect(progress_dialog.close)
                 self.thread.finished.connect(lambda: QMessageBox.information(self, "Success", "Data processed and imported successfully."))
                 self.thread.finished.connect(self.load_existing_datasets)
                 self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
+                self.thread.canceled.connect(progress_dialog.close)
                 self.thread.canceled.connect(lambda: QMessageBox.information(self, "Canceled", "Data processing was canceled."))
                 self.thread.start()
 
@@ -346,40 +350,6 @@ class EMGAnalysisGUI(QMainWindow):
             else:
                 QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
-class DataProcessingThread(QThread):
-    progress = pyqtSignal(int)
-    finished = pyqtSignal()
-    error = pyqtSignal(Exception)
-    canceled = pyqtSignal()
-
-    def __init__(self, csv_path, output_path):
-        super().__init__()
-        self.csv_path = csv_path
-        self.output_path = output_path
-        self._is_canceled = False
-        self._is_canceled_handled = False
-
-    def run(self):
-        try:
-            # Call your data processing function here with progress callback and cancel check
-            pickle_data(self.csv_path, self.output_path, self.report_progress, self.is_canceled)
-            if not self._is_canceled:
-                self.finished.emit()
-        except Exception as e:
-            if not self._is_canceled:
-                self.error.emit(e)
-
-    def report_progress(self, value):
-        self.progress.emit(value)
-
-    def cancel(self):
-        self._is_canceled = True
-        if not self._is_canceled_handled:
-            self._is_canceled_handled = True
-            self.canceled.emit()
-
-    def is_canceled(self):
-        return self._is_canceled
 
 
 

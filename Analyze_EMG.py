@@ -132,7 +132,7 @@ class EMGSession(EMGData):
 
         # Access session-wide information
         session_info = session_data['session_info']
-        self.session_id = session_info['session_name']
+        self.session_id = session_info['session_id']
         self.num_channels = session_info['num_channels']
         self.channel_names = [self.default_channel_names[i] if i < len(self.default_channel_names) 
                               else 'Channel ' + str(i) for i in range(self.num_channels)]
