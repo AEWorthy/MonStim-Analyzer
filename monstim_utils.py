@@ -1,8 +1,10 @@
 # Utility functions/scripts for the project
+import os
+import sys
 from typing import List
 
-DATA_PATH = 'files_to_analyze'
-OUTPUT_PATH = 'pickles'
+DATA_PATH = 'files_to_process'
+OUTPUT_PATH = 'data'
 SAVED_DATASETS_PATH = 'datasets'
 
 def to_camel_case(text : str):
@@ -18,3 +20,38 @@ def format_report(report : List[str]):
         else:
             formatted_report += line + '\n'   
     return formatted_report
+
+def get_config_path():
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # Running in a normal Python environment
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, 'config.yml')
+
+def get_output_path():
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # Running in a normal Python environment
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, OUTPUT_PATH)
+
+def get_data_path():
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = os.path.dirname(sys.executable)
+        data_path = base_path
+    else:
+        # Running in a normal Python environment
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        data_path = os.path.join(base_path, DATA_PATH)
+
+        if not os.path.exists(data_path):
+            os.makedirs(data_path)
+
+    return data_path

@@ -16,11 +16,12 @@ from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLin
 
 from Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
 import EMG_Transformer
+from monstim_utils import get_config_path
 
 
 # Parent EMG data class. Mainly for loading config settings.
 class EMGData:
-    def __init__(self, config_file='config.yml'):
+    def __init__(self, config_file=get_config_path()):
         _config = self.load_config(config_file)
 
         self.m_start = _config['m_start']
