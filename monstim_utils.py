@@ -2,6 +2,7 @@
 import os
 import sys
 from typing import List
+import yaml
 
 DATA_PATH = 'files_to_process'
 OUTPUT_PATH = 'data'
@@ -39,7 +40,11 @@ def get_output_path():
         # Running in a normal Python environment
         base_path = os.path.dirname(os.path.abspath(__file__))
 
-    return os.path.join(base_path, OUTPUT_PATH)
+    output_path = os.path.join(base_path, OUTPUT_PATH)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+    return output_path
 
 def get_data_path():
     if getattr(sys, 'frozen', False):
@@ -55,3 +60,16 @@ def get_data_path():
             os.makedirs(data_path)
 
     return data_path
+
+def load_config(config_file=None):
+        """
+        Loads the config.yaml file into a YAML object that can be used to reference hard-coded configurable constants.
+
+        Args:
+            config_file (str): location of the 'config.yaml' file.
+        """
+        if config_file is None:
+            config_file = get_config_path()
+        with open(config_file, 'r') as file:
+            config = yaml.safe_load(file)
+        return config

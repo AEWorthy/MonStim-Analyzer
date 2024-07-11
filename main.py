@@ -1,10 +1,8 @@
 import sys
-import os
 import traceback
 import logging
 import argparse
-from typing import NoReturn
-from GUI import EMGAnalysisGUI
+from gui import EMGAnalysisGUI
 from PyQt6.QtWidgets import QApplication
 import multiprocessing
 
@@ -29,11 +27,9 @@ def exception_hook(exc_type, exc_value, exc_traceback):
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
 def main() -> int:
-    logging.debug("Entering main function")
+    logging.debug("Starting main function")
     try:
         multiprocessing.freeze_support()
-        logging.debug("Multiprocessing freeze support called")
-
         with QApplication(sys.argv) as app:
             gui = EMGAnalysisGUI()
             gui.show()
@@ -55,3 +51,6 @@ if __name__ == '__main__':
 
 # To create an executable:
 # pyinstaller EMGAnalysis.spec
+
+# To create a debug executable:
+# pyinstaller EMGAnalysis.spec --debug

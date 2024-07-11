@@ -314,9 +314,12 @@ def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_
         else:    
             return m_max
     else:
-        print("No clear plateau region detected. Try adjusting the threshold values.")
-        return None
+        raise NoCalculableMmaxError()
 
+class NoCalculableMmaxError(Exception):
+    def __init__(self, message="No calculable M-max. Try adjusting the threshold values."):
+        self.message = message
+        super().__init__(self.message)
 
 
 

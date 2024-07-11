@@ -7,22 +7,22 @@ import sys
 import pickle
 import copy
 import re
+import logging
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Union
 
-import yaml
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
 from Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
 import EMG_Transformer
-from monstim_utils import get_config_path
+from monstim_utils import load_config
 
 
 # Parent EMG data class. Mainly for loading config settings.
 class EMGData:
-    def __init__(self, config_file=get_config_path()):
-        _config = self.load_config(config_file)
+    def __init__(self):
+        _config = load_config()
 
         self.m_start = _config['m_start']
         self.m_end = [(time + _config['m_duration']) for time in _config['m_start']]
@@ -44,17 +44,6 @@ class EMGData:
         self.default_method = _config['default_method']
 
         self.default_channel_names = _config['default_channel_names']
-
-    def load_config(self, config_file):
-        """
-        Loads the config.yaml file into a YAML object that can be used to reference hard-coded configurable constants.
-
-        Args:
-            config_file (str): location of the 'config.yaml' file.
-        """
-        with open(config_file, 'r') as file:
-            config = yaml.safe_load(file)
-        return config
     
     @staticmethod
     def unpackPickleOutput (output_path):
@@ -234,10 +223,18 @@ class EMGSession(EMGData):
             
             for channel_idx in range(self.num_channels):
                 stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
-                m_wave_amplitudes = [EMG_Transformer.calculate_emg_amplitude(recording['channel_data'][channel_idx], self.m_start[channel_idx], self.m_end[channel_idx], self.scan_rate, method=self.default_method) for recording in self.recordings_processed]                
-                
-                channel_mmax = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=False, **self.m_max_args)
-                m_max.append(channel_mmax)
+                m_wave_amplitudes = [EMG_Transformer.calculate_emg_amplitude(recording['channel_data'][channel_idx], 
+                                                                             self.m_start[channel_idx] + self.stim_delay,
+                                                                             self.m_end[channel_idx] + self.stim_delay, 
+                                                                             self.scan_rate, 
+                                                                             method=self.default_method) 
+                                                                             for recording in self.recordings_processed]                
+                try: # Check if the channel has a valid M-max amplitude.
+                    channel_mmax = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=False, **self.m_max_args)
+                    m_max.append(channel_mmax)
+                except EMG_Transformer.NoCalculableMmaxError:
+                    logging.info(f"Channel {channel_idx} does not have a valid M-max amplitude.")
+                    m_max.append(None)
             
             self._m_max = m_max
         return self._m_max
