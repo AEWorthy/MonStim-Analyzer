@@ -146,7 +146,7 @@ def pickle_data(data_path, output_path, progress_callback=None, is_canceled_call
 
     print('Processing complete.')
 
-class DataProcessingThread(QThread):
+class GUIDataProcessingThread(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal()
     error = pyqtSignal(Exception)
