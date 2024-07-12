@@ -16,6 +16,10 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+# Exclude VCRUNTIME140.dll to avoid packaging it
+a.binaries = [b for b in a.binaries if 'VCRUNTIME140.dll' not in b[0]]
+
 pyz = PYZ(a.pure)
 
 splash = Splash('src\\splash.png',
@@ -34,13 +38,13 @@ exe = EXE(
     splash.binaries,
     [],
     name='MonStim Analyzer v1.0',
-    debug=False,
+    debug=True,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

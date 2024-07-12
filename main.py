@@ -6,6 +6,7 @@ import argparse
 import multiprocessing
 import shutil
 import atexit
+import time
 try:
     import pyi_splash # type: ignore
 except ModuleNotFoundError:
@@ -14,9 +15,6 @@ except ModuleNotFoundError:
 from PyQt6.QtWidgets import QApplication
 
 from monstim_gui import EMGAnalysisGUI, SplashScreen
-
-
-
 
 # Constants
 LOG_FILE = 'app.log'
@@ -38,8 +36,11 @@ def exception_hook(exc_type, exc_value, exc_traceback):
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
 def cleanup_tempdir():
+    # time.sleep(2)  # Wait for the application to close
     if hasattr(sys, '_MEIPASS'):
+        print("Cleaning up temporary directory before exit")
         temp_dir = sys._MEIPASS
+        logging.log(f"Cleaning up temporary directory before exit: {temp_dir}")
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
