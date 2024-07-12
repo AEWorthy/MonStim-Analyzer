@@ -4,6 +4,8 @@ import traceback
 import logging
 import argparse
 import multiprocessing
+import shutil
+import atexit
 try:
     import pyi_splash # type: ignore
 except ModuleNotFoundError:
@@ -35,6 +37,12 @@ def exception_hook(exc_type, exc_value, exc_traceback):
     logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
+def cleanup_tempdir():
+    if hasattr(sys, '_MEIPASS'):
+        temp_dir = sys._MEIPASS
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 def main() -> int:
     logging.debug("Starting main function")
     try:
@@ -65,6 +73,7 @@ if __name__ == '__main__':
     args = parse_arguments()
     setup_logging(args.debug)
     sys.excepthook = exception_hook
+    atexit.register(cleanup_tempdir)
     logging.debug("Script running as main")
     sys.exit(main())
 

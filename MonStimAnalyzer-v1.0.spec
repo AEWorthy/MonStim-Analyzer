@@ -34,7 +34,7 @@ exe = EXE(
     splash.binaries,
     [],
     name='MonStim Analyzer v1.0',
-    debug=True,
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,

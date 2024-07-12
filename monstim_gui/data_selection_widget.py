@@ -60,7 +60,7 @@ class DataSelectionWidget(QGroupBox):
         self.dataset_options.addWidget(self.remove_session_button)
 
         # button to reload dataset from file
-        self.reload_dataset_button = QPushButton("Reload Dataset")
+        self.reload_dataset_button = QPushButton("Reload All Sessions")
         self.reload_dataset_button.clicked.connect(self.parent.reload_dataset)
         self.dataset_options.addWidget(self.reload_dataset_button)
 
