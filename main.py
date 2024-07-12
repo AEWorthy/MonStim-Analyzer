@@ -1,10 +1,20 @@
 import sys
+import os
 import traceback
 import logging
 import argparse
-from gui import EMGAnalysisGUI
-from PyQt6.QtWidgets import QApplication
 import multiprocessing
+try:
+    import pyi_splash # type: ignore
+except ModuleNotFoundError:
+    pass
+
+from PyQt6.QtWidgets import QApplication
+
+from monstim_gui import EMGAnalysisGUI, SplashScreen
+
+
+
 
 # Constants
 LOG_FILE = 'app.log'
@@ -13,8 +23,7 @@ LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 def setup_logging(debug_mode: bool) -> None:
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logging.basicConfig(filename=LOG_FILE, level=log_level, format=LOG_FORMAT)
-    if debug_mode:
-        print("Debug mode enabled")
+    if debug_mode: print("Debug mode enabled")  # noqa: E701
     logging.debug("Logging setup complete")
 
 def parse_arguments() -> argparse.Namespace:
@@ -30,12 +39,22 @@ def main() -> int:
     logging.debug("Starting main function")
     try:
         multiprocessing.freeze_support()
-        with QApplication(sys.argv) as app:
-            gui = EMGAnalysisGUI()
-            gui.show()
-            logging.debug("GUI shown")
-            logging.debug("Entering main event loop")
-            return app.exec()
+
+        app = QApplication(sys.argv)
+
+        if 'pyi_splash' in sys.modules:
+            pyi_splash.close()  # Close the PyInstaller splash screen
+        
+        # Display splash screen
+        splash = SplashScreen()
+        splash.show()
+
+        gui = EMGAnalysisGUI()
+        gui.show()
+
+        logging.debug("Entering main event loop")
+        return app.exec()
+
     except Exception as e:
         logging.error(f"Error in main function: {str(e)}")
         logging.error(traceback.format_exc())

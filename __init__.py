@@ -3,7 +3,7 @@
 __version__ = '1.0.0'
 
 # Metadata
-__title__ = 'MonStim Analysis'
+__title__ = 'MonStim Analyzer'
 __description__ = 'Convert MonStim CSV files to Pickle files.'
 __author__ = 'Andrew Worthy'
 __email__ = 'aeworth@emory.edu'

@@ -46,6 +46,31 @@ def get_output_path():
 
     return output_path
 
+def get_source_path():
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running as compiled executable
+        base_path = sys._MEIPASS
+    else:
+        # Running in a normal Python environment
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    source_path = os.path.join(base_path, 'src')
+
+    return source_path
+
+def get_output_bin_path():
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # Running in a normal Python environment
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    output_bin_path = os.path.join(base_path, OUTPUT_PATH, 'bin')
+    if not os.path.exists(output_bin_path):
+        os.makedirs(output_bin_path)
+
+    return output_bin_path
+
 def get_data_path():
     if getattr(sys, 'frozen', False):
         # Running as compiled executable
