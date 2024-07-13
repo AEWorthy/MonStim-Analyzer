@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+import traceback
 import multiprocessing
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
                              QDialog, QProgressDialog, QSplashScreen, QLabel)
@@ -134,7 +135,6 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.debug("Window settings updated successfully.")
         else:
             QMessageBox.warning(self, "Warning", "Please select a session first.")
-            logging.warning("No session selected for updating reflex window settings.")
 
     def import_csv_data(self):
         logging.debug("Importing new data from CSV files.")
@@ -159,7 +159,8 @@ class EMGAnalysisGUI(QMainWindow):
                 self.thread.finished.connect(self.refresh_existing_datasets)
                 
                 self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
-                self.thread.error.connect(lambda: logging.error)
+                self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
+                self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
                 
                 self.thread.canceled.connect(progress_dialog.close)
                 self.thread.canceled.connect(lambda: QMessageBox.information(self, "Canceled", "Data processing was canceled."))
@@ -170,10 +171,8 @@ class EMGAnalysisGUI(QMainWindow):
 
                 progress_dialog.canceled.connect(self.thread.cancel)
             else:
-                logging.warning("No output directory selected.")
                 QMessageBox.warning(self, "Warning", "You must select an output directory.")
         else:
-            logging.warning("No CSV directory selected.")
             QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
     
     def refresh_existing_datasets(self):
@@ -288,6 +287,10 @@ class EMGAnalysisGUI(QMainWindow):
                     QMessageBox.warning(self, "Warning", "Please select a dataset first.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
+            logging.error(f"An error occurred while plotting: {e}")
+            logging.error(f"Plot type: {plot_type}, options: {plot_options}")
+            logging.error(f"Current session: {self.current_session}, current dataset: {self.current_dataset}")
+            logging.error(traceback.format_exc())
 
 
 if __name__ == '__main__':

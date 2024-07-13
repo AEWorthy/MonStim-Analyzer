@@ -4,13 +4,6 @@ import traceback
 import logging
 import argparse
 import multiprocessing
-import shutil
-import atexit
-import time
-try:
-    import pyi_splash # type: ignore
-except ModuleNotFoundError:
-    pass
 
 from PyQt6.QtWidgets import QApplication
 
@@ -22,7 +15,10 @@ LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
 def setup_logging(debug_mode: bool) -> None:
     log_level = logging.DEBUG if debug_mode else logging.INFO
-    logging.basicConfig(filename=LOG_FILE, level=log_level, format=LOG_FORMAT)
+    if hasattr(sys, '_MEIPASS'):
+        logging.basicConfig(filename=os.path.join(sys._MEIPASS, LOG_FILE), level=log_level, format=LOG_FORMAT)
+    else:
+        logging.basicConfig(filename=LOG_FILE, level=log_level, format=LOG_FORMAT)
     if debug_mode: print("Debug mode enabled")  # noqa: E701
     logging.debug("Logging setup complete")
 
@@ -35,24 +31,12 @@ def exception_hook(exc_type, exc_value, exc_traceback):
     logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
-def cleanup_tempdir():
-    # time.sleep(2)  # Wait for the application to close
-    if hasattr(sys, '_MEIPASS'):
-        print("Cleaning up temporary directory before exit")
-        temp_dir = sys._MEIPASS
-        logging.log(f"Cleaning up temporary directory before exit: {temp_dir}")
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
 def main() -> int:
     logging.debug("Starting main function")
     try:
         multiprocessing.freeze_support()
 
         app = QApplication(sys.argv)
-
-        if 'pyi_splash' in sys.modules:
-            pyi_splash.close()  # Close the PyInstaller splash screen
         
         # Display splash screen
         splash = SplashScreen()
@@ -72,9 +56,15 @@ def main() -> int:
 
 if __name__ == '__main__':
     args = parse_arguments()
-    setup_logging(args.debug)
+    if getattr(sys, 'frozen', False):
+        # If running as a frozen executable, log to file
+        setup_logging(args.debug)
+    else:
+        # If running in an IDE, log to console
+        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+        
+    
     sys.excepthook = exception_hook
-    atexit.register(cleanup_tempdir)
     logging.debug("Script running as main")
     sys.exit(main())
 

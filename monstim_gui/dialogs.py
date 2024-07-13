@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
                              QTextEdit, QPushButton, QApplication)
@@ -110,6 +111,7 @@ class ReflexSettingsDialog(QDialog):
             self.dataset.set_reflex_settings(m_start, m_duration, h_start, h_duration)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error saving settings: {str(e)}")
+            logging.error(f"Error saving reflex settings: {str(e)}\n\tdataset: {self.dataset}\n\tm_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}")
             return
 
         self.accept()

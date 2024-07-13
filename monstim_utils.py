@@ -26,6 +26,9 @@ def get_config_path():
     if getattr(sys, 'frozen', False):
         # Running as compiled executable
         base_path = os.path.dirname(sys.executable)
+        # in version 2.0, the config file should be in the main directory.
+        # The settings should be editable by the user in a menu bar option called "Settings" under the "File" menu.
+        # base_path = sys._MEIPASS
     else:
         # Running in a normal Python environment
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -47,8 +50,7 @@ def get_output_path():
     return output_path
 
 def get_source_path():
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # Running as compiled executable
+    if getattr(sys, 'frozen', False):
         base_path = sys._MEIPASS
     else:
         # Running in a normal Python environment

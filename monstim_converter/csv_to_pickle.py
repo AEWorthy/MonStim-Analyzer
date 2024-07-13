@@ -1,5 +1,7 @@
 import os
 import re
+import logging
+import traceback
 import pickle
 import pandas as pd
 import numpy as np
@@ -135,7 +137,8 @@ def pickle_data(data_path, output_path, progress_callback=None, is_canceled_call
                 try:
                     future.result()
                 except Exception as exc:
-                    print(f'>! Error in processing session: {exc}')
+                    logging.error(f'Error processing session: {exc}')
+                    logging.error(traceback.format_exc())
 
     for dataset_dir in datasets:
         if is_canceled_callback():
@@ -169,6 +172,8 @@ class GUIDataProcessingThread(QThread):
         except Exception as e:
             if not self._is_canceled:
                 self.error.emit(e)
+                logging.error(f'Error in GUIDataProcessingThread: {e}')
+                logging.error(traceback.format_exc())
 
     def report_progress(self, value):
         if not self._is_canceled:
