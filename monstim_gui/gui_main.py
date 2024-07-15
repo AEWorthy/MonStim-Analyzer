@@ -54,7 +54,7 @@ class SplashScreen(QSplashScreen):
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
         
-        description = QLabel("Software for analyzing EMG data from LabView MonStim experiments.\n\n\nClick to dismiss...")
+        description = QLabel("Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...")
         description.setStyleSheet("color: #666666;")
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
