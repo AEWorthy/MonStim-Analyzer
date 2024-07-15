@@ -7,12 +7,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QF
                              QDialog, QProgressDialog, QSplashScreen, QLabel)
 from PyQt6.QtGui import QPixmap, QFont, QIcon
 from PyQt6.QtCore import Qt
+import markdown
 
 from monstim_analysis import EMGData, EMGDataset#, EMGSession
 from monstim_converter import GUIDataProcessingThread
 from monstim_utils import format_report, get_output_path, get_data_path, get_output_bin_path, get_source_path
 
-from .dialogs import ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog
+from .dialogs import ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, HelpWindow, InfoDialog
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
@@ -21,6 +22,7 @@ from .commands import RemoveSessionCommand, CommandInvoker
 
 class SplashScreen(QSplashScreen):
     def __init__(self):
+        logging.debug("Creating splash screen.")
         pixmap = QPixmap(400, 300)
         pixmap.fill(Qt.GlobalColor.white)
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
@@ -205,6 +207,18 @@ class EMGAnalysisGUI(QMainWindow):
             else:
                 QMessageBox.warning(self, "Warning", "No changes made to channel names.")
                 logging.debug("No changes made to channel names.")
+
+    def show_splash_screen(self):
+        dialog = InfoDialog(self)
+        dialog.show()
+
+    def show_help_dialog(self):
+        file_path = 'readme.md'
+        with open(file_path, 'r', encoding='utf-8') as file:
+            markdown_content = file.read()
+            html_content = markdown.markdown(markdown_content)
+            self.help_window = HelpWindow(html_content)
+            self.help_window.show()
 
     # Data selection widget functions
     def load_dataset(self, index):

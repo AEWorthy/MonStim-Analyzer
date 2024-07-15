@@ -11,6 +11,7 @@ class MenuBar(QMenuBar):
             self.parent = parent
             self.create_file_menu()
             self.create_edit_menu()
+            self.create_help_menu()
         
         def create_file_menu(self):
             # File menu
@@ -49,5 +50,17 @@ class MenuBar(QMenuBar):
             # Update window settings button
             update_window_action = edit_menu.addAction("Update Reflex Time Windows")
             update_window_action.triggered.connect(self.parent.update_reflex_settings)
+        
+        def create_help_menu(self):
+            # Help menu
+            help_menu = self.addMenu("Help")
+
+            # About button
+            about_action = help_menu.addAction("About")
+            about_action.triggered.connect(self.parent.show_splash_screen)
+
+            # Help button
+            help_action = help_menu.addAction("Help")
+            help_action.triggered.connect(self.parent.show_help_dialog)
 
             

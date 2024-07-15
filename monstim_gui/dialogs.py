@@ -1,10 +1,13 @@
 import logging
+import os
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
-                             QTextEdit, QPushButton, QApplication)
+                             QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget)
+from PyQt6.QtGui import QPixmap, QFont
+from PyQt6.QtCore import Qt
 from monstim_analysis.Plot_EMG import MatplotlibCanvas
 
-from monstim_utils import DATA_PATH, OUTPUT_PATH, SAVED_DATASETS_PATH  # noqa: F401
+from monstim_utils import get_source_path
 
 if TYPE_CHECKING:
     from monstim_analysis import EMGSession, EMGDataset
@@ -143,5 +146,69 @@ class CopyableReportDialog(QDialog):
 
     def copy_to_clipboard(self):
         QApplication.clipboard().setText(self.text_edit.toPlainText())
+
+class HelpWindow(QWidget):
+    def __init__(self, markdown_content, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Help")
+        self.resize(600, 400)
+        
+        layout = QVBoxLayout()
+        self.text_browser = QTextBrowser()
+        self.text_browser.setHtml(markdown_content)
+        layout.addWidget(self.text_browser)
+        self.setLayout(layout)
+
+class InfoDialog(QWidget):
+    logging.debug("Showing info dialog")
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Program Information")
+        self.setFixedSize(400, 300)
+        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog)
+
+        # Set white background
+        self.setStyleSheet("background-color: white;")
+
+        layout = QVBoxLayout(self)
+
+        # Add logo
+        logo_pixmap = QPixmap(os.path.join(get_source_path(), 'icon.png'))
+        max_width = 100  # Set the desired maximum width
+        max_height = 100  # Set the desired maximum height
+        logo_pixmap = logo_pixmap.scaled(max_width, max_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        logo_label = QLabel()
+        logo_label.setPixmap(logo_pixmap)
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(logo_label)
+
+        font = QFont()
+        font.setPointSize(12)
+
+        program_name = QLabel("MonStim EMG Analyzer")
+        program_name.setStyleSheet("font-weight: bold; color: #333333;")
+        program_name.setFont(font)
+        program_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(program_name)
+
+        version = QLabel("Version 1.0")
+        version.setStyleSheet("color: #666666;")
+        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(version)
+
+        description = QLabel("Software for analyzing EMG data from LabView MonStim experiments.\n\n\nClick to dismiss...")
+        description.setStyleSheet("color: #666666;")
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(description)
+
+        copyright = QLabel("© 2024 Andrew Worthy")
+        copyright.setStyleSheet("color: #999999;")
+        copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
+        layout.addWidget(copyright)
+
+        self.setLayout(layout)
+
+    def mousePressEvent(self, event):
+        self.close()
 
 

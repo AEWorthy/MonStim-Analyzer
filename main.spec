@@ -2,6 +2,7 @@
 import os
 import shutil
 from PyInstaller.config import CONF
+from PyInstaller.utils.hooks import collect_data_files
 
 # Windows build
 
@@ -10,12 +11,12 @@ a = Analysis(
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],
     datas=[('src/icon.png', 'src')], # add config.yml and readme.md to datas. Add Settings option to the GUI under File
-    hiddenimports=[],
+    hiddenimports=['numpy', 'scipy', 'numpy.f2py'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=False, # change to False for release, True for debug
+    noarchive=True, # change to False for release, True for debug
     optimize=1, # change to 1 for release, 0 for debug
 )
 
