@@ -399,7 +399,7 @@ class EMGSession(EMGData):
         """
 
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{'emg' if not plot_type else plot_type}')(**kwargs)
+        getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
 
 class EMGDataset(EMGData):
     """
@@ -563,7 +563,7 @@ class EMGDataset(EMGData):
         """
 
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{'reflexCurves' if not plot_type else plot_type}')(**kwargs)
+        getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
 
     # User methods for manipulating the EMGSession instances in the dataset.
     def add_session(self, session : Union[EMGSession, str]):
