@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import TYPE_CHECKING
-from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 import monstim_analysis.Transform_EMG as Transform_EMG
 
