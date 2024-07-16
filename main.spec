@@ -10,13 +10,13 @@ a = Analysis(
     ['main.py'],
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],
-    datas=[('src/icon.png', 'src')], # add config.yml and readme.md to datas. Add Settings option to the GUI under File
-    hiddenimports=['numpy', 'scipy', 'numpy.f2py'],
+    datas=[('src/icon.png', 'src'), ('readme.md', 'src')], # add config.yml and readme.md to datas. Add Settings option to the GUI under File
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=True, # change to False for release, True for debug
+    noarchive=False, # change to False for release, True for debug
     optimize=1, # change to 1 for release, 0 for debug
 )
 
@@ -31,7 +31,7 @@ exe = EXE(
     debug=False, # change to False for release, True for debug
     bootloader_ignore_signals=False,
     strip=True, # change to True for release, False for debug
-    upx=False,
+    upx=True,
     console=False, # change to False for release, True for debug
     disable_windowed_traceback=False,
     argv_emulation=False,

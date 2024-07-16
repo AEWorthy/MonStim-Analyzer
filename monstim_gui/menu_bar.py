@@ -17,7 +17,7 @@ class MenuBar(QMenuBar):
             # File menu
             file_menu = self.addMenu("File")
             
-            import_action = file_menu.addAction("Import New Data from CSV Files")
+            import_action = file_menu.addAction("Import CSV Data")
             import_action.triggered.connect(self.parent.import_csv_data)
 
             # save_action = file_menu.addAction("Save Data")

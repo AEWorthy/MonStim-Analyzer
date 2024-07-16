@@ -213,7 +213,7 @@ class EMGAnalysisGUI(QMainWindow):
         dialog.show()
 
     def show_help_dialog(self):
-        file_path = 'readme.md'
+        file_path = os.path.join(get_source_path(), 'readme.md') if hasattr(sys, '_MEIPASS') else 'readme.md'
         with open(file_path, 'r', encoding='utf-8') as file:
             markdown_content = file.read()
             html_content = markdown.markdown(markdown_content)
