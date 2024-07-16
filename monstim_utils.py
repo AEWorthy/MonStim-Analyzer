@@ -24,8 +24,13 @@ def format_report(report : List[str]):
 
 def get_config_path():
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        base_path = os.path.dirname(sys.executable)
+        if sys.platform == 'darwin':
+            # macOS .app bundle
+            exe_path = os.path.dirname(sys.executable)
+            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
+        else:
+            # Windows .exe or other platforms
+            base_path = os.path.dirname(sys.executable)
         # in version 2.0, the config file should be in the main directory.
         # The settings should be editable by the user in a menu bar option called "Settings" under the "File" menu.
         # base_path = sys._MEIPASS
@@ -37,8 +42,13 @@ def get_config_path():
 
 def get_output_path():
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        base_path = os.path.dirname(sys.executable)
+        if sys.platform == 'darwin':
+            # macOS .app bundle
+            exe_path = os.path.dirname(sys.executable)
+            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
+        else:
+            # Windows .exe or other platforms
+            base_path = os.path.dirname(sys.executable)
     else:
         # Running in a normal Python environment
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -61,8 +71,13 @@ def get_source_path():
 
 def get_output_bin_path():
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        base_path = os.path.dirname(sys.executable)
+        if sys.platform == 'darwin':
+            # macOS .app bundle
+            exe_path = os.path.dirname(sys.executable)
+            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
+        else:
+            # Windows .exe or other platforms
+            base_path = os.path.dirname(sys.executable)
     else:
         # Running in a normal Python environment
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -75,8 +90,13 @@ def get_output_bin_path():
 
 def get_data_path():
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        base_path = os.path.dirname(sys.executable)
+        if sys.platform == 'darwin':
+            # macOS .app bundle
+            exe_path = os.path.dirname(sys.executable)
+            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
+        else:
+            # Windows .exe or other platforms
+            base_path = os.path.dirname(sys.executable)
         data_path = base_path
     else:
         # Running in a normal Python environment
