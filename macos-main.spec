@@ -1,57 +1,52 @@
 # -*- mode: python ; coding: utf-8 -*-
-
 import os
 import shutil
+import subprocess
+
 from PyInstaller.config import CONF
 
-
-# Determine the path to main.py and import_all.py
 main_path = os.path.abspath('main.py')
 base_path = os.path.dirname(main_path)
 
-# Include the Python shared library explicitly
-python_lib = '/opt/miniconda3/envs/alv_lab/lib/libpython3.12.dylib'
-
-
-
 a = Analysis(
-    [main_path],
-    pathex=[base_path],
-    binaries=[(python_lib, 'libpython3.12.dylib')],
-    datas=[(os.path.join(base_path, 'src', 'icon.png'), 'src')],
+    ['main.py'],
+    pathex=[base_path, os.path.join(base_path, 'monsit_gui'), os.path.join(base_path, 'monstim_analysis'), os.path.join(base_path, 'monstim_converter')],
+    binaries=[],
+    datas=[(os.path.join(base_path, 'src', 'icon.png'), 'src'), (os.path.join(base_path, 'src', 'icon.icns'), 'src'), (os.path.join(base_path, 'readme.md'), 'src')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=True, # change to False for release, True for debug
-    optimize=0, # change to 1 for release, 0 for debug
+    noarchive=False,
+    optimize=0,
 )
-
 pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
-    name='MonStimAnalyzer-OSX',
-    debug=True, # change to False for release, True for debug
+    name='macos-monstim-analyzer',
+    debug=False,
     bootloader_ignore_signals=False,
-    strip=False, # change to True for release, False for debug
-    upx=False,
-    console=False, # change to False for release, True for debug
+    strip=True,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/icon.png'
+    icon='src/icon.icns',
 )
-
 app = BUNDLE(
     exe,
-    name='MonStim Analyzer v1-0.app',
+    name='MonStim Analyzer v1.0.app',
     icon='src/icon.icns',
     bundle_identifier=None,
 )
@@ -63,4 +58,10 @@ os.makedirs(CONF['distpath'], exist_ok=True)
 shutil.copy2('config.yml', os.path.join(CONF['distpath'], 'MonStim Analyzer v1.0'))
 shutil.copy2('readme.md', os.path.join(CONF['distpath'], 'MonStim Analyzer v1.0'))
 
-# To compile, use command: /opt/miniconda3/envs/alv_lab/bin/pyinstaller --clean macos-main.spec
+
+# Sign the application with self-signed certificate
+subprocess.call([
+    'codesign', '--deep', '--force', '--verify', '--verbose',
+    '--sign', 'Andrew Worthy',
+    os.path.join(CONF['distpath'], 'MonStim Analyzer v1.0.app')
+])
