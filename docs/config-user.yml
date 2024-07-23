@@ -32,5 +32,5 @@ subplot_adjust_args:
   top: 0.85
   wspace: 0.1
 tick_font_size: 12
-time_window: 50
+time_window: 9
 title_font_size: 16

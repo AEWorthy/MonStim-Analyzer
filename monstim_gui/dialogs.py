@@ -3,19 +3,23 @@ import os
 import ast
 import yaml
 from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
-                             QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget, QFormLayout, QGroupBox, QScrollArea)
+                             QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget, QFormLayout, QGroupBox, QScrollArea,
+                             QSizePolicy)
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
 from PyQt6.QtCore import Qt, QUrl, pyqtSlot
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
-from monstim_analysis.Plot_EMG import MatplotlibCanvas
 import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 from mdx_math import MathExtension
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from monstim_utils import get_source_path, CustomLoader
 
@@ -29,17 +33,6 @@ class WebEnginePage(QWebEnginePage):
         print(f"JS: {message}")
 
 # Define custom dialogs
-class PlotWindowDialog(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Plot Window")
-        self.setGeometry(100, 100, 800, 600)
-
-        self.layout = QVBoxLayout(self)
-
-        self.canvas = MatplotlibCanvas(self)
-        self.layout.addWidget(self.canvas)
-
 class ChangeChannelNamesDialog(QDialog):
     def __init__(self, channel_names, parent=None):
         super().__init__(parent)
@@ -511,4 +504,32 @@ class InfoDialog(QWidget):
     def mousePressEvent(self, event):
         self.close()
 
+class PlotWindowDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Plot Window")
+        # self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'plot.png')))
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        self.canvas = None
+        self.toolbar = None
+
+    def create_canvas(self):
+        self.figure = Figure()
+        self.canvas = FigureCanvas(self.figure) # Type: FigureCanvas
+        self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.canvas.setMinimumSize(400, 200)       
+        self.layout.addWidget(self.canvas)
+            
+    def set_toolbar(self):
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.layout.addWidget(self.toolbar)
+
+    def closeEvent(self, event):
+        if self.toolbar:
+            self.toolbar.deleteLater()
+        if self.canvas:
+            self.canvas.deleteLater()
+        event.accept()
 

@@ -1,4 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
+
+# Before you package with Pyinstaller, be sure to do the following:
+    #1: delete the config-user.yml file
+
+
 import os
 import shutil
 from PyInstaller.config import CONF

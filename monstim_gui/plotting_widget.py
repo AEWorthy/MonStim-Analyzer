@@ -1,6 +1,9 @@
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup,
-                             QComboBox, QLabel, QHBoxLayout, QPushButton)
+                             QComboBox, QLabel, QHBoxLayout, QPushButton, QSizePolicy)
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from .plot_options import EMGOptions, SuspectedHReflexesOptions, ReflexCurvesOptions, MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions
 
@@ -18,6 +21,7 @@ class PlotWidget(QGroupBox):
         self.create_plot_type_selection()
         self.create_additional_options()
         self.create_plot_button()
+        self.import_canvas()
         self.setLayout(self.layout)
 
         self.plot_options = {
@@ -81,6 +85,10 @@ class PlotWidget(QGroupBox):
         self.plot_button = QPushButton("Plot")
         self.plot_button.clicked.connect(self.parent.plot_data)
         self.layout.addWidget(self.plot_button)
+    
+    def import_canvas(self):
+        self.canvas = self.parent.plot_pane.canvas
+        self.figure = self.parent.plot_pane.figure        
 
     def on_view_changed(self):
         view = "session" if self.session_radio.isChecked() else "dataset"
@@ -135,3 +143,21 @@ class PlotWidget(QGroupBox):
         if self.current_option_widget:
             return self.current_option_widget.get_options()
         return {}
+
+
+class PlotPane(QGroupBox):
+    def __init__(self, parent: 'EMGAnalysisGUI'):
+        super().__init__("Plot Pane", parent)
+        self.parent = parent
+        self.layout = QVBoxLayout()
+
+        self.figure = Figure()
+        self.canvas = FigureCanvas(self.figure) # Type: FigureCanvas
+        self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.canvas.setMinimumSize(400, 400)       
+        self.layout.addWidget(self.canvas)
+        
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.layout.addWidget(self.toolbar)
+        self.setLayout(self.layout)
+        print("Canvas created and added to layout.")

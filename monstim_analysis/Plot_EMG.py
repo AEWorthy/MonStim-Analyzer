@@ -28,7 +28,47 @@ class EMGPlotter:
         plt.rcParams.update({'figure.labelsize': self.emg_object.axis_label_font_size, 'figure.labelweight': 'bold'})
         plt.rcParams.update({'axes.titlesize': self.emg_object.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.emg_object.tick_font_size, 'ytick.labelsize': self.emg_object.tick_font_size})
-        pass
+
+    def create_fig_and_axes(self, num_channels: int, canvas: FigureCanvas = None, figsizes = 'large'):
+        fig, ax, axes = None, None, None
+        if figsizes == 'large':
+            single_channel_size_tuple = (4, 2)
+            multi_channel_size_tuple = (7, 2)
+        elif figsizes == 'small':
+            single_channel_size_tuple = (3, 2)
+            multi_channel_size_tuple = (5, 2)
+        
+        if canvas:
+            fig = canvas.figure
+            fig.clear()
+            fig.set_tight_layout(True)
+            
+            # Use predefined size tuples
+            if num_channels == 1:
+                fig.set_size_inches(*single_channel_size_tuple)
+                ax = fig.add_subplot(111)
+            else:
+                fig.set_size_inches(*multi_channel_size_tuple)
+                axes = fig.subplots(nrows=1, ncols=num_channels, sharey=True)
+            
+            # Update canvas size to match figure size
+            dpi = fig.get_dpi()
+            width_in_inches, height_in_inches = fig.get_size_inches()
+            canvas_width = int(width_in_inches * dpi)
+            canvas_height = int(height_in_inches * dpi)
+            
+            # Adjust canvas size and minimum size
+            canvas.setMinimumSize(canvas_width, canvas_height)
+            canvas.resize(canvas_width, canvas_height)
+        else:
+            # Create a new figure and axes
+            scale = 2 # Scale factor for figure size relative to default
+            if num_channels == 1:
+                fig, ax = plt.subplots(figsize=tuple([item * scale for item in single_channel_size_tuple]))
+            else:
+                fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True)
+
+        return fig, ax, axes
 
 class EMGSessionPlotter(EMGPlotter):
     """
@@ -104,7 +144,6 @@ class EMGSessionPlotter(EMGPlotter):
         # Define the start and end times for the window
         window_start_time = self.session.stim_start - offset # Start [offset]ms before stimulus onset
         window_end_time = window_start_time + self.session.time_window_ms
-        print(f'Window start: {window_start_time}; Window end: {window_end_time}')
 
         # Convert time window to sample indices
         window_start_sample = int(window_start_time * self.session.scan_rate / 1000)
@@ -115,7 +154,7 @@ class EMGSessionPlotter(EMGPlotter):
         return time_axis, window_start_sample, window_end_sample
 
     # EMGSession plotting functions
-    def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, data_type='filtered', canvas=None):
+    def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, data_type='filtered', canvas : FigureCanvas = None):
         """
         Plots EMG data from a Pickle file for a specified time window.
 
@@ -136,12 +175,9 @@ class EMGSessionPlotter(EMGPlotter):
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
-        # Create a figure and axis
-        if self.session.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.session.num_channels, figsize=(12, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
+        
+
 
         # Establish type of EMG data to plot
         if data_type == 'filtered':
@@ -196,13 +232,12 @@ class EMGSessionPlotter(EMGPlotter):
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.session.subplot_adjust_args)
-
         # Show the plot
         if canvas:
+            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
             canvas.draw()
         else:
+            plt.subplots_adjust(**self.session.subplot_adjust_args)
             plt.show()
 
     def plot_suspectedH (self, h_threshold=0.3, method=None, plot_legend=False, canvas= None):
@@ -222,12 +257,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
-        # Create a figure and axis
-        if self.session.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.session.num_channels, figsize=(12, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
 
         # Plot the EMG arrays for each channel, only for the first 10ms
         for recording in self.session.recordings_processed:
@@ -261,13 +291,12 @@ class EMGSessionPlotter(EMGPlotter):
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
 
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.session.subplot_adjust_args)
-
         # Show the plot
         if canvas:
+            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
             canvas.draw()
         else:
+            plt.subplots_adjust(**self.session.subplot_adjust_args)
             plt.show()
 
     def plot_mmax(self, method=None, mmax_report=True, canvas=None):
@@ -284,12 +313,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         channel_names = self.session.channel_names
 
-        # Create a figure and axis
-        if self.session.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(6, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.session.num_channels, figsize=(8, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas, figsizes = 'small')
 
         # Create a superlist to store all M-wave amplitudes for each channel for later y-axis adjustment.
         all_m_max_amplitudes = []
@@ -358,13 +382,12 @@ class EMGSessionPlotter(EMGPlotter):
             # fig.supxlabel('Stimulus Voltage (V)')
             fig.supylabel(f'Reflex Ampl. (mV, {method})')
 
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.session.subplot_adjust_args)
-
         # Show the plot
         if canvas:
+            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
             canvas.draw()
         else:
+            plt.subplots_adjust(**self.session.subplot_adjust_args)
             plt.show()
 
     def plot_reflexCurves (self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
@@ -381,12 +404,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         channel_names = self.session.channel_names
 
-        # Create a figure and axis
-        if self.session.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.session.num_channels, figsize=(12, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.session.num_channels):
@@ -456,13 +474,12 @@ class EMGSessionPlotter(EMGPlotter):
             if relative_to_mmax:
                 fig.supylabel(f'Reflex Ampl. (M-max, {method})')
         
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.session.subplot_adjust_args)
-
         # Show the plot
         if canvas:
+            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
             canvas.draw()
         else:
+            plt.subplots_adjust(**self.session.subplot_adjust_args)
             plt.show()
 
     def plot_m_curves_smoothened (self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
@@ -480,12 +497,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         channel_names = self.session.channel_names
 
-        # Create a figure and axis
-        if self.session.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.session.num_channels, figsize=(12, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.session.num_channels):
@@ -553,13 +565,12 @@ class EMGSessionPlotter(EMGPlotter):
             if relative_to_mmax:
                 fig.supylabel(f'Reflex Ampl. (M-max, {method})')
         
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.session.subplot_adjust_args)
-
         # Show the plot
         if canvas:
+            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
             canvas.draw()
         else:
+            plt.subplots_adjust(**self.session.subplot_adjust_args)
             plt.show()
 
 class EMGDatasetPlotter(EMGPlotter):
@@ -609,7 +620,7 @@ class EMGDatasetPlotter(EMGPlotter):
         print(help_text)
 
     # EMGDataset plotting functions
-    def plot_reflexCurves(self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, mmax_report=True):
+    def plot_reflexCurves(self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
         """
         Plots the M-response and H-reflex curves for each channel.
 
@@ -631,12 +642,7 @@ class EMGDatasetPlotter(EMGPlotter):
             recordings.extend(session.recordings_processed)
         sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
 
-        # Create a figure and axis
-        if self.dataset.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.dataset.num_channels, figsize=(12, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.dataset.num_channels, canvas)
 
         # Get unique binned stimulus voltages
         stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size for recording in sorted_recordings])))
@@ -727,13 +733,15 @@ class EMGDatasetPlotter(EMGPlotter):
             if relative_to_mmax:
                 fig.supylabel(f'Reflex Ampl. (M-max, {method})')
 
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.dataset.subplot_adjust_args)
-
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.figure.subplots_adjust(**self.dataset.subplot_adjust_args)
+            canvas.draw()
+        else:
+            plt.subplots_adjust(**self.dataset.subplot_adjust_args)
+            plt.show()
 
-    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=True):
+    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
         """
         Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
 
@@ -758,12 +766,7 @@ class EMGDatasetPlotter(EMGPlotter):
             recordings.extend(session.recordings_processed)
         sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
 
-        # Create a figure and axis
-        if self.dataset.num_channels == 1:
-            fig, ax = plt.subplots(figsize=(5, 4))
-            axes = [ax]
-        else:
-            fig, axes = plt.subplots(nrows=1, ncols=self.dataset.num_channels, figsize=(8, 4), sharey=True)
+        fig, ax, axes = self.create_fig_and_axes(self.dataset.num_channels, canvas, figsizes='small')
 
         # Get unique binned stimulus voltages
         stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size for recording in sorted_recordings])))
@@ -880,12 +883,13 @@ class EMGDatasetPlotter(EMGPlotter):
             if relative_to_mmax:
                 fig.supylabel(f'EMG Amp. (M-max, {method})')
 
-
-        # Adjust subplot spacing
-        plt.subplots_adjust(**self.dataset.subplot_adjust_args)
-
         # Show the plot
-        plt.show()
+        if canvas:
+            canvas.figure.subplots_adjust(**self.dataset.subplot_adjust_args)
+            canvas.draw()
+        else:
+            plt.subplots_adjust(**self.dataset.subplot_adjust_args)
+            plt.show()
 
     # def plot_mmax(self, channel_names=[], method='rms'):
     #     """
@@ -1005,13 +1009,6 @@ class EMGDatasetPlotter(EMGPlotter):
 
     #     # Show the plot
     #     plt.show()
-
-# Custom Matplotlib canvas class for embedding plots in PyQt5 applications. Not currently used.
-class MatplotlibCanvas(FigureCanvas):
-    def __init__(self, parent=None):
-        self.fig, self.ax = plt.subplots()
-        super().__init__(self.fig)
-        self.setParent(parent)
 
 class UnableToPlotError(Exception):
     def __init__(self, message):

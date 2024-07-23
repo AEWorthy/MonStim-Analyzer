@@ -4,7 +4,7 @@ import logging
 import traceback
 import multiprocessing
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
-                             QDialog, QProgressDialog, QSplashScreen, QLabel)
+                             QDialog, QProgressDialog, QSplashScreen, QLabel, QHBoxLayout)
 from PyQt6.QtGui import QPixmap, QFont, QIcon
 from PyQt6.QtCore import Qt
 import markdown
@@ -19,7 +19,7 @@ from .dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableRe
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
-from .plotting_widget import PlotWidget
+from .plotting_widget import PlotWidget, PlotPane
 from .commands import RemoveSessionCommand, CommandInvoker
 
 class SplashScreen(QSplashScreen):
@@ -73,19 +73,13 @@ class EMGAnalysisGUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
-        self.setGeometry(100, 100, 600, 400)
-
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
-        self.layout.setSpacing(10)  # Set spacing between layout items
-        self.layout.setContentsMargins(20, 20, 20, 20)  # Set layout margins
-
+        self.setGeometry(100, 100, 1000, 600)
+    
         # Initialize variables
         self.dataset_dict = {}
         self.datasets = []
-        self.current_dataset = None
-        self.current_session = None
+        self.current_dataset = None # Type: EMGDataset
+        self.current_session = None # Type: EMGSession
         self.channel_names = []
         self.plot_type_dict = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
                                "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves"}
@@ -94,26 +88,46 @@ class EMGAnalysisGUI(QMainWindow):
         self.csv_path = get_data_path()
         self.output_path = get_output_path()
         self.config_file = get_config_path()
-        
-        # Create widgets
-        self.menu_bar = MenuBar(self)
-        self.data_selection_widget = DataSelectionWidget(self)
-        self.reports_widget = ReportsWidget(self)
-        self.plot_widget = PlotWidget(self)
-        
-        # Add widgets to layout
-        self.setMenuBar(self.menu_bar)
-        self.layout.addWidget(self.data_selection_widget)
-        self.layout.addWidget(self.reports_widget)
-        self.layout.addWidget(self.plot_widget)
-        self.layout.addStretch(1)
+
+        self.init_ui()
 
         # Load existing pickled datasets if available
         self.load_existing_datasets()
         self.data_selection_widget.update_ui()
 
         self.command_invoker = CommandInvoker()
+    
+    def init_ui(self):
+        # Central widget and main layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(20, 20, 20, 20)
 
+        # Create widgets
+        self.menu_bar = MenuBar(self)
+        self.data_selection_widget = DataSelectionWidget(self)
+        self.reports_widget = ReportsWidget(self)
+        self.plot_pane = PlotPane(self)
+        self.plot_widget = PlotWidget(self)
+        
+        # Left panel widget to hold existing widgets
+        left_panel = QWidget()
+        left_panel_layout = QVBoxLayout(left_panel)
+        left_panel_layout.setSpacing(10)
+        left_panel_layout.setContentsMargins(0, 0, 0, 0)
+        left_panel_layout.addWidget(self.data_selection_widget)
+        left_panel_layout.addWidget(self.reports_widget)
+        left_panel_layout.addWidget(self.plot_widget)
+        left_panel_layout.addStretch(1)  # Pushes the plot button to the bottom
+
+        # Add left panel and plot widget to the main layout
+        main_layout.addWidget(left_panel)
+        main_layout.addWidget(self.plot_pane)
+
+        self.setMenuBar(self.menu_bar)
+   
     # Command functions
     def undo(self):
         self.command_invoker.undo()
@@ -260,10 +274,10 @@ class EMGAnalysisGUI(QMainWindow):
 
             # Load existing dataset if available
             if os.path.exists(save_path):
-                self.current_dataset = EMGDataset.load_dataset(save_path)
+                self.current_dataset = EMGDataset.load_dataset(save_path) # Type: EMGDataset
                 logging.debug(f"Dataset '{dataset_name}' loaded successfully from '{save_path}'.")
             else:
-                self.current_dataset = EMGDataset(self.dataset_dict[dataset_name], date, animal_id, condition)
+                self.current_dataset = EMGDataset(self.dataset_dict[dataset_name], date, animal_id, condition) # Type: EMGDataset
                 logging.debug(f"Dataset '{dataset_name}' created successfully to '{save_path}'.")         
             # Update channel names
             self.channel_names = self.current_dataset.channel_names
@@ -272,7 +286,7 @@ class EMGAnalysisGUI(QMainWindow):
 
     def load_session(self, index):
         if self.current_dataset and index >= 0:
-            self.current_session = self.current_dataset.get_session(index)
+            self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
             
             # Update channel names
             self.channel_names = self.current_session.channel_names
@@ -315,29 +329,44 @@ class EMGAnalysisGUI(QMainWindow):
 
     # Plotting functions
     def plot_data(self):
+        self.plot_widget.canvas.show()
         plot_type_raw = self.plot_widget.plot_type_combo.currentText()
         plot_type = self.plot_type_dict.get(plot_type_raw)
         plot_options = self.plot_widget.get_plot_options()
         
+        # Plot the data      
         try:
             logging.debug(f'Plotting {plot_type} with options: {plot_options}.')
             if self.plot_widget.session_radio.isChecked():
                 if self.current_session:
-                    self.current_session.plot(plot_type=plot_type, **plot_options)
+                    # Assuming plot_type corresponds to the data_type in plot_emg
+                    self.current_session.plot(
+                        plot_type=plot_type,
+                        **plot_options,
+                        canvas = self.plot_widget.canvas
+                    )
                 else:
                     QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
             else:
                 if self.current_dataset:
-                    self.current_dataset.plot(plot_type=plot_type, **plot_options)
+                    # If you have a similar plot method for dataset, use it here
+                    self.current_dataset.plot(
+                        plot_type=plot_type,
+                        **plot_options,
+                        canvas = self.plot_widget.canvas
+                    )
                 else:
                     QMessageBox.warning(self, "Warning", "Please select a dataset first.")
+                    return
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
             logging.error(f"An error occurred while plotting: {e}")
             logging.error(f"Plot type: {plot_type}, options: {plot_options}")
             logging.error(f"Current session: {self.current_session}, current dataset: {self.current_dataset}")
             logging.error(traceback.format_exc())
-
+        
+        self.plot_pane.layout.update()  # Refresh the layout of the plot pane
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
