@@ -10,7 +10,7 @@ a = Analysis(
     ['main.py'],
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],
-    datas=[('src/icon.png', 'src'), ('readme.md', 'src')], # add config.yml and readme.md to datas. Add Settings option to the GUI under File
+    datas=[('src', 'src'), ('docs', 'docs')], # add config.yml and readme.md to datas. Add Settings option to the GUI under File
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -27,7 +27,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='MonStim Analyzer v1.0',
+    name='MonStim Analyzer v1.1',
     debug=False, # change to False for release, True for debug
     bootloader_ignore_signals=False,
     strip=True, # change to True for release, False for debug
@@ -48,7 +48,7 @@ coll = COLLECT(
     strip=True, # change to True for release, False for debug
     upx=True,
     upx_exclude=['PyQt6'],
-    name='MonStim Analyzer v1.0'
+    name='MonStim Analyzer v1.1'
 )
 
 # Ensure the dist directory exists

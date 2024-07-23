@@ -11,9 +11,11 @@ import markdown
 
 from monstim_analysis import EMGData, EMGDataset#, EMGSession
 from monstim_converter import GUIDataProcessingThread
-from monstim_utils import format_report, get_output_path, get_data_path, get_output_bin_path, get_source_path
+from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
+                           get_source_path, get_docs_path, get_config_path)
 
-from .dialogs import ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, HelpWindow, InfoDialog
+from .dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, 
+                      LatexHelpWindow, InfoDialog, HelpWindow, PreferencesDialog)
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
@@ -91,6 +93,7 @@ class EMGAnalysisGUI(QMainWindow):
         # Set default paths
         self.csv_path = get_data_path()
         self.output_path = get_output_path()
+        self.config_file = get_config_path()
         
         # Create widgets
         self.menu_bar = MenuBar(self)
@@ -182,6 +185,14 @@ class EMGAnalysisGUI(QMainWindow):
         self.load_existing_datasets()
         self.data_selection_widget.update_ui()
 
+    def show_preferences_window(self):
+        logging.debug("Showing preferences window.")
+        window = PreferencesDialog(self.config_file, parent=self)
+        if window.exec() == QDialog.DialogCode.Accepted:
+            QMessageBox.information(self, "Success", "Preferences updated successfully.")
+            logging.debug("Preferences updated successfully.")
+        pass
+
     def change_channel_names(self):
         # Check if a dataset and session are selected
         logging.debug("Changing channel names.")
@@ -208,16 +219,32 @@ class EMGAnalysisGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "No changes made to channel names.")
                 logging.debug("No changes made to channel names.")
 
-    def show_splash_screen(self):
+    def show_about_screen(self):
         dialog = InfoDialog(self)
         dialog.show()
 
-    def show_help_dialog(self):
-        file_path = os.path.join(get_source_path(), 'readme.md') if hasattr(sys, '_MEIPASS') else 'readme.md'
+    def show_help_dialog(self, topic=None, latex=False):
+        logging.debug(f"Showing help dialog for topic: {topic}.")
+
+        match topic:
+            case 'help':
+                file = 'readme.md'
+                title = 'Help'
+            case 'emg_processing':
+                file = 'Transform_EMG.md'
+                latex = True
+                title = 'EMG Processing and Analysis Info'
+            case _:
+                file = 'readme.md'
+
+        file_path = os.path.join(get_docs_path(), file)
         with open(file_path, 'r', encoding='utf-8') as file:
             markdown_content = file.read()
             html_content = markdown.markdown(markdown_content)
-            self.help_window = HelpWindow(html_content)
+            if latex:
+                self.help_window = LatexHelpWindow(html_content, title)
+            else:
+                self.help_window = HelpWindow(html_content, title)
             self.help_window.show()
 
     # Data selection widget functions

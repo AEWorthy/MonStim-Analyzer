@@ -1,6 +1,6 @@
 # monstim_gui/__init__.py
 
-__version__ = '1.0.0'
+__version__ = '1.1.2'
 
 # Metadata
 __title__ = 'monstim_gui'

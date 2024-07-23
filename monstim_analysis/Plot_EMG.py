@@ -97,6 +97,23 @@ class EMGSessionPlotter(EMGPlotter):
         """
         print(help_text)
 
+    def get_time_axis(self, offset=1):
+        # Calculate time values based on the scan rate
+        time_values_ms = np.arange(self.session.num_samples) * 1000 / self.session.scan_rate  # Time values in milliseconds
+        
+        # Define the start and end times for the window
+        window_start_time = self.session.stim_start - offset # Start [offset]ms before stimulus onset
+        window_end_time = window_start_time + self.session.time_window_ms
+        print(f'Window start: {window_start_time}; Window end: {window_end_time}')
+
+        # Convert time window to sample indices
+        window_start_sample = int(window_start_time * self.session.scan_rate / 1000)
+        window_end_sample = int(window_end_time * self.session.scan_rate / 1000)
+
+        # Slice the time array for the time window
+        time_axis = time_values_ms[window_start_sample:window_end_sample] - self.session.stim_start
+        return time_axis, window_start_sample, window_end_sample
+
     # EMGSession plotting functions
     def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, data_type='filtered', canvas=None):
         """
@@ -117,14 +134,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         channel_names = self.session.channel_names
 
-        # Calculate time values based on the scan rate
-        time_values_ms = np.arange(self.session.num_samples) * 1000 / self.session.scan_rate  # Time values in milliseconds
-
-        # Determine the number of samples for the desired time window in ms
-        num_samples_time_window = int(self.session.time_window_ms * self.session.scan_rate / 1000)  # Convert time window to number of samples
-
-        # Slice the time array for the time window
-        time_axis = time_values_ms[:num_samples_time_window] - self.session.stim_delay
+        time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
         # Create a figure and axis
         if self.session.num_channels == 1:
@@ -154,7 +164,7 @@ class EMGSessionPlotter(EMGPlotter):
         for recording in emg_recordings:
             for channel_index, channel_data in enumerate(recording['channel_data']):
                 if self.session.num_channels == 1:
-                    ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     ax.set_title(f'{channel_names[0]}')
                     ax.grid(True)
                     #ax.legend()
@@ -165,7 +175,7 @@ class EMGSessionPlotter(EMGPlotter):
                         ax.axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
                         ax.axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)                       
                 else:
-                    axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                    axes[channel_index].plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     axes[channel_index].set_title(f'{channel_names[channel_index]}')
                     axes[channel_index].grid(True)
                     #axes[channel_index].legend()
@@ -210,14 +220,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         channel_names = self.session.channel_names
 
-        # Calculate time values based on the scan rate
-        time_values_ms = np.arange(self.session.num_samples) * 1000 / self.session.scan_rate  # Time values in milliseconds
-
-        # Determine the number of samples for the first 10ms
-        num_samples_time_window = int(self.session.time_window_ms * self.session.scan_rate / 1000)  # Convert time window to number of samples
-
-        # Slice the time array for the time window
-        time_axis = time_values_ms[:num_samples_time_window] - self.session.stim_delay
+        time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
         # Create a figure and axis
         if self.session.num_channels == 1:
@@ -230,19 +233,19 @@ class EMGSessionPlotter(EMGPlotter):
         for recording in self.session.recordings_processed:
             for channel_index, channel_data in enumerate(recording['channel_data']):
                 h_reflex_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                             self.session.h_start[channel_index] + self.session.stim_delay, 
-                                                                             self.session.h_end[channel_index] + self.session.stim_delay, 
+                                                                             self.session.h_start[channel_index] + self.session.stim_start, 
+                                                                             self.session.h_end[channel_index] + self.session.stim_start, 
                                                                              self.session.scan_rate,  
                                                                              method=method)
                 if h_reflex_amplitude > h_threshold:  # Check EMG amplitude within H-reflex window
                     if self.session.num_channels == 1:
-                        ax.plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         ax.set_title(f'{channel_names[0]}')
                         ax.grid(True)
                         if plot_legend:
                             ax.legend()
                     else:
-                        axes[channel_index].plot(time_axis, channel_data[:num_samples_time_window], label=f"Stimulus Voltage: {recording['stimulus_v']}")
+                        axes[channel_index].plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         axes[channel_index].set_title(f'{channel_names[channel_index]}')
                         axes[channel_index].grid(True)
                         if plot_legend:
@@ -302,7 +305,7 @@ class EMGSessionPlotter(EMGPlotter):
                 stimulus_v = recording['stimulus_v']
                              
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_delay, self.session.m_end[channel_index] + self.session.stim_delay, self.session.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_start, self.session.m_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -397,8 +400,8 @@ class EMGSessionPlotter(EMGPlotter):
                 stimulus_v = recording['stimulus_v']
                 
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_delay, self.session.m_end[channel_index] + self.session.stim_delay, self.session.scan_rate, method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.h_start[channel_index] + self.session.stim_delay, self.session.h_end[channel_index] + self.session.stim_delay, self.session.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_start, self.session.m_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
+                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.h_start[channel_index] + self.session.stim_start, self.session.h_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -497,8 +500,8 @@ class EMGSessionPlotter(EMGPlotter):
                 
 
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_delay, self.session.m_end[channel_index] + self.session.stim_delay, self.session.scan_rate, method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.h_start[channel_index] + self.session.stim_delay, self.session.h_end[channel_index] + self.session.stim_delay, self.session.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_start, self.session.m_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
+                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.h_start[channel_index] + self.session.stim_start, self.session.h_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -622,7 +625,6 @@ class EMGDatasetPlotter(EMGPlotter):
             method = self.dataset.default_method
         channel_names = self.dataset.channel_names
 
-
         # Unpack processed session recordings.
         recordings = []
         for session in self.dataset.emg_sessions:
@@ -656,8 +658,8 @@ class EMGDatasetPlotter(EMGPlotter):
                         channel_data = recording['channel_data'][channel_index]
 
                         try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_delay, self.dataset.m_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_delay, self.dataset.h_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate, method=method)
+                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
+                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_start, self.dataset.h_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
                         except ValueError:
                             raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -685,16 +687,13 @@ class EMGDatasetPlotter(EMGPlotter):
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
                 if manual_mmax is not None:
-                    m_max = manual_mmax
+                    channel_m_max = manual_mmax[channel_index]
                 else:
-                    try:
-                        m_max = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_means, mmax_report=mmax_report, **self.dataset.m_max_args)
-                    except Transform_EMG.NoCalculableMmaxError:
-                        raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
-                m_wave_means = [(amplitude / m_max) for amplitude in m_wave_means]
-                m_wave_stds = [(amplitude / m_max) for amplitude in m_wave_stds]
-                h_response_means = [(amplitude / m_max) for amplitude in h_response_means]
-                h_response_stds = [(amplitude / m_max) for amplitude in h_response_stds]
+                    channel_m_max = self.dataset.m_max[channel_index]
+                m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
+                m_wave_stds = [(amplitude / channel_m_max) for amplitude in m_wave_stds]
+                h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
+                h_response_stds = [(amplitude / channel_m_max) for amplitude in h_response_stds]
 
             if self.dataset.num_channels == 1:
                 ax.plot(stimulus_voltages, m_wave_means, color=self.dataset.m_color, label='M-wave')
@@ -788,8 +787,8 @@ class EMGDatasetPlotter(EMGPlotter):
                         channel_data = recording['channel_data'][channel_index]
                         
                         try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_delay, self.dataset.m_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_delay, self.dataset.h_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate, method=method)
+                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
+                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_start, self.dataset.h_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
                         except ValueError:
                             raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
 
@@ -820,8 +819,8 @@ class EMGDatasetPlotter(EMGPlotter):
                     channel_data = recording['channel_data'][channel_index]
                     
                     try:
-                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_delay, self.dataset.m_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate, method=method)
-                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_delay, self.dataset.h_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate, method=method)
+                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
+                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_start, self.dataset.h_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
                     except ValueError:
                         raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
                 
@@ -834,7 +833,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 if manual_mmax is not None:
                     m_max = manual_mmax
                 else:     
-                    m_max = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_means, mmax_report=mmax_report, **self.dataset.m_max_args)
+                    m_max = self.dataset.m_max[channel_index]
                 m_wave_amplitudes_max_h = [amplitude / m_max for amplitude in m_wave_amplitudes_max_h]
                 h_response_amplitudes_max_h = [amplitude / m_max for amplitude in h_response_amplitudes_max_h]
 
@@ -940,11 +939,11 @@ class EMGDatasetPlotter(EMGPlotter):
     #                 if binned_stimulus_v == stimulus_v:
     #                     channel_data = recording['channel_data'][channel_index]
     #                     if method == 'rms':
-    #                         m_wave_amplitude = EMG_Transformer.calculate_rms_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_delay, self.dataset.m_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate)
+    #                         m_wave_amplitude = EMG_Transformer.calculate_rms_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate)
     #                     elif method == 'avg_rectified':
-    #                         m_wave_amplitude = EMG_Transformer.calculate_average_amplitude_rectified(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_delay, self.dataset.m_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate)
+    #                         m_wave_amplitude = EMG_Transformer.calculate_average_amplitude_rectified(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate)
     #                     elif method == 'peak_to_trough':
-    #                         m_wave_amplitude = EMG_Transformer.calculate_peak_to_trough_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_delay, self.dataset.m_end[channel_index] + self.dataset.stim_delay, self.dataset.scan_rate)
+    #                         m_wave_amplitude = EMG_Transformer.calculate_peak_to_trough_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate)
     #                     else:
     #                         print(f">! Error: method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
     #                         return

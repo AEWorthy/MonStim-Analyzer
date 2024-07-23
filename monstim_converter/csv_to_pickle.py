@@ -28,7 +28,9 @@ def extract_session_info_and_data(file_path):
             'num_channels': int(float(metadata['# of Channels'])),
             'scan_rate': float(metadata['Scan Rate (Hz)']),
             'num_samples': float(metadata['Samples/Channel']),
-            'stim_delay': float(metadata['Pre-Stim Acq. time (ms)']),
+            'pre_stim_acquired': float(metadata['Pre-Stim Acq. time (ms)']),
+            'post_stim_acquired': float(metadata['Post-Stim Acq. time (ms)']),
+            'stim_delay': float(metadata['Start Delay (ms)']),
             'stim_duration': float(metadata['Stimulus duration (ms)']),
             'stim_interval': float(metadata['Inter-Stim delay (sec)']),
             'emg_amp_gains': [int(float(metadata[f'EMG amp gain ch {i}'])) for i in range(1, int(float(metadata['# of Channels'])) + 1)]
@@ -104,7 +106,7 @@ def getDatasetSessionDict(dataset_path):
     
     return dataset_session_dict
 
-def pickle_data(data_path, output_path, progress_callback=None, is_canceled_callback=None, max_workers=None):
+def pickle_data(data_path, output_path, progress_callback=print, is_canceled_callback=lambda: False, max_workers=4):
     """Main module function to create Pickle files from EMG datasets."""
     if progress_callback is None:
         progress_callback = lambda x: None  # noqa: E731

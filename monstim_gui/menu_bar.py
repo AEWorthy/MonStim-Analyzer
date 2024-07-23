@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class MenuBar(QMenuBar):
         def __init__(self, parent : 'EMGAnalysisGUI'):
             super().__init__(parent)
-            self.parent = parent
+            self.parent = parent # type: EMGAnalysisGUI
             self.create_file_menu()
             self.create_edit_menu()
             self.create_help_menu()
@@ -30,6 +30,10 @@ class MenuBar(QMenuBar):
             refresh_datasets_action = file_menu.addAction("Refresh Datasets/Sessions Lists")
             refresh_datasets_action.triggered.connect(self.parent.refresh_existing_datasets)
             refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
+
+            # Preferences button
+            preferences_action = file_menu.addAction("Preferences")
+            preferences_action.triggered.connect(self.parent.show_preferences_window)
 
         def create_edit_menu(self):
             # Edit menu
@@ -57,10 +61,14 @@ class MenuBar(QMenuBar):
 
             # About button
             about_action = help_menu.addAction("About")
-            about_action.triggered.connect(self.parent.show_splash_screen)
+            about_action.triggered.connect(self.parent.show_about_screen)
 
-            # Help button
-            help_action = help_menu.addAction("Help")
-            help_action.triggered.connect(self.parent.show_help_dialog)
+            # Show Help button
+            help_action = help_menu.addAction("Show Help")
+            help_action.triggered.connect(lambda: self.parent.show_help_dialog('help'))
+
+            # Show EMG processing info button
+            processing_info_action = help_menu.addAction("Show EMG Processing Info")
+            processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog('emg_processing'))
 
             

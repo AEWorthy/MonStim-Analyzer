@@ -1,0 +1,34 @@
+axis_label_font_size: 16
+bin_size: 0.05
+butter_filter_args:
+  highcut: 3500
+  lowcut: 100
+  order: 4
+default_channel_names: LG, TA
+default_method: rms
+flag_style: ':'
+h_color: blue
+h_duration: 1
+h_start: !!python/tuple
+- 3.5
+- 3.5
+h_threshold: 0.5
+m_color: red
+m_duration: 2
+m_max_args:
+  max_window_size: 15
+  min_window_size: 2
+  threshold: 0.2
+m_start: !!python/tuple
+- 1
+- 1
+subplot_adjust_args:
+  bottom: 0.15
+  hspace: 0.5
+  left: 0.1
+  right: 0.9
+  top: 0.85
+  wspace: 0.1
+tick_font_size: 12
+time_window: 8.0
+title_font_size: 16

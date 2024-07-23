@@ -22,7 +22,7 @@ def format_report(report : List[str]):
             formatted_report += line + '\n'   
     return formatted_report
 
-def get_config_path():
+def get_base_path():
     if getattr(sys, 'frozen', False):
         if sys.platform == 'darwin':
             # macOS .app bundle
@@ -31,81 +31,58 @@ def get_config_path():
         else:
             # Windows .exe or other platforms
             base_path = os.path.dirname(sys.executable)
-        # in version 2.0, the config file should be in the main directory.
-        # The settings should be editable by the user in a menu bar option called "Settings" under the "File" menu.
-        # base_path = sys._MEIPASS
     else:
         # Running in a normal Python environment
         base_path = os.path.dirname(os.path.abspath(__file__))
 
-    return os.path.join(base_path, 'config.yml')
+    return base_path
+
+def get_bundle_path():
+    if getattr(sys, 'frozen', False):
+        bundle_path = sys._MEIPASS
+    else:
+        # Running in a normal Python environment
+        bundle_path = os.path.dirname(os.path.abspath(__file__))
+
+    return bundle_path
 
 def get_output_path():
-    if getattr(sys, 'frozen', False):
-        if sys.platform == 'darwin':
-            # macOS .app bundle
-            exe_path = os.path.dirname(sys.executable)
-            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
-        else:
-            # Windows .exe or other platforms
-            base_path = os.path.dirname(sys.executable)
-    else:
-        # Running in a normal Python environment
-        base_path = os.path.dirname(os.path.abspath(__file__))
-
-    output_path = os.path.join(base_path, OUTPUT_PATH)
+    output_path = os.path.join(get_base_path(), OUTPUT_PATH)
     if not os.path.exists(output_path):
         os.makedirs(output_path)
-
     return output_path
 
 def get_source_path():
     if getattr(sys, 'frozen', False):
-        base_path = sys._MEIPASS
+        source_path = os.path.join(get_bundle_path(), 'src')
     else:
-        # Running in a normal Python environment
-        base_path = os.path.dirname(os.path.abspath(__file__))
-    source_path = os.path.join(base_path, 'src')
-
+        source_path = os.path.join(get_base_path(), 'src')
     return source_path
 
-def get_output_bin_path():
+def get_docs_path():
     if getattr(sys, 'frozen', False):
-        if sys.platform == 'darwin':
-            # macOS .app bundle
-            exe_path = os.path.dirname(sys.executable)
-            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
-        else:
-            # Windows .exe or other platforms
-            base_path = os.path.dirname(sys.executable)
+        docs_path = os.path.join(get_bundle_path(), 'docs')
     else:
-        # Running in a normal Python environment
-        base_path = os.path.dirname(os.path.abspath(__file__))
+        docs_path = os.path.join(get_base_path(), 'docs')
+    return docs_path
 
-    output_bin_path = os.path.join(base_path, OUTPUT_PATH, 'bin')
+def get_config_path():
+    # later, config will be in the bundle path once I implement the preferences window.
+    return os.path.join(get_docs_path(), 'config.yml')
+
+def get_output_bin_path():
+    output_bin_path = os.path.join(get_output_path(), 'bin')
     if not os.path.exists(output_bin_path):
         os.makedirs(output_bin_path)
-
     return output_bin_path
 
 def get_data_path():
     if getattr(sys, 'frozen', False):
-        if sys.platform == 'darwin':
-            # macOS .app bundle
-            exe_path = os.path.dirname(sys.executable)
-            base_path = os.path.abspath(os.path.join(exe_path, '..', '..', '..'))
-        else:
-            # Windows .exe or other platforms
-            base_path = os.path.dirname(sys.executable)
-        data_path = base_path
+        data_path = get_base_path()
     else:
-        # Running in a normal Python environment
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        data_path = os.path.join(base_path, DATA_PATH)
-
+        data_path = os.path.join(get_base_path(), DATA_PATH)
         if not os.path.exists(data_path):
             os.makedirs(data_path)
-
     return data_path
 
 def load_config(config_file=None):
@@ -120,3 +97,12 @@ def load_config(config_file=None):
         with open(config_file, 'r') as file:
             config = yaml.safe_load(file)
         return config
+
+# Custom YAML loader to handle tuples
+class CustomLoader(yaml.SafeLoader):
+    def construct_python_tuple(self, node):
+        return tuple(self.construct_sequence(node))
+
+CustomLoader.add_constructor(
+    u'tag:yaml.org,2002:python/tuple',
+    CustomLoader.construct_python_tuple)

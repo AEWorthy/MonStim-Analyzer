@@ -1,17 +1,33 @@
 import logging
 import os
+import yaml
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
-                             QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget)
-from PyQt6.QtGui import QPixmap, QFont
-from PyQt6.QtCore import Qt
+                             QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget, QFormLayout, QGroupBox, QScrollArea)
+from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
+from PyQt6.QtCore import Qt, QUrl, pyqtSlot
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
 from monstim_analysis.Plot_EMG import MatplotlibCanvas
+import markdown
+from markdown.extensions.codehilite import CodeHiliteExtension
+from markdown.extensions.fenced_code import FencedCodeExtension
+from markdown.extensions.tables import TableExtension
+from mdx_math import MathExtension
 
-from monstim_utils import get_source_path
+from monstim_utils import get_source_path, CustomLoader
 
 if TYPE_CHECKING:
     from monstim_analysis import EMGSession, EMGDataset
 
+
+class WebEnginePage(QWebEnginePage):
+    # Custom WebEnginePage to handle JavaScript messages
+    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+        print(f"JS: {message}")
+
+# Define custom dialogs
 class PlotWindowDialog(QDialog):
     def __init__(self):
         super().__init__()
@@ -147,10 +163,131 @@ class CopyableReportDialog(QDialog):
     def copy_to_clipboard(self):
         QApplication.clipboard().setText(self.text_edit.toPlainText())
 
+class PreferencesDialog(QDialog):
+    def __init__(self, default_config_file, parent=None):
+        super().__init__()
+        self.default_config_file = default_config_file
+        self.user_config_file = self.get_user_config_file()
+        self.config = self.read_config()
+        self.init_ui()
+
+    def get_user_config_file(self):
+        # Get the directory of the default config file
+        config_dir = os.path.dirname(self.default_config_file)
+        return os.path.join(config_dir, 'config-user.yaml')
+    
+    def read_config(self):
+        # First, read the original config
+        with open(self.default_config_file, 'r') as file:
+            config = yaml.safe_load(file)
+        
+        # If user config exists, update the config with user settings
+        if os.path.exists(self.user_config_file):
+            with open(self.user_config_file, 'r') as file:
+                user_config = yaml.load(file, Loader = CustomLoader)
+            if user_config:  # Check if user_config is not None
+                self.update_nested_dict(config, user_config)
+        
+        return config
+
+    def update_nested_dict(self, d, u):
+        for k, v in u.items():
+            if isinstance(v, dict):
+                d[k] = self.update_nested_dict(d.get(k, {}), v)
+            else:
+                d[k] = v
+        return d
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+
+        self.fields = {}
+        
+        # Define sections and their corresponding keys
+        sections = {
+            "Basic Plotting Parameters": ["bin_size", "time_window", "default_method", "default_channel_names"],
+            "EMG Filter Settings": ["butter_filter_args"],
+            "Default Reflex Window Settings": ["m_start", "m_duration", "h_start", "h_duration"],
+            "'Suspected H-reflex' Plot Settings": ["h_threshold"],
+            "M-max Calculation Settings": ["m_max_args"],
+            "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size", 
+                                      "m_color", "h_color", "flag_style", "subplot_adjust_args"],
+        }
+
+        for section, keys in sections.items():
+            group_box = QGroupBox(section)
+            form_layout = QFormLayout()
+
+            for key in keys:
+                value = self.config.get(key)
+                if isinstance(value, dict):
+                    sub_group = QGroupBox(key)
+                    sub_form = QFormLayout()
+                    for sub_key, sub_value in value.items():
+                        field = QLineEdit(str(sub_value))
+                        sub_form.addRow(sub_key, field)
+                        self.fields[f"{key}.{sub_key}"] = field
+                    sub_group.setLayout(sub_form)
+                    form_layout.addRow(sub_group)
+                elif isinstance(value, list):
+                    field = QLineEdit(', '.join(map(str, value)))
+                    form_layout.addRow(key, field)
+                    self.fields[key] = field
+                else:
+                    field = QLineEdit(str(value))
+                    form_layout.addRow(key, field)
+                    self.fields[key] = field
+
+            group_box.setLayout(form_layout)
+            scroll_layout.addWidget(group_box)
+
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.save_config)
+        layout.addWidget(save_button)
+
+        self.setLayout(layout)
+        self.setWindowTitle("Preferences")
+        self.resize(400, 600)  # Set a default size
+
+    def save_config(self):
+        # Fix to handle lists spit by commas like default_channel_names, m_start, h_start.
+        user_config = {}
+        for key, field in self.fields.items():
+            if '.' in key:
+                main_key, sub_key = key.split('.')
+                if main_key not in user_config:
+                    user_config[main_key] = {}
+                user_config[main_key][sub_key] = self.parse_value(field.text())
+            else:
+                user_config[key] = self.parse_value(field.text())
+
+        # Save all values to the user config file
+        with open(self.user_config_file, 'w') as file:
+            yaml.dump(user_config, file)
+
+        QMessageBox.information(self, "Save Successful", 
+                                f"User preferences saved to {self.user_config_file}")
+        self.accept()
+
+    def parse_value(self, value):
+        try:
+            return eval(value)
+        except Exception:
+            return value
+
 class HelpWindow(QWidget):
-    def __init__(self, markdown_content, parent=None):
+    def __init__(self, markdown_content, title=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Help")
+        self.setWindowTitle(title if title else "Help Window")
+        self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'info.png')))
         self.resize(600, 400)
         
         layout = QVBoxLayout()
@@ -159,11 +296,167 @@ class HelpWindow(QWidget):
         layout.addWidget(self.text_browser)
         self.setLayout(layout)
 
+class LatexHelpWindow(QWidget):
+    def __init__(self, markdown_content, title=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title if title else "LaTeX Help Window")
+        self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'info.png')))
+        self.resize(600, 400)
+
+        layout = QVBoxLayout(self)
+        self.web_view = QWebEngineView()
+        layout.addWidget(self.web_view)
+
+        # Set custom WebEnginePage to handle JavaScript messages
+        self.page = WebEnginePage(self.web_view)
+        self.web_view.setPage(self.page)
+
+        # Process and display the markdown content
+        self.process_content(markdown_content)
+
+    def process_content(self, markdown_content):
+        # Convert markdown to HTML
+        html_content = self.markdown_to_html(markdown_content)
+
+        # Get the path to your local MathJax installation
+        mathjax_path = os.path.abspath(os.path.join(get_source_path(), 'mathjax', 'es5', 'tex-mml-chtml.js'))
+        
+        if os.path.exists(mathjax_path):
+            print("MathJax file exists")
+        else:
+            print("MathJax file does not exist")
+
+        # Full HTML content (use the HTML from the previous artifact)
+        full_html = f"""
+        <!DOCTYPE html>
+            <html>
+            <head>
+                <script id="MathJax-script" async src="file:///{mathjax_path}"></script>
+                <script>
+                    MathJax = {{
+                        tex: {{
+                            inlineMath: [['$', '$']]
+                        }}
+                    }};
+                </script>
+                <style>
+                    body {{
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                        font-size: 14px;
+                        line-height: 1.5;
+                        margin: 0;
+                        padding: 10px;
+                        transition: background-color 0.5s, color 0.5s;
+                        overflow-y: auto;
+                    }}
+                    body.light-mode {{
+                        background-color: #ffffff;
+                        color: #000000;
+                    }}
+                    body.dark-mode {{
+                        background-color: #2b2b2b;
+                        color: #ffffff;
+                    }}
+                    a {{
+                        color: #0000ff;
+                        text-decoration: none;
+                    }}
+                    a:hover {{
+                        text-decoration: underline;
+                    }}
+                    pre {{
+                        background-color: #f0f0f0;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        padding: 10px;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                    }}
+                    body.dark-mode pre {{
+                        background-color: #3c3c3c;
+                        border-color: #555;
+                    }}
+                    table {{
+                        border-collapse: collapse;
+                        margin-bottom: 10px;
+                    }}
+                    th, td {{
+                        border: 1px solid #ccc;
+                        padding: 5px;
+                    }}
+                    body.dark-mode th, body.dark-mode td {{
+                        border-color: #555;
+                    }}
+                </style>
+                <script>
+                    document.addEventListener("DOMContentLoaded", function() {{
+                        const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                        document.body.classList.toggle('dark-mode', isDarkMode);
+                        document.body.classList.toggle('light-mode', !isDarkMode);
+
+                        // Add click event listener to all links
+                        document.querySelectorAll('a').forEach(link => {{
+                            link.addEventListener('click', function(event) {{
+                                event.preventDefault();
+                                window.pyqt.linkClicked(this.href);
+                            }});
+                        }});
+                    }});
+                </script>
+            </head>
+            <body>
+                {html_content}
+            </body>
+            </html>
+        """
+
+        # Add the bridge object
+        bridge_script = QWebEngineScript()
+        bridge_script.setName("pyqt_bridge")
+        bridge_script.setSourceCode("""
+            var pyqt = {
+                linkClicked: function(url) {
+                    new QWebChannel(qt.webChannelTransport, function(channel) {
+                        channel.objects.pyqt.linkClicked(url);
+                    });
+                }
+            };
+        """)
+        bridge_script.setWorldId(QWebEngineScript.ScriptWorldId.ApplicationWorld)
+        bridge_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        bridge_script.setRunsOnSubFrames(False)
+        self.page.scripts().insert(bridge_script)
+
+        # Convert the file path to a QUrl object
+        base_url = QUrl.fromLocalFile(os.path.dirname(mathjax_path) + '/')
+        self.web_view.setHtml(full_html, baseUrl=base_url)
+
+        # Set up channel to handle link clicks
+        self.channel = QWebChannel()
+        self.page.setWebChannel(self.channel)
+        self.channel.registerObject('pyqt', self)
+
+    @pyqtSlot(str)
+    def linkClicked(self, url):
+        print(f"Link clicked: {url}")
+        # Handle the link click as needed, e.g., open in external browser
+        QDesktopServices.openUrl(QUrl(url))
+
+    def markdown_to_html(self, markdown_content):
+        md = markdown.Markdown(extensions=[
+            TableExtension(),
+            FencedCodeExtension(),
+            CodeHiliteExtension(guess_lang=False),
+            MathExtension(enable_dollar_delimiter=True)
+        ])
+        return md.convert(markdown_content)
+    
 class InfoDialog(QWidget):
     logging.debug("Showing info dialog")
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Program Information")
+        self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'info.png')))
         self.setFixedSize(400, 300)
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog)
 

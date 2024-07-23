@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Union
 
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
+import numpy as np
 
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
 import monstim_analysis.Transform_EMG as Transform_EMG
@@ -89,7 +90,7 @@ class EMGSession(EMGData):
         - num_channels (int): The number of channels in the EMG recordings.
         - scan_rate (int): The scan rate of the EMG recordings (Hz).
         - num_samples (int): The number of samples per channel in the EMG recordings.
-        - stim_delay (float): The stimulus delay from recording start (in ms) in the EMG recordings.
+        - stim_start (float): The stimulus delay from recording start (in ms) in the EMG recordings.
         - stim_duration (float): The stimulus duration (in ms) in the EMG recordings.
         - stim_interval (float): The stimulus interval (in s) in the EMG recordings.
         - emg_amp_gains (list): The amplifier gains for each channel in the EMG recordings.
@@ -120,6 +121,7 @@ class EMGSession(EMGData):
     def load_session_data(self, pickled_data):
 
         # Load the session data from the pickle file
+        logging.info(f"Loading session data from {pickled_data}")
         with open(pickled_data, 'rb') as pickle_file:
             session_data = pickle.load(pickle_file)
 
@@ -131,7 +133,10 @@ class EMGSession(EMGData):
                               else 'Channel ' + str(i) for i in range(self.num_channels)]
         self.scan_rate = session_info['scan_rate']
         self.num_samples = session_info['num_samples']
+        self.pre_stim_acquired = session_info['pre_stim_acquired']
+        self.post_stim_acquired = session_info['post_stim_acquired']
         self.stim_delay = session_info['stim_delay']
+        self.stim_start = self.stim_delay + self.pre_stim_acquired
         self.stim_duration = session_info['stim_duration']
         self.stim_interval = session_info['stim_interval']
         self.emg_amp_gains = [gain for index, gain in enumerate(session_info['emg_amp_gains']) 
@@ -183,7 +188,7 @@ class EMGSession(EMGData):
                 
                 # # Code to apply baseline correction to the processed data if a filter was applied.
                 # if apply_filter:
-                #     recording['channel_data'] = EMG_Transformer.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_delay)
+                #     recording['channel_data'] = EMG_Transformer.correct_emg_to_baseline(recording['channel_data'], self.scan_rate, self.stim_start)
             
             return recording
         
@@ -227,8 +232,8 @@ class EMGSession(EMGData):
             for channel_idx in range(self.num_channels):
                 stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
                 m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_idx], 
-                                                                             self.m_start[channel_idx] + self.stim_delay,
-                                                                             self.m_end[channel_idx] + self.stim_delay, 
+                                                                             self.m_start[channel_idx] + self.stim_start,
+                                                                             self.m_end[channel_idx] + self.stim_start, 
                                                                              self.scan_rate, 
                                                                              method=self.default_method) 
                                                                              for recording in self.recordings_processed]                
@@ -349,6 +354,8 @@ class EMGSession(EMGData):
                   f"# of Channels: {self.num_channels}",
                   f"Scan Rate (Hz): {self.scan_rate}",
                   f"Samples/Channel: {self.num_samples}",
+                  f"Pre-Stim Acq. time (ms): {self.pre_stim_acquired}",
+                  f"Post-Stim Acq. time (ms): {self.post_stim_acquired}",
                   f"Stimulus Delay (ms): {self.stim_delay}",
                   f"Stimulus Duration (ms): {self.stim_duration}",
                   f"Stimulus Interval (s): {self.stim_interval}",
@@ -418,7 +425,6 @@ class EMGDataset(EMGData):
         - condition (str): The experimental condition of the dataset.
         - scan_rate (int): The scan rate of the EMG recordings (Hz).
         - num_channels (int): The number of channels in the EMG recordings.
-        - stim_delay (float): The stimulus delay from recording start (in ms) in the EMG recordings.
     """
     
     def __init__(self, emg_sessions, date, animal_id, condition, emg_sessions_to_exclude=[], save_path=None, temp=False):
@@ -434,8 +440,7 @@ class EMGDataset(EMGData):
         self.animal_id = animal_id
         self.condition = condition
         self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
-
-        
+        self._m_max = None
 
         if os.path.exists(self.save_path) and not temp:
             raise FileExistsError(f"Dataset already exists at {self.save_path}.")
@@ -445,8 +450,11 @@ class EMGDataset(EMGData):
             self.plotter = EMGDatasetPlotter(self)    
             
             # Unpack the EMG sessions and exclude any sessions if needed.
+            if isinstance(emg_sessions, str):
+                emg_sessions = [emg_sessions]
             self.original_emg_sessions = emg_sessions
             self.emg_sessions: List[EMGSession] = []
+            logging.info(f"Unpacking EMG sessions: {emg_sessions}")
             self.emg_sessions = self.__unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
             if len(emg_sessions_to_exclude) > 0:
                 print(f"Excluding the following sessions from the dataset: {emg_sessions_to_exclude}")
@@ -462,7 +470,7 @@ class EMGDataset(EMGData):
             else:
                 self.scan_rate = self.emg_sessions[0].scan_rate
                 self.num_channels = self.emg_sessions[0].num_channels
-                self.stim_delay = self.emg_sessions[0].stim_delay
+                self.stim_start = self.emg_sessions[0].stim_start
                 self.channel_names = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.           
                 if not temp:
                     self.save_dataset(self.save_path)          
@@ -499,7 +507,7 @@ class EMGDataset(EMGData):
 
     def __check_session_consistency(self):
         """
-        Checks if all sessions in the dataset have the same parameters (scan rate, num_channels, stim_delay).
+        Checks if all sessions in the dataset have the same parameters (scan rate, num_channels, stim_start).
 
         Returns:
             tuple: A tuple containing a boolean value indicating whether all sessions have consistent parameters and a message indicating the result.
@@ -507,15 +515,15 @@ class EMGDataset(EMGData):
         reference_session = self.emg_sessions[0]
         reference_scan_rate = reference_session.scan_rate
         reference_num_channels = reference_session.num_channels
-        reference_stim_delay = reference_session.stim_delay
+        reference_stim_start = reference_session.stim_start
 
         for session in self.emg_sessions[1:]:
             if session.scan_rate != reference_scan_rate:
                 return False, f"Inconsistent scan_rate for {session.session_id}: {session.scan_rate} != {reference_scan_rate}."
             if session.num_channels != reference_num_channels:
                 return False, f"Inconsistent num_channels for {session.session_id}: {session.num_channels} != {reference_num_channels}."
-            if session.stim_delay != reference_stim_delay:
-                return False, f"Inconsistent stim_delay for {session.session_id}: {session.stim_delay} != {reference_stim_delay}."
+            if session.stim_start != reference_stim_start:
+                return False, f"Inconsistent stim_start for {session.session_id}: {session.stim_start} != {reference_stim_start}."
 
         return True, "All sessions have consistent parameters"
 
@@ -598,7 +606,7 @@ class EMGDataset(EMGData):
             else:
                 self.scan_rate = self.emg_sessions[0].scan_rate
                 self.num_channels = self.emg_sessions[0].num_channels
-                self.stim_delay = self.emg_sessions[0].stim_delay
+                self.stim_start = self.emg_sessions[0].stim_start
 
     def remove_session(self, session_id : str):
         """
@@ -706,6 +714,23 @@ class EMGDataset(EMGData):
     def name(self):
         return f"{self.date} {self.animal_id} {self.condition}"
 
+    @property
+    def m_max(self):
+        if self._m_max is None:
+            session_m_maxes = [session.m_max for session in self.emg_sessions]
+            print(session_m_maxes)
+            m_max = []
+            # separate each channel's m_max into separate arrays and average them.
+            for channel_index in range(self.num_channels):
+                channel_m_maxes = [m_max[channel_index] for m_max in session_m_maxes if m_max[channel_index] is not None]
+                if len(channel_m_maxes) == 0:
+                    raise ValueError(f"Error: No valid M-max values found for channel {channel_index}.")
+                channel_m_max = np.mean(channel_m_maxes)
+                m_max.append(channel_m_max)
+            self._m_max = m_max
+            logging.info(f"Average M-max values created for dataset {self.name}: {self._m_max}")
+        return self._m_max
+
     # Static methods for extracting information from dataset names and dataset dictionaries.
     @staticmethod
     def getDatasetInfo(dataset_name : str) -> tuple:
@@ -739,7 +764,7 @@ class EMGDataset(EMGData):
             return None, None, None
 
     @classmethod
-    def dataset_from_dataset_dict(cls, dataset_dict: dict, datasets: List[str], dataset_idx: int, emg_sessions_to_exclude: List[str] = []) -> 'EMGDataset':
+    def dataset_from_dataset_dict(cls, dataset_dict: dict, datasets: List[str], dataset_idx: int, emg_sessions_to_exclude: List[str] = [], temp=True) -> 'EMGDataset':
         """
         Instantiates an EMGDataset from a dataset dictionary for downstream analysis.
 
@@ -748,13 +773,14 @@ class EMGDataset(EMGData):
             datasets (list): A list of dataset names (keys).
             dataset_idx (int): The index of the dataset to be used.
             emg_sessions_to_exclude (list, optional): A list of EMG sessions to exclude. Defaults to an empty list.
+            temp (bool, optional): Whether to create a temporary dataset object or save to the bin folder. Defaults to True.
 
         Returns:
             EMGDataset: The session of interest for downstream analysis.
         """
         date, animal_id, condition = cls.getDatasetInfo(datasets[dataset_idx])
         # Future: Add a check to see if the dataset is already saved as a pickle file. If it is, load the pickle file instead of re-creating the dataset.
-        dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude)
+        dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
         return dataset_oi
 
 class EMGExperiment(EMGData):
