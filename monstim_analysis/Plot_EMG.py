@@ -1006,7 +1006,6 @@ class EMGDatasetPlotter(EMGPlotter):
     #     # Show the plot
     #     plt.show()
 
-
 # Custom Matplotlib canvas class for embedding plots in PyQt5 applications. Not currently used.
 class MatplotlibCanvas(FigureCanvas):
     def __init__(self, parent=None):

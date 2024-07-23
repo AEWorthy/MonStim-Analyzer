@@ -1,5 +1,6 @@
 import logging
 import os
+import ast
 import yaml
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
@@ -174,7 +175,7 @@ class PreferencesDialog(QDialog):
     def get_user_config_file(self):
         # Get the directory of the default config file
         config_dir = os.path.dirname(self.default_config_file)
-        return os.path.join(config_dir, 'config-user.yaml')
+        return os.path.join(config_dir, 'config-user.yml')
     
     def read_config(self):
         # First, read the original config
@@ -258,31 +259,37 @@ class PreferencesDialog(QDialog):
         self.resize(400, 600)  # Set a default size
 
     def save_config(self):
-        # Fix to handle lists spit by commas like default_channel_names, m_start, h_start.
         user_config = {}
         for key, field in self.fields.items():
             if '.' in key:
                 main_key, sub_key = key.split('.')
                 if main_key not in user_config:
                     user_config[main_key] = {}
-                user_config[main_key][sub_key] = self.parse_value(field.text())
+                user_config[main_key][sub_key] = self.parse_value(field.text(), key)
             else:
-                user_config[key] = self.parse_value(field.text())
+                user_config[key] = self.parse_value(field.text(), key)
 
         # Save all values to the user config file
         with open(self.user_config_file, 'w') as file:
             yaml.dump(user_config, file)
 
-        QMessageBox.information(self, "Save Successful", 
-                                f"User preferences saved to {self.user_config_file}")
+        logging.info(f"Saved user config: {user_config}")
         self.accept()
 
-    def parse_value(self, value):
+    def parse_value(self, value, key):
+        # List of keys that should be treated as lists
+        list_keys = ['default_channel_names', 'm_start', 'h_start']
+        
+        if key in list_keys:
+            # Split by comma and strip whitespace
+            return [item.strip() for item in value.split(',')]
         try:
-            return eval(value)
-        except Exception:
+            # Try to evaluate as a Python literal
+            return ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            # If it's not a valid Python literal, return as is
             return value
-
+        
 class HelpWindow(QWidget):
     def __init__(self, markdown_content, title=None, parent=None):
         super().__init__(parent)

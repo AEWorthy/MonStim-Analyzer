@@ -189,8 +189,11 @@ class EMGAnalysisGUI(QMainWindow):
         logging.debug("Showing preferences window.")
         window = PreferencesDialog(self.config_file, parent=self)
         if window.exec() == QDialog.DialogCode.Accepted:
-            QMessageBox.information(self, "Success", "Preferences updated successfully.")
-            logging.debug("Preferences updated successfully.")
+            # Apply preferences to data
+            if self.current_dataset:
+                self.current_dataset.apply_preferences()
+            QMessageBox.information(self, "Success", "Preferences applied successfully.")
+            logging.debug("Preferences applied successfully.")
         pass
 
     def change_channel_names(self):
@@ -264,6 +267,7 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.debug(f"Dataset '{dataset_name}' created successfully to '{save_path}'.")         
             # Update channel names
             self.channel_names = self.current_dataset.channel_names
+            self.current_dataset.apply_preferences()
             self.data_selection_widget.update_session_combo()
 
     def load_session(self, index):
@@ -275,6 +279,7 @@ class EMGAnalysisGUI(QMainWindow):
 
     def reload_dataset(self):
         self.current_dataset.reload_dataset_sessions()
+        self.current_dataset.apply_preferences()
         self.data_selection_widget.update_session_combo()
 
     # Reports functions.

@@ -93,7 +93,13 @@ def load_config(config_file=None):
             config_file (str): location of the 'config.yaml' file.
         """
         if config_file is None:
-            config_file = get_config_path()
+            defualt_config_file = get_config_path()
+            user_config_file = os.path.join(os.path.dirname(defualt_config_file), 'config-user.yml')
+            # if it exists, get user config file
+            if os.path.exists(user_config_file):
+                config_file = user_config_file
+            else:
+                config_file = defualt_config_file
         with open(config_file, 'r') as file:
             config = yaml.safe_load(file)
         return config

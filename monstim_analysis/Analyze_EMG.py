@@ -104,7 +104,6 @@ class EMGSession(EMGData):
         process_emg_data(apply_filter=False, rectify=False): Processes EMG data by applying a bandpass filter and/or rectifying the data.
         session_parameters(): Prints EMG recording session parameters from a Pickle file.
     """
-
     def __init__(self, pickled_data):
         """
         Initialize an EMGSession instance.
@@ -119,7 +118,6 @@ class EMGSession(EMGData):
         self._m_max = None
 
     def load_session_data(self, pickled_data):
-
         # Load the session data from the pickle file
         logging.info(f"Loading session data from {pickled_data}")
         with open(pickled_data, 'rb') as pickle_file:
@@ -217,6 +215,31 @@ class EMGSession(EMGData):
             print("Error: The number of new names does not match the number of channels in the session.")
         except ValueError:
             print("Error: The channel name to be replaced does not exist in the session.")
+
+    def apply_preferences(self):
+        """
+        Applies the preferences set in the config file to the dataset.
+        """
+        config = load_config()
+
+        # Apply the preferences to the dataset.
+        self.bin_size = config['bin_size']
+        self.time_window_ms = config['time_window']
+        self.butter_filter_args = config['butter_filter_args']
+        self.default_method = config['default_method']
+        self.m_max_args = config['m_max_args']
+        self.default_channel_names = config['default_channel_names']
+
+        self.flag_style = config['flag_style']
+        self.m_color = config['m_color']
+        self.h_color = config['h_color']
+        self.title_font_size = config['title_font_size']
+        self.axis_label_font_size = config['axis_label_font_size']
+        self.tick_font_size = config['tick_font_size']
+        self.subplot_adjust_args = config['subplot_adjust_args']
+
+        # Re-create the plotter object with the new preferences.
+        self.plotter = EMGSessionPlotter(self)
 
     @property
     def recordings_processed (self):
@@ -573,6 +596,27 @@ class EMGDataset(EMGData):
         # Call the appropriate plotting method from the plotter object
         getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
 
+    #Properties for the EMGDataset class.
+    @property
+    def name(self):
+        return f"{self.date} {self.animal_id} {self.condition}"
+    @property
+    def m_max(self):
+        if self._m_max is None:
+            session_m_maxes = [session.m_max for session in self.emg_sessions]
+            print(session_m_maxes)
+            m_max = []
+            # separate each channel's m_max into separate arrays and average them.
+            for channel_index in range(self.num_channels):
+                channel_m_maxes = [m_max[channel_index] for m_max in session_m_maxes if m_max[channel_index] is not None]
+                if len(channel_m_maxes) == 0:
+                    raise ValueError(f"Error: No valid M-max values found for channel {channel_index}.")
+                channel_m_max = np.mean(channel_m_maxes)
+                m_max.append(channel_m_max)
+            self._m_max = m_max
+            logging.info(f"Average M-max values created for dataset {self.name}: {self._m_max}")
+        return self._m_max
+
     # User methods for manipulating the EMGSession instances in the dataset.
     def add_session(self, session : Union[EMGSession, str]):
         """
@@ -678,7 +722,34 @@ class EMGDataset(EMGData):
         except IndexError:
             print("Error: The number of new names does not match the number of channels in the dataset.")
         
+    def apply_preferences(self):
+        """
+        Applies the preferences set in the config file to the dataset.
+        """
+        config = load_config()
+        # Apply the preferences to the dataset.
+        self.bin_size = config['bin_size']
+        self.time_window_ms = config['time_window']
+        self.butter_filter_args = config['butter_filter_args']
+        self.default_method = config['default_method']
+        self.m_max_args = config['m_max_args']
+        self.default_channel_names = config['default_channel_names']
 
+        self.flag_style = config['flag_style']
+        self.m_color = config['m_color']
+        self.h_color = config['h_color']
+        self.title_font_size = config['title_font_size']
+        self.axis_label_font_size = config['axis_label_font_size']
+        self.tick_font_size = config['tick_font_size']
+        self.subplot_adjust_args = config['subplot_adjust_args']
+
+        # Apply preferences to the session objects.
+        for session in self.emg_sessions:
+            session.apply_preferences()
+
+        # Re-create the plotter object with the new preferences.
+        self.plotter = EMGDatasetPlotter(self)
+        
     # Save and load the dataset object.
     def save_dataset(self, save_path=None):
         """
@@ -705,32 +776,10 @@ class EMGDataset(EMGData):
             EMGDataset: The loaded dataset object.
         """
         with open(save_path, 'rb') as file:
-            dataset = pickle.load(file)
-            dataset.plotter.set_plot_defaults()
+            dataset = pickle.load(file) # type: EMGDataset
+            dataset.apply_preferences()
         return dataset
     
-    #Properties for the EMGDataset class.
-    @property
-    def name(self):
-        return f"{self.date} {self.animal_id} {self.condition}"
-
-    @property
-    def m_max(self):
-        if self._m_max is None:
-            session_m_maxes = [session.m_max for session in self.emg_sessions]
-            print(session_m_maxes)
-            m_max = []
-            # separate each channel's m_max into separate arrays and average them.
-            for channel_index in range(self.num_channels):
-                channel_m_maxes = [m_max[channel_index] for m_max in session_m_maxes if m_max[channel_index] is not None]
-                if len(channel_m_maxes) == 0:
-                    raise ValueError(f"Error: No valid M-max values found for channel {channel_index}.")
-                channel_m_max = np.mean(channel_m_maxes)
-                m_max.append(channel_m_max)
-            self._m_max = m_max
-            logging.info(f"Average M-max values created for dataset {self.name}: {self._m_max}")
-        return self._m_max
-
     # Static methods for extracting information from dataset names and dataset dictionaries.
     @staticmethod
     def getDatasetInfo(dataset_name : str) -> tuple:
@@ -781,6 +830,7 @@ class EMGDataset(EMGData):
         date, animal_id, condition = cls.getDatasetInfo(datasets[dataset_idx])
         # Future: Add a check to see if the dataset is already saved as a pickle file. If it is, load the pickle file instead of re-creating the dataset.
         dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
+        dataset_oi.apply_preferences()
         return dataset_oi
 
 class EMGExperiment(EMGData):
