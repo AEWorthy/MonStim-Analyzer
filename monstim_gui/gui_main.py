@@ -27,6 +27,7 @@ class SplashScreen(QSplashScreen):
         logging.debug("Creating splash screen.")
         pixmap = QPixmap(400, 300)
         pixmap.fill(Qt.GlobalColor.white)
+        
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
         # Add program information

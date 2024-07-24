@@ -1,6 +1,5 @@
 import logging
 import os
-import ast
 import yaml
 from typing import TYPE_CHECKING
 
@@ -275,13 +274,21 @@ class PreferencesDialog(QDialog):
         
         if key in list_keys:
             # Split by comma and strip whitespace
-            return [item.strip() for item in value.split(',')]
+            return [self.convert_to_number(item.strip()) for item in value.split(',')]
+        
+        return self.convert_to_number(value)
+
+    def convert_to_number(self, value):
         try:
-            # Try to evaluate as a Python literal
-            return ast.literal_eval(value)
-        except (ValueError, SyntaxError):
-            # If it's not a valid Python literal, return as is
-            return value
+            # Try to convert to int first
+            return int(value)
+        except ValueError:
+            try:
+                # If not int, try float
+                return float(value)
+            except ValueError:
+                # If it's not a number, return as is
+                return value
         
 class HelpWindow(QWidget):
     def __init__(self, markdown_content, title=None, parent=None):

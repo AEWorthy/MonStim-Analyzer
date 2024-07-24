@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
+from PyQt6.QtCore import Qt
 
 if TYPE_CHECKING:
     from gui_main import EMGAnalysisGUI
@@ -7,7 +8,7 @@ if TYPE_CHECKING:
 class DataSelectionWidget(QGroupBox):
     def __init__(self, parent : 'EMGAnalysisGUI'):
         super().__init__("Data Selection", parent)
-        self.parent = parent
+        self.parent = parent # type: EMGAnalysisGUI
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
         self.create_dataset_selection()
@@ -37,12 +38,18 @@ class DataSelectionWidget(QGroupBox):
     def update_dataset_combo(self):
         self.dataset_combo.clear()
         if self.parent.datasets:
-            self.dataset_combo.addItems(self.parent.datasets)
+            for dataset in self.parent.datasets:
+                self.dataset_combo.addItem(dataset)
+                index = self.dataset_combo.count() - 1
+                self.dataset_combo.setItemData(index, dataset, role=Qt.ItemDataRole.ToolTipRole)
 
     def update_session_combo(self):
         self.session_combo.clear()
         if self.parent.current_dataset:
-            self.session_combo.addItems([session.session_id for session in self.parent.current_dataset.emg_sessions])
+            for session in self.parent.current_dataset.emg_sessions:
+                self.session_combo.addItem(session.session_id)
+                index = self.session_combo.count() - 1
+                self.session_combo.setItemData(index, session.session_id, role=Qt.ItemDataRole.ToolTipRole)
 
     def update_ui(self):
         self.update_dataset_combo()

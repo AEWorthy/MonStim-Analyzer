@@ -794,7 +794,7 @@ class EMGDataset(EMGData):
                 If the dataset name does not match the expected format, returns (None, None, None).
         """
         # Define the regex pattern
-        pattern = r'^(\d{6})\s([A-Z]\d+\.\d)\s(.+)$'
+        pattern = r'^(\d{6})\s([A-Z0-9]+)\s(.+)$'
         
         # Match the pattern
         match = re.match(pattern, dataset_name)

@@ -12,8 +12,8 @@ flag_style: ':'
 h_color: blue
 h_duration: 1
 h_start:
-- '3.5'
-- '3.5'
+- 3.5
+- 3.5
 h_threshold: 0.5
 m_color: red
 m_duration: 2
@@ -22,8 +22,8 @@ m_max_args:
   min_window_size: 2
   threshold: 0.2
 m_start:
-- '1'
-- '1'
+- 1
+- 1
 subplot_adjust_args:
   bottom: 0.15
   hspace: 0.5
@@ -32,5 +32,5 @@ subplot_adjust_args:
   top: 0.85
   wspace: 0.1
 tick_font_size: 12
-time_window: 9
+time_window: 10
 title_font_size: 16
