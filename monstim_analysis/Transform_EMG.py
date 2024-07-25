@@ -27,9 +27,11 @@ Functions:
 
 Note: This module requires the numpy and scipy libraries to be installed.
 """
+import logging
 
 import numpy as np
 from scipy import signal
+
 
 def butter_bandpass(lowcut, highcut, fs, order):
     """
@@ -242,7 +244,7 @@ def savgol_filter_y (y, polyorder=3):
     y_filtered = signal.savgol_filter(y, window_length, min(polyorder, window_length-1))
     return y_filtered
 
-def detect_plateau(x, y, max_window_size, min_window_size, threshold, report=True):
+def detect_plateau(x, y, max_window_size, min_window_size, threshold):
     """
     Detects the plateau region in a reflex curve.
 
@@ -274,16 +276,16 @@ def detect_plateau(x, y, max_window_size, min_window_size, threshold, report=Tru
             plateau_end_idx = None
 
     if plateau_start_idx and plateau_end_idx is not None:
-        if report:
-            print(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
+        logging.info(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
         return plateau_start_idx, plateau_end_idx
     # Shrink the window size and retry if no plateau region is detected.
     elif max_window_size > min_window_size:
-        return detect_plateau(x, y, max_window_size-1, min_window_size, threshold, report=report)
+        return detect_plateau(x, y, max_window_size-1, min_window_size, threshold)
     else:
+        logging.warning("No plateau region detected.")
         return None, None
 
-def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, mmax_report=False, return_mmax_stim_range=False):
+def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, return_mmax_stim_range=False):
     """
     Get the M-wave amplitude and stimulus voltage at M-max.
     """
@@ -291,7 +293,7 @@ def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_
     m_wave_amplitudes = np.array(m_wave_amplitudes)
 
     # Detect the plateau region in the reflex curve.
-    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, min_window_size, threshold, report=mmax_report)
+    plateau_start_idx, plateau_end_idx = detect_plateau(stimulus_voltages, m_wave_amplitudes, max_window_size, min_window_size, threshold)
 
     # Calculate the M-max amplitude using the plateau region m_wave_amplitudes.
     if plateau_start_idx is not None and plateau_end_idx is not None:
@@ -303,15 +305,13 @@ def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_
         # Adjust the M-max amplitude by adding the average difference between the plateau data and the outlier data.
         if m_max < max(m_wave_amplitudes):
             m_max = m_max + np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data[plateau_data < np.max(plateau_data)])
-            if mmax_report:
-                print(f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)}")
+            logging.info(f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)}")
         
         # Return (and optionally print) the M-max amplitude.
-        if mmax_report:
-            print(f"\tM-max amplitude: {m_max}")
+        logging.info(f"\tM-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return m_max, stimulus_voltages[plateau_start_idx], stimulus_voltages[plateau_end_idx]
-        else:    
+        else:
             return m_max
     else:
         raise NoCalculableMmaxError()

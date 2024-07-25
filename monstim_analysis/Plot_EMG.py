@@ -8,6 +8,13 @@ import monstim_analysis.Transform_EMG as Transform_EMG
 if TYPE_CHECKING:
     from monstim_analysis.Analyze_EMG import EMGData
 
+# Desired changes:
+# - make flag numbers, positions, colors, and names customizable as a preference.
+# - make the axis labels and titles customizable as a preference.
+# - add option to plot a figure legend for emg plots.
+# - fix manual mmax implementation.
+
+
 
 class EMGPlotter:
     """
@@ -18,7 +25,7 @@ class EMGPlotter:
     """
     def __init__(self, emg_object):
         self.emg_object : 'EMGData' = emg_object
-        # plt.switch_backend('QtAgg')
+        plt.switch_backend('QtAgg')
         
     def set_plot_defaults(self):
         """
@@ -29,7 +36,7 @@ class EMGPlotter:
         plt.rcParams.update({'axes.titlesize': self.emg_object.axis_label_font_size, 'axes.titleweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.emg_object.tick_font_size, 'ytick.labelsize': self.emg_object.tick_font_size})
 
-    def create_fig_and_axes(self, num_channels: int, canvas: FigureCanvas = None, figsizes = 'large'):
+    def create_fig_and_axes(self, canvas: FigureCanvas = None, figsizes = 'large'):
         fig, ax, axes = None, None, None
         if figsizes == 'large':
             single_channel_size_tuple = (4, 2)
@@ -44,12 +51,12 @@ class EMGPlotter:
             fig.set_tight_layout(True)
             
             # Use predefined size tuples
-            if num_channels == 1:
+            if self.emg_object.num_channels == 1:
                 fig.set_size_inches(*single_channel_size_tuple)
                 ax = fig.add_subplot(111)
             else:
                 fig.set_size_inches(*multi_channel_size_tuple)
-                axes = fig.subplots(nrows=1, ncols=num_channels, sharey=True)
+                axes = fig.subplots(nrows=1, ncols=self.emg_object.num_channels, sharey=True)
             
             # Update canvas size to match figure size
             dpi = fig.get_dpi()
@@ -63,10 +70,10 @@ class EMGPlotter:
         else:
             # Create a new figure and axes
             scale = 2 # Scale factor for figure size relative to default
-            if num_channels == 1:
+            if self.emg_object.num_channels == 1:
                 fig, ax = plt.subplots(figsize=tuple([item * scale for item in single_channel_size_tuple]))
             else:
-                fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True)
+                fig, axes = plt.subplots(nrows=1, ncols=self.emg_object.num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True)
 
         return fig, ax, axes
 
@@ -99,11 +106,13 @@ class EMGSessionPlotter(EMGPlotter):
         Returns:
             None
         """
+        self.emg_object : 'EMGSession' = None # The EMGSession object to be imported containing the EMG data.
+        
         super().__init__(session)
 
         from monstim_analysis.Analyze_EMG import EMGSession
         if isinstance(session, EMGSession):
-            self.session = session
+            self.emg_object = session # Type: EMGSession
         else:
             raise UnableToPlotError("Invalid data type for EMGSessionPlotter. Please provide an EMGSession object.")
 
@@ -139,18 +148,18 @@ class EMGSessionPlotter(EMGPlotter):
 
     def get_time_axis(self, offset=1):
         # Calculate time values based on the scan rate
-        time_values_ms = np.arange(self.session.num_samples) * 1000 / self.session.scan_rate  # Time values in milliseconds
+        time_values_ms = np.arange(self.emg_object.num_samples) * 1000 / self.emg_object.scan_rate  # Time values in milliseconds
         
         # Define the start and end times for the window
-        window_start_time = self.session.stim_start - offset # Start [offset]ms before stimulus onset
-        window_end_time = window_start_time + self.session.time_window_ms
+        window_start_time = self.emg_object.stim_start - offset # Start [offset]ms before stimulus onset
+        window_end_time = window_start_time + self.emg_object.time_window_ms
 
         # Convert time window to sample indices
-        window_start_sample = int(window_start_time * self.session.scan_rate / 1000)
-        window_end_sample = int(window_end_time * self.session.scan_rate / 1000)
+        window_start_sample = int(window_start_time * self.emg_object.scan_rate / 1000)
+        window_end_sample = int(window_end_time * self.emg_object.scan_rate / 1000)
 
         # Slice the time array for the time window
-        time_axis = time_values_ms[window_start_sample:window_end_sample] - self.session.stim_start
+        time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
         return time_axis, window_start_sample, window_end_sample
 
     # EMGSession plotting functions
@@ -171,27 +180,25 @@ class EMGSessionPlotter(EMGPlotter):
             m_flags = True
             h_flags = True
 
-        channel_names = self.session.channel_names
+        channel_names = self.emg_object.channel_names
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
-        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
         
-
-
         # Establish type of EMG data to plot
         if data_type == 'filtered':
-            emg_recordings = self.session.recordings_processed
+            emg_recordings = self.emg_object.recordings_processed
         elif data_type == 'raw':
-            emg_recordings = self.session.recordings_raw
+            emg_recordings = self.emg_object.recordings_raw
         elif data_type == 'rectified_raw':
-            if not hasattr(self.session, 'recordings_rectified_raw'):
-                self.session.recordings_rectified_raw = self.session._process_emg_data(apply_filter=False, rectify=True)
-            emg_recordings = self.session.recordings_rectified_raw
+            if not hasattr(self.emg_object, 'recordings_rectified_raw'):
+                self.emg_object.recordings_rectified_raw = self.emg_object._process_emg_data(apply_filter=False, rectify=True)
+            emg_recordings = self.emg_object.recordings_rectified_raw
         elif data_type == 'rectified_filtered':
-            if not hasattr(self.session, 'recordings_rectified_filtered'):
-                self.session.recordings_rectified_filtered = self.session._process_emg_data(apply_filter=True, rectify=True)
-            emg_recordings = self.session.recordings_rectified_filtered
+            if not hasattr(self.emg_object, 'recordings_rectified_filtered'):
+                self.emg_object.recordings_rectified_filtered = self.emg_object._process_emg_data(apply_filter=True, rectify=True)
+            emg_recordings = self.emg_object.recordings_rectified_filtered
         else:
             raise UnableToPlotError(f"data type {data_type} is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
 
@@ -199,31 +206,31 @@ class EMGSessionPlotter(EMGPlotter):
         # Plot the EMG arrays for each channel, only for the first 10ms
         for recording in emg_recordings:
             for channel_index, channel_data in enumerate(recording['channel_data']):
-                if self.session.num_channels == 1:
+                if self.emg_object.num_channels == 1:
                     ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     ax.set_title(f'{channel_names[0]}')
                     ax.grid(True)
                     #ax.legend()
                     if m_flags:
-                        ax.axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                        ax.axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)                         
+                        ax.axvline(self.emg_object.m_start[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
+                        ax.axvline(self.emg_object.m_end[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)                         
                     if h_flags:
-                        ax.axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-                        ax.axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)                       
+                        ax.axvline(self.emg_object.h_start[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
+                        ax.axvline(self.emg_object.h_end[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)                       
                 else:
                     axes[channel_index].plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     axes[channel_index].set_title(f'{channel_names[channel_index]}')
                     axes[channel_index].grid(True)
                     #axes[channel_index].legend()
                     if m_flags:
-                        axes[channel_index].axvline(self.session.m_start[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
-                        axes[channel_index].axvline(self.session.m_end[channel_index], color=self.session.m_color, linestyle=self.session.flag_style)
+                        axes[channel_index].axvline(self.emg_object.m_start[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
+                        axes[channel_index].axvline(self.emg_object.m_end[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
                     if h_flags:
-                        axes[channel_index].axvline(self.session.h_start[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
-                        axes[channel_index].axvline(self.session.h_end[channel_index], color=self.session.h_color, linestyle=self.session.flag_style)
+                        axes[channel_index].axvline(self.emg_object.h_start[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
+                        axes[channel_index].axvline(self.emg_object.h_end[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
 
         # Set labels and title
-        if self.session.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('EMG (mV)')
             fig.suptitle('EMG Overlay for Channel 0 (all recordings)')
@@ -234,10 +241,10 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.session.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
     def plot_suspectedH (self, h_threshold=0.3, method=None, plot_legend=False, canvas= None):
@@ -251,24 +258,24 @@ class EMGSessionPlotter(EMGPlotter):
         """
 
         if method is None:
-            method = self.session.default_method
+            method = self.emg_object.default_method
 
-        channel_names = self.session.channel_names
+        channel_names = self.emg_object.channel_names
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
-        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
 
         # Plot the EMG arrays for each channel, only for the first 10ms
-        for recording in self.session.recordings_processed:
+        for recording in self.emg_object.recordings_processed:
             for channel_index, channel_data in enumerate(recording['channel_data']):
                 h_reflex_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                             self.session.h_start[channel_index] + self.session.stim_start, 
-                                                                             self.session.h_end[channel_index] + self.session.stim_start, 
-                                                                             self.session.scan_rate,  
+                                                                             self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
+                                                                             self.emg_object.h_end[channel_index] + self.emg_object.stim_start, 
+                                                                             self.emg_object.scan_rate,  
                                                                              method=method)
                 if h_reflex_amplitude > h_threshold:  # Check EMG amplitude within H-reflex window
-                    if self.session.num_channels == 1:
+                    if self.emg_object.num_channels == 1:
                         ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                         ax.set_title(f'{channel_names[0]}')
                         ax.grid(True)
@@ -282,7 +289,7 @@ class EMGSessionPlotter(EMGPlotter):
                             axes[channel_index].legend()
 
         # Set labels and title
-        if self.session.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('EMG (mV)')
             fig.suptitle(f'EMG Overlay for Channel 0 (H-reflex Amplitude > {h_threshold} mV)')
@@ -293,10 +300,10 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.session.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
     def plot_mmax(self, method=None, mmax_report=True, canvas=None):
@@ -309,27 +316,27 @@ class EMGSessionPlotter(EMGPlotter):
         """
         # Set method to default if not specified.
         if method is None:
-            method = self.session.default_method
+            method = self.emg_object.default_method
 
-        channel_names = self.session.channel_names
+        channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas, figsizes = 'small')
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas, figsizes = 'small')
 
         # Create a superlist to store all M-wave amplitudes for each channel for later y-axis adjustment.
         all_m_max_amplitudes = []
         
         # Plot the M-wave and H-response amplitudes for each channel
-        for channel_index in range(self.session.num_channels):
+        for channel_index in range(self.emg_object.num_channels):
             m_wave_amplitudes = []
             stimulus_voltages = []
 
             # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in self.session.recordings_processed:
+            for recording in self.emg_object.recordings_processed:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
                              
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_start, self.session.m_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -341,7 +348,7 @@ class EMGSessionPlotter(EMGPlotter):
             stimulus_voltages = np.array(stimulus_voltages)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
-            m_max, mmax_low_stim, _ = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report, return_mmax_stim_range=True, **self.session.m_max_args)
+            m_max, mmax_low_stim, _ = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report, return_mmax_stim_range=True, **self.emg_object.m_max_args)
             # print(f'M-max for channel {channel_index}: {m_max:.2f}mV; between {mmax_low_stim:.2f}V and {mmax_high_stim:.2f}V')
             
             # Filter out M-wave amplitudes below the M-max stimulus threshold.
@@ -352,8 +359,8 @@ class EMGSessionPlotter(EMGPlotter):
             all_m_max_amplitudes.extend(m_max_amplitudes)
 
             m_x = 1 # Set x-axis position of the M-wave data.
-            if self.session.num_channels == 1:
-                ax.plot(m_x, [m_max_amplitudes], color=self.session.m_color, marker='o', markersize=5)
+            if self.emg_object.num_channels == 1:
+                ax.plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
                 ax.annotate(f'n={len(m_max_amplitudes)}\nM-max: {m_max:.2f}mV\nStim.: above {mmax_low_stim:.2f}V', xy=(m_x + 0.2, np.mean(m_max_amplitudes) - 0.2), ha='left', va='center', color='black')
                 ax.errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
@@ -362,7 +369,7 @@ class EMGSessionPlotter(EMGPlotter):
                 ax.set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
-                axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.session.m_color, marker='o', markersize=5)
+                axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
                 axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nM-max: {m_max:.2f}mV\nStim.: above {mmax_low_stim:.2f}V', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
                 axes[channel_index].errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
 
@@ -374,7 +381,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Set labels and title
         fig.suptitle('Average M-response values at M-max for each channel')
-        if self.session.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             # ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
 
@@ -384,13 +391,13 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.session.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
-    def plot_reflexCurves (self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
+    def plot_reflexCurves (self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
 
@@ -400,26 +407,26 @@ class EMGSessionPlotter(EMGPlotter):
         """
         # Set method to default if not specified.
         if method is None:
-            method = self.session.default_method
+            method = self.emg_object.default_method
 
-        channel_names = self.session.channel_names
+        channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
 
         # Plot the M-wave and H-response amplitudes for each channel
-        for channel_index in range(self.session.num_channels):
+        for channel_index in range(self.emg_object.num_channels):
             m_wave_amplitudes = []
             h_response_amplitudes = []
             stimulus_voltages = []
 
             # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in self.session.recordings_processed:
+            for recording in self.emg_object.recordings_processed:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
                 
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_start, self.session.m_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.h_start[channel_index] + self.session.stim_start, self.session.h_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -435,26 +442,26 @@ class EMGSessionPlotter(EMGPlotter):
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
                 if manual_mmax is not None:
-                    m_max = manual_mmax
+                    m_max = manual_mmax[channel_index]
                 else:
                     try:
-                        m_max = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report, **self.session.m_max_args)
+                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
                     except Transform_EMG.NoCalculableMmaxError:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
                 m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
                 h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]    
 
-            if self.session.num_channels == 1:
-                ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
-                ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
+            if self.emg_object.num_channels == 1:
+                ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
+                ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
                 ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 if plot_legend:
                     ax.legend()
                     
             else:
-                axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
-                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 if plot_legend:
@@ -463,7 +470,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Set labels and title
         fig.suptitle('M-response and H-reflex Curves')
-        if self.session.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
             if relative_to_mmax:
@@ -476,13 +483,13 @@ class EMGSessionPlotter(EMGPlotter):
         
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.session.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
-    def plot_m_curves_smoothened (self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
+    def plot_m_curves_smoothened (self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
         This plot is smoothened using a Savitzky-Golay filter, which therefore emulates the transformation used before calculating M-max in the EMG analysis.
@@ -493,27 +500,27 @@ class EMGSessionPlotter(EMGPlotter):
         """
         # Set method to default if not specified.
         if method is None:
-            method = self.session.default_method
+            method = self.emg_object.default_method
 
-        channel_names = self.session.channel_names
+        channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(self.session.num_channels, canvas)
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
 
         # Plot the M-wave and H-response amplitudes for each channel
-        for channel_index in range(self.session.num_channels):
+        for channel_index in range(self.emg_object.num_channels):
             m_wave_amplitudes = []
             h_response_amplitudes = []
             stimulus_voltages = []
 
             # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in self.session.recordings_processed:
+            for recording in self.emg_object.recordings_processed:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
                 
 
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.m_start[channel_index] + self.session.stim_start, self.session.m_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.session.h_start[channel_index] + self.session.stim_start, self.session.h_end[channel_index] + self.session.stim_start, self.session.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -529,9 +536,9 @@ class EMGSessionPlotter(EMGPlotter):
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
                 if manual_mmax is not None:
-                    m_max = manual_mmax
+                    m_max = manual_mmax[channel_index]
                 else:
-                    m_max = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report **self.session.m_max_args)
+                    m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
                 m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
                 h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]    
 
@@ -539,22 +546,22 @@ class EMGSessionPlotter(EMGPlotter):
             m_wave_amplitudes = Transform_EMG.savgol_filter_y(m_wave_amplitudes)
             # h_response_amplitudes = np.gradient(m_wave_amplitudes, stimulus_voltages)
 
-            if self.session.num_channels == 1:
-                ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
-                ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
+            if self.emg_object.num_channels == 1:
+                ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
+                ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
                 ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 ax.legend()    
             else:
-                axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.session.m_color, label='M-wave', marker='o')
-                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.session.h_color, label='H-response', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 axes[channel_index].legend()
                     
         # Set labels and title
         fig.suptitle('M-response and H-reflex Curves')
-        if self.session.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
             if relative_to_mmax:
@@ -567,10 +574,10 @@ class EMGSessionPlotter(EMGPlotter):
         
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.session.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.session.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
 class EMGDatasetPlotter(EMGPlotter):
@@ -589,12 +596,13 @@ class EMGDatasetPlotter(EMGPlotter):
         help: Displays the help text for the class.
     """
     def __init__(self, dataset):
-
+        self.emg_object : 'EMGDataset' = None # The EMGDataset object to be imported.
+        
         super().__init__(dataset)
 
         from monstim_analysis.Analyze_EMG import EMGDataset
         if isinstance(dataset, EMGDataset):
-            self.dataset = dataset
+            self.emg_object = dataset # Type: EMGDataset
         else:
             raise UnableToPlotError("Invalid data type for EMGDatasetPlotter. Please provide an EMGDataset object.")
 
@@ -620,7 +628,7 @@ class EMGDatasetPlotter(EMGPlotter):
         print(help_text)
 
     # EMGDataset plotting functions
-    def plot_reflexCurves(self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
+    def plot_reflexCurves(self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
         Plots the M-response and H-reflex curves for each channel.
 
@@ -633,22 +641,22 @@ class EMGDatasetPlotter(EMGPlotter):
         """
         # Set method to default if not specified.
         if method is None:
-            method = self.dataset.default_method
-        channel_names = self.dataset.channel_names
+            method = self.emg_object.default_method
+        channel_names = self.emg_object.channel_names
 
         # Unpack processed session recordings.
         recordings = []
-        for session in self.dataset.emg_sessions:
+        for session in self.emg_object.emg_sessions:
             recordings.extend(session.recordings_processed)
         sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
 
-        fig, ax, axes = self.create_fig_and_axes(self.dataset.num_channels, canvas)
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
 
         # Get unique binned stimulus voltages
-        stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size for recording in sorted_recordings])))
+        stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size for recording in sorted_recordings])))
 
         # Plot the M-wave and H-response amplitudes for each channel
-        for channel_index in range(self.dataset.num_channels):
+        for channel_index in range(self.emg_object.num_channels):
             m_wave_means = []
             m_wave_stds = []
             h_response_means = []
@@ -659,13 +667,13 @@ class EMGDatasetPlotter(EMGPlotter):
                 
                 # Append the M-wave and H-response amplitudes for the binned voltage into a list.
                 for recording in recordings:
-                    binned_stimulus_v = round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size
+                    binned_stimulus_v = round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size
                     if binned_stimulus_v == stimulus_v:
                         channel_data = recording['channel_data'][channel_index]
 
                         try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_start, self.dataset.h_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
+                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
                         except ValueError:
                             raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -695,25 +703,25 @@ class EMGDatasetPlotter(EMGPlotter):
                 if manual_mmax is not None:
                     channel_m_max = manual_mmax[channel_index]
                 else:
-                    channel_m_max = self.dataset.m_max[channel_index]
+                    channel_m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
                 m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
                 m_wave_stds = [(amplitude / channel_m_max) for amplitude in m_wave_stds]
                 h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
                 h_response_stds = [(amplitude / channel_m_max) for amplitude in h_response_stds]
 
-            if self.dataset.num_channels == 1:
-                ax.plot(stimulus_voltages, m_wave_means, color=self.dataset.m_color, label='M-wave')
+            if self.emg_object.num_channels == 1:
+                ax.plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
                 ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
-                ax.plot(stimulus_voltages, h_response_means, color=self.dataset.h_color, label='H-response')
+                ax.plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
                 ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
                 ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 if plot_legend:
                     ax.legend()
             else:
-                axes[channel_index].plot(stimulus_voltages, m_wave_means, color=self.dataset.m_color, label='M-wave')
+                axes[channel_index].plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
                 axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
-                axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.dataset.h_color, label='H-response')
+                axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
                 axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
@@ -722,7 +730,7 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Set labels and title
         fig.suptitle('M-response and H-reflex Curves')
-        if self.dataset.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             ax.set_xlabel('Stimulus Voltage (V)')
             ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
             if relative_to_mmax:
@@ -735,13 +743,13 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.dataset.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.dataset.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
-    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, mmax_report=True, canvas=None):
+    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
         Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
 
@@ -757,21 +765,21 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Set method to default if not specified.
         if method is None:
-            method = self.dataset.default_method
-        channel_names = self.dataset.channel_names
+            method = self.emg_object.default_method
+        channel_names = self.emg_object.channel_names
 
         # Unpack processed session recordings.
         recordings = []
-        for session in self.dataset.emg_sessions:
+        for session in self.emg_object.emg_sessions:
             recordings.extend(session.recordings_processed)
         sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
 
-        fig, ax, axes = self.create_fig_and_axes(self.dataset.num_channels, canvas, figsizes='small')
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas, figsizes='small')
 
         # Get unique binned stimulus voltages
-        stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size for recording in sorted_recordings])))
+        stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size for recording in sorted_recordings])))
 
-        for channel_index in range(self.dataset.num_channels):
+        for channel_index in range(self.emg_object.num_channels):
             if relative_to_mmax:
                 m_wave_means = []
             max_h_reflex_voltage = None
@@ -785,13 +793,13 @@ class EMGDatasetPlotter(EMGPlotter):
                 
                 # Append the M-wave and H-response amplitudes for the binned voltage into a list.
                 for recording in recordings:
-                    binned_stimulus_v = round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size
+                    binned_stimulus_v = round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size
                     if binned_stimulus_v == stimulus_v:
                         channel_data = recording['channel_data'][channel_index]
                         
                         try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_start, self.dataset.h_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
+                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
                         except ValueError:
                             raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
 
@@ -817,13 +825,13 @@ class EMGDatasetPlotter(EMGPlotter):
             h_response_amplitudes_max_h = []
 
             for recording in recordings:
-                binned_stimulus_v = round(recording['stimulus_v'] / self.dataset.bin_size) * self.dataset.bin_size
+                binned_stimulus_v = round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size
                 if binned_stimulus_v == max_h_reflex_voltage:
                     channel_data = recording['channel_data'][channel_index]
                     
                     try:
-                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.m_start[channel_index] + self.dataset.stim_start, self.dataset.m_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
-                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.dataset.h_start[channel_index] + self.dataset.stim_start, self.dataset.h_end[channel_index] + self.dataset.stim_start, self.dataset.scan_rate, method=method)
+                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
                     except ValueError:
                         raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
                 
@@ -834,45 +842,45 @@ class EMGDatasetPlotter(EMGPlotter):
             if relative_to_mmax:
                 m_wave_means = np.array(m_wave_means)
                 if manual_mmax is not None:
-                    m_max = manual_mmax
+                    m_max = manual_mmax[channel_index]
                 else:     
-                    m_max = self.dataset.m_max[channel_index]
+                    m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
                 m_wave_amplitudes_max_h = [amplitude / m_max for amplitude in m_wave_amplitudes_max_h]
                 h_response_amplitudes_max_h = [amplitude / m_max for amplitude in h_response_amplitudes_max_h]
 
             # Plot the M-wave and H-response amplitudes for the maximum H-reflex voltage.
             m_x = 1
             h_x = 2.5
-            if self.dataset.num_channels == 1:
-                ax.plot(m_x, [m_wave_amplitudes_max_h], color=self.dataset.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_wave_amplitudes_max_h)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes_max_h)), ha='center', color=self.dataset.m_color)
+            if self.emg_object.num_channels == 1:
+                ax.plot(m_x, [m_wave_amplitudes_max_h], color=self.emg_object.m_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(m_wave_amplitudes_max_h)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes_max_h)), ha='center', color=self.emg_object.m_color)
                 ax.errorbar(m_x, np.mean(m_wave_amplitudes_max_h), yerr=np.std(m_wave_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
                 
-                ax.plot(h_x, [h_response_amplitudes_max_h], color=self.dataset.h_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.dataset.h_color)
+                ax.plot(h_x, [h_response_amplitudes_max_h], color=self.emg_object.h_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.emg_object.h_color)
                 ax.errorbar(h_x, np.mean(h_response_amplitudes_max_h), yerr=np.std(h_response_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(['M-response', 'H-reflex'])
-                ax.set_title(f'{channel_names[0]} ({round(max_h_reflex_voltage + self.dataset.bin_size / 2, 2)} ± {self.dataset.bin_size/2}V)')
+                ax.set_title(f'{channel_names[0]} ({round(max_h_reflex_voltage + self.emg_object.bin_size / 2, 2)} ± {self.emg_object.bin_size/2}V)')
                 ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
             else:
-                axes[channel_index].plot(m_x, [m_wave_amplitudes_max_h], color=self.dataset.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_wave_amplitudes_max_h)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes_max_h)), ha='center', color=self.dataset.m_color)
+                axes[channel_index].plot(m_x, [m_wave_amplitudes_max_h], color=self.emg_object.m_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(m_wave_amplitudes_max_h)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes_max_h)), ha='center', color=self.emg_object.m_color)
                 axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes_max_h), yerr=np.std(m_wave_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
 
-                axes[channel_index].plot(h_x, [h_response_amplitudes_max_h], color=self.dataset.h_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.dataset.h_color)
+                axes[channel_index].plot(h_x, [h_response_amplitudes_max_h], color=self.emg_object.h_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.emg_object.h_color)
                 axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes_max_h), yerr=np.std(h_response_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
                 
-                axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage + self.dataset.bin_size / 2, 2)} ± {self.dataset.bin_size/2}V)')
+                axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage + self.emg_object.bin_size / 2, 2)} ± {self.emg_object.bin_size/2}V)')
                 axes[channel_index].set_xticks([m_x, h_x])
                 axes[channel_index].set_xticklabels(['M-response', 'H-reflex'])
                 axes[channel_index].set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
         
         # Set labels and title
         fig.suptitle('EMG Responses at Max H-reflex Stimulation')
-        if self.dataset.num_channels == 1:
+        if self.emg_object.num_channels == 1:
             ax.set_xlabel('Response Type')
             ax.set_ylabel(f'EMG Amp. (mV, {method})')
             if relative_to_mmax:
@@ -885,10 +893,10 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Show the plot
         if canvas:
-            canvas.figure.subplots_adjust(**self.dataset.subplot_adjust_args)
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.dataset.subplot_adjust_args)
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
     # def plot_mmax(self, channel_names=[], method='rms'):

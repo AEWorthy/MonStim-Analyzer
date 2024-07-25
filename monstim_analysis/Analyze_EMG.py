@@ -249,6 +249,7 @@ class EMGSession(EMGData):
 
     @property
     def m_max(self):
+        # uses default method to calculate m_max if not already calculated.
         if self._m_max is None:
             m_max = []
             
@@ -261,7 +262,7 @@ class EMGSession(EMGData):
                                                                              method=self.default_method) 
                                                                              for recording in self.recordings_processed]                
                 try: # Check if the channel has a valid M-max amplitude.
-                    channel_mmax = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=False, **self.m_max_args)
+                    channel_mmax = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
                     m_max.append(channel_mmax)
                 except Transform_EMG.NoCalculableMmaxError:
                     logging.info(f"Channel {channel_idx} does not have a valid M-max amplitude.")
@@ -287,6 +288,26 @@ class EMGSession(EMGData):
         for line in report:
             print(line)
         return report
+
+    def get_m_max(self, method, channel_index):
+        """
+        Calculates the M-wave amplitude for a specific channel in the session.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+
+        Returns:
+            float: The M-wave amplitude for the specified channel.
+        """
+        stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
+        m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
+                                                                    self.m_start[channel_index] + self.stim_start,
+                                                                    self.m_end[channel_index] + self.stim_start, 
+                                                                    self.scan_rate, 
+                                                                    method=method) 
+                                                                    for recording in self.recordings_processed]
+        return Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
 
     def update_window_settings(self):
         """
@@ -596,6 +617,20 @@ class EMGDataset(EMGData):
         # Call the appropriate plotting method from the plotter object
         getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
 
+    def get_avg_m_max(self, method, channel_index):
+        """
+        Calculates the average M-wave amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+
+        Returns:
+            float: The average M-wave amplitude for the specified channel.
+        """
+        m_wave_amplitudes = [session.get_m_max(method, channel_index) for session in self.emg_sessions if session.m_max[channel_index] is not None]
+        return np.mean(m_wave_amplitudes)
+
     #Properties for the EMGDataset class.
     @property
     def name(self):
@@ -604,7 +639,6 @@ class EMGDataset(EMGData):
     def m_max(self):
         if self._m_max is None:
             session_m_maxes = [session.m_max for session in self.emg_sessions]
-            print(session_m_maxes)
             m_max = []
             # separate each channel's m_max into separate arrays and average them.
             for channel_index in range(self.num_channels):
@@ -612,7 +646,7 @@ class EMGDataset(EMGData):
                 if len(channel_m_maxes) == 0:
                     raise ValueError(f"Error: No valid M-max values found for channel {channel_index}.")
                 channel_m_max = np.mean(channel_m_maxes)
-                m_max.append(channel_m_max)
+                m_max.append(float(channel_m_max))
             self._m_max = m_max
             logging.info(f"Average M-max values created for dataset {self.name}: {self._m_max}")
         return self._m_max
