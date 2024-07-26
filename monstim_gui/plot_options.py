@@ -1,6 +1,11 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox
 from .custom_gui_elements import FloatLineEdit
 
+# Things to do:
+# - change flag system to a more general system of latency windows.
+# - Add option to show or hide the plot legend for emg plots
+# - Add manual mmax option
+
 # Base class for plot options
 class BasePlotOptions(QWidget):
     def __init__(self, parent):

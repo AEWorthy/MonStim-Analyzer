@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 # - make flag numbers, positions, colors, and names customizable as a preference.
 # - make the axis labels and titles customizable as a preference.
 # - add option to plot a figure legend for emg plots.
-# - fix manual mmax implementation.
 
 
 
@@ -163,7 +162,7 @@ class EMGSessionPlotter(EMGPlotter):
         return time_axis, window_start_sample, window_end_sample
 
     # EMGSession plotting functions
-    def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, data_type='filtered', canvas : FigureCanvas = None):
+    def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, plot_legend=True, data_type='filtered', canvas : FigureCanvas = None):
         """
         Plots EMG data from a Pickle file for a specified time window.
 
@@ -185,6 +184,11 @@ class EMGSessionPlotter(EMGPlotter):
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+
+        # # Create custom legend elements
+        # legend_elements = []
+        # if plot_latency_windows:
+        #     legend_elements = [window.get_legend_element() for window in self.latency_windows]
         
         # Establish type of EMG data to plot
         if data_type == 'filtered':
@@ -210,7 +214,8 @@ class EMGSessionPlotter(EMGPlotter):
                     ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     ax.set_title(f'{channel_names[0]}')
                     ax.grid(True)
-                    #ax.legend()
+                    if plot_legend:
+                        ax.legend()
                     if m_flags:
                         ax.axvline(self.emg_object.m_start[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
                         ax.axvline(self.emg_object.m_end[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)                         
@@ -221,14 +226,15 @@ class EMGSessionPlotter(EMGPlotter):
                     axes[channel_index].plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
                     axes[channel_index].set_title(f'{channel_names[channel_index]}')
                     axes[channel_index].grid(True)
-                    #axes[channel_index].legend()
+                    if plot_legend:
+                        axes[channel_index].legend()
                     if m_flags:
                         axes[channel_index].axvline(self.emg_object.m_start[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
                         axes[channel_index].axvline(self.emg_object.m_end[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
                     if h_flags:
                         axes[channel_index].axvline(self.emg_object.h_start[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
                         axes[channel_index].axvline(self.emg_object.h_end[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
-
+                
         # Set labels and title
         if self.emg_object.num_channels == 1:
             ax.set_xlabel('Time (ms)')
@@ -238,6 +244,13 @@ class EMGSessionPlotter(EMGPlotter):
             fig.suptitle('EMG Overlay for All Channels (all recordings)')
             fig.supxlabel('Time (ms)')
             fig.supylabel('EMG (mV)')
+        
+        # # Add latency window legend elements
+        # if plot_legend and legend_elements:
+        #                 if self.emg_object.num_channels == 1:
+        #                     ax.legend(handles=legend_elements, loc='best')
+        #                 else:
+        #                     fig.legend(handles=legend_elements, loc='lower right')
 
         # Show the plot
         if canvas:

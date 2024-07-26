@@ -11,20 +11,44 @@ import logging
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Union
+from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 import numpy as np
+from matplotlib.lines import Line2D
 
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
 import monstim_analysis.Transform_EMG as Transform_EMG
 from monstim_utils import load_config, get_output_bin_path
 
+# To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
+
+@dataclass
+class LatencyWindow:
+    name: str
+    color: str
+    start_times: List[float]
+    duration: List[float]
+    linestyle: str = '--'
+
+    @property
+    def end_times(self):
+        return [start + dur for start, dur in zip(self.start_times, self.duration)]
+
+    def plot(self, ax, channel_index):
+        ax.axvline(self.start_times[channel_index], color=self.color, linestyle=self.linestyle)
+        ax.axvline(self.end_times[channel_index], color=self.color, linestyle=self.linestyle)
+
+    def get_legend_element(self):
+        return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
+    
 
 # Parent EMG data class. Mainly for loading config settings.
 class EMGData:
     def __init__(self):
+        self.latency_windows: List[LatencyWindow] = []
         _config = load_config()
-
+        
         self.m_start = _config['m_start']
         self.m_end = [(time + _config['m_duration']) for time in _config['m_start']]
         self.h_start = _config['h_start']
@@ -45,6 +69,20 @@ class EMGData:
         self.default_method = _config['default_method']
 
         self.default_channel_names = _config['default_channel_names']
+    
+    def add_latency_window(self, name: str, color: str, start_times: List[float], duration: List[float], linestyle: str = '--'):
+        """
+        Add a new latency window.
+        
+        Args:
+            name (str): Name of the latency window.
+            color (str): Color of the latency window markers.
+            start_times (list): List of start times for each channel.
+            end_times (list): List of end times for each channel.
+            linestyle (str, optional): Line style for the markers. Defaults to '--'.
+        """
+        new_window = LatencyWindow(name, color, start_times, duration, linestyle)
+        self.latency_windows.append(new_window)
             
     @staticmethod
     def unpackPickleOutput (output_path):
@@ -116,6 +154,22 @@ class EMGSession(EMGData):
         self.load_session_data(pickled_data)
         self._recordings_processed = None
         self._m_max = None
+
+        # Add M-wave latency window
+        self.add_latency_window(
+            name="M-wave",
+            color="red",
+            start_times=[1 for _ in range(self.num_channels)],  # start times for each channel
+            duration=[2 for _ in range(self.num_channels)]  # end times for each channel
+        )
+
+        # Add H-reflex latency window
+        self.add_latency_window(
+            name="H-reflex",
+            color="blue",
+            start_times=[5 for _ in range(self.num_channels)],  # start times for each channel
+            duration=[1 for _ in range(self.num_channels)]  # end times for each channel
+        )
 
     def load_session_data(self, pickled_data):
         # Load the session data from the pickle file
