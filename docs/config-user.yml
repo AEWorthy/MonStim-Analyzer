@@ -8,7 +8,7 @@ default_channel_names:
 - LG
 - TA
 default_method: rms
-flag_style: ':'
+latency_window_style: ':'
 h_color: blue
 h_duration: 1
 h_start:

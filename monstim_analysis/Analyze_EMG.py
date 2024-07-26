@@ -28,49 +28,65 @@ class LatencyWindow:
     name: str
     color: str
     start_times: List[float]
-    duration: List[float]
+    durations: List[float]
     linestyle: str = '--'
 
     @property
     def end_times(self):
-        return [start + dur for start, dur in zip(self.start_times, self.duration)]
+        return [start + dur for start, dur in zip(self.start_times, self.durations)]
 
     def plot(self, ax, channel_index):
-        ax.axvline(self.start_times[channel_index], color=self.color, linestyle=self.linestyle)
-        ax.axvline(self.end_times[channel_index], color=self.color, linestyle=self.linestyle)
+        start_exists = end_exists = False
+        
+        for line in ax.lines:
+            if isinstance(line, Line2D):
+                if line.get_xdata()[0] == self.start_times[channel_index] and line.get_color() == self.color:
+                    start_exists = True
+                elif line.get_xdata()[0] == self.end_times[channel_index] and line.get_color() == self.color:
+                    end_exists = True
+                
+                if start_exists and end_exists:
+                    break
+        
+        if not start_exists:
+            ax.axvline(self.start_times[channel_index], color=self.color, linestyle=self.linestyle)
+        
+        if not end_exists:
+            ax.axvline(self.end_times[channel_index], color=self.color, linestyle=self.linestyle)
 
-    def get_legend_element(self):
-        return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
+    def get_legend_element(self, stylized=True):
+        if stylized:
+            return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
+        else:
+            return Line2D([0], [0], color=self.color, linestyle='-', label=self.name)
     
-
 # Parent EMG data class. Mainly for loading config settings.
 class EMGData:
     def __init__(self):
         self.latency_windows: List[LatencyWindow] = []
         _config = load_config()
         
-        self.m_start = _config['m_start']
-        self.m_end = [(time + _config['m_duration']) for time in _config['m_start']]
-        self.h_start = _config['h_start']
-        self.h_end = [(time + _config['h_duration']) for time in _config['h_start']]
-        self.time_window_ms = _config['time_window']
-        self.bin_size = _config['bin_size']
+        self.m_start : List[float] = _config['m_start']
+        self.m_end : List[float] = [(time + _config['m_duration']) for time in _config['m_start']]
+        self.h_start : List[float] = _config['h_start']
+        self.h_end : List[float] = [(time + _config['h_duration']) for time in _config['h_start']]
+        self.time_window_ms : float = _config['time_window']
+        self.bin_size : float = _config['bin_size']
 
-        self.flag_style = _config['flag_style']
-        self.m_color = _config['m_color']
-        self.h_color = _config['h_color']
-        self.title_font_size = _config['title_font_size']
-        self.axis_label_font_size = _config['axis_label_font_size']
-        self.tick_font_size = _config['tick_font_size']
+        self.latency_window_style : str = _config['latency_window_style']
+        self.m_color : str = _config['m_color']
+        self.h_color : str = _config['h_color']
+        self.title_font_size : int = _config['title_font_size']
+        self.axis_label_font_size : int = _config['axis_label_font_size']
+        self.tick_font_size : int = _config['tick_font_size']
+        
         self.subplot_adjust_args = _config['subplot_adjust_args']
         self.m_max_args = _config['m_max_args']
-
         self.butter_filter_args = _config['butter_filter_args']
-        self.default_method = _config['default_method']
-
-        self.default_channel_names = _config['default_channel_names']
+        self.default_method : str = _config['default_method']
+        self.default_channel_names : List[str] = _config['default_channel_names']
     
-    def add_latency_window(self, name: str, color: str, start_times: List[float], duration: List[float], linestyle: str = '--'):
+    def add_latency_window(self, name: str, color: str, start_times: List[float], durations: List[float], linestyle: str = '--'):
         """
         Add a new latency window.
         
@@ -78,10 +94,10 @@ class EMGData:
             name (str): Name of the latency window.
             color (str): Color of the latency window markers.
             start_times (list): List of start times for each channel.
-            end_times (list): List of end times for each channel.
+            durations (list): List of durations for each channel.
             linestyle (str, optional): Line style for the markers. Defaults to '--'.
         """
-        new_window = LatencyWindow(name, color, start_times, duration, linestyle)
+        new_window = LatencyWindow(name, color, start_times, durations, linestyle)
         self.latency_windows.append(new_window)
             
     @staticmethod
@@ -160,7 +176,7 @@ class EMGSession(EMGData):
             name="M-wave",
             color="red",
             start_times=[1 for _ in range(self.num_channels)],  # start times for each channel
-            duration=[2 for _ in range(self.num_channels)]  # end times for each channel
+            durations=[2 for _ in range(self.num_channels)]  # end times for each channel
         )
 
         # Add H-reflex latency window
@@ -168,7 +184,7 @@ class EMGSession(EMGData):
             name="H-reflex",
             color="blue",
             start_times=[5 for _ in range(self.num_channels)],  # start times for each channel
-            duration=[1 for _ in range(self.num_channels)]  # end times for each channel
+            durations=[1 for _ in range(self.num_channels)]  # end times for each channel
         )
 
     def load_session_data(self, pickled_data):
@@ -178,21 +194,21 @@ class EMGSession(EMGData):
             session_data = pickle.load(pickle_file)
 
         # Access session-wide information
-        session_info = session_data['session_info']
-        self.session_id = session_info['session_id']
-        self.num_channels = session_info['num_channels']
-        self.channel_names = [self.default_channel_names[i] if i < len(self.default_channel_names) 
-                              else 'Channel ' + str(i) for i in range(self.num_channels)]
-        self.scan_rate = session_info['scan_rate']
-        self.num_samples = session_info['num_samples']
-        self.pre_stim_acquired = session_info['pre_stim_acquired']
-        self.post_stim_acquired = session_info['post_stim_acquired']
-        self.stim_delay = session_info['stim_delay']
-        self.stim_start = self.stim_delay + self.pre_stim_acquired
-        self.stim_duration = session_info['stim_duration']
-        self.stim_interval = session_info['stim_interval']
-        self.emg_amp_gains = [gain for index, gain in enumerate(session_info['emg_amp_gains']) 
-                              if index < self.num_channels] # only include gains for the number of recorded channels.
+        session_info : dict = session_data['session_info']
+        self.session_id : str = session_info['session_id']
+        self.num_channels : int = int(session_info['num_channels'])
+        self.channel_names : List[str] = [self.default_channel_names[i] if i < len(self.default_channel_names) 
+                                          else 'Channel ' + str(i) for i in range(self.num_channels)]
+        self.scan_rate : int = int(session_info['scan_rate'])
+        self.num_samples : int = int(session_info['num_samples'])
+        self.pre_stim_acquired : float = session_info['pre_stim_acquired']
+        self.post_stim_acquired : float = session_info['post_stim_acquired']
+        self.stim_delay : float = session_info['stim_delay']
+        self.stim_start : float = self.stim_delay + self.pre_stim_acquired
+        self.stim_duration : float = session_info['stim_duration']
+        self.stim_interval : float = session_info['stim_interval']
+        self.emg_amp_gains : List[int] = [int(gain) for index, gain in enumerate(session_info['emg_amp_gains']) 
+                                          if index < self.num_channels] # only include gains for the number of recorded channels.
         
         # Access the raw EMG recordings. Sort by stimulus voltage.
         self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
@@ -284,7 +300,7 @@ class EMGSession(EMGData):
         self.m_max_args = config['m_max_args']
         self.default_channel_names = config['default_channel_names']
 
-        self.flag_style = config['flag_style']
+        self.latency_window_style = config['latency_window_style']
         self.m_color = config['m_color']
         self.h_color = config['h_color']
         self.title_font_size = config['title_font_size']
@@ -294,6 +310,9 @@ class EMGSession(EMGData):
 
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGSessionPlotter(self)
+        for latency_window in self.latency_windows:
+            latency_window.linestyle = config['latency_window_style']
+
 
     @property
     def recordings_processed (self):
@@ -534,9 +553,9 @@ class EMGDataset(EMGData):
             emg_sessions_to_exclude (list, optional): A list of session names to exclude from the dataset. Defaults to an empty list.
         """
         # Set dataset parameters
-        self.date = date
-        self.animal_id = animal_id
-        self.condition = condition
+        self.date : str = date
+        self.animal_id : str = animal_id
+        self.condition : str = condition
         self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
         self._m_max = None
 
@@ -566,64 +585,13 @@ class EMGDataset(EMGData):
             if not consistent:
                 print(f"Error: {message}")
             else:
-                self.scan_rate = self.emg_sessions[0].scan_rate
-                self.num_channels = self.emg_sessions[0].num_channels
-                self.stim_start = self.emg_sessions[0].stim_start
-                self.channel_names = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.           
+                self.scan_rate : int = self.emg_sessions[0].scan_rate
+                self.num_channels : int = self.emg_sessions[0].num_channels
+                self.stim_start : float = self.emg_sessions[0].stim_start
+                self.channel_names : List[str] = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
+                self.latency_windows : LatencyWindow = self.emg_sessions[0].latency_windows.copy()        
                 if not temp:
                     self.save_dataset(self.save_path)          
-
-    def __unpackEMGSessions(self, emg_sessions):
-        """
-        Unpacks a list of EMG session Pickle files and outputs a list of EMGSession instances for those pickles.
-        If a list of EMGSession instances is passed, will return that same list.
-
-        Args:
-            emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
-
-        Returns:
-            list: a list of EMGSession instances.
-
-        Raises:
-            TypeError: if an object in the 'emg_sessions' list was not properly converted to an EMGSession.
-        """
-        # Check if list dtype is EMGSession. If it is, convert it to a new EMGSession instance and replace the string in the list.
-        pickled_sessions = []
-        for session in emg_sessions:
-            if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
-                session = EMGSession(session) # replace the string with an actual session object.
-                pickled_sessions.append(session)
-            elif isinstance(session, EMGSession):
-                pickled_sessions.append(session)
-                print(session)
-            else:
-                raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
-            
-            pickled_sessions = sorted(pickled_sessions, key=lambda x: x.session_id)
-        
-        return pickled_sessions
-
-    def __check_session_consistency(self):
-        """
-        Checks if all sessions in the dataset have the same parameters (scan rate, num_channels, stim_start).
-
-        Returns:
-            tuple: A tuple containing a boolean value indicating whether all sessions have consistent parameters and a message indicating the result.
-        """
-        reference_session = self.emg_sessions[0]
-        reference_scan_rate = reference_session.scan_rate
-        reference_num_channels = reference_session.num_channels
-        reference_stim_start = reference_session.stim_start
-
-        for session in self.emg_sessions[1:]:
-            if session.scan_rate != reference_scan_rate:
-                return False, f"Inconsistent scan_rate for {session.session_id}: {session.scan_rate} != {reference_scan_rate}."
-            if session.num_channels != reference_num_channels:
-                return False, f"Inconsistent num_channels for {session.session_id}: {session.num_channels} != {reference_num_channels}."
-            if session.stim_start != reference_stim_start:
-                return False, f"Inconsistent stim_start for {session.session_id}: {session.stim_start} != {reference_stim_start}."
-
-        return True, "All sessions have consistent parameters"
 
     def dataset_parameters(self):
         """
@@ -823,7 +791,7 @@ class EMGDataset(EMGData):
         self.m_max_args = config['m_max_args']
         self.default_channel_names = config['default_channel_names']
 
-        self.flag_style = config['flag_style']
+        self.latency_window_style = config['latency_window_style']
         self.m_color = config['m_color']
         self.h_color = config['h_color']
         self.title_font_size = config['title_font_size']
@@ -837,6 +805,8 @@ class EMGDataset(EMGData):
 
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGDatasetPlotter(self)
+        for latency_window in self.latency_windows:
+            latency_window.linestyle = config['latency_window_style']
         
     # Save and load the dataset object.
     def save_dataset(self, save_path=None):
@@ -882,7 +852,7 @@ class EMGDataset(EMGData):
                 If the dataset name does not match the expected format, returns (None, None, None).
         """
         # Define the regex pattern
-        pattern = r'^(\d{6})\s([A-Z0-9]+)\s(.+)$'
+        pattern = r'^(\d{6})\s([A-Z0-9.]+)\s(.+)$'
         
         # Match the pattern
         match = re.match(pattern, dataset_name)
@@ -897,7 +867,7 @@ class EMGDataset(EMGData):
             
             return date, animal_id, condition
         else:
-            print(f"Error: Dataset name {dataset_name} does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
+            logging.error(f"Error: Dataset name '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
             return None, None, None
 
     @classmethod
@@ -920,6 +890,61 @@ class EMGDataset(EMGData):
         dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
         dataset_oi.apply_preferences()
         return dataset_oi
+
+    # Private methods for the EMGDataset class.
+    def __unpackEMGSessions(self, emg_sessions):
+        """
+        Unpacks a list of EMG session Pickle files and outputs a list of EMGSession instances for those pickles.
+        If a list of EMGSession instances is passed, will return that same list.
+
+        Args:
+            emg_sessions (list): a list of instances of the class EMGSession, or a list of Pickle file locations that you want to use for the dataset.
+
+        Returns:
+            list: a list of EMGSession instances.
+
+        Raises:
+            TypeError: if an object in the 'emg_sessions' list was not properly converted to an EMGSession.
+        """
+        # Check if list dtype is EMGSession. If it is, convert it to a new EMGSession instance and replace the string in the list.
+        pickled_sessions = []
+        for session in emg_sessions:
+            if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
+                session = EMGSession(session) # replace the string with an actual session object.
+                pickled_sessions.append(session)
+            elif isinstance(session, EMGSession):
+                pickled_sessions.append(session)
+                print(session)
+            else:
+                raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
+            
+            pickled_sessions = sorted(pickled_sessions, key=lambda x: x.session_id)
+        
+        return pickled_sessions
+
+    def __check_session_consistency(self):
+        """
+        Checks if all sessions in the dataset have the same parameters (scan rate, num_channels, stim_start).
+
+        Returns:
+            tuple: A tuple containing a boolean value indicating whether all sessions have consistent parameters and a message indicating the result.
+        """
+        reference_session = self.emg_sessions[0]
+        reference_scan_rate = reference_session.scan_rate
+        reference_num_channels = reference_session.num_channels
+        reference_stim_start = reference_session.stim_start
+
+        for session in self.emg_sessions[1:]:
+            if session.scan_rate != reference_scan_rate:
+                return False, f"Inconsistent scan_rate for {session.session_id}: {session.scan_rate} != {reference_scan_rate}."
+            if session.num_channels != reference_num_channels:
+                return False, f"Inconsistent num_channels for {session.session_id}: {session.num_channels} != {reference_num_channels}."
+            if session.stim_start != reference_stim_start:
+                return False, f"Inconsistent stim_start for {session.session_id}: {session.stim_start} != {reference_stim_start}."
+
+        return True, "All sessions have consistent parameters"
+
+
 
 class EMGExperiment(EMGData):
     def __init__(self, emg_datasets, emg_dataset_settings, emg_sessions_to_exclude=[]):

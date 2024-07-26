@@ -26,7 +26,7 @@ axis_label_font_size : 16 # (int) font size of the axis labels.
 tick_font_size : 12 # (int) font size of the axis ticks.
 m_color : 'red' # (str) color of M-response flags and plots.
 h_color : 'blue' # (str) color of H-reflex flags and plots.
-flag_style : ':' # (str) matplotlib linestyle character(s) for H/M-response flags.
+latency_window_style : ':' # (str) matplotlib linestyle character(s) for H/M-response flags.
 subplot_adjust_args: # dict fot subplots_adjust() function. default is below.
   left: 0.1
   right: 0.9

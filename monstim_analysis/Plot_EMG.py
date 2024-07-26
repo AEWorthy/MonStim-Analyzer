@@ -33,6 +33,7 @@ class EMGPlotter:
         plt.rcParams.update({'figure.titlesize': self.emg_object.title_font_size})
         plt.rcParams.update({'figure.labelsize': self.emg_object.axis_label_font_size, 'figure.labelweight': 'bold'})
         plt.rcParams.update({'axes.titlesize': self.emg_object.axis_label_font_size, 'axes.titleweight': 'bold'})
+        plt.rcParams.update({'axes.labelsize': self.emg_object.axis_label_font_size, 'axes.labelweight': 'bold'})
         plt.rcParams.update({'xtick.labelsize': self.emg_object.tick_font_size, 'ytick.labelsize': self.emg_object.tick_font_size})
 
     def create_fig_and_axes(self, canvas: FigureCanvas = None, figsizes = 'large'):
@@ -45,7 +46,7 @@ class EMGPlotter:
             multi_channel_size_tuple = (5, 2)
         
         if canvas:
-            fig = canvas.figure
+            fig = canvas.figure # Type: matplotlib.figure.Figure
             fig.clear()
             fig.set_tight_layout(True)
             
@@ -70,11 +71,19 @@ class EMGPlotter:
             # Create a new figure and axes
             scale = 2 # Scale factor for figure size relative to default
             if self.emg_object.num_channels == 1:
-                fig, ax = plt.subplots(figsize=tuple([item * scale for item in single_channel_size_tuple]))
+                fig, ax = plt.subplots(figsize=tuple([item * scale for item in single_channel_size_tuple])) # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot
             else:
-                fig, axes = plt.subplots(nrows=1, ncols=self.emg_object.num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True)
+                fig, axes = plt.subplots(nrows=1, ncols=self.emg_object.num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True) # Type: matplotlib.figure.Figure, numpy.ndarray
 
-        return fig, ax, axes
+        return fig, ax, axes # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot, numpy.ndarray
+    
+    def display_plot(self, canvas):
+        if canvas:
+            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
+            canvas.draw()
+        else:
+            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
+            plt.show()
 
 class EMGSessionPlotter(EMGPlotter):
     """
@@ -161,106 +170,105 @@ class EMGSessionPlotter(EMGPlotter):
         time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
         return time_axis, window_start_sample, window_end_sample
 
+    def get_emg_recordings(self, data_type):
+        """
+        Get the EMG recordings based on the specified data type.
+
+        Parameters:
+        - data_type (str): The type of EMG data to retrieve. Valid options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.
+
+        Returns:
+        - list: The EMG recordings based on the specified data type.
+
+        Raises:
+        - ValueError: If the specified data type is not supported.
+
+        """
+        if data_type == 'filtered':
+            return self.emg_object.recordings_processed
+        elif data_type == 'raw':
+            return self.emg_object.recordings_raw
+        elif data_type in ['rectified_raw', 'rectified_filtered']:
+            attribute_name = f'recordings_{data_type}'
+            if not hasattr(self.emg_object, attribute_name):
+                setattr(self.emg_object, attribute_name, self.emg_object._process_emg_data(apply_filter=(data_type == 'rectified_filtered'), rectify=True))
+            return getattr(self.emg_object, attribute_name)
+        else:
+            raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
+
+    def plot_channel_data(self, ax, time_axis, channel_data, start, end, stimulus_v, channel_index):
+        ax.plot(time_axis, channel_data[start:end], label=f"Stimulus Voltage: {stimulus_v}")
+        ax.set_title(f'{self.emg_object.channel_names[channel_index]}')
+        ax.grid(True)
+   
+    def plot_latency_windows(self, ax, all_flags, channel_index):
+        if all_flags:
+            for window in self.emg_object.latency_windows:
+                window.plot(ax=ax, channel_index=channel_index)
+        # else:
+        #     for window in self.emg_object.latency_windows:
+        #         if window.should_plot:
+        #             window.plot(ax=ax, channel_index=channel_index)
+
+    def set_fig_labels_and_legends(self, fig, sup_title : str, x_title : str, y_title: str, plot_legend : bool, legend_elements : list):
+        fig.suptitle(sup_title)
+        if self.emg_object.num_channels == 1:
+            fig.gca().set_xlabel(x_title)
+            fig.gca().set_ylabel(y_title)
+            if plot_legend and legend_elements:
+                fig.gca().legend(handles=legend_elements, loc='best')
+        else:
+            fig.supxlabel(x_title)
+            fig.supylabel(y_title)
+            if plot_legend and legend_elements:
+                fig.legend(handles=legend_elements, loc='upper right')
+
     # EMGSession plotting functions
-    def plot_emg (self, all_flags=False, m_flags=False, h_flags=False, plot_legend=True, data_type='filtered', canvas : FigureCanvas = None):
+    def plot_emg(self, all_flags : bool = True, plot_legend : bool = True, data_type : str = 'filtered', canvas: FigureCanvas = None):
         """
         Plots EMG data from a Pickle file for a specified time window.
 
         Args:
-            channel_names (list, optional): List of custom channel names to be plotted. Must be the exact same length as the number of recorded channels in the dataset.
-            m_flags (bool, optional): Flag to indicate whether to plot markers for muscle onset and offset. Default is False.
-            h_flags (bool, optional): Flag to indicate whether to plot markers for hand onset and offset. Default is False.
-            data_type (str, optional): Type of EMG data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'. Default is 'filtered'.
+            all_flags (bool): Flag to plot all latency windows. Default is True.
+            m_flags (bool): Flag to plot markers for muscle onset and offset. Default is False.
+            h_flags (bool): Flag to plot markers for hand onset and offset. Default is False.
+            plot_legend (bool): Flag to plot the legend. Default is True.
+            data_type (str): Type of EMG data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'. Default is 'filtered'.
+            canvas (FigureCanvas, optional): Canvas to draw on. If None, a new figure is created.
 
         Returns:
             None
         """
         if all_flags:
-            m_flags = True
-            h_flags = True
-
-        channel_names = self.emg_object.channel_names
+            plot_latency_windows = True
+        else:
+            plot_latency_windows = False
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+        legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
+        emg_recordings = self.get_emg_recordings(data_type)
 
-        # # Create custom legend elements
-        # legend_elements = []
-        # if plot_latency_windows:
-        #     legend_elements = [window.get_legend_element() for window in self.latency_windows]
-        
-        # Establish type of EMG data to plot
-        if data_type == 'filtered':
-            emg_recordings = self.emg_object.recordings_processed
-        elif data_type == 'raw':
-            emg_recordings = self.emg_object.recordings_raw
-        elif data_type == 'rectified_raw':
-            if not hasattr(self.emg_object, 'recordings_rectified_raw'):
-                self.emg_object.recordings_rectified_raw = self.emg_object._process_emg_data(apply_filter=False, rectify=True)
-            emg_recordings = self.emg_object.recordings_rectified_raw
-        elif data_type == 'rectified_filtered':
-            if not hasattr(self.emg_object, 'recordings_rectified_filtered'):
-                self.emg_object.recordings_rectified_filtered = self.emg_object._process_emg_data(apply_filter=True, rectify=True)
-            emg_recordings = self.emg_object.recordings_rectified_filtered
-        else:
-            raise UnableToPlotError(f"data type {data_type} is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
-
-        
-        # Plot the EMG arrays for each channel, only for the first 10ms
         for recording in emg_recordings:
             for channel_index, channel_data in enumerate(recording['channel_data']):
-                if self.emg_object.num_channels == 1:
-                    ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                    ax.set_title(f'{channel_names[0]}')
-                    ax.grid(True)
-                    if plot_legend:
-                        ax.legend()
-                    if m_flags:
-                        ax.axvline(self.emg_object.m_start[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
-                        ax.axvline(self.emg_object.m_end[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)                         
-                    if h_flags:
-                        ax.axvline(self.emg_object.h_start[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
-                        ax.axvline(self.emg_object.h_end[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)                       
-                else:
-                    axes[channel_index].plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                    axes[channel_index].set_title(f'{channel_names[channel_index]}')
-                    axes[channel_index].grid(True)
-                    if plot_legend:
-                        axes[channel_index].legend()
-                    if m_flags:
-                        axes[channel_index].axvline(self.emg_object.m_start[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
-                        axes[channel_index].axvline(self.emg_object.m_end[channel_index], color=self.emg_object.m_color, linestyle=self.emg_object.flag_style)
-                    if h_flags:
-                        axes[channel_index].axvline(self.emg_object.h_start[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
-                        axes[channel_index].axvline(self.emg_object.h_end[channel_index], color=self.emg_object.h_color, linestyle=self.emg_object.flag_style)
+                current_ax = ax if self.emg_object.num_channels == 1 else axes[channel_index]
                 
-        # Set labels and title
+                self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
+                self.plot_latency_windows(current_ax, all_flags, channel_index)
+
+
+        # Set labels and title, and display plot
         if self.emg_object.num_channels == 1:
-            ax.set_xlabel('Time (ms)')
-            ax.set_ylabel('EMG (mV)')
-            fig.suptitle('EMG Overlay for Channel 0 (all recordings)')
+            sup_title = 'EMG Overlay for Channel 0 (all recordings)'
         else:
-            fig.suptitle('EMG Overlay for All Channels (all recordings)')
-            fig.supxlabel('Time (ms)')
-            fig.supylabel('EMG (mV)')
-        
-        # # Add latency window legend elements
-        # if plot_legend and legend_elements:
-        #                 if self.emg_object.num_channels == 1:
-        #                     ax.legend(handles=legend_elements, loc='best')
-        #                 else:
-        #                     fig.legend(handles=legend_elements, loc='lower right')
+            sup_title = 'EMG Overlay for All Channels (all recordings)'
+        x_title = 'Time (ms)'
+        y_title = 'EMG (mV)'
 
-        # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.set_fig_labels_and_legends(fig, sup_title, x_title, y_title, plot_legend, legend_elements)
+        self.display_plot(canvas)
 
-    def plot_suspectedH (self, h_threshold=0.3, method=None, plot_legend=False, canvas= None):
+    def plot_emg_thresholded (self, latency_window_oi_name : str, emg_threshold_v : float = 0.3, method : str = None, all_flags : bool = False, plot_legend : bool = False, canvas : FigureCanvas = None):
         """
         Detects session recordings with potential H-reflexes and plots them.
 
@@ -269,57 +277,59 @@ class EMGSessionPlotter(EMGPlotter):
             h_threshold (float, optional): Detection threshold of the average rectified EMG response in millivolts in the H-relfex window. Defaults to 0.3mV.
             plot_legend (bool, optional): Whether to plot legends. Defaults to False.
         """
-
         if method is None:
             method = self.emg_object.default_method
 
-        channel_names = self.emg_object.channel_names
+        if all_flags:
+            plot_latency_windows = True
+        else:
+            plot_latency_windows = False
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+        # legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
+        emg_recordings = self.get_emg_recordings('filtered')
+
+        latency_window_oi = next((window for window in self.emg_object.latency_windows 
+                                  if window.name == latency_window_oi_name), None)
+        if latency_window_oi is None:
+            raise UnableToPlotError(f"No latency window named '{latency_window_oi_name}' found in the session.")
 
         # Plot the EMG arrays for each channel, only for the first 10ms
-        for recording in self.emg_object.recordings_processed:
+        for recording in emg_recordings:
             for channel_index, channel_data in enumerate(recording['channel_data']):
-                h_reflex_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                             self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
-                                                                             self.emg_object.h_end[channel_index] + self.emg_object.stim_start, 
+                current_ax = ax if self.emg_object.num_channels == 1 else axes[channel_index]
+                latency_window_oi_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                             latency_window_oi.start_times[channel_index] + self.emg_object.stim_start, 
+                                                                             latency_window_oi.end_times[channel_index] + self.emg_object.stim_start, 
                                                                              self.emg_object.scan_rate,  
                                                                              method=method)
-                if h_reflex_amplitude > h_threshold:  # Check EMG amplitude within H-reflex window
-                    if self.emg_object.num_channels == 1:
-                        ax.plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                        ax.set_title(f'{channel_names[0]}')
-                        ax.grid(True)
-                        if plot_legend:
-                            ax.legend()
-                    else:
-                        axes[channel_index].plot(time_axis, channel_data[window_start_sample:window_end_sample], label=f"Stimulus Voltage: {recording['stimulus_v']}")
-                        axes[channel_index].set_title(f'{channel_names[channel_index]}')
-                        axes[channel_index].grid(True)
-                        if plot_legend:
-                            axes[channel_index].legend()
+                if latency_window_oi_amplitude > emg_threshold_v:  # Check EMG amplitude within H-reflex window
+                    self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
+                    self.plot_latency_windows(current_ax, all_flags=False, channel_index=channel_index)
+                    if plot_legend:
+                        current_ax.legend()
 
-        # Set labels and title
-        if self.emg_object.num_channels == 1:
-            ax.set_xlabel('Time (ms)')
-            ax.set_ylabel('EMG (mV)')
-            fig.suptitle(f'EMG Overlay for Channel 0 (H-reflex Amplitude > {h_threshold} mV)')
-        else:
-            fig.suptitle(f'EMG Overlay for All Channels (H-reflex Amplitude > {h_threshold} mV)')
-            fig.supxlabel('Time (ms)')
-            fig.supylabel('EMG (mV)')
+        # Set labels and title, and display plot
+        sup_title = f'EMG Recordings Over Threshold ({emg_threshold_v} V) for {latency_window_oi_name}'
+        x_title = 'Time (ms)'
+        y_title = 'EMG (mV)'
 
-        # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.set_fig_labels_and_legends(fig, sup_title, x_title, y_title, plot_legend=False)
+        self.display_plot(canvas)
+    
+    def plot_suspectedH(self, h_threshold : float = 0.3, method : str = None, all_flags : bool = False, plot_legend : bool = False, canvas : FigureCanvas = None):
+        has_h_reflex_latency_window = False
+        for window in self.emg_object.latency_windows:
+            if window.name.lower() in ('h-reflex', 'h_reflex', 'h reflex', 'hreflex'):
+                has_h_reflex_latency_window = True
+                break
+        if not has_h_reflex_latency_window:
+            raise UnableToPlotError("No H-reflex latency window detected. Please add an H-reflex latency window to the session.")
+        self.plot_emg_thresholded('H-reflex', emg_threshold_v=h_threshold, method=method, 
+                                  all_flags=all_flags, plot_legend=plot_legend, canvas=canvas)
 
-    def plot_mmax(self, method=None, mmax_report=True, canvas=None):
+    def plot_mmax(self, method : str = None, canvas : FigureCanvas = None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
 
@@ -335,6 +345,8 @@ class EMGSessionPlotter(EMGPlotter):
 
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas, figsizes = 'small')
 
+        emg_recordings = self.get_emg_recordings('filtered')
+
         # Create a superlist to store all M-wave amplitudes for each channel for later y-axis adjustment.
         all_m_max_amplitudes = []
         
@@ -344,7 +356,7 @@ class EMGSessionPlotter(EMGPlotter):
             stimulus_voltages = []
 
             # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in self.emg_object.recordings_processed:
+            for recording in emg_recordings:
                 channel_data = recording['channel_data'][channel_index]
                 stimulus_v = recording['stimulus_v']
                              
@@ -361,8 +373,7 @@ class EMGSessionPlotter(EMGPlotter):
             stimulus_voltages = np.array(stimulus_voltages)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
-            m_max, mmax_low_stim, _ = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, mmax_report=mmax_report, return_mmax_stim_range=True, **self.emg_object.m_max_args)
-            # print(f'M-max for channel {channel_index}: {m_max:.2f}mV; between {mmax_low_stim:.2f}V and {mmax_high_stim:.2f}V')
+            m_max, mmax_low_stim, _ = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, return_mmax_stim_range=True, **self.emg_object.m_max_args)
             
             # Filter out M-wave amplitudes below the M-max stimulus threshold.
             mask = (stimulus_voltages >= mmax_low_stim)
@@ -495,12 +506,7 @@ class EMGSessionPlotter(EMGPlotter):
                 fig.supylabel(f'Reflex Ampl. (M-max, {method})')
         
         # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.display_plot(canvas)
 
     def plot_m_curves_smoothened (self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
@@ -586,12 +592,7 @@ class EMGSessionPlotter(EMGPlotter):
                 fig.supylabel(f'Reflex Ampl. (M-max, {method})')
         
         # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.display_plot(canvas)
 
 class EMGDatasetPlotter(EMGPlotter):
     """
@@ -755,12 +756,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 fig.supylabel(f'Reflex Ampl. (M-max, {method})')
 
         # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.display_plot(canvas)
 
     def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
@@ -905,12 +901,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 fig.supylabel(f'EMG Amp. (M-max, {method})')
 
         # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.display_plot(canvas)
 
     # def plot_mmax(self, channel_names=[], method='rms'):
     #     """
@@ -980,7 +971,7 @@ class EMGDatasetPlotter(EMGPlotter):
 
     #         # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
     #         m_wave_means = np.array(m_wave_means)
-    #         m_max, mmax_low_stim, _ = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_means, mmax_report=mmax_report **self.dataset.m_max_args, return_mmax_stim_range=True)
+    #         m_max, mmax_low_stim, _ = EMG_Transformer.get_avg_mmax(stimulus_voltages, m_wave_means, **self.dataset.m_max_args, return_mmax_stim_range=True)
             
     #         # Filter out M-wave amplitudes below the M-max stimulus threshold.
     #         mask = (stimulus_voltages >= mmax_low_stim)
