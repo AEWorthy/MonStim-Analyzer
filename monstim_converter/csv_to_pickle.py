@@ -8,9 +8,11 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PyQt6.QtCore import QThread, pyqtSignal
 
+MAX_NUM_CHANNELS = 6
+
 def read_csv(file_path):
     """Helper function to read a CSV file using pandas with optimized settings."""
-    return pd.read_csv(file_path, header=None, engine='c', low_memory=False, memory_map=True)
+    return pd.read_csv(file_path, header=None, names=range(MAX_NUM_CHANNELS), engine='c', low_memory=False, memory_map=True)
 
 def extract_session_info_and_data(file_path):
     df = read_csv(file_path)
@@ -19,8 +21,9 @@ def extract_session_info_and_data(file_path):
         raise ValueError(f"The CSV file at {file_path} is empty.")
 
     # Extract metadata
-    metadata = df.iloc[:df.isnull().any(axis=1).idxmax()].set_index(0)[1].to_dict()
-    data_start_index = df.isnull().any(axis=1).idxmax() + 1
+    data_start_marker = df[df.iloc[:, 0] == "Recorded Data (mV)"].index[0] # Find the index of the row containing "Recorded Data (mV)"
+    metadata = df.iloc[:data_start_marker].set_index(0)[1].to_dict() # Select all rows above the "Recorded Data (mV)" row as metadata
+    data_start_index = data_start_marker + 1 # The data start index is the row right after "Recorded Data (mV)"
 
     try:
         session_info = {
@@ -151,23 +154,26 @@ def pickle_data(data_path, output_path, progress_callback=print, is_canceled_cal
 
     print('Processing complete.')
 
-class GUIDataProcessingThread(QThread):
+class GUIExptImportingThread(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal()
     error = pyqtSignal(Exception)
     canceled = pyqtSignal()
 
-    def __init__(self, csv_path, output_path, max_workers=None):
+    def __init__(self, expt_name, expt_path, output_path, max_workers=None):
         super().__init__()
-        self.csv_path = csv_path
-        self.output_path = output_path
+        self.expt_path = expt_path
+        self.output_path = os.path.join(output_path, expt_name)
+        if not os.path.isdir(self.output_path):
+            os.makedirs(self.output_path)
+        
         self.max_workers = max_workers
         self._is_canceled = False
         self._is_finished = False
 
     def run(self):
         try:
-            pickle_data(self.csv_path, self.output_path, self.report_progress, self.is_canceled, self.max_workers)
+            pickle_data(self.expt_path, self.output_path, self.report_progress, self.is_canceled, self.max_workers)
             if not self._is_canceled:
                 self.finished.emit()
                 self._is_finished = True

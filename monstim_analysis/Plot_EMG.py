@@ -210,18 +210,22 @@ class EMGSessionPlotter(EMGPlotter):
         #         if window.should_plot:
         #             window.plot(ax=ax, channel_index=channel_index)
 
-    def set_fig_labels_and_legends(self, fig, sup_title : str, x_title : str, y_title: str, plot_legend : bool, legend_elements : list):
+    def set_fig_labels_and_legends(self, fig, sup_title : str, x_title : str, y_title: str, plot_legend : bool, legend_elements : list = None):
         fig.suptitle(sup_title)
         if self.emg_object.num_channels == 1:
             fig.gca().set_xlabel(x_title)
             fig.gca().set_ylabel(y_title)
             if plot_legend and legend_elements:
                 fig.gca().legend(handles=legend_elements, loc='best')
+            elif plot_legend:
+                fig.plot_legend()
         else:
             fig.supxlabel(x_title)
             fig.supylabel(y_title)
             if plot_legend and legend_elements:
                 fig.legend(handles=legend_elements, loc='upper right')
+            elif plot_legend:
+                fig.plot_legend()
 
     # EMGSession plotting functions
     def plot_emg(self, all_flags : bool = True, plot_legend : bool = True, data_type : str = 'filtered', canvas: FigureCanvas = None):
@@ -306,7 +310,8 @@ class EMGSessionPlotter(EMGPlotter):
                                                                              method=method)
                 if latency_window_oi_amplitude > emg_threshold_v:  # Check EMG amplitude within H-reflex window
                     self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
-                    self.plot_latency_windows(current_ax, all_flags=False, channel_index=channel_index)
+                    if plot_latency_windows:
+                        self.plot_latency_windows(current_ax, all_flags=False, channel_index=channel_index)
                     if plot_legend:
                         current_ax.legend()
 
@@ -1021,6 +1026,20 @@ class EMGDatasetPlotter(EMGPlotter):
 
     #     # Show the plot
     #     plt.show()
+
+class EMGExperimentPlotter(EMGPlotter):
+    def __init__(self, experiment):
+        self.emg_object : 'EMGExperiment' = None # The EMGExperiment object to be imported.
+
+        super().__init__(experiment)
+
+        from monstim_analysis.Analyze_EMG import EMGExperiment
+        if isinstance(experiment, EMGExperiment):
+            self.emg_object = experiment # Type: EMGExperiment
+        else:
+            raise UnableToPlotError("Invalid data type for EMGExperimentPlotter. Please provide an EMGExperiment object.")
+        
+        self.set_plot_defaults()
 
 class UnableToPlotError(Exception):
     def __init__(self, message):

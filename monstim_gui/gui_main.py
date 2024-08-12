@@ -9,8 +9,8 @@ from PyQt6.QtGui import QPixmap, QFont, QIcon
 from PyQt6.QtCore import Qt
 import markdown
 
-from monstim_analysis import EMGData, EMGDataset#, EMGSession
-from monstim_converter import GUIDataProcessingThread
+from monstim_analysis import EMGData, EMGDataset, EMGExperiment
+from monstim_converter import GUIExptImportingThread
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path)
 
@@ -77,8 +77,10 @@ class EMGAnalysisGUI(QMainWindow):
         self.setGeometry(100, 100, 1000, 600)
     
         # Initialize variables
-        self.dataset_dict = {}
-        self.datasets = []
+        self.expts_dict = {} 
+        self.experiments = [] # Type: List[str]
+        self.datasets = [] # Type: List[str]
+        self.current_experiment = None # Type: EMGExperiment
         self.current_dataset = None # Type: EMGDataset
         self.current_session = None # Type: EMGSession
         self.channel_names = []
@@ -86,15 +88,15 @@ class EMGAnalysisGUI(QMainWindow):
                                "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves"}
         
         # Set default paths
-        self.csv_path = get_data_path()
         self.output_path = get_output_path()
         self.config_file = get_config_path()
 
         self.init_ui()
 
-        # Load existing pickled datasets if available
-        self.load_existing_datasets()
+        # Load existing pickled experiments if available
+        self.load_existing_experiments()
         self.data_selection_widget.update_ui()
+        self.current_experiment = self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
 
         self.command_invoker = CommandInvoker()
     
@@ -140,10 +142,11 @@ class EMGAnalysisGUI(QMainWindow):
         command = RemoveSessionCommand(self)
         self.command_invoker.execute(command)
 
-    def load_existing_datasets(self):
-        logging.debug("Loading existing datasets.")
+    def load_existing_experiments(self):
+        logging.debug("Loading existing experiments.")
         if os.path.exists(self.output_path):
-            self.dataset_dict, self.datasets = EMGData.unpackPickleOutput(self.output_path)
+            self.expts_dict = EMGData.unpackPickleOutput(self.output_path)
+            self.experiments = list(self.expts_dict.keys())
     
     # Menu bar functions
     def update_reflex_settings(self):
@@ -156,55 +159,58 @@ class EMGAnalysisGUI(QMainWindow):
         else:
             QMessageBox.warning(self, "Warning", "Please select a session first.")
 
-    def import_csv_data(self):
-        logging.debug("Importing new data from CSV files.")
-        self.csv_path = QFileDialog.getExistingDirectory(self, "Select CSV Directory", self.csv_path)
-        if self.csv_path:
-            # self.output_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
-            if self.output_path:
-                progress_dialog = QProgressDialog("Processing data...", "Cancel", 0, 100, self)
-                progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-                progress_dialog.setAutoClose(False)
-                progress_dialog.setAutoReset(False)
-                progress_dialog.show()
+    def import_expt_data(self):
+        logging.debug("Importing new experiment data from CSV files.")
+        expt_path = QFileDialog.getExistingDirectory(self, "Select Experiment Directory", get_data_path())
+        
+        #extract the experiment name from the selected directory name
+        expt_name = os.path.splitext(os.path.basename(expt_path))[0]
+        
+        if expt_path:
+            progress_dialog = QProgressDialog("Processing data...", "Cancel", 0, 100, self)
+            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dialog.setAutoClose(False)
+            progress_dialog.setAutoReset(False)
+            progress_dialog.show()
 
-                max_workers = max(1, multiprocessing.cpu_count() - 1)
+            max_workers = max(1, multiprocessing.cpu_count() - 1)
 
-                self.thread = GUIDataProcessingThread(self.csv_path, self.output_path, max_workers=max_workers)
-                self.thread.progress.connect(progress_dialog.setValue)
-                
-                self.thread.finished.connect(progress_dialog.close)
-                self.thread.finished.connect(lambda: QMessageBox.information(self, "Success", "Data processed and imported successfully."))
-                self.thread.finished.connect(lambda: logging.info("Data processed and imported successfully."))
-                self.thread.finished.connect(self.refresh_existing_datasets)
-                
-                self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
-                self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
-                self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
-                
-                self.thread.canceled.connect(progress_dialog.close)
-                self.thread.canceled.connect(lambda: QMessageBox.information(self, "Canceled", "Data processing was canceled."))
-                self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
-                self.thread.canceled.connect(self.refresh_existing_datasets)
-                
-                self.thread.start()
+            self.thread = GUIExptImportingThread(expt_name, expt_path, self.output_path, max_workers=max_workers)
+            self.thread.progress.connect(progress_dialog.setValue)
+            
+            self.thread.finished.connect(progress_dialog.close)
+            self.thread.finished.connect(self.refresh_existing_experiments)
+            self.thread.finished.connect(lambda: QMessageBox.information(self, "Success", "Data processed and imported successfully."))
+            self.thread.finished.connect(lambda: logging.info("Data processed and imported successfully."))
+            
+            self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
+            self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
+            self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
+            
+            self.thread.canceled.connect(progress_dialog.close)
+            self.thread.canceled.connect(lambda: QMessageBox.information(self, "Canceled", "Data processing was canceled."))
+            self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
+            self.thread.canceled.connect(self.refresh_existing_experiments)
+            
+            self.thread.start()
 
-                progress_dialog.canceled.connect(self.thread.cancel)
-            else:
-                QMessageBox.warning(self, "Warning", "You must select an output directory.")
+            progress_dialog.canceled.connect(self.thread.cancel)
         else:
             QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
-    
-    def refresh_existing_datasets(self):
-        logging.debug("Refreshing existing datasets.")
-        self.load_existing_datasets()
+        
+    def refresh_existing_experiments(self):
+        logging.debug("Refreshing existing experiments.")
+        self.load_existing_experiments()
         self.data_selection_widget.update_ui()
+        self.current_experiment = self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
 
     def show_preferences_window(self):
         logging.debug("Showing preferences window.")
         window = PreferencesDialog(self.config_file, parent=self)
         if window.exec() == QDialog.DialogCode.Accepted:
             # Apply preferences to data
+            if self.current_experiment:
+                self.current_experiment.apply_preferences()
             if self.current_dataset:
                 self.current_dataset.apply_preferences()
             QMessageBox.information(self, "Success", "Preferences applied successfully.")
@@ -215,7 +221,7 @@ class EMGAnalysisGUI(QMainWindow):
         # Check if a dataset and session are selected
         logging.debug("Changing channel names.")
         if not self.channel_names:
-            QMessageBox.warning(self, "Warning", "Please load a dataset and session first.")
+            QMessageBox.warning(self, "Warning", "Please load a dataset first.")
             return
 
         # Open dialog to change channel names
@@ -229,7 +235,7 @@ class EMGAnalysisGUI(QMainWindow):
                     self.current_dataset.save_dataset()
 
                 # Update the channel_names list
-                self.channel_names = list(new_names.values())
+                self.channel_names = self.current_dataset.channel_names
                 
                 QMessageBox.information(self, "Success", "Channel names updated successfully.")
                 logging.debug("Channel names updated successfully.")
@@ -266,6 +272,25 @@ class EMGAnalysisGUI(QMainWindow):
             self.help_window.show()
 
     # Data selection widget functions
+    def load_experiment(self, index):
+        if index >= 0:
+            experiment_name = self.experiments[index]
+            save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}.pickle"))
+            logging.debug(f"Loading experiment: '{experiment_name}'.")
+            
+            # Load existing experiment if available
+            if os.path.exists(save_path):
+                self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
+                logging.debug(f"Experiment '{experiment_name}' loaded successfully from '{save_path}'.")
+            else:
+                self.current_experiment = EMGExperiment(experiment_name, self.expts_dict) # Type: EMGExperiment
+                logging.debug(f"Experiment '{experiment_name}' created successfully to '{save_path}'.")
+
+            # Update current expt/dataset/session
+            _, self.datasets = self.expts_dict[experiment_name]
+            self.data_selection_widget.update_dataset_combo()
+            self.load_dataset(self.data_selection_widget.dataset_combo.currentIndex()) # Type: EMGDataset
+
     def load_dataset(self, index):
         if index >= 0:
             dataset_name = self.datasets[index]
@@ -278,19 +303,17 @@ class EMGAnalysisGUI(QMainWindow):
                 self.current_dataset = EMGDataset.load_dataset(save_path) # Type: EMGDataset
                 logging.debug(f"Dataset '{dataset_name}' loaded successfully from '{save_path}'.")
             else:
-                self.current_dataset = EMGDataset(self.dataset_dict[dataset_name], date, animal_id, condition) # Type: EMGDataset
+                self.current_dataset = EMGDataset(self.current_experiment.dataset_dict[dataset_name], date, animal_id, condition) # Type: EMGDataset
                 logging.debug(f"Dataset '{dataset_name}' created successfully to '{save_path}'.")         
-            # Update channel names
+
+            # Update current dataset/session and channel names
             self.channel_names = self.current_dataset.channel_names
-            self.current_dataset.apply_preferences()
             self.data_selection_widget.update_session_combo()
+            self.load_session(self.data_selection_widget.session_combo.currentIndex()) # Type: EMGSession
 
     def load_session(self, index):
         if self.current_dataset and index >= 0:
             self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
-            
-            # Update channel names
-            self.channel_names = self.current_session.channel_names
 
     def reload_dataset(self):
         self.current_dataset.reload_dataset_sessions()

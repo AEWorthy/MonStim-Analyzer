@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLin
 import numpy as np
 from matplotlib.lines import Line2D
 
-from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter
+from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 import monstim_analysis.Transform_EMG as Transform_EMG
 from monstim_utils import load_config, get_output_bin_path
 
@@ -108,23 +108,26 @@ class EMGData:
         Args:
             output_path (str): location of the output folder containing dataset directories/Pickle files.
         """
-        dataset_pickles_dict = {} #k=datasets, v=pickle_filepath(s)
+        expt_pickles_dict = {} #k=experiment_name, v=(dataset_pickles_dict, dataset_names)
 
-        # get everything except if the folder is named bin
-        contents = [file for file in os.listdir(output_path) if file != 'bin']
+        # get every experiment folder. Ignores a folder if the folder is named 'bin'
+        expts = [file for file in os.listdir(output_path) if file != 'bin']
 
-        for dataset in contents:
-            if os.path.isdir(os.path.join(output_path, dataset)):
-                pickles = os.listdir(os.path.join(output_path, dataset))
-                pickle_paths = [os.path.join(output_path, dataset, pickle).replace('\\', '/') for pickle in pickles]
-                dataset_pickles_dict[dataset] = pickle_paths
-            else: # if this is a single session instead...
-                split_parts = dataset.split('-') # Split the string at the hyphens
-                session_name = '-'.join(split_parts[:-1]) # Select the portion before the last hyphen to drop the "-SessionData.pickle" portion.
-                dataset_pickles_dict[session_name] = os.path.join(output_path, dataset).replace('\\', '/')
-        # Get dict keys
-        dataset_dict_keys = list(dataset_pickles_dict.keys())
-        return dataset_pickles_dict, dataset_dict_keys
+        for expt in expts:
+            dataset_pickles_dict = {} #k=dataset_name, v=pickle_filepath(s)
+            for dataset in os.listdir(os.path.join(output_path, expt)):
+                if os.path.isdir(os.path.join(output_path, expt, dataset)):
+                    pickles = os.listdir(os.path.join(output_path, expt, dataset))
+                    pickle_paths = [os.path.join(output_path, expt, dataset, pickle).replace('\\', '/') for pickle in pickles]
+                    dataset_pickles_dict[dataset] = pickle_paths
+                else: # if this is a single session instead...
+                    split_parts = dataset.split('-') # Split the string at the hyphens
+                    session_name = '-'.join(split_parts[:-1]) # Select the portion before the last hyphen to drop the "-SessionData.pickle" portion.
+                    dataset_pickles_dict[session_name] = os.path.join(output_path, expt, dataset).replace('\\', '/')
+            # Add the dataset data to the experiment dictionary.
+            dataset_names = list(dataset_pickles_dict.keys())
+            expt_pickles_dict[expt] = (dataset_pickles_dict, dataset_names)
+        return expt_pickles_dict
 
 # Three main classes for EMG analysis. Children of the EMGData class.
 class EMGSession(EMGData):
@@ -560,14 +563,14 @@ class EMGDataset(EMGData):
         self._m_max = None
 
         if os.path.exists(self.save_path) and not temp:
-            raise FileExistsError(f"Dataset already exists at {self.save_path}.")
+            raise FileExistsError(self.save_path)
         else:
             logging.info(f"Creating new dataset: {self.date} {self.animal_id} {self.condition}.")
             super().__init__()
             self.plotter = EMGDatasetPlotter(self)    
             
             # Unpack the EMG sessions and exclude any sessions if needed.
-            if isinstance(emg_sessions, str):
+            if isinstance(emg_sessions, str) or isinstance(emg_sessions, EMGSession):
                 emg_sessions = [emg_sessions]
             self.original_emg_sessions = emg_sessions
             self.emg_sessions: List[EMGSession] = []
@@ -871,7 +874,7 @@ class EMGDataset(EMGData):
             return None, None, None
 
     @classmethod
-    def dataset_from_dataset_dict(cls, dataset_dict: dict, datasets: List[str], dataset_idx: int, emg_sessions_to_exclude: List[str] = [], temp=True) -> 'EMGDataset':
+    def dataset_from_dataset_dict(cls, dataset_dict: dict, dataset_idx: int, emg_sessions_to_exclude: List[str] = [], temp=True) -> 'EMGDataset':
         """
         Instantiates an EMGDataset from a dataset dictionary for downstream analysis.
 
@@ -885,11 +888,17 @@ class EMGDataset(EMGData):
         Returns:
             EMGDataset: The session of interest for downstream analysis.
         """
-        date, animal_id, condition = cls.getDatasetInfo(datasets[dataset_idx])
-        # Future: Add a check to see if the dataset is already saved as a pickle file. If it is, load the pickle file instead of re-creating the dataset.
-        dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
-        dataset_oi.apply_preferences()
-        return dataset_oi
+        try: 
+            datasets = list(dataset_dict.keys())
+            date, animal_id, condition = cls.getDatasetInfo(datasets[dataset_idx])
+            # Future: Add a check to see if the dataset is already saved as a pickle file. If it is, load the pickle file instead of re-creating the dataset.
+            dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
+            dataset_oi.apply_preferences()
+            return dataset_oi
+        except FileExistsError as e:
+            save_path = str(e)
+            dataset_oi = EMGDataset.load_dataset(save_path)
+            return dataset_oi
 
     # Private methods for the EMGDataset class.
     def __unpackEMGSessions(self, emg_sessions):
@@ -914,7 +923,6 @@ class EMGDataset(EMGData):
                 pickled_sessions.append(session)
             elif isinstance(session, EMGSession):
                 pickled_sessions.append(session)
-                print(session)
             else:
                 raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
             
@@ -944,12 +952,170 @@ class EMGDataset(EMGData):
 
         return True, "All sessions have consistent parameters"
 
-
-
 class EMGExperiment(EMGData):
-    def __init__(self, emg_datasets, emg_dataset_settings, emg_sessions_to_exclude=[]):
-            super.__init__()
-            pass
+    def __init__(self, expt_name, expts_dict: List[str] = [], save_path: str = None, temp: bool = False):
+            self.dataset_dict, self.dataset_names = expts_dict[expt_name]
+            self.expt_name = expt_name
+
+            # Create a list of EMGDataset instances from the dataset dictionary.
+            emg_datasets = [EMGDataset.dataset_from_dataset_dict(self.dataset_dict, i, temp=temp) for i in range(len(self.dataset_names))] # Type: List[EMGDataset]
+            self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.expt_name}.pickle")) if save_path is None else save_path
+
+            if os.path.exists(self.save_path) and not temp:
+                raise FileExistsError(f"Experiment already exists at {self.save_path}.")
+            else:
+                logging.info(f"Creating new experiment: {self.expt_name}.")
+                super().__init__()
+                self.plotter = EMGExperimentPlotter(self)    
+                
+                # Unpack the EMG datasets and exclude any datasets if needed.
+                if isinstance(emg_datasets, str) or isinstance(emg_datasets, EMGDataset):
+                    emg_datasets = [emg_datasets]
+                self.original_emg_datasets = emg_datasets
+                self.emg_datasets: List[EMGDataset] = []
+                logging.info(f"Unpacking EMG sessions: {emg_datasets}")
+                self.emg_datasets = self.__unpackEMGDatasets(emg_datasets) # Convert file location strings into a list of EMGDataset instances.
+
+                # Check that all sessions have the same parameters and set dataset parameters.
+                consistent, message = True, ''
+                # consistent, message = self.__check_dataset_consistency()
+                if not consistent:
+                    print(f"Error: {message}")
+                else:
+                    # self.scan_rate : int = self.emg_datasets[0].scan_rate
+                    # self.num_channels : int = self.emg_datasets[0].num_channels
+                    # self.stim_start : float = self.emg_datasets[0].stim_start
+                    # self.channel_names : List[str] = self.emg_datasets[0].channel_names # not checked for consistency, but should be the same for all sessions.
+                    self.latency_windows : List[LatencyWindow] = self.emg_datasets[0].latency_windows.copy()
+                    if not temp:
+                        self.save_experiment(self.save_path)
+
+    def apply_preferences(self):
+        """
+        Applies the preferences set in the config file to the dataset.
+        """
+        config = load_config()
+        # Apply the preferences to the dataset.
+        self.bin_size = config['bin_size']
+        self.time_window_ms = config['time_window']
+        self.butter_filter_args = config['butter_filter_args']
+        self.default_method = config['default_method']
+        self.m_max_args = config['m_max_args']
+        self.default_channel_names = config['default_channel_names']
+
+        self.latency_window_style = config['latency_window_style']
+        self.m_color = config['m_color']
+        self.h_color = config['h_color']
+        self.title_font_size = config['title_font_size']
+        self.axis_label_font_size = config['axis_label_font_size']
+        self.tick_font_size = config['tick_font_size']
+        self.subplot_adjust_args = config['subplot_adjust_args']
+
+        # Apply preferences to the session objects.
+        for dataset in self.emg_datasets:
+            dataset.apply_preferences()
+
+        # Re-create the plotter object with the new preferences.
+        self.plotter = EMGExperimentPlotter(self)
+        for latency_window in self.latency_windows:
+            latency_window.linestyle = config['latency_window_style']
+
+    def save_experiment(self, save_path=None):
+        """
+        Save the curated dataset object to disk.
+
+        Args:
+            save_path (str): The filename/save path to use for saving the dataset object.
+        """
+        if save_path is None:
+            save_path = self.save_path
+            
+        with open(save_path, 'wb') as file:
+            pickle.dump(self, file)
+    
+    @staticmethod
+    def load_experiment(save_path):
+        """
+        Load a previously saved experiment object from disk.
+
+        Args:
+            save_path (str): The filename/save path of the saved experiment object.
+
+        Returns:
+            EMGExperiment: The loaded experiment object.
+        """
+        with open(save_path, 'rb') as file:
+            experiment = pickle.load(file) # type: EMGExperiment
+            experiment.apply_preferences()
+            return experiment
+    
+    @staticmethod
+    def getExperimentInfo(experiment_name : str) -> tuple:
+        pass
+
+    @classmethod
+    def experiment_from_experiment_dict(cls, experiment_dict: dict, experiment_idx: int, emg_datasets_to_exclude: List[str] = [], temp=True) -> 'EMGExperiment':
+        """
+        Instantiates an EMGExperiment from an experiment dictionary for downstream analysis.
+
+        Args:
+            experiment_dict (dict): A dictionary containing experiment information (keys = experiment names, values = experiment filepaths).
+            experiment_idx (int): The index of the experiment to be used.
+            emg_datasets_to_exclude (list, optional): A list of EMG datasets to exclude. Defaults to an empty list.
+            temp (bool, optional): Whether to create a temporary experiment object or save to the bin folder. Defaults to True.
+
+        Returns:
+            EMGExperiment: The experiment of interest for downstream analysis.
+        """
+        experiments = list(experiment_dict.keys())
+        expt_oi = EMGExperiment(experiment_dict[experiments[experiment_idx]], emg_datasets_to_exclude=emg_datasets_to_exclude, temp=temp)
+        expt_oi.apply_preferences()
+        return expt_oi
+
+    def __unpackEMGDatasets(self, emg_datasets):
+        """
+        Unpacks a list of EMG dataset Pickle files and outputs a list of EMGDataset instances for those pickles.
+        If a list of EMGDataset instances is passed, will return that same list.
+
+        Args:
+            emg_datasets (list): a list of instances of the class EMGDataset, or a list of Pickle file locations that you want to use for the dataset.
+
+        Returns:
+            list: a list of EMGDataset instances.
+
+        Raises:
+            TypeError: if an object in the 'emg_datasets' list was not properly converted to an EMGDataset.
+        """
+        # Check if list dtype is EMGDataset. If it is, convert it to a new EMGDataset instance and replace the string in the list.
+        pickled_datasets = []
+        for dataset in emg_datasets:
+            if isinstance(dataset, str): # If list object is dtype(string), then convert to an EMGDataset.
+                dataset = EMGDataset(dataset) # replace the string with an actual dataset object.
+                pickled_datasets.append(dataset)
+            elif isinstance(dataset, EMGDataset):
+                pickled_datasets.append(dataset)
+            else:
+                raise TypeError(f"An object in the 'emg_datasets' list was not properly converted to an EMGDataset. Object: {dataset}, {type(dataset)}")
+            
+            pickled_datasets = sorted(pickled_datasets, key=lambda x: x.save_path)
+        
+        return pickled_datasets
+
+    def __check_dataset_consistency(self):
+        """
+        Checks if all datasets in the experiment have the same parameters (scan rate, num_channels, stim_start).
+
+        Returns:
+            tuple: A tuple containing a boolean value indicating whether all datasets have consistent parameters and a message indicating the result.
+        """
+        reference_dataset = self.emg_datasets[0]
+        reference_num_channels = reference_dataset.num_channels
+
+        for dataset in self.emg_datasets[1:]:
+            if dataset.num_channels != reference_num_channels:
+                return False, f"Inconsistent num_channels for {dataset.name}: {dataset.num_channels} != {reference_num_channels}."
+
+        return True, "All datasets have consistent parameters"
 
 
 if __name__ == '__main__':
@@ -968,7 +1134,7 @@ if __name__ == '__main__':
     # Define dataset of interest for downstream analysis.
     sessions_to_exclude = [] # Add any sessions to exclude from the dataset here.
     dataset_idx = int(input('Dataset of Interest (index):')) # pick the dataset index of interest from the generate list above.
-    dataset_oi = EMGDataset.dataset_from_dataset_dict(dataset_dict, datasets, dataset_idx, sessions_to_exclude)
+    dataset_oi = EMGDataset.dataset_from_dataset_dict(dataset_dict, dataset_idx, sessions_to_exclude)
     
     # Display dataset parameters.
     dataset_oi.dataset_parameters()

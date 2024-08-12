@@ -17,8 +17,8 @@ class MenuBar(QMenuBar):
             # File menu
             file_menu = self.addMenu("File")
             
-            import_action = file_menu.addAction("Import CSV Data")
-            import_action.triggered.connect(self.parent.import_csv_data)
+            import_action = file_menu.addAction("Import an Experiment")
+            import_action.triggered.connect(self.parent.import_expt_data)
 
             # save_action = file_menu.addAction("Save Data")
             # save_action.triggered.connect(self.parent.save_data)
@@ -28,7 +28,7 @@ class MenuBar(QMenuBar):
 
             # refresh existing datasets button
             refresh_datasets_action = file_menu.addAction("Refresh Datasets/Sessions Lists")
-            refresh_datasets_action.triggered.connect(self.parent.refresh_existing_datasets)
+            refresh_datasets_action.triggered.connect(self.parent.refresh_existing_experiments)
             refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
 
             # Preferences button

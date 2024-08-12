@@ -11,11 +11,21 @@ class DataSelectionWidget(QGroupBox):
         self.parent = parent # type: EMGAnalysisGUI
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
+        self.create_experiment_selection()
         self.create_dataset_selection()
         self.create_session_selection()
         self.setLayout(self.layout)
         self.create_dataset_options()
         self.update_ui()
+
+    def create_experiment_selection(self):
+        experiment_layout = QHBoxLayout()
+        self.experiment_label = QLabel("Select Experiment:")
+        self.experiment_combo = QComboBox()
+        self.experiment_combo.currentIndexChanged.connect(self.parent.load_experiment)
+        experiment_layout.addWidget(self.experiment_label)
+        experiment_layout.addWidget(self.experiment_combo)
+        self.layout.addLayout(experiment_layout)
 
     def create_dataset_selection(self):
         dataset_layout = QHBoxLayout()
@@ -35,6 +45,14 @@ class DataSelectionWidget(QGroupBox):
         session_layout.addWidget(self.session_combo)
         self.layout.addLayout(session_layout)
     
+    def update_experiment_combo(self):
+        self.experiment_combo.clear()
+        if self.parent.experiments:
+            for experiment in self.parent.experiments:
+                self.experiment_combo.addItem(experiment)
+                index = self.experiment_combo.count() - 1
+                self.experiment_combo.setItemData(index, experiment, role=Qt.ItemDataRole.ToolTipRole)
+
     def update_dataset_combo(self):
         self.dataset_combo.clear()
         if self.parent.datasets:
@@ -52,6 +70,7 @@ class DataSelectionWidget(QGroupBox):
                 self.session_combo.setItemData(index, session.session_id, role=Qt.ItemDataRole.ToolTipRole)
 
     def update_ui(self):
+        self.update_experiment_combo()
         self.update_dataset_combo()
         self.update_session_combo()
     

@@ -31,16 +31,16 @@ def exception_hook(exc_type, exc_value, exc_traceback):
     logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
-def main() -> int:
+def main(sys_frozen = True) -> int:
     logging.debug("Starting main function")
     try:
         multiprocessing.freeze_support()
 
         app = QApplication(sys.argv)
-        
-        # Display splash screen
-        splash = SplashScreen()
-        splash.show()
+        if sys_frozen:
+            # Display splash screen
+            splash = SplashScreen()
+            splash.show()
 
         gui = EMGAnalysisGUI()
         gui.show()
@@ -56,17 +56,22 @@ def main() -> int:
 
 if __name__ == '__main__':
     args = parse_arguments()
+    sys_frozen = False
     if getattr(sys, 'frozen', False):
         # If running as a frozen executable, log to file
+        sys_frozen = True
         setup_logging(args.debug)
     else:
         # If running in an IDE, log to console
         logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+        if args.debug:
+            logging.debug("Debug mode enabled")
+        sys_frozen = False
         
     
     sys.excepthook = exception_hook
     logging.debug("Script running as main")
-    sys.exit(main())
+    sys.exit(main(sys_frozen=sys_frozen))
 
 # To create an executable:
 # pyinstaller EMGAnalysis.spec
