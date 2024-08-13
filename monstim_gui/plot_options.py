@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox
 from .custom_gui_elements import FloatLineEdit
+from .plotting_cycler import RecordingCyclerWidget
 
 # Things to do:
 # - change flag system to a more general system of latency windows.
@@ -77,6 +78,65 @@ class EMGOptions(BasePlotOptions):
             self.all_windows_checkbox.setChecked(options["all_flags"])
         if "plot_legend" in options:
             self.latency_legend_checkbox.setChecked(options["plot_legend"])
+
+class SingleEMGRecordingOptions(BasePlotOptions):
+    def create_options(self):
+        ## Data type options box
+        data_type_layout = QHBoxLayout()
+        self.data_type_label = QLabel("Select EMG Data Type:")
+        self.data_type_combo = QComboBox()
+        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
+        data_type_layout.addWidget(self.data_type_label)
+        data_type_layout.addWidget(self.data_type_combo)
+        self.layout.addLayout(data_type_layout)
+
+        ## Latency Window options
+        latency_windows_layout = QVBoxLayout()
+
+        # First row
+        first_row_layout = QHBoxLayout()
+        self.all_windows_label = QLabel("Show All Latency Windows:")
+        self.all_windows_checkbox = QCheckBox()
+        self.all_windows_checkbox.setChecked(True)
+        first_row_layout.addWidget(self.all_windows_label)
+        first_row_layout.addWidget(self.all_windows_checkbox)
+        latency_windows_layout.addLayout(first_row_layout)
+
+        # Second row
+        second_row_layout = QHBoxLayout()
+        self.latency_legend_label = QLabel("Show Latency Window Legend:")
+        self.latency_legend_checkbox = QCheckBox()
+        self.latency_legend_checkbox.setChecked(True)  # Set the initial state to True
+        second_row_layout.addWidget(self.latency_legend_label)
+        second_row_layout.addWidget(self.latency_legend_checkbox)
+        latency_windows_layout.addLayout(second_row_layout)
+
+        # Add the latency_windows_layout to the main layout
+        self.layout.addLayout(latency_windows_layout)
+
+        # Recording Cycler
+        self.recording_cycler = RecordingCyclerWidget(self)
+        self.layout.addWidget(self.recording_cycler)
+    
+    def get_options(self):
+        return {
+            "data_type": self.data_type_combo.currentText(),
+            "all_flags": self.all_windows_checkbox.isChecked(),
+            "plot_legend": self.latency_legend_checkbox.isChecked(),
+            "recording_index": self.recording_cycler.get_current_recording()
+        }
+    
+    def set_options(self, options):
+        if "data_type" in options:
+            index = self.data_type_combo.findText(options["data_type"])
+            if index >= 0:
+                self.data_type_combo.setCurrentIndex(index)
+        if "all_flags" in options:
+            self.all_windows_checkbox.setChecked(options["all_flags"])
+        if "plot_legend" in options:
+            self.latency_legend_checkbox.setChecked(options["plot_legend"])
+        if "recording_index" in options:
+            self.recording_cycler.recording_spinbox.setValue(options["recording_index"])
 
 class SuspectedHReflexesOptions(BasePlotOptions):
     def create_options(self):

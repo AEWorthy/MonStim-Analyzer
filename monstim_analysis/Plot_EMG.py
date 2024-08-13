@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from typing import TYPE_CHECKING
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -37,7 +38,7 @@ class EMGPlotter:
         plt.rcParams.update({'xtick.labelsize': self.emg_object.tick_font_size, 'ytick.labelsize': self.emg_object.tick_font_size})
 
     def create_fig_and_axes(self, canvas: FigureCanvas = None, figsizes = 'large'):
-        fig, ax, axes = None, None, None
+        fig, ax, axes = None, None, None # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot, numpy.ndarray
         if figsizes == 'large':
             single_channel_size_tuple = (4, 2)
             multi_channel_size_tuple = (7, 2)
@@ -77,7 +78,7 @@ class EMGPlotter:
 
         return fig, ax, axes # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot, numpy.ndarray
     
-    def display_plot(self, canvas):
+    def display_plot(self, canvas : FigureCanvas):
         if canvas:
             canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
@@ -170,7 +171,7 @@ class EMGSessionPlotter(EMGPlotter):
         time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
         return time_axis, window_start_sample, window_end_sample
 
-    def get_emg_recordings(self, data_type):
+    def get_emg_recordings(self, data_type, original=False):
         """
         Get the EMG recordings based on the specified data type.
 
@@ -184,17 +185,32 @@ class EMGSessionPlotter(EMGPlotter):
         - ValueError: If the specified data type is not supported.
 
         """
-        if data_type == 'filtered':
-            return self.emg_object.recordings_processed
-        elif data_type == 'raw':
-            return self.emg_object.recordings_raw
-        elif data_type in ['rectified_raw', 'rectified_filtered']:
-            attribute_name = f'recordings_{data_type}'
-            if not hasattr(self.emg_object, attribute_name):
-                setattr(self.emg_object, attribute_name, self.emg_object._process_emg_data(apply_filter=(data_type == 'rectified_filtered'), rectify=True))
-            return getattr(self.emg_object, attribute_name)
+        if original:
+            original_recordings = self.emg_object._original_recordings.copy()
+            match data_type:
+                case 'filtered':
+                    return self.emg_object._process_emg_data(original_recordings, apply_filter=True, rectify=False)
+                case 'raw':
+                    return original_recordings
+                case 'rectified_raw':
+                    return self.emg_object._process_emg_data(original_recordings, apply_filter=False, rectify=True)
+                case 'rectified_filtered':
+                    return self.emg_object._process_emg_data(original_recordings, apply_filter=True, rectify=True)
+                case _:
+                    raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
+
         else:
-            raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
+            if data_type == 'filtered':
+                return self.emg_object.recordings_processed
+            elif data_type == 'raw':
+                return self.emg_object.recordings_raw
+            elif data_type in ['rectified_raw', 'rectified_filtered']:
+                attribute_name = f'recordings_{data_type}'
+                if not hasattr(self.emg_object, attribute_name):
+                    setattr(self.emg_object, attribute_name, self.emg_object._process_emg_data(apply_filter=(data_type == 'rectified_filtered'), rectify=True))
+                return getattr(self.emg_object, attribute_name)
+            else:
+                raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
 
     def plot_channel_data(self, ax, time_axis, channel_data, start, end, stimulus_v, channel_index):
         ax.plot(time_axis, channel_data[start:end], label=f"Stimulus Voltage: {stimulus_v}")
@@ -217,15 +233,11 @@ class EMGSessionPlotter(EMGPlotter):
             fig.gca().set_ylabel(y_title)
             if plot_legend and legend_elements:
                 fig.gca().legend(handles=legend_elements, loc='best')
-            elif plot_legend:
-                fig.plot_legend()
         else:
             fig.supxlabel(x_title)
             fig.supylabel(y_title)
             if plot_legend and legend_elements:
                 fig.legend(handles=legend_elements, loc='upper right')
-            elif plot_legend:
-                fig.plot_legend()
 
     # EMGSession plotting functions
     def plot_emg(self, all_flags : bool = True, plot_legend : bool = True, data_type : str = 'filtered', canvas: FigureCanvas = None):
@@ -253,13 +265,38 @@ class EMGSessionPlotter(EMGPlotter):
         legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings(data_type)
 
-        for recording in emg_recordings:
+        # Initialize a list to store structured raw data
+        raw_data_dict = {
+            'recording_index': [],
+            'channel_index': [],
+            'stimulus_V': [],
+            'time_point': [],
+            'amplitude_mV': []
+        }
+
+        for recording_idx, recording in enumerate(emg_recordings):
+            stimulus_v = recording['stimulus_v']
             for channel_index, channel_data in enumerate(recording['channel_data']):
                 current_ax = ax if self.emg_object.num_channels == 1 else axes[channel_index]
                 
-                self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
+                # Plot EMG data
+                self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, stimulus_v, channel_index)
                 self.plot_latency_windows(current_ax, all_flags, channel_index)
 
+                # Collect raw data with hierarchical index structure
+                num_points = len(time_axis)
+                raw_data_dict['recording_index'].extend([recording_idx] * num_points)
+                raw_data_dict['channel_index'].extend([channel_index] * num_points)
+                raw_data_dict['stimulus_V'].extend([stimulus_v] * num_points)
+                raw_data_dict['time_point'].extend(time_axis)
+
+                # Add each individual EMG value for the current channel
+                raw_data_dict['amplitude_mV'].extend(channel_data[window_start_sample:window_end_sample])
+        
+        # Sanity check to ensure all lists in the dictionary are of the same length
+        lengths = [len(lst) for lst in raw_data_dict.values()]
+        if len(set(lengths)) > 1:
+            raise ValueError(f"Inconsistent lengths found in raw_data_dict: {lengths}")
 
         # Set labels and title, and display plot
         if self.emg_object.num_channels == 1:
@@ -271,6 +308,76 @@ class EMGSessionPlotter(EMGPlotter):
 
         self.set_fig_labels_and_legends(fig, sup_title, x_title, y_title, plot_legend, legend_elements)
         self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['recording_index', 'channel_index', 'stimulus_V', 'time_point'], inplace=True)
+        return raw_data_df
+
+    def plot_singleEMG(self, recording_index: int = 0, all_flags : bool = True, plot_legend: bool = True, data_type: str = 'filtered', canvas: FigureCanvas = None):
+        """
+        Plots EMG data for a single recording.
+
+        Args:
+            recording_index (int): Index of the recording to plot. Default is 0.
+            plot_legend (bool): Flag to plot the legend. Default is True.
+            data_type (str): Type of EMG data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'. Default is 'filtered'.
+            canvas (FigureCanvas, optional): Canvas to draw on. If None, a new figure is created.
+
+        Returns:
+            None
+        """
+        if all_flags:
+            plot_latency_windows = True
+        else:
+            plot_latency_windows = False
+            
+        raw_data_dict = {
+            'channel_index': [],
+            'stimulus_V': [],
+            'time_point': [],
+            'amplitude_mV': []
+        }
+
+        time_axis, window_start_sample, window_end_sample = self.get_time_axis()
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+        legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
+        emg_recordings = self.get_emg_recordings(data_type, original=True)
+
+        if recording_index < 0 or recording_index >= len(emg_recordings):
+            raise ValueError(f"Invalid recording index. Must be between 0 and {len(emg_recordings) - 1}")
+
+        recording = emg_recordings[recording_index]
+
+        for channel_index, channel_data in enumerate(recording['channel_data']):
+            current_ax = ax if self.emg_object.num_channels == 1 else axes[channel_index]
+            
+            self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
+            self.plot_latency_windows(current_ax, all_flags, channel_index)
+
+            # Collect raw data with hierarchical index structure
+            num_points = len(time_axis)
+            raw_data_dict['channel_index'].extend([channel_index] * num_points)
+            raw_data_dict['stimulus_V'].extend([recording['stimulus_v']] * num_points)
+            raw_data_dict['time_point'].extend(time_axis)
+
+            # Add each individual EMG value for the current channel
+            raw_data_dict['amplitude_mV'].extend(channel_data[window_start_sample:window_end_sample])
+
+        if self.emg_object.num_channels == 1:
+            sup_title = f'EMG for Channel 0 (Recording {recording_index}, Stim. = {recording["stimulus_v"]}V)'
+        else:
+            sup_title = f'EMG for All Channels (Recording {recording_index}, Stim. = {recording["stimulus_v"]}V)'
+        x_title = 'Time (ms)'
+        y_title = 'EMG (mV)'
+
+        self.set_fig_labels_and_legends(fig, sup_title, x_title, y_title, plot_legend, legend_elements)
+        self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'stimulus_V', 'time_point'], inplace=True)
+        return raw_data_df
 
     def plot_emg_thresholded (self, latency_window_oi_name : str, emg_threshold_v : float = 0.3, method : str = None, all_flags : bool = False, plot_legend : bool = False, canvas : FigureCanvas = None):
         """
@@ -354,6 +461,12 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Create a superlist to store all M-wave amplitudes for each channel for later y-axis adjustment.
         all_m_max_amplitudes = []
+
+        raw_data_dict = {
+            'channel_index': [],
+            'm_threshold': [],
+            'm_max_amplitudes': [],
+        }
         
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
@@ -408,6 +521,12 @@ class EMGSessionPlotter(EMGPlotter):
                 axes[channel_index].set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
                 axes[channel_index].set_ylim(0, 1.1 * max(all_m_max_amplitudes))
 
+            # Get raw data
+            datapoints = len(m_max_amplitudes)
+            raw_data_dict['channel_index'].extend([channel_index]*datapoints)
+            raw_data_dict['m_threshold'].extend([mmax_low_stim]*datapoints)
+            raw_data_dict['m_max_amplitudes'].extend(m_max_amplitudes)
+
         # Set labels and title
         fig.suptitle('Average M-response values at M-max for each channel')
         if self.emg_object.num_channels == 1:
@@ -426,6 +545,11 @@ class EMGSessionPlotter(EMGPlotter):
             plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'm_threshold'], inplace=True)
+        return raw_data_df
+
     def plot_reflexCurves (self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
         Plots overlayed M-response and H-reflex curves for each recorded channel.
@@ -441,6 +565,13 @@ class EMGSessionPlotter(EMGPlotter):
         channel_names = self.emg_object.channel_names
 
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+
+        raw_data_dict = {
+            'channel_index': [],
+            'stimulus_V': [],
+            'm_wave_amplitudes': [],
+            'h_response_amplitudes': [],
+        }
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
@@ -478,7 +609,13 @@ class EMGSessionPlotter(EMGPlotter):
                     except Transform_EMG.NoCalculableMmaxError:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
                 m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
-                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]    
+                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+
+            # Append data to raw data dictionary - will be relative to M-max if specified.
+            raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
+            raw_data_dict['stimulus_V'].extend(stimulus_voltages)
+            raw_data_dict['m_wave_amplitudes'].extend(m_wave_amplitudes)
+            raw_data_dict['h_response_amplitudes'].extend(h_response_amplitudes)
 
             if self.emg_object.num_channels == 1:
                 ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
@@ -512,6 +649,11 @@ class EMGSessionPlotter(EMGPlotter):
         
         # Show the plot
         self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'stimulus_V'], inplace=True)
+        return raw_data_df
 
     def plot_m_curves_smoothened (self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """

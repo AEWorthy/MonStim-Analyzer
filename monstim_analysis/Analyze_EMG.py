@@ -213,10 +213,15 @@ class EMGSession(EMGData):
         self.emg_amp_gains : List[int] = [int(gain) for index, gain in enumerate(session_info['emg_amp_gains']) 
                                           if index < self.num_channels] # only include gains for the number of recorded channels.
         
-        # Access the raw EMG recordings. Sort by stimulus voltage.
+        # Access the raw EMG recordings. Sort by stimulus voltage and assign a unique recording ID to each recording.
         self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
+        for item in self.recordings_raw:
+            item['recording_id'] = self.recordings_raw.index(item)
+        self._original_recordings = copy.deepcopy(self.recordings_raw)
+        self.num_recordings = len(self.recordings_raw) # Number of recordings in the session, including excluded recordings.
+        self.excluded_recordings = set()
     
-    def _process_emg_data(self, apply_filter=False, rectify=False):
+    def _process_emg_data(self, recordings, apply_filter=False, rectify=False):
         """
         Process EMG data by applying a bandpass filter and/or rectifying the data.
 
@@ -264,7 +269,7 @@ class EMGSession(EMGData):
             return recording
         
         # Copy recordings if deep copy is needed.
-        processed_recordings = copy.deepcopy(self.recordings_raw) if apply_filter or rectify else self.recordings_raw
+        processed_recordings = copy.deepcopy(recordings) if apply_filter or rectify else recordings
 
         # Use ThreadPoolExecutor for parallel processing
         with ThreadPoolExecutor() as executor:
@@ -316,11 +321,57 @@ class EMGSession(EMGData):
         for latency_window in self.latency_windows:
             latency_window.linestyle = config['latency_window_style']
 
+    def exclude_recording(self, original_recording_index: int):
+        """
+        Removes a recording from the session.
+
+        Args:
+            original_recording_index (int): The original index of the recording to remove.
+        """
+        if original_recording_index in self.excluded_recordings:
+            raise ValueError("Recording is already excluded.")
+        # Clear the processed data and M-max values.
+        self._recordings_processed = None
+        self._m_max = None
+        # Add the recording to the list of excluded recordings and remove it from the active list of raw recordings.
+        self.excluded_recordings.add(original_recording_index)
+        self.recordings_raw = [recording for recording in self.recordings_raw if recording['recording_id'] != original_recording_index]
+        
+    def restore_recording(self, original_recording_index: int):
+        """
+        Restores a removed recording to the session.
+
+        Args:
+            original_recording_index (int, optional): The original index of the recording to restore.
+        """
+        if original_recording_index not in self.excluded_recordings:
+            raise ValueError("Recording is not excluded.")
+        
+        self._recordings_processed = None
+        self._m_max = None
+        
+        recording = self._original_recordings.copy().pop(original_recording_index)
+        self.recordings_raw.append(recording)
+        self.excluded_recordings.remove(original_recording_index)
+
+        self.recordings_raw = sorted(self.recordings_raw, key=lambda x: x['recording_id'])
+        self.recordings_processed
+        self.m_max
+        return original_recording_index
+
+    def reload_recordings(self):
+        """
+        Reloads the recordings to the original state.
+        """
+        self.recordings_raw = copy.deepcopy(self._original_recordings)
+        self.excluded_recordings = set()
+        self._recordings_processed = None
+        self._m_max = None
 
     @property
     def recordings_processed (self):
         if self._recordings_processed is None:
-            self._recordings_processed = self._process_emg_data(apply_filter=True, rectify=False)
+            self._recordings_processed = self._process_emg_data(self.recordings_raw, apply_filter=True, rectify=False)
         return self._recordings_processed
 
     @property
@@ -470,7 +521,8 @@ class EMGSession(EMGData):
         """
         Prints EMG recording session parameters from a Pickle file.
         """
-        report = [f"Session ID: {self.session_id}", 
+        report = [f"Session ID: {self.session_id}",
+                  f"# of Recordings (including any excluded ones): {self.num_recordings}", 
                   f"# of Channels: {self.num_channels}",
                   f"Scan Rate (Hz): {self.scan_rate}",
                   f"Samples/Channel: {self.num_samples}",
@@ -526,7 +578,8 @@ class EMGSession(EMGData):
         """
 
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
+        raw_data = getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
+        return raw_data
 
 class EMGDataset(EMGData):
     """
@@ -561,6 +614,7 @@ class EMGDataset(EMGData):
         self.condition : str = condition
         self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
         self._m_max = None
+        self.dataset_id = f"{self.date}_{self.animal_id}_{self.condition.replace(' ', '-')}"
 
         if os.path.exists(self.save_path) and not temp:
             raise FileExistsError(self.save_path)
@@ -640,7 +694,8 @@ class EMGDataset(EMGData):
         """
 
         # Call the appropriate plotting method from the plotter object
-        getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
+        raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
+        return raw_data
 
     def get_avg_m_max(self, method, channel_index):
         """
@@ -732,6 +787,29 @@ class EMGDataset(EMGData):
         channel_name_dict = {fresh_temp_dataset.channel_names[i]: self.channel_names[i] for i in range(self.num_channels)}
         self.rename_channels(channel_name_dict)
         self.set_reflex_settings(self.m_start, self.m_end[0]-self.m_start[0], self.h_start, self.h_end[0]-self.h_start[0])
+    
+    def reload_session(self, session_id : str):
+        """
+        Reloads a session that was removed from the dataset.
+
+        Args:
+            session_id (str): The session_id of the session to be reloaded.
+        """
+        session_reloaded = False
+        sessions_reloaded = 0
+
+        for session in self.emg_sessions:
+            if session_id == session.session_id:
+                session.reload_recordings()
+                session.channel_names = self.channel_names
+                session.apply_preferences()
+                session_reloaded = True
+                sessions_reloaded += 1
+        
+        if not session_reloaded:
+            raise ValueError(f"Error: Session {session_id} could not be found in the dataset. The session cannot be reloaded.")
+        elif sessions_reloaded > 1:
+            logging.warn(f"Warning: Multiple sessions with the ID {session_id} were found in the dataset. All sessions were reloaded.")
 
     def get_session(self, session_idx: int) -> EMGSession:
         """
@@ -764,8 +842,7 @@ class EMGDataset(EMGData):
         Renames a channel in the dataset.
 
         Args:
-            old_name (str): The current name of the channel.
-            new_name (str): The new name to assign to the channel.
+            new_names (dict[str]): A dictionary mapping old channel names to new channel names.
         """
         try:
             # Rename the channels in each session.
@@ -989,6 +1066,17 @@ class EMGExperiment(EMGData):
                     self.latency_windows : List[LatencyWindow] = self.emg_datasets[0].latency_windows.copy()
                     if not temp:
                         self.save_experiment(self.save_path)
+
+    def experiment_parameters(self):
+        """
+        Prints EMG dataset parameters.
+        """
+        report = [f"Experiment Name: {self.expt_name}",
+                  f"Datasets ({len(self.emg_datasets)}): {[dataset.dataset_id for dataset in self.emg_datasets]}."]
+
+        for line in report:
+            print(line)
+        return report
 
     def apply_preferences(self):
         """

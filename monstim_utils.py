@@ -4,6 +4,8 @@ import sys
 from typing import List
 import yaml
 
+from PyQt6.QtWidgets import QApplication
+
 DATA_PATH = 'files_to_process'
 OUTPUT_PATH = 'data'
 SAVED_DATASETS_PATH = 'datasets'
@@ -84,6 +86,14 @@ def get_data_path():
         if not os.path.exists(data_path):
             os.makedirs(data_path)
     return data_path
+
+def get_main_window():
+    from monstim_gui.gui_main import EMGAnalysisGUI
+    
+    active_window = QApplication.activeWindow()
+    if isinstance(active_window, EMGAnalysisGUI):
+        return active_window
+    return None
 
 def load_config(config_file=None):
         """

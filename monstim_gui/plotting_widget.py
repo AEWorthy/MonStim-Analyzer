@@ -1,11 +1,13 @@
 from typing import TYPE_CHECKING
+import logging
 from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup,
                              QComboBox, QLabel, QHBoxLayout, QPushButton, QSizePolicy)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from .plot_options import EMGOptions, SuspectedHReflexesOptions, ReflexCurvesOptions, MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions
+from .plot_options import (EMGOptions, SuspectedHReflexesOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
+                           MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
 
 if TYPE_CHECKING:
     from monstim_gui import EMGAnalysisGUI
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
 class PlotWidget(QGroupBox):
     def __init__(self, parent: 'EMGAnalysisGUI'):
         super().__init__("Plotting", parent)
-        self.parent = parent
+        self.parent = parent # Type: EMGAnalysisGUI
         self.layout = QVBoxLayout()
         self.create_view_selection()
         self.create_plot_type_selection()
@@ -27,6 +29,7 @@ class PlotWidget(QGroupBox):
         self.plot_options = {
             "session": {
                 "EMG": EMGOptions,
+                "Single EMG Recordings": SingleEMGRecordingOptions,
                 "Suspected H-reflexes": SuspectedHReflexesOptions,
                 "Reflex Curves": ReflexCurvesOptions,
                 "M-max": MMaxOptions
@@ -85,6 +88,10 @@ class PlotWidget(QGroupBox):
         self.plot_button = QPushButton("Plot")
         self.plot_button.clicked.connect(self.parent.plot_data)
         self.layout.addWidget(self.plot_button)
+
+        self.get_data_button = QPushButton("Plot/Extact Raw Data")
+        self.get_data_button.clicked.connect(self.parent.get_raw_data)
+        self.layout.addWidget(self.get_data_button)
     
     def import_canvas(self):
         self.canvas = self.parent.plot_pane.canvas
@@ -130,8 +137,11 @@ class PlotWidget(QGroupBox):
 
             if plot_type in self.last_options[self.view]:
                 self.current_option_widget.set_options(self.last_options[self.view][plot_type])
-
+        
         self.additional_options_layout.update()
+        
+        if plot_type == "Single EMG Recordings":
+            self.current_option_widget.recording_cycler.reset_max_recordings()
 
     def save_current_options(self):
        if self.current_option_widget:
@@ -160,4 +170,4 @@ class PlotPane(QGroupBox):
         self.toolbar = NavigationToolbar(self.canvas, self)
         self.layout.addWidget(self.toolbar)
         self.setLayout(self.layout)
-        print("Canvas created and added to layout.")
+        logging.debug("Canvas created and added to layout.")

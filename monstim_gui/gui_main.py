@@ -20,7 +20,8 @@ from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
 from .plotting_widget import PlotWidget, PlotPane
-from .commands import RemoveSessionCommand, CommandInvoker
+from .commands import RemoveSessionCommand, CommandInvoker, ExcludeRecordingCommand, RestoreRecordingCommand
+from .dataframe_exporter import DataFrameDialog
 
 class SplashScreen(QSplashScreen):
     def __init__(self):
@@ -85,7 +86,8 @@ class EMGAnalysisGUI(QMainWindow):
         self.current_session = None # Type: EMGSession
         self.channel_names = []
         self.plot_type_dict = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
-                               "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves"}
+                               "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
+                               "Single EMG Recordings": "singleEMG"}
         
         # Set default paths
         self.output_path = get_output_path()
@@ -94,11 +96,11 @@ class EMGAnalysisGUI(QMainWindow):
         self.init_ui()
 
         # Load existing pickled experiments if available
-        self.load_existing_experiments()
+        self.unpack_existing_experiments()
         self.data_selection_widget.update_ui()
-        self.current_experiment = self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
+        self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex()) # load first experiment
 
-        self.command_invoker = CommandInvoker()
+        self.command_invoker = CommandInvoker(self)
     
     def init_ui(self):
         # Central widget and main layout
@@ -138,11 +140,19 @@ class EMGAnalysisGUI(QMainWindow):
     def redo(self):
         self.command_invoker.redo()
 
+    def exclude_recording(self, recording_index):
+        command = ExcludeRecordingCommand(self, recording_index)
+        self.command_invoker.execute(command)
+    
+    def restore_recording(self, recording_index):
+        command = RestoreRecordingCommand(self, recording_index)
+        self.command_invoker.execute(command)
+
     def remove_session(self):
         command = RemoveSessionCommand(self)
         self.command_invoker.execute(command)
 
-    def load_existing_experiments(self):
+    def unpack_existing_experiments(self):
         logging.debug("Loading existing experiments.")
         if os.path.exists(self.output_path):
             self.expts_dict = EMGData.unpackPickleOutput(self.output_path)
@@ -197,10 +207,20 @@ class EMGAnalysisGUI(QMainWindow):
             progress_dialog.canceled.connect(self.thread.cancel)
         else:
             QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
-        
+    
+    def reload_current_session(self):
+        logging.debug("Reloading current session.")
+        if self.current_dataset:
+            self.current_dataset.reload_session(self.current_session.session_id)
+            self.current_dataset.apply_preferences()
+            QMessageBox.information(self, "Success", "Session reloaded successfully.")
+            logging.debug("Session reloaded successfully.")
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a session first.")
+
     def refresh_existing_experiments(self):
         logging.debug("Refreshing existing experiments.")
-        self.load_existing_experiments()
+        self.unpack_existing_experiments()
         self.data_selection_widget.update_ui()
         self.current_experiment = self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
 
@@ -314,6 +334,8 @@ class EMGAnalysisGUI(QMainWindow):
     def load_session(self, index):
         if self.current_dataset and index >= 0:
             self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
+            if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
+                self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
 
     def reload_dataset(self):
         self.current_dataset.reload_dataset_sessions()
@@ -321,16 +343,6 @@ class EMGAnalysisGUI(QMainWindow):
         self.data_selection_widget.update_session_combo()
 
     # Reports functions.
-    def show_mmax_report(self):
-        logging.debug("Showing M-max report.")
-        if self.current_session:
-            report = self.current_session.m_max_report()
-            report = format_report(report)
-            dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self)
-            dialog.exec()
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a session first.")
-
     def show_session_report(self):
         logging.debug("Showing session parameters report.")
         if self.current_session:
@@ -351,12 +363,33 @@ class EMGAnalysisGUI(QMainWindow):
         else:
             QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
+    def show_experiment_report(self):
+        logging.debug("Showing experiment parameters report.")
+        if self.current_experiment:
+            report = self.current_experiment.experiment_parameters()
+            report = format_report(report)
+            dialog = CopyableReportDialog("Experiment Report", report, self)
+            dialog.exec()
+        else:
+            QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+
+    def show_mmax_report(self):
+            logging.debug("Showing M-max report.")
+            if self.current_session:
+                report = self.current_session.m_max_report()
+                report = format_report(report)
+                dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self)
+                dialog.exec()
+            else:
+                QMessageBox.warning(self, "Warning", "Please select a session first.")
+
     # Plotting functions
-    def plot_data(self):
+    def plot_data(self, return_raw_data=False):
         self.plot_widget.canvas.show()
         plot_type_raw = self.plot_widget.plot_type_combo.currentText()
         plot_type = self.plot_type_dict.get(plot_type_raw)
         plot_options = self.plot_widget.get_plot_options()
+        raw_data = None
         
         # Plot the data      
         try:
@@ -364,7 +397,7 @@ class EMGAnalysisGUI(QMainWindow):
             if self.plot_widget.session_radio.isChecked():
                 if self.current_session:
                     # Assuming plot_type corresponds to the data_type in plot_emg
-                    self.current_session.plot(
+                    raw_data = self.current_session.plot(
                         plot_type=plot_type,
                         **plot_options,
                         canvas = self.plot_widget.canvas
@@ -375,7 +408,7 @@ class EMGAnalysisGUI(QMainWindow):
             else:
                 if self.current_dataset:
                     # If you have a similar plot method for dataset, use it here
-                    self.current_dataset.plot(
+                    raw_data = self.current_dataset.plot(
                         plot_type=plot_type,
                         **plot_options,
                         canvas = self.plot_widget.canvas
@@ -391,6 +424,22 @@ class EMGAnalysisGUI(QMainWindow):
             logging.error(traceback.format_exc())
         
         self.plot_pane.layout.update()  # Refresh the layout of the plot pane
+
+        print(raw_data)
+        if return_raw_data:
+            print("Returning raw data")
+            return raw_data
+        else:
+            print("Not returning raw data")
+            return
+
+    def get_raw_data(self):
+        raw_data = self.plot_data(return_raw_data=True)
+        if raw_data is not None:
+            dialog = DataFrameDialog(raw_data, self)
+            dialog.exec()
+        else:
+            QMessageBox.warning(self, "Warning", "No data to display.")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

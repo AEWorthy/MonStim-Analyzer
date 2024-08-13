@@ -1,11 +1,14 @@
 import abc
 from collections import deque
 from typing import TYPE_CHECKING
+from PyQt6.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
     from gui_main import EMGAnalysisGUI
 
 class Command(abc.ABC):
+    command_name : str = None
+
     @abc.abstractmethod
     def execute(self):
         pass
@@ -15,30 +18,91 @@ class Command(abc.ABC):
         pass
 
 class CommandInvoker:
-    def __init__(self):
-        self.history = deque()
-        self.redo_stack = deque()
+    def __init__(self, parent : 'EMGAnalysisGUI'):
+        self.parent = parent # type: EMGAnalysisGUI
+        self.history = deque() # type: deque[Command]
+        self.redo_stack = deque() # type: deque[Command]
 
     def execute(self, command):
         command.execute()
         self.history.append(command)
         self.redo_stack.clear()
+        self.parent.menu_bar.update_undo_redo_labels()
 
     def undo(self):
         if self.history:
             command = self.history.pop()
             command.undo()
             self.redo_stack.append(command)
-
+    
+    def get_undo_command_name(self):
+        if self.history:
+            return self.history[-1].command_name
+        return None
+    
     def redo(self):
         if self.redo_stack:
             command = self.redo_stack.pop()
             command.execute()
             self.history.append(command)
 
+    def get_redo_command_name(self):
+        if self.redo_stack:
+            return self.redo_stack[-1].command_name
+        return None
+    
+    def remove_command_by_name(self, command_name : str):
+        # Remove all occurrences from history
+        self.history = deque(command for command in self.history if command.command_name != command_name)
+        
+        # Remove all occurrences from redo_stack
+        self.redo_stack = deque(command for command in self.redo_stack if command.command_name != command_name)
+                
+
 # GUI command classes
+class ExcludeRecordingCommand(Command):
+    def __init__(self, gui, recording_index):
+        self.command_name = "Exclude Recording"
+        self.gui : 'EMGAnalysisGUI' = gui
+        self.recording_index = recording_index
+    
+    def execute(self):
+        try:
+            self.gui.current_session.exclude_recording(self.recording_index)
+            self.gui.current_dataset.save_dataset()
+        except ValueError as e:
+            QMessageBox.critical(self.gui, "Error", str(e))
+    
+    def undo(self):
+        try:
+            self.gui.current_session.restore_recording(self.recording_index)
+            self.gui.current_dataset.save_dataset()
+        except ValueError as e:
+            QMessageBox.critical(self.gui, "Error", str(e))
+
+class RestoreRecordingCommand(Command):
+    def __init__(self, gui, original_recording_index):
+        self.command_name = "Restore Recording"
+        self.gui : 'EMGAnalysisGUI' = gui
+        self.recording_index = original_recording_index
+
+    def execute(self):
+        try:
+            self.gui.current_session.restore_recording(self.recording_index)
+            self.gui.current_dataset.save_dataset()
+        except ValueError as e:
+            QMessageBox.critical(self.gui, "Error", str(e))
+
+    def undo(self):
+        try:
+            self.gui.current_session.exclude_recording(self.recording_index)
+            self.gui.current_dataset.save_dataset()
+        except ValueError as e:
+            QMessageBox.critical(self.gui, "Error", str(e))
+
 class RemoveSessionCommand(Command):
     def __init__(self, gui):
+        self.command_name = "Remove Session"
         self.gui : 'EMGAnalysisGUI' = gui
         self.removed_session = None
 
@@ -53,3 +117,10 @@ class RemoveSessionCommand(Command):
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
 
+# def confirm_save(self):
+#     reply = QMessageBox.question(self, 'Save Changes?', 
+#                             'Would you like to save the changes you made to the current session?',
+#                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+#                             QMessageBox.StandardButton.No)
+#     if reply == QMessageBox.StandardButton.Yes:
+#         self.parent.current_dataset.save_dataset()
