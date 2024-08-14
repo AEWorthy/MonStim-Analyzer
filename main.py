@@ -19,7 +19,7 @@ def setup_logging(debug_mode: bool) -> None:
         logging.basicConfig(filename=os.path.join(sys._MEIPASS, LOG_FILE), level=log_level, format=LOG_FORMAT)
     else:
         logging.basicConfig(filename=LOG_FILE, level=log_level, format=LOG_FORMAT)
-    if debug_mode: print("Debug mode enabled")  # noqa: E701
+    if debug_mode: logging.info("Debug mode enabled")  # noqa: E701
     logging.debug("Logging setup complete")
 
 def parse_arguments() -> argparse.Namespace:
@@ -51,7 +51,6 @@ def main(sys_frozen = True) -> int:
     except Exception as e:
         logging.error(f"Error in main function: {str(e)}")
         logging.error(traceback.format_exc())
-        print(f"An error occurred: {str(e)}")
         return 1
 
 if __name__ == '__main__':

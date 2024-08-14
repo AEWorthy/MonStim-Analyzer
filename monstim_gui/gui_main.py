@@ -3,6 +3,7 @@ import os
 import logging
 import traceback
 import multiprocessing
+
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
                              QDialog, QProgressDialog, QSplashScreen, QLabel, QHBoxLayout)
 from PyQt6.QtGui import QPixmap, QFont, QIcon
@@ -13,7 +14,6 @@ from monstim_analysis import EMGData, EMGDataset, EMGExperiment
 from monstim_converter import GUIExptImportingThread
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path)
-
 from .dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, 
                       LatexHelpWindow, InfoDialog, HelpWindow, PreferencesDialog)
 from .menu_bar import MenuBar
@@ -384,17 +384,18 @@ class EMGAnalysisGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please select a session first.")
 
     # Plotting functions
-    def plot_data(self, return_raw_data=False):
+    def plot_data(self, return_raw_data : bool = False):
         self.plot_widget.canvas.show()
         plot_type_raw = self.plot_widget.plot_type_combo.currentText()
         plot_type = self.plot_type_dict.get(plot_type_raw)
         plot_options = self.plot_widget.get_plot_options()
-        raw_data = None
+        raw_data = None # Type: pd.DataFrame
         
         # Plot the data      
         try:
             logging.debug(f'Plotting {plot_type} with options: {plot_options}.')
             if self.plot_widget.session_radio.isChecked():
+                logging.debug("Plotting session data.")
                 if self.current_session:
                     # Assuming plot_type corresponds to the data_type in plot_emg
                     raw_data = self.current_session.plot(
@@ -406,6 +407,7 @@ class EMGAnalysisGUI(QMainWindow):
                     QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
             else:
+                logging.debug("Plotting dataset data.")
                 if self.current_dataset:
                     # If you have a similar plot method for dataset, use it here
                     raw_data = self.current_dataset.plot(
@@ -422,15 +424,15 @@ class EMGAnalysisGUI(QMainWindow):
             logging.error(f"Plot type: {plot_type}, options: {plot_options}")
             logging.error(f"Current session: {self.current_session}, current dataset: {self.current_dataset}")
             logging.error(traceback.format_exc())
-        
+        logging.debug("Plotting complete.")
+
         self.plot_pane.layout.update()  # Refresh the layout of the plot pane
 
-        print(raw_data)
         if return_raw_data:
-            print("Returning raw data")
+            logging.debug("Returning raw data.")
             return raw_data
         else:
-            print("Not returning raw data")
+            logging.debug("Not returning raw data.")
             return
 
     def get_raw_data(self):

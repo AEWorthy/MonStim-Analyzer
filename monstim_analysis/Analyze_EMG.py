@@ -290,9 +290,9 @@ class EMGSession(EMGData):
                 channel_idx = self.channel_names.index(old_name)
                 self.channel_names[channel_idx] = new_name
         except IndexError:
-            print("Error: The number of new names does not match the number of channels in the session.")
+            logging.error("Error: The number of new names does not match the number of channels in the session.")
         except ValueError:
-            print("Error: The channel name to be replaced does not exist in the session.")
+            logging.error("Error: The channel name to be replaced does not exist in the session.")
 
     def apply_preferences(self):
         """
@@ -401,7 +401,7 @@ class EMGSession(EMGData):
     # User methods for EMGSession class
     def m_max_report(self):
         """
-        Prints the M-wave amplitudes for each channel in the session.
+        Logs the M-wave amplitudes for each channel in the session.
         """
         report = []
         for i, channel_m_max in enumerate(self.m_max):
@@ -413,7 +413,7 @@ class EMGSession(EMGData):
                 report.append(line)
 
         for line in report:
-            print(line)
+            logging.info(line)
         return report
 
     def get_m_max(self, method, channel_index):
@@ -490,7 +490,7 @@ class EMGSession(EMGData):
                     m_duration = float(self.m_duration_entry.text())
                     h_duration = float(self.h_duration_entry.text())
                 except ValueError:
-                    print("Invalid input for durations. Please enter valid numbers.")
+                    logging.error("Invalid input for durations. Please enter valid numbers.")
                     return
 
                 for i, (m_start_entry, h_start_entry) in enumerate(self.entries):
@@ -503,7 +503,7 @@ class EMGSession(EMGData):
                         self.parent.h_start[i] = h_start
                         self.parent.h_end[i] = h_start + h_duration
                     except ValueError:
-                        print(f"Invalid input for channel {i}. Skipping.")
+                        logging.error(f"Invalid input for channel {i}. Skipping.")
 
                 self.close()
 
@@ -519,7 +519,7 @@ class EMGSession(EMGData):
 
     def session_parameters (self):
         """
-        Prints EMG recording session parameters from a Pickle file.
+        Logs EMG recording session parameters from a Pickle file.
         """
         report = [f"Session ID: {self.session_id}",
                   f"# of Recordings (including any excluded ones): {self.num_recordings}", 
@@ -534,7 +534,7 @@ class EMGSession(EMGData):
                   f"EMG Amp Gains: {self.emg_amp_gains}"]        
         
         for line in report:
-            print(line)
+            logging.info(line)
         return report
 
     def plot(self, plot_type: str = None, **kwargs):
@@ -631,7 +631,7 @@ class EMGDataset(EMGData):
             logging.info(f"Unpacking EMG sessions: {emg_sessions}")
             self.emg_sessions = self.__unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
             if len(emg_sessions_to_exclude) > 0:
-                print(f"Excluding the following sessions from the dataset: {emg_sessions_to_exclude}")
+                logging.warning(f"Excluding the following sessions from the dataset: {emg_sessions_to_exclude}")
                 self.emg_sessions = [session for session in self.emg_sessions if session.session_id not in emg_sessions_to_exclude]
                 self._num_sessions_excluded = len(emg_sessions) - len(self.emg_sessions)
             else:
@@ -640,7 +640,7 @@ class EMGDataset(EMGData):
             # Check that all sessions have the same parameters and set dataset parameters.
             consistent, message = self.__check_session_consistency()
             if not consistent:
-                print(f"Error: {message}")
+                logging.error(f"Error: {message}")
             else:
                 self.scan_rate : int = self.emg_sessions[0].scan_rate
                 self.num_channels : int = self.emg_sessions[0].num_channels
@@ -652,7 +652,7 @@ class EMGDataset(EMGData):
 
     def dataset_parameters(self):
         """
-        Prints EMG dataset parameters.
+        Logs EMG dataset parameters.
         """
         report = [f"EMG Sessions ({len(self.emg_sessions)}): {[session.session_id for session in self.emg_sessions]}.",
                     f"Date: {self.date}",
@@ -660,7 +660,7 @@ class EMGDataset(EMGData):
                     f"Condition: {self.condition}"]
 
         for line in report:
-            print(line)
+            logging.info(line)
         return report
 
     def plot(self, plot_type: str = None, **kwargs):
@@ -760,7 +760,7 @@ class EMGDataset(EMGData):
             self.__check_session_consistency()
             consistent, message = self.__check_session_consistency()
             if not consistent:
-                print(f"Error: {message}")
+                logging.error(f"Error: {message}")
             else:
                 self.scan_rate = self.emg_sessions[0].scan_rate
                 self.num_channels = self.emg_sessions[0].num_channels
@@ -774,7 +774,7 @@ class EMGDataset(EMGData):
             session_id (str): The session_id of the session to be removed.
         """
         if session_id not in [session.session_id for session in self.emg_sessions]:
-            print(f">! Error: session {session_id} not found in the dataset.")
+            logging.warning(f">! Error: session {session_id} not found in the dataset.")
         else:
             self.emg_sessions = [session for session in self.emg_sessions if session.session_id != session_id]
     
@@ -856,7 +856,7 @@ class EMGDataset(EMGData):
                 except ValueError:
                     logging.info(f"The name '{old_name}' does not exist in the dataset. Channel names are still {self.channel_names}.")
         except IndexError:
-            print("Error: The number of new names does not match the number of channels in the dataset.")
+            logging.error("Error: The number of new names does not match the number of channels in the dataset.")
         
     def apply_preferences(self):
         """
@@ -1057,7 +1057,7 @@ class EMGExperiment(EMGData):
                 consistent, message = True, ''
                 # consistent, message = self.__check_dataset_consistency()
                 if not consistent:
-                    print(f"Error: {message}")
+                    logging.error(f"Error: {message}")
                 else:
                     # self.scan_rate : int = self.emg_datasets[0].scan_rate
                     # self.num_channels : int = self.emg_datasets[0].num_channels
@@ -1069,13 +1069,13 @@ class EMGExperiment(EMGData):
 
     def experiment_parameters(self):
         """
-        Prints EMG dataset parameters.
+        Logs EMG dataset parameters.
         """
         report = [f"Experiment Name: {self.expt_name}",
                   f"Datasets ({len(self.emg_datasets)}): {[dataset.dataset_id for dataset in self.emg_datasets]}."]
 
         for line in report:
-            print(line)
+            logging.info(line)
         return report
 
     def apply_preferences(self):
