@@ -23,8 +23,9 @@ class CommandInvoker:
         self.history = deque() # type: deque[Command]
         self.redo_stack = deque() # type: deque[Command]
 
-    def execute(self, command):
+    def execute(self, command : Command):
         command.execute()
+        self.parent.current_experiment.save_experiment()
         self.history.append(command)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
@@ -33,6 +34,7 @@ class CommandInvoker:
         if self.history:
             command = self.history.pop()
             command.undo()
+            self.parent.current_experiment.save_experiment()
             self.redo_stack.append(command)
     
     def get_undo_command_name(self):
@@ -44,6 +46,7 @@ class CommandInvoker:
         if self.redo_stack:
             command = self.redo_stack.pop()
             command.execute()
+            self.parent.current_experiment.save_experiment()
             self.history.append(command)
 
     def get_redo_command_name(self):
@@ -58,7 +61,6 @@ class CommandInvoker:
         # Remove all occurrences from redo_stack
         self.redo_stack = deque(command for command in self.redo_stack if command.command_name != command_name)
                 
-
 # GUI command classes
 class ExcludeRecordingCommand(Command):
     def __init__(self, gui, recording_index):
@@ -69,14 +71,12 @@ class ExcludeRecordingCommand(Command):
     def execute(self):
         try:
             self.gui.current_session.exclude_recording(self.recording_index)
-            self.gui.current_dataset.save_dataset()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
     
     def undo(self):
         try:
             self.gui.current_session.restore_recording(self.recording_index)
-            self.gui.current_dataset.save_dataset()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
@@ -89,14 +89,12 @@ class RestoreRecordingCommand(Command):
     def execute(self):
         try:
             self.gui.current_session.restore_recording(self.recording_index)
-            self.gui.current_dataset.save_dataset()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
     def undo(self):
         try:
             self.gui.current_session.exclude_recording(self.recording_index)
-            self.gui.current_dataset.save_dataset()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
@@ -111,12 +109,13 @@ class RemoveSessionCommand(Command):
         self.gui.current_dataset.remove_session(self.gui.current_session.session_id)
         self.gui.current_session = None
         self.gui.data_selection_widget.update_session_combo()
+        
       
     def undo(self):
         self.gui.current_dataset.add_session(self.removed_session)
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
-
+        
 class InvertChannelPolarityCommand(Command):
     def __init__(self, gui, channel_indexes_to_invert : list[int]):
         self.command_name = "Invert Channel Polarity"
@@ -126,17 +125,7 @@ class InvertChannelPolarityCommand(Command):
     def execute(self):
         for channel_index in self.channel_indexes_to_invert:
             self.gui.current_dataset.invert_channel_polarity(channel_index)
-        self.gui.current_dataset.save_dataset()
 
     def undo(self):
         for channel_index in self.channel_indexes_to_invert:
             self.gui.current_dataset.invert_channel_polarity(channel_index)
-        self.gui.current_dataset.save_dataset()
-
-# def confirm_save(self):
-#     reply = QMessageBox.question(self, 'Save Changes?', 
-#                             'Would you like to save the changes you made to the current session?',
-#                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-#                             QMessageBox.StandardButton.No)
-#     if reply == QMessageBox.StandardButton.Yes:
-#         self.parent.current_dataset.save_dataset()

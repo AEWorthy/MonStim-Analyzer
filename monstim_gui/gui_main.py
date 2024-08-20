@@ -5,17 +5,17 @@ import traceback
 import multiprocessing
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
-                             QDialog, QProgressDialog, QSplashScreen, QLabel, QHBoxLayout)
-from PyQt6.QtGui import QPixmap, QFont, QIcon
+                             QDialog, QProgressDialog, QHBoxLayout)
+from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 import markdown
 
-from monstim_analysis import EMGData, EMGDataset, EMGExperiment
+from monstim_analysis import EMGExperiment
 from monstim_converter import GUIExptImportingThread
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path)
 from .dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, 
-                      LatexHelpWindow, InfoDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
+                      LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
@@ -23,53 +23,6 @@ from .plotting_widget import PlotWidget, PlotPane
 from .commands import (RemoveSessionCommand, CommandInvoker, ExcludeRecordingCommand, 
                        RestoreRecordingCommand, InvertChannelPolarityCommand)
 from .dataframe_exporter import DataFrameDialog
-
-class SplashScreen(QSplashScreen):
-    def __init__(self):
-        logging.debug("Creating splash screen.")
-        pixmap = QPixmap(400, 300)
-        pixmap.fill(Qt.GlobalColor.white)
-        
-        super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
-        
-        # Add program information
-        layout = self.layout()
-        if layout is None:
-            layout = QVBoxLayout(self)
-
-        # Add logo
-        logo_pixmap = QPixmap(os.path.join(get_source_path(), 'icon.png'))
-        max_width = 100  # Set the desired maximum width
-        max_height = 100  # Set the desired maximum height
-        logo_pixmap = logo_pixmap.scaled(max_width, max_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        logo_label = QLabel()
-        logo_label.setPixmap(logo_pixmap)
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(logo_label)
-        
-        font = QFont()
-        font.setPointSize(12)
-        
-        program_name = QLabel("MonStim EMG Analyzer")
-        program_name.setStyleSheet("font-weight: bold; color: #333333;")
-        program_name.setFont(font)
-        program_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(program_name)
-        
-        version = QLabel("Version 1.0")
-        version.setStyleSheet("color: #666666;")
-        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(version)
-        
-        description = QLabel("Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...")
-        description.setStyleSheet("color: #666666;")
-        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(description)
-        
-        copyright = QLabel("© 2024 Andrew Worthy")
-        copyright.setStyleSheet("color: #999999;")
-        copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
-        layout.addWidget(copyright)
 
 class EMGAnalysisGUI(QMainWindow):
     def __init__(self):
@@ -79,9 +32,8 @@ class EMGAnalysisGUI(QMainWindow):
         self.setGeometry(100, 100, 1000, 600)
     
         # Initialize variables
-        self.expts_dict = {} 
-        self.experiments = [] # Type: List[str]
-        self.datasets = [] # Type: List[str]
+        self.expts_dict = {}
+        self.expts_dict_keys = [] # Type: List[str]
         self.current_experiment = None # Type: EMGExperiment
         self.current_dataset = None # Type: EMGDataset
         self.current_session = None # Type: EMGSession
@@ -98,8 +50,7 @@ class EMGAnalysisGUI(QMainWindow):
 
         # Load existing pickled experiments if available
         self.unpack_existing_experiments()
-        self.data_selection_widget.update_ui()
-        self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex()) # load first experiment
+        self.data_selection_widget.update_experiment_combo()
 
         self.command_invoker = CommandInvoker(self)
     
@@ -154,10 +105,10 @@ class EMGAnalysisGUI(QMainWindow):
         self.command_invoker.execute(command)
 
     def unpack_existing_experiments(self):
-        logging.debug("Loading existing experiments.")
+        logging.debug("Unpacking existing experiments.")
         if os.path.exists(self.output_path):
-            self.expts_dict = EMGData.unpackPickleOutput(self.output_path)
-            self.experiments = list(self.expts_dict.keys())
+            self.expts_dict = EMGExperiment.unpackPickleOutput(self.output_path)
+            self.expts_dict_keys = list(self.expts_dict.keys())
     
     # Menu bar functions
     def update_reflex_settings(self):
@@ -165,6 +116,7 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_session:
             dialog = ReflexSettingsDialog(self.current_session, self.current_dataset, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.current_experiment.save_experiment()
                 QMessageBox.information(self, "Success", "Window settings updated successfully.")
                 logging.debug("Window settings updated successfully.")
         else:
@@ -228,19 +180,59 @@ class EMGAnalysisGUI(QMainWindow):
     
     def reload_current_session(self):
         logging.debug("Reloading current session.")
-        if self.current_dataset:
+        if self.current_dataset and self.current_session:
             self.current_dataset.reload_session(self.current_session.session_id)
             self.current_dataset.apply_preferences()
+            self.current_experiment.save_experiment()
+            self.plot_widget.update_plot_options() # Reset plot options
+
             QMessageBox.information(self, "Success", "Session reloaded successfully.")
             logging.debug("Session reloaded successfully.")
         else:
             QMessageBox.warning(self, "Warning", "Please select a session first.")
 
+    def reload_current_dataset(self):
+        logging.debug("Reloading current dataset.")
+        if self.current_dataset:
+            self.current_dataset.reload_dataset_sessions()
+            self.data_selection_widget.update_session_combo()
+            self.current_experiment.save_experiment()
+            self.plot_widget.update_plot_options() # Reset plot options
+
+            QMessageBox.information(self, "Success", "Dataset reloaded successfully.")
+            logging.debug("Dataset reloaded successfully.")
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a dataset first.")
+
+    def reload_current_experiment(self):
+        logging.debug(f"Reloading current experiment: {self.current_experiment.expt_id}.") 
+        if self.current_experiment:
+            # delete bin file in output folder
+            bin_file = self.current_experiment.save_path
+            if os.path.exists(bin_file):
+                os.remove(bin_file)
+                logging.debug(f"Deleted bin file: {bin_file}.")
+            else:
+                logging.error(f"Bin file not found: {bin_file}. Could not delete current experiment.")
+            
+            self.current_experiment = None
+            self.current_dataset = None
+            self.current_session = None
+            
+            self.refresh_existing_experiments()
+            
+            logging.debug("Experiment reloaded successfully.")
+            QMessageBox.information(self, "Success", "Experiment reloaded successfully.")
+
     def refresh_existing_experiments(self):
         logging.debug("Refreshing existing experiments.")
         self.unpack_existing_experiments()
-        self.data_selection_widget.update_ui()
-        self.current_experiment = self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
+        self.data_selection_widget.update_experiment_combo()
+        self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
+        self.data_selection_widget.update_dataset_combo()
+        self.data_selection_widget.update_session_combo()
+        self.plot_widget.update_plot_options() # Reset plot options
+        logging.debug("Existing experiments refreshed successfully.")
 
     def show_preferences_window(self):
         logging.debug("Showing preferences window.")
@@ -249,11 +241,12 @@ class EMGAnalysisGUI(QMainWindow):
             # Apply preferences to data
             if self.current_experiment:
                 self.current_experiment.apply_preferences()
-            if self.current_dataset:
-                self.current_dataset.apply_preferences()
+                self.current_experiment.save_experiment()
             QMessageBox.information(self, "Success", "Preferences applied successfully.")
             logging.debug("Preferences applied successfully.")
-        pass
+        else:
+            QMessageBox.warning(self, "Warning", "No changes made to preferences.")
+            logging.debug("No changes made to preferences.")
 
     def change_channel_names(self):
         # Check if a dataset and session are selected
@@ -268,9 +261,9 @@ class EMGAnalysisGUI(QMainWindow):
             new_names = dialog.get_new_names()
             if new_names:
                 # Update channel names in the current session and dataset
-                if self.current_dataset:
+                if self.current_dataset and self.current_experiment:
                     self.current_dataset.rename_channels(new_names)
-                    self.current_dataset.save_dataset()
+                    self.current_experiment.save_experiment()
 
                 # Update the channel_names list
                 self.channel_names = self.current_dataset.channel_names
@@ -282,7 +275,7 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.debug("No changes made to channel names.")
 
     def show_about_screen(self):
-        dialog = InfoDialog(self)
+        dialog = AboutDialog(self)
         dialog.show()
 
     def show_help_dialog(self, topic=None, latex=False):
@@ -312,53 +305,49 @@ class EMGAnalysisGUI(QMainWindow):
     # Data selection widget functions
     def load_experiment(self, index):
         if index >= 0:
-            experiment_name = self.experiments[index]
+            experiment_name = self.expts_dict_keys[index]
             save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}.pickle"))
             logging.debug(f"Loading experiment: '{experiment_name}'.")
             
             # Load existing experiment if available
             if os.path.exists(save_path):
                 self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
-                logging.debug(f"Experiment '{experiment_name}' loaded successfully from '{save_path}'.")
+                logging.debug(f"Experiment '{experiment_name}' loaded successfully from bin.")
             else:
-                self.current_experiment = EMGExperiment(experiment_name, self.expts_dict) # Type: EMGExperiment
-                logging.debug(f"Experiment '{experiment_name}' created successfully to '{save_path}'.")
+                self.current_experiment = EMGExperiment(experiment_name, self.expts_dict, save_path=save_path) # Type: EMGExperiment
+                logging.debug(f"Experiment '{experiment_name}' created to bin and loaded successfully.")
 
             # Update current expt/dataset/session
-            _, self.datasets = self.expts_dict[experiment_name]
             self.data_selection_widget.update_dataset_combo()
-            self.load_dataset(self.data_selection_widget.dataset_combo.currentIndex()) # Type: EMGDataset
 
     def load_dataset(self, index):
         if index >= 0:
-            dataset_name = self.datasets[index]
-            date, animal_id, condition = EMGDataset.getDatasetInfo(dataset_name)  
-            save_path = os.path.join(get_output_bin_path(),(f"{date}_{animal_id}_{condition}.pickle"))
-            logging.debug(f"Loading dataset: '{dataset_name}'.")
+            # date, animal_id, condition = EMGDataset.getDatasetInfo(dataset_name)  
+            logging.debug(f"Loading dataset [{index}] from experiment '{self.current_experiment.expt_id}'.")
 
-            # Load existing dataset if available
-            if os.path.exists(save_path):
-                self.current_dataset = EMGDataset.load_dataset(save_path) # Type: EMGDataset
-                logging.debug(f"Dataset '{dataset_name}' loaded successfully from '{save_path}'.")
+            if self.current_experiment:
+                self.current_dataset = self.current_experiment.get_dataset(index) # Type: EMGDataset
             else:
-                self.current_dataset = EMGDataset(self.current_experiment.dataset_dict[dataset_name], date, animal_id, condition) # Type: EMGDataset
-                logging.debug(f"Dataset '{dataset_name}' created successfully to '{save_path}'.")         
+                logging.error("No current experiment to load dataset from.")
+                # save_path = os.path.join(get_output_bin_path(),(f"{date}_{animal_id}_{condition}.pickle"))
+                # # Load existing dataset if available
+                # if os.path.exists(save_path):
+                #     self.current_dataset = EMGDataset.load_dataset(save_path) # Type: EMGDataset
+                #     logging.debug(f"Dataset '{dataset_name}' loaded successfully.")
+                # else:
+                #     self.current_dataset = EMGDataset(self.current_experiment.dataset_dict[dataset_name], date, animal_id, condition) # Type: EMGDataset
+                #     logging.debug(f"Dataset '{dataset_name}' created successfully to '{save_path}'.")         
 
             # Update current dataset/session and channel names
             self.channel_names = self.current_dataset.channel_names
             self.data_selection_widget.update_session_combo()
-            self.load_session(self.data_selection_widget.session_combo.currentIndex()) # Type: EMGSession
 
     def load_session(self, index):
         if self.current_dataset and index >= 0:
+            logging.debug(f"Loading session [{index}] from dataset '{self.current_dataset.dataset_id}'.")
             self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
             if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
                 self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
-
-    def reload_dataset(self):
-        self.current_dataset.reload_dataset_sessions()
-        self.current_dataset.apply_preferences()
-        self.data_selection_widget.update_session_combo()
 
     # Reports functions.
     def show_session_report(self):

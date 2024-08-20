@@ -181,7 +181,6 @@ class EMGSession(EMGData):
             start_times=[1 for _ in range(self.num_channels)],  # start times for each channel
             durations=[2 for _ in range(self.num_channels)]  # end times for each channel
         )
-
         # Add H-reflex latency window
         self.add_latency_window(
             name="H-reflex",
@@ -190,9 +189,10 @@ class EMGSession(EMGData):
             durations=[1 for _ in range(self.num_channels)]  # end times for each channel
         )
 
+        logging.info(f"Session {self.session_id} initialized with {self.num_recordings} recordings.")
+
     def load_session_data(self, pickled_data):
         # Load the session data from the pickle file
-        logging.info(f"Loading session data from {pickled_data}")
         with open(pickled_data, 'rb') as pickle_file:
             session_data = pickle.load(pickle_file)
 
@@ -249,16 +249,12 @@ class EMGSession(EMGData):
             processed_data = process_emg_data(apply_filter=True, rectify=True)
         """
         def __process_single_recording(recording):
-            for i, channel_emg in enumerate(recording['channel_data']):
-                if apply_filter:
+            if apply_filter:
+                for i, channel_emg in enumerate(recording['channel_data']):
                     filtered_emg = Transform_EMG.butter_bandpass_filter(channel_emg, self.scan_rate, **self.butter_filter_args)
-                    if rectify:
-                        recording['channel_data'][i] = Transform_EMG.rectify_emg(filtered_emg)
-                    else:
-                        recording['channel_data'][i] = filtered_emg
-                elif rectify:
-                    rectified_emg = Transform_EMG.rectify_emg(channel_emg)
-                    recording['channel_data'][i] = rectified_emg
+                    recording['channel_data'][i] = filtered_emg
+            if rectify:
+                recording['channel_data'] = np.abs(recording['channel_data'])
                 
                 #!# I decided to remove the baseline correction code for now. It's best not to transform the data more than necessary.
                 
@@ -271,7 +267,6 @@ class EMGSession(EMGData):
         # Copy recordings if deep copy is needed.
         processed_recordings = copy.deepcopy(recordings) if apply_filter or rectify else recordings
 
-        # Use ThreadPoolExecutor for parallel processing
         with ThreadPoolExecutor() as executor:
             processed_recordings = list(executor.map(__process_single_recording, processed_recordings))
 
@@ -294,7 +289,7 @@ class EMGSession(EMGData):
         except ValueError:
             logging.error("Error: The channel name to be replaced does not exist in the session.")
 
-    def apply_preferences(self):
+    def apply_preferences(self, reset_properties=True):
         """
         Applies the preferences set in the config file to the dataset.
         """
@@ -321,6 +316,9 @@ class EMGSession(EMGData):
         for latency_window in self.latency_windows:
             latency_window.linestyle = config['latency_window_style']
 
+        if reset_properties:
+            self.reset_properties(recalculate=True)
+
     def exclude_recording(self, original_recording_index: int):
         """
         Removes a recording from the session.
@@ -336,6 +334,7 @@ class EMGSession(EMGData):
         # Add the recording to the list of excluded recordings and remove it from the active list of raw recordings.
         self.excluded_recordings.add(original_recording_index)
         self.recordings_raw = [recording for recording in self.recordings_raw if recording['recording_id'] != original_recording_index]
+        logging.info(f"Recording {original_recording_index} has been excluded.")
         
     def restore_recording(self, original_recording_index: int):
         """
@@ -356,15 +355,18 @@ class EMGSession(EMGData):
         self.recordings_raw = sorted(self.recordings_raw, key=lambda x: x['recording_id'])
         self.recordings_processed
         self.m_max
+
+        logging.info(f"Recording {original_recording_index} has been restored.")
         return original_recording_index
 
     def reload_recordings(self):
         """
-        Reloads the recordings to the original state.
+        Reloads all recordings to the original state.
         """
         self.recordings_raw = copy.deepcopy(self._original_recordings)
         self.excluded_recordings = set()
         self.reset_properties(recalculate=True)
+        logging.info("All recordings have been reloaded from the original state.")
 
     def invert_channel_polarity(self, channel_index):
         """
@@ -384,6 +386,12 @@ class EMGSession(EMGData):
         """
         self._recordings_processed = None
         self._m_max = None
+        
+        # remove 'rectified_raw' or 'rectified_filtered' data if it exists.
+        if hasattr(self, 'recordings_rectified_raw'):
+            del self.recordings_rectified_raw
+        if hasattr(self, 'recordings_rectified_filtered'):
+            del self.recordings_rectified_filtered
 
         if recalculate:
             self.recordings_processed
@@ -637,6 +645,7 @@ class EMGDataset(EMGData):
         self._m_max = None
         self.dataset_id = f"{self.date}_{self.animal_id}_{self.condition.replace(' ', '-')}"
 
+        # Saving was disabled for now. It's better to save the dataset inside of the experiment class.
         if os.path.exists(self.save_path) and not temp:
             raise FileExistsError(self.save_path)
         else:
@@ -649,8 +658,11 @@ class EMGDataset(EMGData):
                 emg_sessions = [emg_sessions]
             self.original_emg_sessions = emg_sessions
             self.emg_sessions: List[EMGSession] = []
-            logging.info(f"Unpacking EMG sessions: {emg_sessions}")
+
+            logging.info(f"Unpacking {len(emg_sessions)} EMG sessions...")
             self.emg_sessions = self.__unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
+            
+            # Exclude any sessions if needed.
             if len(emg_sessions_to_exclude) > 0:
                 logging.warning(f"Excluding the following sessions from the dataset: {emg_sessions_to_exclude}")
                 self.emg_sessions = [session for session in self.emg_sessions if session.session_id not in emg_sessions_to_exclude]
@@ -667,9 +679,10 @@ class EMGDataset(EMGData):
                 self.num_channels : int = self.emg_sessions[0].num_channels
                 self.stim_start : float = self.emg_sessions[0].stim_start
                 self.channel_names : List[str] = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
-                self.latency_windows : LatencyWindow = self.emg_sessions[0].latency_windows.copy()        
-                if not temp:
-                    self.save_dataset(self.save_path)          
+                self.latency_windows : LatencyWindow = self.emg_sessions[0].latency_windows.copy()
+                logging.info(f"Dataset {self.dataset_id} initialized with {len(self.emg_sessions)} sessions.")
+                # if not temp:
+                #     self.save_dataset(self.save_path)
 
     def dataset_parameters(self):
         """
@@ -741,6 +754,7 @@ class EMGDataset(EMGData):
         """
         for session in self.emg_sessions:
             session.invert_channel_polarity(channel_index)
+        logging.info(f"Channel {channel_index} polarity has been inverted for all sessions in dataset {self.dataset_id}.")
 
     def reset_properties(self, recalculate : bool = False):
         """
@@ -753,7 +767,7 @@ class EMGDataset(EMGData):
 
     #Properties for the EMGDataset class.
     @property
-    def name(self):
+    def formatted_name(self):
         return f"{self.date} {self.animal_id} {self.condition}"
     @property
     def m_max(self):
@@ -768,7 +782,7 @@ class EMGDataset(EMGData):
                 channel_m_max = np.mean(channel_m_maxes)
                 m_max.append(float(channel_m_max))
             self._m_max = m_max
-            logging.info(f"Average M-max values created for dataset {self.name}: {self._m_max}")
+            logging.info(f"Average M-max values created for dataset {self.formatted_name}: {self._m_max}")
         return self._m_max
 
     # User methods for manipulating the EMGSession instances in the dataset.
@@ -829,6 +843,7 @@ class EMGDataset(EMGData):
         channel_name_dict = {fresh_temp_dataset.channel_names[i]: self.channel_names[i] for i in range(self.num_channels)}
         self.rename_channels(channel_name_dict)
         self.set_reflex_settings(self.m_start, self.m_end[0]-self.m_start[0], self.h_start, self.h_end[0]-self.h_start[0])
+        self.apply_preferences(reset_properties=False)
         self.reset_properties(recalculate=True)
     
     def reload_session(self, session_id : str):
@@ -877,10 +892,27 @@ class EMGDataset(EMGData):
             session.m_end = [(time + m_duration) for time in m_start]
             session.h_start = h_start
             session.h_end = [(time + h_duration) for time in h_start]
+
+            # Apply the preferences to the session latency windows.
+            for latency_window in session.latency_windows:
+                if latency_window.name == 'M-wave':
+                    latency_window.start_times = m_start
+                    latency_window.durations = [m_duration for _ in m_start]
+                elif latency_window.name == 'H-reflex':
+                    latency_window.start_times = h_start
+                    latency_window.durations = [h_duration for _ in h_start]
         self.m_start = m_start
         self.m_end = [(time + m_duration) for time in m_start]
         self.h_start = h_start
         self.h_end = [(time + h_duration) for time in h_start]
+
+        for latency_window in self.latency_windows:
+            if latency_window.name == 'M-wave':
+                latency_window.start_times = m_start
+                latency_window.durations = [m_duration for _ in m_start]
+            elif latency_window.name == 'H-reflex':
+                latency_window.start_times = h_start
+                latency_window.durations = [h_duration for _ in h_start]
 
     def rename_channels(self, new_names : dict[str]):
         """
@@ -903,7 +935,7 @@ class EMGDataset(EMGData):
         except IndexError:
             logging.error("Error: The number of new names does not match the number of channels in the dataset.")
         
-    def apply_preferences(self):
+    def apply_preferences(self, reset_properties=True):
         """
         Applies the preferences set in the config file to the dataset.
         """
@@ -926,14 +958,15 @@ class EMGDataset(EMGData):
 
         # Apply preferences to the session objects.
         for session in self.emg_sessions:
-            session.apply_preferences()
+            session.apply_preferences(reset_properties=False)
 
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGDatasetPlotter(self)
         for latency_window in self.latency_windows:
             latency_window.linestyle = config['latency_window_style']
         
-        self.reset_properties(recalculate=True)
+        if reset_properties:
+            self.reset_properties(recalculate=True)
         
     # Save and load the dataset object.
     def save_dataset(self, save_path=None):
@@ -942,9 +975,10 @@ class EMGDataset(EMGData):
 
         Args:
             save_path (str): The filename/save path to use for saving the dataset object.
-        """
+        """        
         if save_path is None:
             save_path = self.save_path
+        logging.info(f"Saving dataset '{self.formatted_name}' to {save_path}.")
             
         with open(save_path, 'wb') as file:
             pickle.dump(self, file)
@@ -960,9 +994,10 @@ class EMGDataset(EMGData):
         Returns:
             EMGDataset: The loaded dataset object.
         """
+        logging.info(f"Loading dataset from {save_path}.")
         with open(save_path, 'rb') as file:
             dataset = pickle.load(file) # type: EMGDataset
-            dataset.apply_preferences()
+            dataset.apply_preferences(reset_properties=False)
         return dataset
     
     # Static methods for extracting information from dataset names and dataset dictionaries.
@@ -994,7 +1029,7 @@ class EMGDataset(EMGData):
             
             return date, animal_id, condition
         else:
-            logging.error(f"Error: Dataset name '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
+            logging.error(f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
             return None, None, None
 
     @classmethod
@@ -1046,6 +1081,7 @@ class EMGDataset(EMGData):
                 session = EMGSession(session) # replace the string with an actual session object.
                 pickled_sessions.append(session)
             elif isinstance(session, EMGSession):
+                logging.info(f"Session {session.session_id} is already an EMGSession instance with {session.num_recordings} recordings.")
                 pickled_sessions.append(session)
             else:
                 raise TypeError(f"An object in the 'emg_sessions' list was not properly converted to an EMGSession. Object: {session}, {type(session)}")
@@ -1077,28 +1113,31 @@ class EMGDataset(EMGData):
         return True, "All sessions have consistent parameters"
 
 class EMGExperiment(EMGData):
-    def __init__(self, expt_name, expts_dict: List[str] = [], save_path: str = None, temp: bool = False):
-            self.dataset_dict, self.dataset_names = expts_dict[expt_name]
-            self.expt_name = expt_name
-
-            # Create a list of EMGDataset instances from the dataset dictionary.
-            emg_datasets = [EMGDataset.dataset_from_dataset_dict(self.dataset_dict, i, temp=temp) for i in range(len(self.dataset_names))] # Type: List[EMGDataset]
-            self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.expt_name}.pickle")) if save_path is None else save_path
+    def __init__(self, expt_id, expts_dict: List[str] = [], save_path: str = None, temp: bool = False):
+            dataset_dict, dataset_dict_keys = expts_dict[expt_id]
+            self.formatted_name = expt_id
+            self.expt_id = expt_id.replace(' ', '_')
+            self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.expt_id}.pickle")) if save_path is None else save_path
 
             if os.path.exists(self.save_path) and not temp:
                 raise FileExistsError(f"Experiment already exists at {self.save_path}.")
             else:
-                logging.info(f"Creating new experiment: {self.expt_name}.")
+                logging.info(f"Creating new experiment: {self.expt_id}.")
                 super().__init__()
-                self.plotter = EMGExperimentPlotter(self)    
+                self.plotter = EMGExperimentPlotter(self)
+
+                # Create a list of EMGDataset instances from the dataset dictionary.
+                emg_datasets_list = [EMGDataset.dataset_from_dataset_dict(dataset_dict, i, temp=True) for i in range(len(dataset_dict_keys))] # Type: List[EMGDataset]
+                
+                # Handle the case where only one dataset is passed as a string or an EMGDataset instance.
+                if isinstance(emg_datasets_list, EMGDataset) or isinstance(emg_datasets_list, str):
+                    emg_datasets_list = [emg_datasets_list]
                 
                 # Unpack the EMG datasets and exclude any datasets if needed.
-                if isinstance(emg_datasets, str) or isinstance(emg_datasets, EMGDataset):
-                    emg_datasets = [emg_datasets]
-                self.original_emg_datasets = emg_datasets
+                self.original_emg_datasets = emg_datasets_list # Save the original list of EMG datasets for reloading purposes.
                 self.emg_datasets: List[EMGDataset] = []
-                logging.info(f"Unpacking EMG sessions: {emg_datasets}")
-                self.emg_datasets = self.__unpackEMGDatasets(emg_datasets) # Convert file location strings into a list of EMGDataset instances.
+                logging.info(f"Unpacking {len(emg_datasets_list)} EMG datasets.")
+                self.emg_datasets = self.__unpackEMGDatasets(emg_datasets_list) # Convert file location strings into a list of EMGDataset instances.
 
                 # Check that all sessions have the same parameters and set dataset parameters.
                 consistent, message = True, ''
@@ -1113,19 +1152,21 @@ class EMGExperiment(EMGData):
                     self.latency_windows : List[LatencyWindow] = self.emg_datasets[0].latency_windows.copy()
                     if not temp:
                         self.save_experiment(self.save_path)
+                        logging.info(f"Experiment saved to {self.save_path}")
+                    logging.info(f"Experiment {self.expt_id} created successfully.")
 
     def experiment_parameters(self):
         """
         Logs EMG dataset parameters.
         """
-        report = [f"Experiment Name: {self.expt_name}",
+        report = [f"Experiment ID: {self.expt_id}",
                   f"Datasets ({len(self.emg_datasets)}): {[dataset.dataset_id for dataset in self.emg_datasets]}."]
 
         for line in report:
             logging.info(line)
         return report
 
-    def apply_preferences(self):
+    def apply_preferences(self, reset_properties=True):
         """
         Applies the preferences set in the config file to the dataset.
         """
@@ -1148,12 +1189,22 @@ class EMGExperiment(EMGData):
 
         # Apply preferences to the session objects.
         for dataset in self.emg_datasets:
-            dataset.apply_preferences()
+            dataset.apply_preferences(reset_properties=reset_properties)
 
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGExperimentPlotter(self)
         for latency_window in self.latency_windows:
             latency_window.linestyle = config['latency_window_style']
+
+    def get_dataset(self, dataset_idx: int) -> EMGDataset:
+        """
+        Returns the EMGDataset object at the specified index.
+        """
+        return self.emg_datasets[dataset_idx]
+
+    @property
+    def dataset_names(self):
+        return [dataset.formatted_name for dataset in self.emg_datasets]
 
     def save_experiment(self, save_path=None):
         """
@@ -1164,6 +1215,8 @@ class EMGExperiment(EMGData):
         """
         if save_path is None:
             save_path = self.save_path
+
+        logging.info(f"Saving experiment '{self.expt_id}' to {save_path}.")
             
         with open(save_path, 'wb') as file:
             pickle.dump(self, file)
@@ -1179,11 +1232,12 @@ class EMGExperiment(EMGData):
         Returns:
             EMGExperiment: The loaded experiment object.
         """
+        logging.info(f"Reloading experiment from file: {save_path}.")
         with open(save_path, 'rb') as file:
             experiment = pickle.load(file) # type: EMGExperiment
-            experiment.apply_preferences()
+            experiment.apply_preferences(reset_properties=False)
             return experiment
-    
+
     @staticmethod
     def getExperimentInfo(experiment_name : str) -> tuple:
         pass
@@ -1225,6 +1279,7 @@ class EMGExperiment(EMGData):
         pickled_datasets = []
         for dataset in emg_datasets:
             if isinstance(dataset, str): # If list object is dtype(string), then convert to an EMGDataset.
+                logging.info(f"Unpacking dataset: {dataset}")
                 dataset = EMGDataset(dataset) # replace the string with an actual dataset object.
                 pickled_datasets.append(dataset)
             elif isinstance(dataset, EMGDataset):
@@ -1232,7 +1287,8 @@ class EMGExperiment(EMGData):
             else:
                 raise TypeError(f"An object in the 'emg_datasets' list was not properly converted to an EMGDataset. Object: {dataset}, {type(dataset)}")
             
-            pickled_datasets = sorted(pickled_datasets, key=lambda x: x.save_path)
+            logging.info("Sorting datasets by dataset_id.")
+            pickled_datasets = sorted(pickled_datasets, key=lambda x: x.dataset_id)
         
         return pickled_datasets
 
@@ -1248,21 +1304,20 @@ class EMGExperiment(EMGData):
 
         for dataset in self.emg_datasets[1:]:
             if dataset.num_channels != reference_num_channels:
-                return False, f"Inconsistent num_channels for {dataset.name}: {dataset.num_channels} != {reference_num_channels}."
+                return False, f"Inconsistent num_channels for {dataset.formatted_name}: {dataset.num_channels} != {reference_num_channels}."
 
         return True, "All datasets have consistent parameters"
 
 
 if __name__ == '__main__':
     from monstim_converter import pickle_data  # noqa: F401
-    from monstim_analysis.Analyze_EMG import EMGData,EMGDataset
-    from monstim_utils import DATA_PATH, OUTPUT_PATH, SAVED_DATASETS_PATH  # noqa: F401
+    from Analyze_EMG import EMGData,EMGDataset
 
     #Process CSVs into Pickle files: 'files_to_analyze' --> 'output'
     # pickle_data(DATA_PATH, OUTPUT_PATH) # If pickles are already created, comment this line out.
 
     # Create dictionaries of Pickle datasets and single sessions that are in the 'output' directory.
-    dataset_dict, datasets = EMGData.unpackPickleOutput(OUTPUT_PATH)
+    dataset_dict, datasets = EMGData.unpackPickleOutput(get_output_bin_path())
     for idx, dataset in enumerate(datasets):
         print(f'dataset index {idx}: {dataset}')
 

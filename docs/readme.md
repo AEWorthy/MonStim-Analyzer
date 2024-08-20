@@ -31,63 +31,76 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 4. **Select Session**: Select a session within the chosen dataset.
 5. **Change Channel Names**: Optionally, customize the channel names via the settings dialog. This change is persistent even if you close the program.
 6. **Generate Reports**: Access various reports through the "Reports" menu.
-7. **Visualize Data**: Use the plotting options to visualize different aspects of your EMG data.
+7. **Visualize Data**: Use dynamic plotting options to visualize different aspects of your EMG data.
+8. **Export Raw Data**: Click the "Plot/Extract Raw Data" button in the plotting menu to easily export a plot's raw data to a CSV file.
 
 # Quick Start Guide
 
-1. **Import Data**: 
-   - Click on "File" > "Import CSV Data" in the menu bar.
-   - Select the directory containing your directory containing dataset folders with CSV files. ***See the `Important Information` section below for a guide on how to structure your data.***
+1. **Import Data**
+   - Click on "File" > "Import an Experiment" in the menu bar.
+   - Select the directory containing the experiment directory. An experiment level directory should contain one or more dataset folders each containing one or more session folders with recording CSV files. 
+   - ***See the `Important Information` section below for a guide on how to structure your data.*** In short, an "EMG Experiment" is a group of "EMG Datasets" that all have similar experimental parameters/conditions but are from different animals. Each "EMG Dataset" may contain multiple replicate "EMG Sessions" which are each stimulation ramps where each stimulus/response is an "EMG Recording".
    - Wait for the import process to complete. Processed data will be stored in the `/data` directory in the same folder as the `.EXE` file.
 
-2. **Select Dataset and Session**:
-   - Use the dropdown menus in the "Data Selection" section to choose a dataset and session of interest.
+2. **Select Dataset and Session**
+   - Use the dropdown menus in the "Data Selection" section to choose an experiment, a dataset, and a session of interest for plotting, report generation, etc.
 
-3. **View Reports**:
+3. **View Reports**
    - Click on the "Show M-max Report", "Show Session Report", or "Show Dataset Report" buttons to view detailed information about the selected data.
 
-4. **Plot Data**:
-   - Choose whether to plot data from the selected session or from the entire dataset.
+4. **Plot Data**
+   - Choose whether to plot data from the selected session or from the entire dataset. *Note: Future versions will also allow analysis/plotting at the experiment level.*
    - Choose the desired plot type from the dropdown menu. (see the `Plot Types` section for more info).
    - Adjust any additional plot options.
    - Click the "Plot" button to generate the visualization.
         - Note: You can open more than one plot at a time. They will always open in new windows.
 
-5. **Customization Settings**:
+5. **Export Plotted Data**
+    - Click the "Plot/Export Raw Data" button to simultaneously plot data and extract the plotted values.
+    - In the pop-up window, press "Export Dataframe..." to easily export this data to a CSV file.
+    - Note: The extracted data are an exact copy of the data plotted in the plotting frame.
+
+6. **Customization Settings**
     - Use "Remove Session" in the "Data Selection" panel to remove a session from the dataset. This is useful if one of your recording sessions is too noisy or had other issues and you want to exclude it from the dataset.
         - Use "Undo"/"Redo" to undo/redo the removal/addition of sessions.
-        - Alternatively use the "Reload All Sessions" button to restore all sessions to the dataset. This will preserve any changes you made to the dataset such as channel names or reflex time windows.
-    - Use "Tools" > "Change Channel Names" to modify channel labels.
-    - Use "Tools" > "Update Reflex Settings" to adjust reflex window parameters.
+        - Alternatively use the "Edit" > "Reload Current Dataset" button to restore all sessions to the dataset. This will preserve any changes you made to the dataset such as channel names or reflex time windows.
+    - Use "Edit" > "Change Channel Names" to modify channel labels.
+    - Use "Edit" > "Update Reflex Time Windows" to adjust latency window parameters (For now just M-wave and H-reflex windows).
+    - Use "Edit" > "Invert Channel Polarity" to select any desired channels in the currently selected dataset for which you would like to invert the polarity. This will be applied to all sessions in the dataset for each of the selected channels.
+    - To view/exclude individual recordings, use the Single Session plot type called "Single EMG Recordings". Cycle through the individual recordings and exclude/include any that you desire. Use "Edit" > "Reload Current Session" to reset all changes.
+    - For advanced users, set user preferences in "File" > "Preferences".
+
+7. **Special Note**
+    - Any changes made to your experiments (such as altering reflex window settings or channel names) are persistent (this data is saved in the ./data/bin folder). If you want to reset/reload experiments or restore them to default, you should use "Edit" > "Reload Current Experiment".
 
 # Important Information and Tips
 
 ## Definitions for Common Terms
 
 ### EMG Data Types
-- **EMG Recording:** A single peri-stimulus recording at a defined stimulus value. Many recordings (sometimes with varying stimulus intensity) will make up a session.
-- **EMG Session:** A set of EMG Recordings. All the recordings will share the same recording parameters like stimulus/recording duration; the only variable parameter should be the stimulus intensity. And EMG session may contain enough datapoints to create a Reflex Curve plot (see the `EMG Plot Types` section for details).
-- **EMG Dataset:** A set of EMG sessions. These are replicates of the same protocol/condition within a single animal.
-- **EMG Experiment:** *(NOT YET IMPLEMENTED)* A set of EMG Datasets. These are replicates of the same protocol/condition on different animal.
+- **EMG Experiment:** A set of EMG Datasets. These are biological replicates of the same protocol/condition across different animals.
+- **EMG Dataset:** A set of EMG sessions. These are replicates of a single protocol/condition within a single animal.
+- **EMG Session:** A set of EMG Recordings. All the recordings will share the same recording parameters like stimulus duration/recording duration; the only variable parameter should be the stimulus intensity. And individual EMG session should contain enough datapoints to create a Reflex Curve plot (see the `EMG Plot Types` section for details).
+- **EMG Recording:** A single peri-stimulus recording at a defined stimulus intensity. Many recordings (often with varying stimulus intensity) will make up a session.
 
 ## How to structure your CSV data
 
-- Importing data from CSV files makes certain assumptions about how your data is saved. You should store your data in the following structure:
-    - my_project/
-    - Dataset 1/
-        - XX001-1.CSV  # These are recordings files for Session 'XX001'
-        - XX001-2.CSV
-        - ...
-        - XX002-1.CSV  # These are recordings files for Session 'XX002'
-        - XX002-2.CSV
-        - ...
-    - Dataset 2/
-        - session files...
-    - other datasets...
+- The algorithm for importing experiment data from CSV files makes certain assumptions about how your data is saved. You should store your data in the following structure:
+    - Experiment 1/
+        - Dataset 1/
+            - XX001-1.CSV  # These are recordings files for Session 'XX001'
+            - XX001-2.CSV
+            - ...
+            - XX002-1.CSV  # These are recordings files for Session 'XX002'
+            - XX002-2.CSV
+            - ...
+        - Dataset 2/
+            - session files...
+        - other datasets...
 
-- The project folder name is not used at all by the program. Later versions may use it to create an `Experiment` data type.
-- Dataset folder names should all have the following format: '[YYMMDD] [AnimalID] [Experimental Condition]'.
-    - You can leave `.STM` or any other non-`.CSV` filetypes in the datset folders.
+- The experiment folder name (the directory you import under "File" > "Import an Experiment") is used to name the imported experiment, so make sure it is sufficiently descriptive.
+- Dataset folder names should all have the following format: '[YYMMDD] [AnimalID] [Experimental condition or other desired info...]'.
+    - You can leave `.STM` or any other non-`.CSV` filetypes in the datset folders. Any non-CSV files will be ignored.
 - Session file names will be used to create a [`SessionID`]. It is best to leave them as the default names given by MonStim.
 
 
@@ -152,11 +165,6 @@ The `Entire Dtaset` view offers the following plot types:
    - Options:
      - Choose reflex amplitude calculation method
      - Plot relative to M-max
-
-
-## Other Tips
-
-- Changes made to dataset (such as altering reflex window settings or channel names) are persistent and saved in the ./data/bin folder. If you want to reset/reload datasets or restore any to default, you should close the program, delete the appropriate '.pickle' file, and re-open the program.
 
 
 

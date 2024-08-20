@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
 from PyQt6.QtCore import Qt
@@ -15,8 +16,6 @@ class DataSelectionWidget(QGroupBox):
         self.create_dataset_selection()
         self.create_session_selection()
         self.setLayout(self.layout)
-        self.create_dataset_options()
-        self.update_ui()
 
     def create_experiment_selection(self):
         experiment_layout = QHBoxLayout()
@@ -41,25 +40,35 @@ class DataSelectionWidget(QGroupBox):
         self.session_label = QLabel("Select Session:")
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self.parent.load_session)
+        
+        # button to remove session from dataset
+        self.remove_session_button = QPushButton("Remove Session")
+        self.remove_session_button.clicked.connect(self.parent.remove_session)
+        
         session_layout.addWidget(self.session_label)
         session_layout.addWidget(self.session_combo)
+        session_layout.addWidget(self.remove_session_button)
         self.layout.addLayout(session_layout)
     
     def update_experiment_combo(self):
         self.experiment_combo.clear()
-        if self.parent.experiments:
-            for experiment in self.parent.experiments:
+        if self.parent.expts_dict_keys:
+            for experiment in self.parent.expts_dict_keys:
                 self.experiment_combo.addItem(experiment)
                 index = self.experiment_combo.count() - 1
                 self.experiment_combo.setItemData(index, experiment, role=Qt.ItemDataRole.ToolTipRole)
+        else:
+            logging.warning("Cannot update experiments combo. No experiments loaded.")
 
     def update_dataset_combo(self):
         self.dataset_combo.clear()
-        if self.parent.datasets:
-            for dataset in self.parent.datasets:
-                self.dataset_combo.addItem(dataset)
+        if self.parent.current_experiment:
+            for name in self.parent.current_experiment.dataset_names:
+                self.dataset_combo.addItem(name)
                 index = self.dataset_combo.count() - 1
-                self.dataset_combo.setItemData(index, dataset, role=Qt.ItemDataRole.ToolTipRole)
+                self.dataset_combo.setItemData(index, name, role=Qt.ItemDataRole.ToolTipRole)
+        else:
+            logging.warning("Cannot update datasets combo. No experiment loaded.")
 
     def update_session_combo(self):
         self.session_combo.clear()
@@ -68,28 +77,11 @@ class DataSelectionWidget(QGroupBox):
                 self.session_combo.addItem(session.session_id)
                 index = self.session_combo.count() - 1
                 self.session_combo.setItemData(index, session.session_id, role=Qt.ItemDataRole.ToolTipRole)
+        else:
+            logging.warning("Cannot update sessions combo. No dataset loaded.")
 
-    def update_ui(self):
+    def update_all_data_combos(self):
         self.update_experiment_combo()
         self.update_dataset_combo()
         self.update_session_combo()
     
-    def create_dataset_options(self):
-        self.dataset_options = QHBoxLayout()
-        self.dataset_options.setSpacing(5)
-
-        self.dataset_options.addWidget(QLabel(""))
-
-        # button to remove session from dataset
-        self.remove_session_button = QPushButton("Remove Session")
-        self.remove_session_button.clicked.connect(self.parent.remove_session)
-        self.dataset_options.addWidget(self.remove_session_button)
-
-        # button to reload dataset from file
-        self.reload_dataset_button = QPushButton("Reload All Sessions")
-        self.reload_dataset_button.clicked.connect(self.parent.reload_dataset)
-        self.dataset_options.addWidget(self.reload_dataset_button)
-
-
-        self.layout.addLayout(self.dataset_options)
-

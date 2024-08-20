@@ -1,6 +1,6 @@
 # monstim_analysis/__init__.py
 
-__version__ = '1.4.0'
+__version__ = '1.5.0'
 
 # Metadata
 __title__ = 'monstim_analysis'

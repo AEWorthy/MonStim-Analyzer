@@ -21,6 +21,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from monstim_utils import get_source_path, CustomLoader
+from monstim_gui.splash import SPLASH_INFO
 
 if TYPE_CHECKING:
     from monstim_analysis import EMGSession, EMGDataset
@@ -62,7 +63,7 @@ class ReflexSettingsDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.dataset.name}")
+        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.dataset.formatted_name}")
         layout = QVBoxLayout()
 
         # Duration
@@ -209,7 +210,7 @@ class PreferencesDialog(QDialog):
             "'Suspected H-reflex' Plot Settings": ["h_threshold"],
             "M-max Calculation Settings": ["m_max_args"],
             "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size", 
-                                      "m_color", "h_color", "flag_style", "subplot_adjust_args"],
+                                      "m_color", "h_color", "latency_window_style", "subplot_adjust_args"],
         }
 
         for section, keys in sections.items():
@@ -458,8 +459,8 @@ class LatexHelpWindow(QWidget):
         ])
         return md.convert(markdown_content)
     
-class InfoDialog(QWidget):
-    logging.debug("Showing info dialog")
+class AboutDialog(QWidget):
+    logging.debug("Showing 'About' dialog")
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Program Information")
@@ -485,23 +486,23 @@ class InfoDialog(QWidget):
         font = QFont()
         font.setPointSize(12)
 
-        program_name = QLabel("MonStim EMG Analyzer")
+        program_name = QLabel(SPLASH_INFO['program_name'])
         program_name.setStyleSheet("font-weight: bold; color: #333333;")
         program_name.setFont(font)
         program_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(program_name)
 
-        version = QLabel("Version 1.0")
+        version = QLabel(SPLASH_INFO['version'])
         version.setStyleSheet("color: #666666;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
 
-        description = QLabel("Software for analyzing EMG data from LabView MonStim experiments.\n\n\nClick to dismiss...")
+        description = QLabel(SPLASH_INFO['description'])
         description.setStyleSheet("color: #666666;")
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(description)
 
-        copyright = QLabel("© 2024 Andrew Worthy")
+        copyright = QLabel(SPLASH_INFO['copyright'])
         copyright.setStyleSheet("color: #999999;")
         copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
         layout.addWidget(copyright)
@@ -556,7 +557,7 @@ class InvertChannelPolarityDialog(QDialog):
 
         # Add checkbox header
         header_layout = QVBoxLayout()
-        header_layout.addWidget(QLabel(f"Invert selected channel polarities for dataset\n'{self.dataset.name}'"))
+        header_layout.addWidget(QLabel(f"Invert selected channel polarities for dataset\n'{self.dataset.formatted_name}'"))
         header_layout.addWidget(QLabel("\nSelect channels to invert:"))
         layout.addLayout(header_layout)
 

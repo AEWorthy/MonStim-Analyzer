@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import copy
 from typing import TYPE_CHECKING
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -25,7 +26,6 @@ class EMGPlotter:
     """
     def __init__(self, emg_object):
         self.emg_object : 'EMGData' = emg_object
-        plt.switch_backend('QtAgg')
         
     def set_plot_defaults(self):
         """
@@ -177,6 +177,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         Parameters:
         - data_type (str): The type of EMG data to retrieve. Valid options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.
+        - original (bool): Flag to retrieve the original EMG recordings. Default is False.
 
         Returns:
         - list: The EMG recordings based on the specified data type.
@@ -186,7 +187,8 @@ class EMGSessionPlotter(EMGPlotter):
 
         """
         if original:
-            original_recordings = self.emg_object._original_recordings.copy()
+            # deep copy of the original recordings
+            original_recordings = copy.deepcopy(self.emg_object._original_recordings)
             match data_type:
                 case 'filtered':
                     return self.emg_object._process_emg_data(original_recordings, apply_filter=True, rectify=False)
@@ -198,8 +200,7 @@ class EMGSessionPlotter(EMGPlotter):
                     return self.emg_object._process_emg_data(original_recordings, apply_filter=True, rectify=True)
                 case _:
                     raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
-
-        else:
+        else: # For most uses, use the raw or filtered recordings
             if data_type == 'filtered':
                 return self.emg_object.recordings_processed
             elif data_type == 'raw':

@@ -20,6 +20,8 @@ class MenuBar(QMenuBar):
         import_action = file_menu.addAction("Import an Experiment")
         import_action.triggered.connect(self.parent.import_expt_data)
 
+        file_menu.addSeparator()
+
         # save_action = file_menu.addAction("Save Data")
         # save_action.triggered.connect(self.parent.save_data)
 
@@ -27,9 +29,11 @@ class MenuBar(QMenuBar):
         # load_action.triggered.connect(self.parent.load_data)
 
         # refresh existing datasets button
-        refresh_datasets_action = file_menu.addAction("Refresh Datasets/Sessions Lists")
+        refresh_datasets_action = file_menu.addAction("Refresh Experiments in Data Selection Lists")
         refresh_datasets_action.triggered.connect(self.parent.refresh_existing_experiments)
         refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
+
+        file_menu.addSeparator()
 
         # Preferences button
         preferences_action = file_menu.addAction("Preferences")
@@ -47,9 +51,17 @@ class MenuBar(QMenuBar):
         self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         self.redo_action.setShortcut(QKeySequence.StandardKey.Redo)
 
-        # Reload current session button
-        reload_action = edit_menu.addAction("Reload Current Session")
-        reload_action.triggered.connect(self.confirm_reload)
+        edit_menu.addSeparator()
+
+        # Reload buttons
+        reload_session_action = edit_menu.addAction("Reload Current Session")
+        reload_session_action.triggered.connect(self.confirm_reload_session)
+        reload_dataset_action = edit_menu.addAction("Reload Current Dataset")
+        reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
+        reload_experiment_action = edit_menu.addAction("Reload Current Experiment")
+        reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
+
+        edit_menu.addSeparator()
 
         # Change channel names button
         change_names_action = edit_menu.addAction("Change Channel Names")
@@ -71,6 +83,8 @@ class MenuBar(QMenuBar):
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self.parent.show_about_screen)
 
+        help_menu.addSeparator()
+
         # Show Help button
         help_action = help_menu.addAction("Show Help")
         help_action.triggered.connect(lambda: self.parent.show_help_dialog('help'))
@@ -79,13 +93,30 @@ class MenuBar(QMenuBar):
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
         processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog('emg_processing'))
 
-    def confirm_reload(self):
-            reply = QMessageBox.question(self, 'Confirm Reload', 
-                                 'Are you sure you want to reload the current session?\n\nNote: This will add back any recordings that were removed.',
-                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                 QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
-                self.parent.reload_current_session()
+    # Edit menu functions
+    def confirm_reload_session(self):
+        reply = QMessageBox.question(self, 'Confirm Reload', 
+                                'Are you sure you want to restore the current session to its original state?\n\nNote: This will add back any recordings that were removed.',
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.parent.reload_current_session()
+    
+    def confirm_reload_dataset(self):
+        reply = QMessageBox.question(self, 'Confirm Reload', 
+                                'Are you sure you want to restore the current dataset to its original state?\n\nNote: This will add back any sessions/recordings that were removed.',
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.parent.reload_current_dataset()
+    
+    def confirm_reload_experiment(self):
+        reply = QMessageBox.warning(self, 'Confirm Reload', 
+                                'Are you sure you want to restore the current experiment to its original state?\n\nNote: THIS ACTION IS NOT REVERSIBLE. This will add back any datasets/sessions/recordings that were removed and will completely reset any changes you made to the data contained within this experiment.',
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.parent.reload_current_experiment()
     
     # Update functions
     def update_undo_redo_labels(self):

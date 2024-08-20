@@ -102,11 +102,9 @@ class RecordingCyclerWidget(QGroupBox):
         if current in self.main_gui.current_session.excluded_recordings:
             self.exclude_button.setText("Exclude")
             self.main_gui.restore_recording(current)
-            self.main_gui.current_dataset.save_dataset() 
         else:
             self.exclude_button.setText("Include")
             self.main_gui.exclude_recording(current)
-            self.main_gui.current_dataset.save_dataset()
 
     def on_recording_changed(self, value):
         if value in self.main_gui.current_session.excluded_recordings:

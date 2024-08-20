@@ -7,8 +7,6 @@ import multiprocessing
 
 from PyQt6.QtWidgets import QApplication
 
-from monstim_gui import EMGAnalysisGUI, SplashScreen
-
 # Constants
 LOG_FILE = 'app.log'
 LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
@@ -21,6 +19,12 @@ def setup_logging(debug_mode: bool) -> None:
         logging.basicConfig(filename=LOG_FILE, level=log_level, format=LOG_FORMAT)
     if debug_mode: logging.info("Debug mode enabled")  # noqa: E701
     logging.debug("Logging setup complete")
+
+def setup_matplotlib():
+    import matplotlib
+    matplotlib.use('QtAgg')  # Ensure compatibility with PyQt6
+    logging.getLogger('matplotlib').setLevel(logging.WARNING) # turn off matplotlib debugging messages
+    logging.debug("Matplotlib setup complete")
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -35,14 +39,22 @@ def main(sys_frozen = True) -> int:
     logging.debug("Starting main function")
     try:
         multiprocessing.freeze_support()
+        setup_matplotlib()
 
+        logging.debug("Creating QApplication")
         app = QApplication(sys.argv)
+
         if sys_frozen:
             # Display splash screen
+            from monstim_gui.splash import SplashScreen
             splash = SplashScreen()
             splash.show()
-
+        
+        # logging.debug("Importing EMGAnalysisGUI")
+        # from monstim_gui import EMGAnalysisGUI
+        logging.debug("Creating main window")
         gui = EMGAnalysisGUI()
+        logging.debug("Showing main window")
         gui.show()
 
         logging.debug("Entering main event loop")
@@ -60,14 +72,15 @@ if __name__ == '__main__':
         # If running as a frozen executable, log to file
         sys_frozen = True
         setup_logging(args.debug)
+        logging.info("Running as frozen executable")
     else:
         # If running in an IDE, log to console
         logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-        if args.debug:
-            logging.debug("Debug mode enabled")
         sys_frozen = False
+        logging.info("Running in IDE")
+
+    from monstim_gui import EMGAnalysisGUI
         
-    
     sys.excepthook = exception_hook
     logging.debug("Script running as main")
     sys.exit(main(sys_frozen=sys_frozen))
