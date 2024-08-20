@@ -4,24 +4,24 @@
 MonStim EMG Analyzer is a graphical user interface (GUI) application designed to facilitate the analysis of electromyography (EMG) data obtained from LabView MonStim experiments. The software allows users to import, process, visualize, and report on EMG data effectively.
 
 ## Features
-- **Data Import**: Import EMG data from CSV files. *You must first convert .STM files to CSVs*.
+- **Data Import**: Import EMG data from CSV files. *You must first convert STM files to CSVs*.
 - **Data Processing**: Automatically process and store EMG data.
-- **Data Visualization**: Plot various types of EMG data including raw EMG signals, suspected H-reflexes, reflex curves, M-max, max H-reflex, and average reflex curves.
-- **Session Management**: Load and manage multiple EMG data sessions under datasets. Remove unwanted session at runtime and reload if necessary.
-- **Report Generation**: Generate and display detailed reports on  M-max, session parameters, and dataset parameters.
-- **Customizable Channel Names**: Change and save custom channel names for datasets and sessions.
+- **Data Visualization**: Plot various types of hierarchical EMG data including raw EMG signals, reflex curves, M-max, max H-reflex, and average reflex curves.
+- **Report Generation**: Generate and display detailed M-max reports, and session or dataset parameters.
+- **Hierarchical Data Management**: Load and manage multiple EMG recording sessions as a dataset, and store multiple datasets as experiments. Exclude unwanted recordings/sessions/datasets at runtime and reload from the originals if desired.
 
 ## Installation
-1. **Download** the MonStim EMG Analyzer zip file from the provided source: https://github.com/AEWorthy/MonStim_Analysis/releases/tag/Releases
-    - Windows Users: Download `MonStim-Analyzer-v1.x-WIN.zip`
-    - Mac Users: Dowload `MonStim-Analyzer-v1.x-OSX.zip`
+1. **Download** the MonStim EMG Analyzer zip file from GitHub: https://github.com/AEWorthy/MonStim_Analysis/releases/tag/Releases
+    - Windows Users: Download `MonStim-Analyzer-vX.x-WIN.zip`
+    - Mac Users: A public Mac version is currently unavailable.
 2. **Extract** the contents of the zip file to a location of your choice on your computer.
-3. **Navigate** to the extracted folder and locate the `MonStim Analyzer v1.X.exe` file.
-    - Note: Please keep all program files in the unzipped directory and work from there.
+3. **Navigate** to the extracted folder and locate the `MonStim Analyzer vX.X.exe` file.
+    - Note: Please keep all program files in the unzipped directory and work directly from there.
 
 ## Running the Application
-1. Double-click on `MonStim Analyzer v1.X.exe` to launch the application.
-    - Note: If you 
+1. Double-click on `MonStim Analyzer vX.X.exe` to launch the application.
+    - Note: Your system may aggresively warn you that this program may be a virus. It is an unsigned program because I am an individual developer.
+    - Additional Note: The program may take a while to load, especially the first time you use it.
 2. The MonStim EMG Analyzer main window will appear, ready for use.
 
 ## Usage
