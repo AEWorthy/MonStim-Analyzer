@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
                              QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget, QFormLayout, QGroupBox, QScrollArea,
-                             QSizePolicy)
+                             QSizePolicy, QCheckBox)
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
 from PyQt6.QtCore import Qt, QUrl, pyqtSlot
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -540,3 +540,46 @@ class PlotWindowDialog(QDialog):
             self.canvas.deleteLater()
         event.accept()
 
+class InvertChannelPolarityDialog(QDialog):
+    def __init__(self, dataset : 'EMGDataset', parent=None):
+        super().__init__(parent)
+        self.dataset = dataset
+        self.channel_names = dataset.channel_names
+
+        self.selected_channels = []
+        
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Invert Channel Polarity")
+        layout = QVBoxLayout(self)
+
+        # Add checkbox header
+        header_layout = QVBoxLayout()
+        header_layout.addWidget(QLabel(f"Invert selected channel polarities for dataset\n'{self.dataset.name}'"))
+        header_layout.addWidget(QLabel("\nSelect channels to invert:"))
+        layout.addLayout(header_layout)
+
+        # Add checkboxes for each channel in the dataset
+        self.checkboxes = []
+        for name in self.channel_names:
+            checkbox = QCheckBox(name, self)
+            self.checkboxes.append(checkbox)
+            layout.addWidget(checkbox)
+        
+        # Add button box (OK and Cancel buttons)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        layout.addWidget(button_box)
+
+        # Connect signals
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        
+        # Final layout setup
+        self.setLayout(layout)
+
+    def get_selected_channel_indexes(self):
+        # Return the indexes of the channels where checkboxes are checked
+        return [i for i, checkbox in enumerate(self.checkboxes) if checkbox.isChecked()]
+
+        

@@ -15,12 +15,13 @@ from monstim_converter import GUIExptImportingThread
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path)
 from .dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, 
-                      LatexHelpWindow, InfoDialog, HelpWindow, PreferencesDialog)
+                      LatexHelpWindow, InfoDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
 from .plotting_widget import PlotWidget, PlotPane
-from .commands import RemoveSessionCommand, CommandInvoker, ExcludeRecordingCommand, RestoreRecordingCommand
+from .commands import (RemoveSessionCommand, CommandInvoker, ExcludeRecordingCommand, 
+                       RestoreRecordingCommand, InvertChannelPolarityCommand)
 from .dataframe_exporter import DataFrameDialog
 
 class SplashScreen(QSplashScreen):
@@ -168,6 +169,23 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.debug("Window settings updated successfully.")
         else:
             QMessageBox.warning(self, "Warning", "Please select a session first.")
+
+    def invert_channel_polarity(self, channel_indexes_to_invert):
+        logging.debug("Inverting channel polarity.")
+
+        if self.current_dataset:
+            dialog = InvertChannelPolarityDialog(self.current_dataset, self)
+
+            if dialog.exec():  # Show the dialog and wait for the user's response
+                channel_indexes_to_invert = dialog.get_selected_channel_indexes()
+                if not channel_indexes_to_invert:
+                    QMessageBox.warning(self, "Warning", "Please select at least one channel to invert.")
+                    return
+                else:
+                    command = InvertChannelPolarityCommand(self, channel_indexes_to_invert)
+                    self.command_invoker.execute(command)
+        else:
+            QMessageBox.warning(self, "Warning", "Please load a dataset first.")
 
     def import_expt_data(self):
         logging.debug("Importing new experiment data from CSV files.")

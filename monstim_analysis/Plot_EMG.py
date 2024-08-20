@@ -314,7 +314,7 @@ class EMGSessionPlotter(EMGPlotter):
         raw_data_df.set_index(['recording_index', 'channel_index', 'stimulus_V', 'time_point'], inplace=True)
         return raw_data_df
 
-    def plot_singleEMG(self, recording_index: int = 0, all_flags : bool = True, plot_legend: bool = True, data_type: str = 'filtered', canvas: FigureCanvas = None):
+    def plot_singleEMG(self, recording_index: int = 0, fixed_y_axis : bool = True, all_flags : bool = True, plot_legend: bool = True, data_type: str = 'filtered', canvas: FigureCanvas = None):
         """
         Plots EMG data for a single recording.
 
@@ -344,6 +344,19 @@ class EMGSessionPlotter(EMGPlotter):
         legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings(data_type, original=True)
 
+        if fixed_y_axis:
+            max_y = [] # list to store maximum values for each channel
+            min_y = [] # list to store minimum values for each channel
+            for recording in emg_recordings:
+                for channel_data in recording['channel_data']:
+                    max_y.append(max(channel_data[window_start_sample:window_end_sample]))
+                    min_y.append(min(channel_data[window_start_sample:window_end_sample]))
+            y_max = max(max_y)
+            y_min = min(min_y)
+            y_range = y_max - y_min
+            y_max += 0.01 * y_range
+            y_min -= 0.01 * y_range
+
         if recording_index < 0 or recording_index >= len(emg_recordings):
             raise ValueError(f"Invalid recording index. Must be between 0 and {len(emg_recordings) - 1}")
 
@@ -363,6 +376,9 @@ class EMGSessionPlotter(EMGPlotter):
 
             # Add each individual EMG value for the current channel
             raw_data_dict['amplitude_mV'].extend(channel_data[window_start_sample:window_end_sample])
+
+            if fixed_y_axis:
+                current_ax.set_ylim(y_min, y_max)
 
         if self.emg_object.num_channels == 1:
             sup_title = f'EMG for Channel 0 (Recording {recording_index}, Stim. = {recording["stimulus_v"]}V)'

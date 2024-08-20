@@ -117,6 +117,22 @@ class RemoveSessionCommand(Command):
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
 
+class InvertChannelPolarityCommand(Command):
+    def __init__(self, gui, channel_indexes_to_invert : list[int]):
+        self.command_name = "Invert Channel Polarity"
+        self.gui : 'EMGAnalysisGUI' = gui # type: EMGAnalysisGUI
+        self.channel_indexes_to_invert = channel_indexes_to_invert
+
+    def execute(self):
+        for channel_index in self.channel_indexes_to_invert:
+            self.gui.current_dataset.invert_channel_polarity(channel_index)
+        self.gui.current_dataset.save_dataset()
+
+    def undo(self):
+        for channel_index in self.channel_indexes_to_invert:
+            self.gui.current_dataset.invert_channel_polarity(channel_index)
+        self.gui.current_dataset.save_dataset()
+
 # def confirm_save(self):
 #     reply = QMessageBox.question(self, 'Save Changes?', 
 #                             'Would you like to save the changes you made to the current session?',

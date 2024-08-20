@@ -330,9 +330,9 @@ class EMGSession(EMGData):
         """
         if original_recording_index in self.excluded_recordings:
             raise ValueError("Recording is already excluded.")
-        # Clear the processed data and M-max values.
-        self._recordings_processed = None
-        self._m_max = None
+
+        self.reset_properties()
+
         # Add the recording to the list of excluded recordings and remove it from the active list of raw recordings.
         self.excluded_recordings.add(original_recording_index)
         self.recordings_raw = [recording for recording in self.recordings_raw if recording['recording_id'] != original_recording_index]
@@ -347,8 +347,7 @@ class EMGSession(EMGData):
         if original_recording_index not in self.excluded_recordings:
             raise ValueError("Recording is not excluded.")
         
-        self._recordings_processed = None
-        self._m_max = None
+        self.reset_properties(recalculate=False)
         
         recording = self._original_recordings.copy().pop(original_recording_index)
         self.recordings_raw.append(recording)
@@ -365,8 +364,30 @@ class EMGSession(EMGData):
         """
         self.recordings_raw = copy.deepcopy(self._original_recordings)
         self.excluded_recordings = set()
+        self.reset_properties(recalculate=True)
+
+    def invert_channel_polarity(self, channel_index):
+        """
+        Inverts the polarity of a recording channel.
+
+        Args:
+            channel_index (int): The index of the channel to invert.
+        """
+        for recording in self.recordings_raw:
+            recording['channel_data'][channel_index] *= -1
+        self.reset_properties(recalculate=True)
+    
+    def reset_properties(self, recalculate : bool = False):
+        """
+        Resets the processed recordings and M-max properties. 
+        This should be called after any changes to the raw recordings so that the properties are recalculated.
+        """
         self._recordings_processed = None
         self._m_max = None
+
+        if recalculate:
+            self.recordings_processed
+            self.m_max
 
     @property
     def recordings_processed (self):
@@ -711,6 +732,25 @@ class EMGDataset(EMGData):
         m_wave_amplitudes = [session.get_m_max(method, channel_index) for session in self.emg_sessions if session.m_max[channel_index] is not None]
         return np.mean(m_wave_amplitudes)
 
+    def invert_channel_polarity(self, channel_index):
+        """
+        Inverts the polarity of a recording channel.
+
+        Args:
+            channel_index (int): The index of the channel to invert.
+        """
+        for session in self.emg_sessions:
+            session.invert_channel_polarity(channel_index)
+
+    def reset_properties(self, recalculate : bool = False):
+        """
+        Resets the processed recordings and M-max properties. 
+        This should be called after any changes to the raw recordings so that the properties are recalculated.
+        """
+        for session in self.emg_sessions:
+            session.reset_properties(recalculate=recalculate)
+        self._m_max = None
+
     #Properties for the EMGDataset class.
     @property
     def name(self):
@@ -765,6 +805,7 @@ class EMGDataset(EMGData):
                 self.scan_rate = self.emg_sessions[0].scan_rate
                 self.num_channels = self.emg_sessions[0].num_channels
                 self.stim_start = self.emg_sessions[0].stim_start
+            self.reset_properties(recalculate=True)
 
     def remove_session(self, session_id : str):
         """
@@ -777,6 +818,7 @@ class EMGDataset(EMGData):
             logging.warning(f">! Error: session {session_id} not found in the dataset.")
         else:
             self.emg_sessions = [session for session in self.emg_sessions if session.session_id != session_id]
+            self.reset_properties(recalculate=True)
     
     def reload_dataset_sessions(self):
         """
@@ -787,6 +829,7 @@ class EMGDataset(EMGData):
         channel_name_dict = {fresh_temp_dataset.channel_names[i]: self.channel_names[i] for i in range(self.num_channels)}
         self.rename_channels(channel_name_dict)
         self.set_reflex_settings(self.m_start, self.m_end[0]-self.m_start[0], self.h_start, self.h_end[0]-self.h_start[0])
+        self.reset_properties(recalculate=True)
     
     def reload_session(self, session_id : str):
         """
@@ -810,6 +853,8 @@ class EMGDataset(EMGData):
             raise ValueError(f"Error: Session {session_id} could not be found in the dataset. The session cannot be reloaded.")
         elif sessions_reloaded > 1:
             logging.warn(f"Warning: Multiple sessions with the ID {session_id} were found in the dataset. All sessions were reloaded.")
+        
+        self.reset_properties(recalculate=True)
 
     def get_session(self, session_idx: int) -> EMGSession:
         """
@@ -887,6 +932,8 @@ class EMGDataset(EMGData):
         self.plotter = EMGDatasetPlotter(self)
         for latency_window in self.latency_windows:
             latency_window.linestyle = config['latency_window_style']
+        
+        self.reset_properties(recalculate=True)
         
     # Save and load the dataset object.
     def save_dataset(self, save_path=None):

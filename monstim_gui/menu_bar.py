@@ -58,6 +58,10 @@ class MenuBar(QMenuBar):
         # Update window settings button
         update_window_action = edit_menu.addAction("Update Reflex Time Windows")
         update_window_action.triggered.connect(self.parent.update_reflex_settings)
+
+        # Invert channel polarity button
+        invert_polarity_action = edit_menu.addAction("Invert Channel Polarity")
+        invert_polarity_action.triggered.connect(self.parent.invert_channel_polarity)
     
     def create_help_menu(self):
         # Help menu

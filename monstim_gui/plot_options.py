@@ -111,6 +111,15 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         second_row_layout.addWidget(self.latency_legend_checkbox)
         latency_windows_layout.addLayout(second_row_layout)
 
+        # Third row
+        third_row_layout = QHBoxLayout()
+        self.fixed_y_axis_label = QLabel("Fixed Y-Axis:")
+        self.fixed_y_axis_checkbox = QCheckBox()
+        self.fixed_y_axis_checkbox.setChecked(True)  # Set the initial state to False
+        third_row_layout.addWidget(self.fixed_y_axis_label)
+        third_row_layout.addWidget(self.fixed_y_axis_checkbox)
+        latency_windows_layout.addLayout(third_row_layout)
+
         # Add the latency_windows_layout to the main layout
         self.layout.addLayout(latency_windows_layout)
 
@@ -123,7 +132,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             "data_type": self.data_type_combo.currentText(),
             "all_flags": self.all_windows_checkbox.isChecked(),
             "plot_legend": self.latency_legend_checkbox.isChecked(),
-            "recording_index": self.recording_cycler.get_current_recording()
+            "recording_index": self.recording_cycler.get_current_recording(),
+            "fixed_y_axis": self.fixed_y_axis_checkbox.isChecked()
         }
     
     def set_options(self, options):
@@ -137,6 +147,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             self.latency_legend_checkbox.setChecked(options["plot_legend"])
         if "recording_index" in options:
             self.recording_cycler.recording_spinbox.setValue(options["recording_index"])
+        if "fixed_y_axis" in options:
+            self.fixed_y_axis_checkbox.setChecked(options["fixed_y_axis"])
 
 class SuspectedHReflexesOptions(BasePlotOptions):
     def create_options(self):
