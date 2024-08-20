@@ -12,7 +12,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 - **Customizable Channel Names**: Change and save custom channel names for datasets and sessions.
 
 ## Installation
-1. **Download** the MonStim EMG Analyzer zip file from the provided source.
+1. **Download** the MonStim EMG Analyzer zip file from the provided source: https://github.com/AEWorthy/MonStim_Analysis/releases/tag/Releases
     - Windows Users: Download `MonStim-Analyzer-v1.x-WIN.zip`
     - Mac Users: Dowload `MonStim-Analyzer-v1.x-OSX.zip`
 2. **Extract** the contents of the zip file to a location of your choice on your computer.
