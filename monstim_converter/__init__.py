@@ -1,6 +1,6 @@
 # monstim_converter/__init__.py
 
-__version__ = '1.4.0'
+__version__ = '1.4.1'
 
 # Metadata
 __title__ = 'monstim_csv_converter'

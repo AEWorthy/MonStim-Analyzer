@@ -152,7 +152,7 @@ class EMGData:
                 ('%m%d%Y', 'MMDDYYYY')
             ]
         else:
-            return None, "Invalid date string length"
+            return None, f"Invalid date string length ('{date_string}'): must be 6 or 8 characters."
         
         valid_formats = []
         for date_format, format_name in formats:
@@ -164,7 +164,7 @@ class EMGData:
                 continue
 
         if not valid_formats:
-            return None, "No valid date format found"
+            return None, f"No valid date format found: please check the date string ('{date_string}')."
         
         if len(valid_formats) == 1:
             return valid_formats[0]
@@ -471,6 +471,9 @@ class EMGSession(EMGData):
                     m_max.append(channel_mmax)
                 except Transform_EMG.NoCalculableMmaxError:
                     logging.info(f"Channel {channel_idx} does not have a valid M-max amplitude.")
+                    m_max.append(None)
+                except ValueError as e:
+                    logging.error(f"Error in calculating M-max amplitude for channel {channel_idx}. Error: {str(e)}")
                     m_max.append(None)
             
             self._m_max = m_max
@@ -1080,12 +1083,13 @@ class EMGDataset(EMGData):
                 logging.info(f'Date: {formatted_date}, Format: {format_info}, Animal ID: {animal_id}, Condition: {condition}')
                 return formatted_date, animal_id, condition
             else:
-                logging.error(f"Error: {format_info}")
-                return 'DATE_ERROR', animal_id, condition
+                logging.error(f"Error: {format_info}\n\n Make the neccessary changes to the dataset name, re-import your data, and try again.")
+                # return 'DATE_ERROR', animal_id, condition
+                raise ValueError(f"Error: {format_info}")
             
         else:
             logging.error(f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
-            return None, None, None
+            raise ValueError(f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
 
     @classmethod
     def dataset_from_dataset_dict(cls, dataset_dict: dict, dataset_idx: int, emg_sessions_to_exclude: List[str] = [], temp=True) -> 'EMGDataset':

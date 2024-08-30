@@ -13,8 +13,8 @@ import shutil
 from PyInstaller.config import CONF
 from PyInstaller.utils.hooks import collect_data_files
 
-EXE_NAME = 'MonStim Analyzer v0.2.1'
-DIST_NAME = 'MonStim Analyzer v0.2.1-alpha'
+EXE_NAME = 'MonStim Analyzer v0.2.2'
+DIST_NAME = 'MonStim Analyzer v0.2.2-alpha'
 
 # Windows build
 
