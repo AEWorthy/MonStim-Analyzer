@@ -184,10 +184,16 @@ class EMGAnalysisGUI(QMainWindow):
                     return
                 
             # Validate the dataset dir names in the experiment directory.
-            for dataset_dir in os.listdir(expt_path):
-                dataset_path = os.path.join(expt_path, dataset_dir)
-                if os.path.isdir(dataset_path):
-                    self.validate_dataset_name(dataset_path)
+            try:
+                for dataset_dir in os.listdir(expt_path):
+                    dataset_path = os.path.join(expt_path, dataset_dir)
+                    if os.path.isdir(dataset_path):
+                        self.validate_dataset_name(dataset_path)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An error occurred while validating dataset names: {e}.\n\nImportation was canceled.")
+                logging.error(f"An error occurred while validating dataset names: {e}. Importation was canceled.")
+                logging.error(traceback.format_exc())
+                return
 
             # Create a progress dialog to show the importing progress.
             progress_dialog = QProgressDialog("Processing data...", "Cancel", 0, 100, self)
@@ -508,10 +514,14 @@ class EMGAnalysisGUI(QMainWindow):
 
                 dialog = QDialog()
                 dialog.setWindowTitle('Rename Dataset')
+                dialog.setModal(True)
+                dialog.resize(500, 200)
                 layout = QVBoxLayout()
 
                 # Add labels based on the validity check dictionary.
-                layout.addWidget(QLabel(f'The dataset name "{dataset_name}" is not valid. Dataset folder names should be formatted like "[YYMMDD] [Animal ID] [Experimental Condition]". Please confirm the following fields, and that they are separated by single spaces:'))
+                main_text = QLabel(f'The dataset name "{dataset_name}" is not valid. Dataset folder names should be formatted like "[YYMMDD] [Animal ID] [Experimental Condition]". Please confirm the following fields, and that they are separated by single spaces:')
+                main_text.setWordWrap(True)
+                layout.addWidget(main_text)
                 if not validity_check_dict['Date']:
                     layout.addWidget(QLabel('- Date (YYYYMMDD)'))
                 if not validity_check_dict['Animal ID']:

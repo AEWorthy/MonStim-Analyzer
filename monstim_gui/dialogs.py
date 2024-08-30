@@ -57,13 +57,15 @@ class ChangeChannelNamesDialog(QDialog):
 class ReflexSettingsDialog(QDialog):
     def __init__(self, session : 'EMGSession', dataset : 'EMGDataset', parent=None):
         super().__init__(parent)
+        self.setModal(True)
+        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.dataset.formatted_name}")
+
         self.session = session
         self.dataset = dataset
         
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.dataset.formatted_name}")
         layout = QVBoxLayout()
 
         # Duration
@@ -160,6 +162,9 @@ class CopyableReportDialog(QDialog):
 class PreferencesDialog(QDialog):
     def __init__(self, default_config_file, parent=None):
         super().__init__()
+        self.setModal(True)
+        self.setWindowTitle("Preferences")
+
         self.default_config_file = default_config_file
         self.user_config_file = self.get_user_config_file()
         self.config = self.read_config()
@@ -544,6 +549,9 @@ class PlotWindowDialog(QDialog):
 class InvertChannelPolarityDialog(QDialog):
     def __init__(self, dataset : 'EMGDataset', parent=None):
         super().__init__(parent)
+        self.setModal(True)
+        self.setWindowTitle("Invert Channel Polarity")
+        
         self.dataset = dataset
         self.channel_names = dataset.channel_names
 
@@ -552,7 +560,6 @@ class InvertChannelPolarityDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("Invert Channel Polarity")
         layout = QVBoxLayout(self)
 
         # Add checkbox header
