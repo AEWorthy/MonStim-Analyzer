@@ -18,7 +18,7 @@ DIST_NAME = 'MonStim_Analyzer_v0.2.2-alpha'
 
 # Windows build
 
-a = Analysis(
+a = Analysis( # type: ignore
     ['main.py'],
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],
@@ -32,9 +32,9 @@ a = Analysis(
     optimize=1, # change to 1 for release, 0 for debug
 )
 
-pyz = PYZ(a.pure)
+pyz = PYZ(a.pure) # type: ignore
 
-exe = EXE(
+exe = EXE( # type: ignore
     pyz,
     a.scripts,
     [],
@@ -53,7 +53,7 @@ exe = EXE(
     icon='src/icon.png'
 )
 
-coll = COLLECT(
+coll = COLLECT( # type: ignore
     exe,
     a.binaries,
     a.datas,
