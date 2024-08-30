@@ -9,7 +9,7 @@ from monstim_utils import get_source_path
 
 SPLASH_INFO = {
     'program_name': "MonStim EMG Analyzer",
-    'version': "Version 0.2 (alpha)",
+    'version': "Version 0.2.1 (alpha)",
     'description': "Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...",
     'copyright': "© 2024 Andrew Worthy"
 }

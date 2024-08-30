@@ -129,6 +129,55 @@ class EMGData:
             expt_pickles_dict[expt] = (dataset_pickles_dict, dataset_names)
         return expt_pickles_dict
 
+    @staticmethod
+    def parse_date(date_string, preferred_format=None):
+        
+        def is_valid_date(year, month, day):
+            try:
+                datetime(year, month, day)
+                return True
+            except ValueError:
+                return False
+            
+        if len(date_string) == 6:
+            formats = [
+                ('%y%m%d', 'YYMMDD'),
+                ('%d%m%y', 'DDMMYY'),
+                ('%m%d%y', 'MMDDYY')
+            ]
+        elif len(date_string) == 8:
+            formats = [
+                ('%Y%m%d', 'YYYYMMDD'),
+                ('%d%m%Y', 'DDMMYYYY'),
+                ('%m%d%Y', 'MMDDYYYY')
+            ]
+        else:
+            return None, "Invalid date string length"
+        
+        valid_formats = []
+        for date_format, format_name in formats:
+            try:
+                parsed_date = datetime.strptime(date_string, date_format)
+                if is_valid_date(parsed_date.year, parsed_date.month, parsed_date.day):
+                    valid_formats.append((parsed_date, format_name))
+            except ValueError:
+                continue
+
+        if not valid_formats:
+            return None, "No valid date format found"
+        
+        if len(valid_formats) == 1:
+            return valid_formats[0]
+        
+        if preferred_format:
+            for parsed_date, format_name in valid_formats:
+                if format_name == preferred_format:
+                    return parsed_date, format_name
+                
+        # If we reach here, we have multiple valid formats and no preferred format
+        logging.warning(f"Ambiguous date. Please specify preferred format: {[f for _, f in valid_formats]}. Returning first valid format: {valid_formats[0][1]}.")
+        return valid_formats[0]
+
 # Three main classes for EMG analysis. Children of the EMGData class.
 class EMGSession(EMGData):
     """
@@ -1002,7 +1051,7 @@ class EMGDataset(EMGData):
     
     # Static methods for extracting information from dataset names and dataset dictionaries.
     @staticmethod
-    def getDatasetInfo(dataset_name : str) -> tuple:
+    def getDatasetInfo(dataset_name : str, preferred_date_format : str = None) -> tuple:
         """
         Extracts information from a dataset' directory name.
 
@@ -1014,20 +1063,26 @@ class EMGDataset(EMGData):
                 If the dataset name does not match the expected format, returns (None, None, None).
         """
         # Define the regex pattern
-        pattern = r'^(\d{6})\s([A-Z0-9.]+)\s(.+)$'
+        pattern = r'^(\d{6,8})\s([A-Z0-9.]+)\s(.+)$'
         
         # Match the pattern
         match = re.match(pattern, dataset_name)
         
         if match:
-            date = match.group(1)
+            date_string = match.group(1)
             animal_id = match.group(2)
             condition = match.group(3)
+
+            parsed_date, format_info = EMGData.parse_date(date_string, preferred_date_format)
             
-            # Convert the date to "yyyy-mm-dd"
-            date = datetime.strptime(date, '%y%m%d').strftime('%Y-%m-%d')
+            if isinstance(parsed_date, datetime):
+                formatted_date = parsed_date.strftime('%Y-%m-%d')
+                logging.info(f'Date: {formatted_date}, Format: {format_info}, Animal ID: {animal_id}, Condition: {condition}')
+                return formatted_date, animal_id, condition
+            else:
+                logging.error(f"Error: {format_info}")
+                return 'DATE_ERROR', animal_id, condition
             
-            return date, animal_id, condition
         else:
             logging.error(f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
             return None, None, None
