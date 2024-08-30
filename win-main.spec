@@ -14,7 +14,7 @@ from PyInstaller.config import CONF
 from PyInstaller.utils.hooks import collect_data_files
 
 EXE_NAME = 'MonStim Analyzer v0.2.2'
-DIST_NAME = 'MonStim Analyzer v0.2.2-alpha'
+DIST_NAME = 'MonStim_Analyzer_v0.2.2-alpha'
 
 # Windows build
 
@@ -67,5 +67,5 @@ coll = COLLECT(
 os.makedirs(CONF['distpath'], exist_ok=True)
 
 # Copy the example_expts directory to the dist directory
-shutil.copytree(os.path.join('files_to_process','example_expts'), os.path.join(CONF['distpath'], DIST_NAME, 'Example Experiments'))
+# shutil.copytree(os.path.join('files_to_process','example_expts'), os.path.join(CONF['distpath'], DIST_NAME, 'Example Experiments'))
 shutil.copy2('docs/readme.md', os.path.join(CONF['distpath'], DIST_NAME))
