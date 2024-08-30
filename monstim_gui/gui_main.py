@@ -1,5 +1,7 @@
 import sys
 import os
+import re
+import shutil
 import logging
 import traceback
 import multiprocessing
@@ -114,8 +116,14 @@ class EMGAnalysisGUI(QMainWindow):
     def unpack_existing_experiments(self):
         logging.debug("Unpacking existing experiments.")
         if os.path.exists(self.output_path):
-            self.expts_dict = EMGExperiment.unpackPickleOutput(self.output_path)
-            self.expts_dict_keys = list(self.expts_dict.keys())
+            try:
+                self.expts_dict = EMGExperiment.unpackPickleOutput(self.output_path)
+                self.expts_dict_keys = list(self.expts_dict.keys())
+                logging.debug("Existing experiments unpacked successfully.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An error occurred while unpacking existing experiments: {e}")
+                logging.error(f"An error occurred while unpacking existing experiments: {e}")
+                logging.error(traceback.format_exc())
     
     # Menu bar functions
     def update_reflex_settings(self):
@@ -147,43 +155,75 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please load a dataset first.")
 
     def import_expt_data(self):
-        logging.debug("Importing new experiment data from CSV files.")
+        logging.info("Importing new experiment data from CSV files.")
         expt_path = QFileDialog.getExistingDirectory(self, "Select Experiment Directory", get_data_path())
-        
-        #extract the experiment name from the selected directory name
         expt_name = os.path.splitext(os.path.basename(expt_path))[0]
-        
-        if expt_path:
+
+        if expt_path and expt_name:
+            # Ensure that the experiment directory does not already exist. If so, prompt the user to confirm overwriting.
+            if os.path.exists(os.path.join(self.output_path, expt_name)):
+                overwrite = QMessageBox.question(self, "Warning", "This experiment already exists in your 'data' folder. Do you want to continue the importation process and overwrite the existing data?\n\nNote: This will also reset and changes you made to the datasets in this experiment (e.g., channel names, latency time windows, etc.)", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if overwrite == QMessageBox.StandardButton.Yes: # Overwrite existing experiment.
+                    logging.info(f"Overwriting existing experiment '{expt_name}' in the output folder.")                
+
+                    # Delete existing experiment folder in the data output folder.
+                    shutil.rmtree(os.path.join(self.output_path, expt_name))
+                    logging.info(f"Deleted existing experiment '{expt_name}' in 'data' folder.")
+
+                    # Delete existing bin file in the output folder.
+                    logging.info(f"Checking for bin file: {os.path.join(get_output_bin_path(),(f'{expt_name}.pickle'))}.")
+                    bin_file = os.path.join(get_output_bin_path(),(f"{expt_name}.pickle"))
+                    if os.path.exists(bin_file):
+                        os.remove(bin_file)
+                        logging.info(f"Deleted bin file: {bin_file}.")
+                    else:
+                        logging.info(f"Bin file not found: {bin_file}. Could not delete existing experiment if it exists.")  
+                else: # Cancel importing the experiment.
+                    logging.info(f"User chose not to overwrite existing experiment '{expt_name}' in the output folder.")
+                    QMessageBox.information(self, "Canceled", "The importation of your data was canceled.")
+                    return
+                
+            # Validate the dataset dir names in the experiment directory.
+            for dataset_dir in os.listdir(expt_path):
+                dataset_path = os.path.join(expt_path, dataset_dir)
+                if os.path.isdir(dataset_path):
+                    self.validate_dataset_name(dataset_path)
+
+            # Create a progress dialog to show the importing progress.
             progress_dialog = QProgressDialog("Processing data...", "Cancel", 0, 100, self)
             progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             progress_dialog.setAutoClose(False)
             progress_dialog.setAutoReset(False)
             progress_dialog.show()
 
+            # Initialize the importing thread.
             max_workers = max(1, multiprocessing.cpu_count() - 1)
-
-            self.thread = GUIExptImportingThread(expt_name, expt_path, self.output_path, max_workers=max_workers)
+            self.thread : GUIExptImportingThread = GUIExptImportingThread(expt_name, expt_path, self.output_path, max_workers=max_workers)
             self.thread.progress.connect(progress_dialog.setValue)
             
+            # Finished signal.
             self.thread.finished.connect(progress_dialog.close)
             self.thread.finished.connect(self.refresh_existing_experiments)
             self.thread.finished.connect(lambda: QMessageBox.information(self, "Success", "Data processed and imported successfully."))
             self.thread.finished.connect(lambda: logging.info("Data processed and imported successfully."))
             
+            # Error signal.
             self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
             self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
             self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
             
+            # Canceled signal.
             self.thread.canceled.connect(progress_dialog.close)
             self.thread.canceled.connect(lambda: QMessageBox.information(self, "Canceled", "Data processing was canceled."))
             self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
             self.thread.canceled.connect(self.refresh_existing_experiments)
             
+            # Start the thread.
             self.thread.start()
-
             progress_dialog.canceled.connect(self.thread.cancel)
-        else:
+        else: # No directory selected.
             QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
+            logging.info("No CSV directory selected. Import canceled.")
     
     def reload_current_session(self):
         logging.debug("Reloading current session.")
@@ -235,9 +275,6 @@ class EMGAnalysisGUI(QMainWindow):
         logging.debug("Refreshing existing experiments.")
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
-        self.load_experiment(self.data_selection_widget.experiment_combo.currentIndex())
-        self.data_selection_widget.update_dataset_combo()
-        self.data_selection_widget.update_session_combo()
         self.plot_widget.update_plot_options() # Reset plot options
         logging.debug("Existing experiments refreshed successfully.")
 
@@ -309,23 +346,28 @@ class EMGAnalysisGUI(QMainWindow):
                 self.help_window = HelpWindow(html_content, title)
             self.help_window.show()
 
-    # Data selection widget functions
+    # Data selection widget functions - will be called whenever their index changes.
     def load_experiment(self, index):
         if index >= 0:
             experiment_name = self.expts_dict_keys[index]
             save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}.pickle"))
             logging.debug(f"Loading experiment: '{experiment_name}'.")
             
-            # Load existing experiment if available
-            if os.path.exists(save_path):
-                self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
-                logging.debug(f"Experiment '{experiment_name}' loaded successfully from bin.")
-            else:
-                self.current_experiment = EMGExperiment(experiment_name, self.expts_dict, save_path=save_path) # Type: EMGExperiment
-                logging.debug(f"Experiment '{experiment_name}' created to bin and loaded successfully.")
+            try:
+                # Load existing experiment if available
+                if os.path.exists(save_path):
+                    self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
+                    logging.debug(f"Experiment '{experiment_name}' loaded successfully from bin.")
+                else:
+                    self.current_experiment = EMGExperiment(experiment_name, self.expts_dict, save_path=save_path) # Type: EMGExperiment
+                    logging.debug(f"Experiment '{experiment_name}' created to bin and loaded successfully.")
 
-            # Update current expt/dataset/session
-            self.data_selection_widget.update_dataset_combo()
+                # Update current expt/dataset/session
+                self.data_selection_widget.update_dataset_combo()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An error occurred while loading experiment '{experiment_name}': {e}")
+                logging.error(f"An error occurred while loading experiment: {e}")
+                logging.error(traceback.format_exc())
 
     def load_dataset(self, index):
         if index >= 0:
@@ -335,15 +377,7 @@ class EMGAnalysisGUI(QMainWindow):
             if self.current_experiment:
                 self.current_dataset = self.current_experiment.get_dataset(index) # Type: EMGDataset
             else:
-                logging.error("No current experiment to load dataset from.")
-                # save_path = os.path.join(get_output_bin_path(),(f"{date}_{animal_id}_{condition}.pickle"))
-                # # Load existing dataset if available
-                # if os.path.exists(save_path):
-                #     self.current_dataset = EMGDataset.load_dataset(save_path) # Type: EMGDataset
-                #     logging.debug(f"Dataset '{dataset_name}' loaded successfully.")
-                # else:
-                #     self.current_dataset = EMGDataset(self.current_experiment.dataset_dict[dataset_name], date, animal_id, condition) # Type: EMGDataset
-                #     logging.debug(f"Dataset '{dataset_name}' created successfully to '{save_path}'.")         
+                logging.error("No current experiment to load dataset from.")     
 
             # Update current dataset/session and channel names
             self.channel_names = self.current_dataset.channel_names
@@ -456,6 +490,110 @@ class EMGAnalysisGUI(QMainWindow):
             dialog.exec()
         else:
             QMessageBox.warning(self, "Warning", "No data to display.")
+
+    @staticmethod
+    def validate_dataset_name(dataset_path):
+        # strip the dataset name from the provided path
+        original_dataset_name = os.path.basename(dataset_path)
+        # get the path before the dataset name for later reconstruction
+        dataset_basepath = os.path.dirname(dataset_path)
+
+        def get_new_dataset_name(dataset_name, validity_check_dict):
+            if 'PyQt6' in sys.modules: # Check if PyQt6 is imported. If not, use input() instead of QDialog.
+                from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout
+                # check if there is an app running
+                app = QApplication.instance()
+                if app is None:
+                    app = QApplication(sys.argv)
+
+                dialog = QDialog()
+                dialog.setWindowTitle('Rename Dataset')
+                layout = QVBoxLayout()
+
+                # Add labels based on the validity check dictionary.
+                layout.addWidget(QLabel(f'The dataset name "{dataset_name}" is not valid. Dataset folder names should be formatted like "[YYMMDD] [Animal ID] [Experimental Condition]". Please confirm the following fields, and that they are separated by single spaces:'))
+                if not validity_check_dict['Date']:
+                    layout.addWidget(QLabel('- Date (YYYYMMDD)'))
+                if not validity_check_dict['Animal ID']:
+                    layout.addWidget(QLabel('- Animal ID (e.g., XX000.0)'))
+                if not validity_check_dict['Condition']:
+                    layout.addWidget(QLabel('- Experimental Condition (Any string. Spaces allowed.)'))
+                        
+                # Add a line edit and button to the layout
+                layout.addWidget(QLabel('\nRename your dataset:'))
+                line_edit = QLineEdit(dataset_name)
+                layout.addWidget(line_edit)
+
+                # Rename button
+                button = QPushButton('Rename')
+                button.clicked.connect(dialog.accept)
+                layout.addWidget(button)
+
+                dialog.setLayout(layout)
+                result = dialog.exec()
+
+                if result == QDialog.DialogCode.Accepted:
+                    dataset_name = line_edit.text()
+                    return dataset_name
+                else:
+                    raise ValueError('User canceled dataset renaming.')
+            else:
+                print(f'The dataset name "{dataset_name}" is not valid. Please confirm the following fields:')
+                if not validity_check_dict['Date']:
+                    print('\t- Date (YYYYMMDD)')
+                if not validity_check_dict['Animal ID']:
+                    print('\t- Animal ID (e.g., XX000.0)')
+                if not validity_check_dict['Condition']:
+                    print('\t- Experimental Condition (Any string. Spaces allowed.)')
+                dataset_name = input('Rename your dataset: > ')
+                if not dataset_name:
+                    raise ValueError('User canceled dataset renaming.')
+                return dataset_name
+
+        def check_name(dataset_name, name_changed = None):
+            date_valid, animal_id_valid, condition_valid = False, False, False
+            if not name_changed:
+                name_changed = False
+            
+            try: # check if the dataset name is in the correct format
+                pattern = r'^(\d+)\s([a-zA-Z0-9.]+)\s(.+)$'
+                match = re.match(pattern, dataset_name)
+                if match:
+                    date_string = match.group(1)
+                    animal_id = match.group(2)
+                    condition = match.group(3)
+                else:
+                    raise AttributeError
+            except AttributeError:
+                new_dataset_name = get_new_dataset_name(dataset_name, validity_check_dict = {'Date': date_valid, 'Animal ID': animal_id_valid, 'Condition': condition_valid})
+                return check_name(new_dataset_name, name_changed=True)
+            
+            # 1) confirm date field is valid
+            if len(date_string) == 6 or len(date_string) == 8:
+                date_valid = True
+            # 2) confirm animal id is valid
+            if len(animal_id) > 0:
+                animal_id_valid = True
+            # 3) confirm condition is valid
+            if len(condition) > 0:
+                condition_valid = True
+
+            if date_valid and animal_id_valid and condition_valid:
+                return dataset_name, name_changed
+            else:
+                new_dataset_name = get_new_dataset_name(dataset_name, validity_check_dict = {'Date': date_valid, 'Animal ID': animal_id_valid, 'Condition': condition_valid})
+                return check_name(new_dataset_name, name_changed=True)
+            
+            
+
+        validated_dataset_name, name_changed = check_name(original_dataset_name)
+        if name_changed: # if the name was changed, rename the dataset folder
+            logging.info(f'Dataset name changed from "{original_dataset_name}" to "{validated_dataset_name}".')
+            validated_dataset_path = os.path.join(dataset_basepath, validated_dataset_name)
+            os.rename(dataset_path, validated_dataset_path)
+            logging.info(f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".')
+        else: # if the name was not changed, return the original, now-validated dataset path.
+            validated_dataset_path = dataset_path
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

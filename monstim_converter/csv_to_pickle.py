@@ -109,7 +109,7 @@ def getDatasetSessionDict(dataset_path):
     
     return dataset_session_dict
 
-def pickle_data(data_path, output_path, progress_callback=print, is_canceled_callback=lambda: False, max_workers=4):
+def pickle_data(data_path, output_path, progress_callback = print, is_canceled_callback : bool = lambda: False, max_workers : int = 4):
     """Main module function to create Pickle files from EMG datasets."""
     if progress_callback is None:
         progress_callback = lambda x: None  # noqa: E731
@@ -155,15 +155,15 @@ def pickle_data(data_path, output_path, progress_callback=print, is_canceled_cal
     print('Processing complete.')
 
 class GUIExptImportingThread(QThread):
-    progress = pyqtSignal(int)
-    finished = pyqtSignal()
-    error = pyqtSignal(Exception)
-    canceled = pyqtSignal()
+    progress : pyqtSignal = pyqtSignal(int)
+    finished : pyqtSignal = pyqtSignal()
+    error : pyqtSignal = pyqtSignal(Exception)
+    canceled : pyqtSignal = pyqtSignal()
 
-    def __init__(self, expt_name, expt_path, output_path, max_workers=None):
+    def __init__(self, expt_name : str, expt_path : str, output_dir_path : str, max_workers : int = None):
         super().__init__()
         self.expt_path = expt_path
-        self.output_path = os.path.join(output_path, expt_name)
+        self.output_path = os.path.join(output_dir_path, expt_name)
         if not os.path.isdir(self.output_path):
             os.makedirs(self.output_path)
         
@@ -197,9 +197,7 @@ class GUIExptImportingThread(QThread):
     
     def is_finished(self):
         return self._is_finished
-    
-
-    
+       
 if __name__ == '__main__':
     # Example usage of the pickle_data function with max_workers
     import multiprocessing
