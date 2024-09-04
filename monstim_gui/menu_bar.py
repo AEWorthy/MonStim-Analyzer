@@ -69,7 +69,7 @@ class MenuBar(QMenuBar):
 
         # Update window settings button
         update_window_action = edit_menu.addAction("Update Reflex Time Windows")
-        update_window_action.triggered.connect(self.parent.update_reflex_settings)
+        update_window_action.triggered.connect(self.parent.change_reflex_window_settings)
 
         # Invert channel polarity button
         invert_polarity_action = edit_menu.addAction("Invert Channel Polarity")
@@ -95,7 +95,7 @@ class MenuBar(QMenuBar):
 
     # Edit menu functions
     def confirm_reload_session(self):
-        reply = QMessageBox.question(self, 'Confirm Reload', 
+        reply = QMessageBox.warning(self, 'Confirm Reload', 
                                 'Are you sure you want to restore the current session to its original state?\n\nNote: This will add back any recordings that were removed.',
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No)
@@ -103,7 +103,7 @@ class MenuBar(QMenuBar):
             self.parent.reload_current_session()
     
     def confirm_reload_dataset(self):
-        reply = QMessageBox.question(self, 'Confirm Reload', 
+        reply = QMessageBox.warning(self, 'Confirm Reload', 
                                 'Are you sure you want to restore the current dataset to its original state?\n\nNote: This will add back any sessions/recordings that were removed.',
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No)

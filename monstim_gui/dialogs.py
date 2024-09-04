@@ -57,11 +57,12 @@ class ChangeChannelNamesDialog(QDialog):
 class ReflexSettingsDialog(QDialog):
     def __init__(self, session : 'EMGSession', dataset : 'EMGDataset', parent=None):
         super().__init__(parent)
+        self.session = session
+        self.dataset = dataset
+
         self.setModal(True)
         self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.dataset.formatted_name}")
 
-        self.session = session
-        self.dataset = dataset
         
         self.init_ui()
 

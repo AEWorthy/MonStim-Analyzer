@@ -91,9 +91,13 @@ def get_main_window():
     from monstim_gui.gui_main import EMGAnalysisGUI
     
     active_window = QApplication.activeWindow()
+
     if isinstance(active_window, EMGAnalysisGUI):
         return active_window
-    return None
+    elif active_window.__class__.__name__ == 'EMGAnalysisGUI': # for special case when running gui_main.py directly.
+        return active_window
+    else:
+        return None
 
 def load_config(config_file=None):
         """
