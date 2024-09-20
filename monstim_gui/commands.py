@@ -117,15 +117,25 @@ class RemoveSessionCommand(Command):
         self.gui.data_selection_widget.update_session_combo()
         
 class InvertChannelPolarityCommand(Command):
-    def __init__(self, gui, channel_indexes_to_invert : list[int]):
+    def __init__(self, gui, level : str, channel_indexes_to_invert : list[int]):
         self.command_name = "Invert Channel Polarity"
         self.gui : 'EMGAnalysisGUI' = gui # type: EMGAnalysisGUI
         self.channel_indexes_to_invert = channel_indexes_to_invert
+        
+        match level:
+            case 'experiment':
+                self.level = self.gui.current_experiment
+            case 'dataset':
+                self.level = self.gui.current_dataset
+            case 'session':
+                self.level = self.gui.current_session
+            case _:
+                raise ValueError(f"Invalid level: {level}")
 
     def execute(self):
         for channel_index in self.channel_indexes_to_invert:
-            self.gui.current_dataset.invert_channel_polarity(channel_index)
+            self.level.invert_channel_polarity(channel_index)
 
     def undo(self):
         for channel_index in self.channel_indexes_to_invert:
-            self.gui.current_dataset.invert_channel_polarity(channel_index)
+            self.level.invert_channel_polarity(channel_index)

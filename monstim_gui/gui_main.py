@@ -8,7 +8,7 @@ import multiprocessing
 
 import markdown
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
-                             QDialog, QProgressDialog, QHBoxLayout, QStatusBar)
+                             QDialog, QProgressDialog, QHBoxLayout, QStatusBar, QInputDialog)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
@@ -23,7 +23,7 @@ from monstim_converter import GUIExptImportingThread
 from monstim_gui.splash import SPLASH_INFO
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path)
-from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, 
+from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog,
                                  LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
 from monstim_gui.menu_bar import MenuBar
 from monstim_gui.data_selection_widget import DataSelectionWidget
@@ -144,21 +144,41 @@ class EMGAnalysisGUI(QMainWindow):
         else:
             QMessageBox.warning(self, "Warning", "Please select a session first.")
 
-    def invert_channel_polarity(self, channel_indexes_to_invert):
+    def invert_channel_polarity(self, level : str):
         logging.debug("Inverting channel polarity.")
 
-        if self.current_dataset:
-            dialog = InvertChannelPolarityDialog(self.current_dataset, self)
-
-            if dialog.exec():  # Show the dialog and wait for the user's response
-                channel_indexes_to_invert = dialog.get_selected_channel_indexes()
-                if not channel_indexes_to_invert:
-                    QMessageBox.warning(self, "Warning", "Please select at least one channel to invert.")
+        match level: # Check the level of the channel polarity inversion.
+            case 'experiment':
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 else:
-                    command = InvertChannelPolarityCommand(self, channel_indexes_to_invert)
-                    self.command_invoker.execute(command)
-                    self.status_bar.showMessage("Channel polarity inverted successfully.", 5000)
+                    dialog = InvertChannelPolarityDialog(self.current_experiment, self)
+            case 'dataset':
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                else:
+                    dialog = InvertChannelPolarityDialog(self.current_dataset, self)
+            case 'session':
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                else:
+                    dialog = InvertChannelPolarityDialog(self.current_session, self)
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for inverting channel polarity.")
+                return
+
+        if dialog.exec():  # Show the dialog and wait for the user's response
+            channel_indexes_to_invert = dialog.get_selected_channel_indexes()
+            if not channel_indexes_to_invert:
+                QMessageBox.warning(self, "Warning", "Please select at least one channel to invert.")
+                return
+            else:
+                command = InvertChannelPolarityCommand(self, level, channel_indexes_to_invert)
+                self.command_invoker.execute(command)
+                self.status_bar.showMessage("Channel polarity inverted successfully.", 5000)
         else:
             QMessageBox.warning(self, "Warning", "Please load a dataset first.")
 
@@ -251,6 +271,40 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
             logging.info("No CSV directory selected. Import canceled.")
     
+    def rename_experiment(self):
+        logging.debug("Renaming experiment.")
+        if self.current_experiment:
+            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:")
+            if ok and new_name:
+                self.current_experiment.rename_experiment(new_name)
+                self.current_experiment.save_experiment()
+                self.refresh_existing_experiments()
+                self.status_bar.showMessage("Experiment renamed successfully.", 5000)
+
+    def delete_experiment(self):
+        # warning message box
+        logging.debug("Deleting experiment.")
+        if self.current_experiment:
+            delete = QMessageBox.warning(self, "Delete Experiment", f"Are you sure you want to delete the experiment '{self.current_experiment.expt_id}'?\n\nWARNING: This action cannot be undone.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if delete == QMessageBox.StandardButton.Yes:
+                # delete bin file in output folder
+                bin_file = self.current_experiment.save_path
+                if os.path.exists(bin_file):
+                    os.remove(bin_file)
+                    logging.debug(f"Deleted bin file: {bin_file}.")
+                else:
+                    logging.error(f"Bin file not found: {bin_file}. Could not delete current experiment.")
+                
+                # delete experiment folder in data folder
+                shutil.rmtree(os.path.join(self.output_path, self.current_experiment.expt_id))
+                logging.debug(f"Deleted experiment folder: {os.path.join(self.output_path, self.current_experiment.expt_id)}.")
+
+                self.current_experiment = None
+                self.current_dataset = None
+                self.current_session = None
+                self.refresh_existing_experiments()
+                self.status_bar.showMessage("Experiment deleted successfully.", 5000)
+
     def reload_current_session(self):
         logging.debug("Reloading current session.")
         if self.current_dataset and self.current_session:
@@ -318,26 +372,49 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "No changes made to preferences.")
             logging.debug("No changes made to preferences.")
 
-    def change_channel_names(self):
-        # Check if a dataset and session are selected
+    def change_channel_names(self, level : str):
         logging.debug("Changing channel names.")
-        if not self.channel_names:
-            QMessageBox.warning(self, "Warning", "Please load a dataset first.")
-            return
+
+        match level: # Check the level of the channel name change and set the channel names accordingly.
+            case 'experiment':
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+                    return
+                else:
+                    self.channel_names = self.current_experiment.channel_names
+            case 'dataset':
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                else:
+                    self.channel_names = self.current_dataset.channel_names
+            case 'session':
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                else:
+                    self.channel_names = self.current_session.channel_names
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
+                return
 
         # Open dialog to change channel names
         dialog = ChangeChannelNamesDialog(self.channel_names, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_names = dialog.get_new_names()
             if new_names:
-                # Update channel names in the current session and dataset
-                if self.current_dataset and self.current_experiment:
-                    self.current_dataset.rename_channels(new_names)
-                    self.current_experiment.save_experiment()
-
-                # Update the channel_names list
-                self.channel_names = self.current_dataset.channel_names
-                
+                match level:
+                    case 'experiment':
+                        self.current_experiment.rename_channels(new_names)
+                    case 'dataset':
+                        self.current_dataset.rename_channels(new_names)
+                    case 'session':
+                        self.current_session.rename_channels(new_names)
+                    case _:
+                        QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
+                        return
+                    
+                self.current_experiment.save_experiment()
                 self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
                 logging.debug("Channel names updated successfully.")
             else:

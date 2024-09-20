@@ -20,6 +20,12 @@ class MenuBar(QMenuBar):
         import_action = file_menu.addAction("Import an Experiment")
         import_action.triggered.connect(self.parent.import_expt_data)
 
+        rename_experiment_action = file_menu.addAction("Rename Current Experiment")
+        rename_experiment_action.triggered.connect(self.parent.rename_experiment)
+
+        delete_experiment_action = file_menu.addAction("Delete Current Experiment")
+        delete_experiment_action.triggered.connect(self.parent.delete_experiment)
+
         file_menu.addSeparator()
 
         # save_action = file_menu.addAction("Save Data")
@@ -29,7 +35,7 @@ class MenuBar(QMenuBar):
         # load_action.triggered.connect(self.parent.load_data)
 
         # refresh existing datasets button
-        refresh_datasets_action = file_menu.addAction("Refresh Experiments in Data Selection Lists")
+        refresh_datasets_action = file_menu.addAction("Refresh Experiments List")
         refresh_datasets_action.triggered.connect(self.parent.refresh_existing_experiments)
         refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
 
@@ -53,28 +59,41 @@ class MenuBar(QMenuBar):
 
         edit_menu.addSeparator()
 
-        # Reload buttons
-        reload_session_action = edit_menu.addAction("Reload Current Session")
-        reload_session_action.triggered.connect(self.confirm_reload_session)
-        reload_dataset_action = edit_menu.addAction("Reload Current Dataset")
-        reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
-        reload_experiment_action = edit_menu.addAction("Reload Current Experiment")
+        # Submenus for each data level
+        experiment_menu = edit_menu.addMenu("Experiment")
+        dataset_menu = edit_menu.addMenu("Dataset")
+        session_menu = edit_menu.addMenu("Session")
+        # recording_menu = edit_menu.addMenu("Recording")
+
+        # Experiment level actions
+        invert_polarity_action = experiment_menu.addAction("Invert Channel Polarity")
+        invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('experiment'))
+        change_names_action = experiment_menu.addAction("Change Channel Names")
+        change_names_action.triggered.connect(lambda: self.parent.change_channel_names('experiment'))
+        experiment_menu.addSeparator()
+        reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
 
-        edit_menu.addSeparator()
-
-        # Change channel names button
-        change_names_action = edit_menu.addAction("Change Channel Names")
-        change_names_action.triggered.connect(self.parent.change_channel_names)
-
-        # Update window settings button
-        update_window_action = edit_menu.addAction("Update Reflex Time Windows")
+        # Dataset level actions
+        update_window_action = dataset_menu.addAction("Update Reflex Time Windows")
         update_window_action.triggered.connect(self.parent.change_reflex_window_settings)
+        invert_polarity_action = dataset_menu.addAction("Invert Channel Polarity")
+        invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('dataset'))
+        change_names_action = dataset_menu.addAction("Change Channel Names")
+        change_names_action.triggered.connect(lambda: self.parent.change_channel_names('dataset'))
+        dataset_menu.addSeparator()
+        reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
+        reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
 
-        # Invert channel polarity button
-        invert_polarity_action = edit_menu.addAction("Invert Channel Polarity")
-        invert_polarity_action.triggered.connect(self.parent.invert_channel_polarity)
-    
+        # Session level actions
+        invert_polarity_action = session_menu.addAction("Invert Channel Polarity")
+        invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('session'))
+        change_names_action = session_menu.addAction("Change Channel Names")
+        change_names_action.triggered.connect(lambda: self.parent.change_channel_names('session'))
+        edit_menu.addSeparator()
+        reload_session_action = session_menu.addAction("Reload Current Session")
+        reload_session_action.triggered.connect(self.confirm_reload_session)
+          
     def create_help_menu(self):
         # Help menu
         help_menu = self.addMenu("Help")

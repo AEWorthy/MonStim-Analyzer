@@ -24,7 +24,7 @@ from monstim_utils import get_source_path, CustomLoader
 from monstim_gui.splash import SPLASH_INFO
 
 if TYPE_CHECKING:
-    from monstim_analysis import EMGSession, EMGDataset
+    from monstim_analysis import EMGData, EMGSession, EMGDataset
 
 
 class WebEnginePage(QWebEnginePage):
@@ -548,13 +548,13 @@ class PlotWindowDialog(QDialog):
         event.accept()
 
 class InvertChannelPolarityDialog(QDialog):
-    def __init__(self, dataset : 'EMGDataset', parent=None):
+    def __init__(self, emg_data : 'EMGData', parent=None):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowTitle("Invert Channel Polarity")
         
-        self.dataset = dataset
-        self.channel_names = dataset.channel_names
+        self.emg_data = emg_data
+        self.channel_names = emg_data.channel_names
 
         self.selected_channels = []
         
@@ -565,7 +565,7 @@ class InvertChannelPolarityDialog(QDialog):
 
         # Add checkbox header
         header_layout = QVBoxLayout()
-        header_layout.addWidget(QLabel(f"Invert selected channel polarities for dataset\n'{self.dataset.formatted_name}'"))
+        header_layout.addWidget(QLabel(f"Invert selected channel polarities for\n'{self.emg_data.formatted_name}'"))
         header_layout.addWidget(QLabel("\nSelect channels to invert:"))
         layout.addLayout(header_layout)
 
