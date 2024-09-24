@@ -6,7 +6,6 @@ import argparse
 import multiprocessing
 
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
 
 # Constants
 LOG_FILE = 'app.log'
@@ -50,8 +49,6 @@ def main(sys_frozen = True) -> int:
             from monstim_gui.splash import SplashScreen
             splash = SplashScreen()
             splash.show()
-
-            QTimer.singleShot(3000, splash.close)
         
         # logging.debug("Importing EMGAnalysisGUI")
         # from monstim_gui import EMGAnalysisGUI

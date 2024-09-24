@@ -1,7 +1,6 @@
 # monstim_analysis/__init__.py
 
-# Version
-from .version import __version__  # noqa: F401
+__version__ = '1.5.0'
 
 # Metadata
 __title__ = 'monstim_analysis'
