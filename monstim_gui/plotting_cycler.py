@@ -59,26 +59,33 @@ class RecordingCyclerWidget(QGroupBox):
         self.main_gui = get_main_window() # type: EMGAnalysisGUI
         self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
         
+        
         self.layout = QGridLayout() # type: QGridLayout
         self.setLayout(self.layout)
 
-        self.prev_button = QPushButton("Previous")
-        self.next_button = QPushButton("Next")
+        self.prev_button = QPushButton("<--")
+        self.next_button = QPushButton("-->")
         self.exclude_button = QPushButton("Exclude")
-        self.recording_label = QLabel("Recording:")
         self.recording_spinbox = CustomSpinBox()
+        self.step_size = CustomSpinBox()
 
-        # Set up the CustomSpinBox
+        # Set up the recording spinbox
         self.recording_spinbox.setMinimum(0)
         self.recording_spinbox.setMaximum(self.maximum_recordings)
         self.recording_spinbox.setWrapping(True)
-        
 
-        self.layout.addWidget(self.prev_button, 0, 0)
-        self.layout.addWidget(self.next_button, 0, 1)
-        self.layout.addWidget(self.recording_label, 1, 0)
+        # Set up the step size spinbox
+        self.step_size.setMinimum(1)
+        self.step_size.setMaximum(self.maximum_recordings)
+        self.step_size.setValue(1)
+        
+        self.layout.addWidget(self.prev_button, 0, 2)
+        self.layout.addWidget(self.next_button, 0, 3)
+        self.layout.addWidget(QLabel("Recording:"), 1, 0)
         self.layout.addWidget(self.recording_spinbox, 1, 1)
         self.layout.addWidget(self.exclude_button, 1, 2)
+        self.layout.addWidget(QLabel("Step size:"), 0, 0)
+        self.layout.addWidget(self.step_size, 0, 1)
 
         self.prev_button.clicked.connect(self.on_previous)
         self.next_button.clicked.connect(self.on_next)
@@ -92,10 +99,16 @@ class RecordingCyclerWidget(QGroupBox):
             self.recording_spinbox.setValue(self.maximum_recordings)
 
     def on_previous(self):
-        self.recording_spinbox.setValue(self.recording_spinbox.value() - 1)
+        if self.recording_spinbox.value() - self.step_size.value() < 0:
+            self.recording_spinbox.setValue(self.recording_spinbox.maximum())
+        else:
+            self.recording_spinbox.setValue(self.recording_spinbox.value() - self.step_size.value())
 
     def on_next(self):
-        self.recording_spinbox.setValue(self.recording_spinbox.value() + 1)
+        if self.recording_spinbox.value() + self.step_size.value() > self.recording_spinbox.maximum():
+            self.recording_spinbox.setValue(self.recording_spinbox.minimum())
+        else:
+            self.recording_spinbox.setValue(self.recording_spinbox.value() + self.step_size.value())
 
     def on_exclude(self):
         current = self.recording_spinbox.value()
