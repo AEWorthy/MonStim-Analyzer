@@ -5,6 +5,7 @@ from typing import List
 import yaml
 
 from PyQt6.QtWidgets import QApplication
+import numpy as np
 
 DATA_PATH = 'files_to_process'
 OUTPUT_PATH = 'data'
@@ -91,9 +92,27 @@ def get_main_window():
     from monstim_gui.gui_main import EMGAnalysisGUI
     
     active_window = QApplication.activeWindow()
+
     if isinstance(active_window, EMGAnalysisGUI):
         return active_window
-    return None
+    elif active_window.__class__.__name__ == 'EMGAnalysisGUI': # for special case when running gui_main.py directly.
+        return active_window
+    else:
+        return None
+
+def deep_equal(val1, val2):
+    if isinstance(val1, np.ndarray) and isinstance(val2, np.ndarray):
+        return np.array_equal(val1, val2)
+    elif isinstance(val1, dict) and isinstance(val2, dict):
+        if val1.keys() != val2.keys():
+            return False
+        return all(deep_equal(val1[k], val2[k]) for k in val1)
+    elif isinstance(val1, list) and isinstance(val2, list):
+        if len(val1) != len(val2):
+            return False
+        return all(deep_equal(v1, v2) for v1, v2 in zip(val1, val2))
+    else:
+        return val1 == val2
 
 def load_config(config_file=None):
         """

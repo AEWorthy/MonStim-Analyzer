@@ -12,6 +12,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Union
 from dataclasses import dataclass
+from packaging.version import parse as parse_version
+from abc import ABC, abstractmethod
 
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 import numpy as np
@@ -19,7 +21,8 @@ from matplotlib.lines import Line2D
 
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 import monstim_analysis.Transform_EMG as Transform_EMG
-from monstim_utils import load_config, get_output_bin_path
+from monstim_utils import load_config, get_output_bin_path, deep_equal, get_output_path
+from monstim_analysis.version import __version__ as DATA_VERSION
 
 # To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
 
@@ -61,31 +64,55 @@ class LatencyWindow:
             return Line2D([0], [0], color=self.color, linestyle='-', label=self.name)
     
 # Parent EMG data class. Mainly for loading config settings.
-class EMGData:
+class EMGData(ABC):
     def __init__(self):
+        self.version = DATA_VERSION
         self.latency_windows: List[LatencyWindow] = []
+        self.channel_names : List[str] = []
+        self.num_channels : int = 0
+        self.formatted_name : str = 'EMGData'
+        self.m_start : List[float] = []
+        self.m_duration : List[float] = []
+        self.h_start : List[float] = []
+        self.h_duration : List[float] = []
+        self._load_config_settings()
+
+    def _load_config_settings(self):
         _config = load_config()
+        self.default_m_start : List[float] = _config['m_start']
+        self.default_m_duration : List[float] = [_config['m_duration'] for _ in range(len(self.default_m_start))]
+        self.default_h_start : List[float] = _config['h_start']
+        self.default_h_duration : List[float] = [_config['h_duration'] for _ in range(len(self.default_h_start))]
         
-        self.m_start : List[float] = _config['m_start']
-        self.m_end : List[float] = [(time + _config['m_duration']) for time in _config['m_start']]
-        self.h_start : List[float] = _config['h_start']
-        self.h_end : List[float] = [(time + _config['h_duration']) for time in _config['h_start']]
         self.time_window_ms : float = _config['time_window']
         self.bin_size : float = _config['bin_size']
-
         self.latency_window_style : str = _config['latency_window_style']
         self.m_color : str = _config['m_color']
         self.h_color : str = _config['h_color']
         self.title_font_size : int = _config['title_font_size']
         self.axis_label_font_size : int = _config['axis_label_font_size']
         self.tick_font_size : int = _config['tick_font_size']
-        
         self.subplot_adjust_args = _config['subplot_adjust_args']
         self.m_max_args = _config['m_max_args']
         self.butter_filter_args = _config['butter_filter_args']
         self.default_method : str = _config['default_method']
-        self.default_channel_names : List[str] = _config['default_channel_names']
+        self.default_channel_names : List[str] = _config['default_channel_names']     
+
+    def __getstate__(self) -> object: # Called when an EMGData object is pickled.
+        state = self.__dict__.copy()
+        state['version'] = self.version
+        return state
     
+    def __setstate__(self, state: object) -> None: # Called when an EMGData object is unpickled.
+        self.__dict__.update(state)
+        if 'version' not in self.__dict__:
+            self.version = '1.0.0' # Default version for older datasets.
+        try:
+            self._upgrade_from_version(self.version)
+        except Exception as e:
+            logging.error(f"Error upgrading dataset from version {self.version}: {str(e)}")
+            raise e
+
     def add_latency_window(self, name: str, color: str, start_times: List[float], durations: List[float], linestyle: str = '--'):
         """
         Add a new latency window.
@@ -99,7 +126,23 @@ class EMGData:
         """
         new_window = LatencyWindow(name, color, start_times, durations, linestyle)
         self.latency_windows.append(new_window)
-            
+  
+    @abstractmethod
+    def _upgrade_from_version(self, old_version):
+        pass
+
+    @abstractmethod
+    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+        pass
+
+    @abstractmethod
+    def update_reflex_parameters(self):
+        pass
+
+    @abstractmethod
+    def reset_properties(self, recalculate : bool = False):
+        pass
+
     @staticmethod
     def unpackPickleOutput (output_path):
         """
@@ -210,41 +253,19 @@ class EMGSession(EMGData):
         process_emg_data(apply_filter=False, rectify=False): Processes EMG data by applying a bandpass filter and/or rectifying the data.
         session_parameters(): Prints EMG recording session parameters from a Pickle file.
     """
-    def __init__(self, pickled_data):
-        """
-        Initialize an EMGSession instance.
-
-        Args:
-            pickled_data (str): Filepath of the .pickle session data file for this session.
-        """
+    def __init__(self, pickled_raw_data=None, session_data=None):
         super().__init__()
-        self.plotter = EMGSessionPlotter(self)
-        self.load_session_data(pickled_data)
-        self._recordings_processed = None
-        self._m_max = None
+        if pickled_raw_data:
+            self.pickled_raw_data = pickled_raw_data
+            with open(pickled_raw_data, 'rb') as pickle_file:
+                session_data = pickle.load(pickle_file)
+            self._initialize_from_data(session_data)
+        elif session_data:
+            self._initialize_from_data(session_data)
+        else:
+            raise ValueError("Either pickled_raw_data or session_data must be provided.")
 
-        # Add M-wave latency window
-        self.add_latency_window(
-            name="M-wave",
-            color="red",
-            start_times=[1 for _ in range(self.num_channels)],  # start times for each channel
-            durations=[2 for _ in range(self.num_channels)]  # end times for each channel
-        )
-        # Add H-reflex latency window
-        self.add_latency_window(
-            name="H-reflex",
-            color="blue",
-            start_times=[5 for _ in range(self.num_channels)],  # start times for each channel
-            durations=[1 for _ in range(self.num_channels)]  # end times for each channel
-        )
-
-        logging.info(f"Session {self.session_id} initialized with {self.num_recordings} recordings.")
-
-    def load_session_data(self, pickled_data):
-        # Load the session data from the pickle file
-        with open(pickled_data, 'rb') as pickle_file:
-            session_data = pickle.load(pickle_file)
-
+    def _initialize_from_data(self, session_data):
         # Access session-wide information
         session_info : dict = session_data['session_info']
         self.session_id : str = session_info['session_id']
@@ -264,12 +285,92 @@ class EMGSession(EMGData):
         
         # Access the raw EMG recordings. Sort by stimulus voltage and assign a unique recording ID to each recording.
         self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
-        for item in self.recordings_raw:
-            item['recording_id'] = self.recordings_raw.index(item)
+        for index, item in enumerate(self.recordings_raw):
+            item['recording_id'] = index
         self._original_recordings = copy.deepcopy(self.recordings_raw)
         self.num_recordings = len(self.recordings_raw) # Number of recordings in the session, including excluded recordings.
         self.excluded_recordings = set()
+
+        # Initialize the EMGSessionPlotter object and other attributes.      
+        self.plotter = EMGSessionPlotter(self)
+        self.formatted_name = self.session_id.replace('_', ' ').title()
+        self._recordings_processed = None
+        self._m_max = None
+
+        # Add default M-wave and H-reflex latency windows for each channel
+        self.add_latency_window( # M-wave latency window
+            name="M-wave",
+            color="red",
+            start_times=self.default_m_start,  # start times for each channel
+            durations=self.default_m_duration  # end times for each channel
+        )
+        self.add_latency_window( # H-reflex latency window
+            name="H-reflex",
+            color="blue",
+            start_times=self.default_h_start,  # start times for each channel
+            durations=self.default_h_duration # end times for each channel
+        )
+
+        # Updated reflex windows for each channel
+        self.update_reflex_parameters()
+        logging.info(f"Session {self.session_id} initialized with {self.num_recordings} recordings.")
     
+    def _upgrade_from_version(self, old_version):
+        old_version_parsed = parse_version(old_version)
+        try:
+            if old_version_parsed < parse_version('1.6.0'): # Upgrade from version 1.5.0 or older to 1.6.0.
+                # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
+                if not hasattr(self, 'latency_windows'):
+                    # if the data has a formatted name, try to use that for the error message.
+                    if hasattr(self, 'formatted_name'):
+                        raise ValueError(f"Dataset '{self.formatted_name}' is too old to upgrade. Delete the bin file and re-import the data.")
+                    else:
+                        raise ValueError("Dataset version is too old to upgrade. Delete the bin file and re-import the data.")
+                
+                # Store the current state of the object
+                current_state = self.__dict__.copy()
+                
+                # Reinitialize the object
+                session_data = {
+                    'session_info': {
+                        'session_id': current_state['session_id'],
+                        'num_channels': current_state['num_channels'],
+                        'scan_rate': current_state['scan_rate'],
+                        'num_samples': current_state['num_samples'],
+                        'pre_stim_acquired': current_state['pre_stim_acquired'],
+                        'post_stim_acquired': current_state['post_stim_acquired'],
+                        'stim_delay': current_state['stim_delay'],
+                        'stim_duration': current_state['stim_duration'],
+                        'stim_interval': current_state['stim_interval'],
+                        'emg_amp_gains': current_state['emg_amp_gains']
+                    },
+                    'recordings': current_state['recordings_raw']
+                }
+
+                self.__init__(session_data=session_data)
+                default_state = self.__dict__.copy()
+
+                # Update the new state with the old values
+                ignore_keys = {'plotter', 'version', 'm_end', 'h_end', '_original_recordings', '_recordings_processed', '_m_max'}
+                for key, value in current_state.items():
+                    if (key not in ignore_keys) and (key not in default_state):
+                            self.__dict__[key] = value
+                            logging.info(f"Retained old key '{key}' during upgrade that was not in default state.")
+                    else:
+                        try:
+                            if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
+                                self.__dict__[key] = value
+                                logging.info(f"Retained old key '{key}' during upgrade.")
+                        except Exception as e:
+                            logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
+                            raise e
+                
+                self.reset_properties(recalculate=False)
+        except Exception as e:
+            logging.error(f"Error upgrading session from version {old_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
+            raise e
+        # Add any other version upgrade checks below.
+
     def _process_emg_data(self, recordings, apply_filter=False, rectify=False):
         """
         Process EMG data by applying a bandpass filter and/or rectifying the data.
@@ -330,40 +431,21 @@ class EMGSession(EMGData):
         """
         try:
             # Rename the channels in the session.
-            for old_name, new_name in new_names.items():
-                channel_idx = self.channel_names.index(old_name)
-                self.channel_names[channel_idx] = new_name
+            for i, new_name in enumerate(new_names.values()):
+                self.channel_names[i] = new_name
         except IndexError:
-            logging.error("Error: The number of new names does not match the number of channels in the session.")
-        except ValueError:
-            logging.error("Error: The channel name to be replaced does not exist in the session.")
+            logging.warning("Error: The number of new names does not match the number of channels in the session.")
 
     def apply_preferences(self, reset_properties=True):
         """
         Applies the preferences set in the config file to the dataset.
         """
-        config = load_config()
-
-        # Apply the preferences to the dataset.
-        self.bin_size = config['bin_size']
-        self.time_window_ms = config['time_window']
-        self.butter_filter_args = config['butter_filter_args']
-        self.default_method = config['default_method']
-        self.m_max_args = config['m_max_args']
-        self.default_channel_names = config['default_channel_names']
-
-        self.latency_window_style = config['latency_window_style']
-        self.m_color = config['m_color']
-        self.h_color = config['h_color']
-        self.title_font_size = config['title_font_size']
-        self.axis_label_font_size = config['axis_label_font_size']
-        self.tick_font_size = config['tick_font_size']
-        self.subplot_adjust_args = config['subplot_adjust_args']
+        self._load_config_settings() # Load the config settings from file.
 
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGSessionPlotter(self)
         for latency_window in self.latency_windows:
-            latency_window.linestyle = config['latency_window_style']
+            latency_window.linestyle = self.latency_window_style
 
         if reset_properties:
             self.reset_properties(recalculate=True)
@@ -402,8 +484,7 @@ class EMGSession(EMGData):
         self.excluded_recordings.remove(original_recording_index)
 
         self.recordings_raw = sorted(self.recordings_raw, key=lambda x: x['recording_id'])
-        self.recordings_processed
-        self.m_max
+        self.reset_properties(recalculate=False)
 
         logging.info(f"Recording {original_recording_index} has been restored.")
         return original_recording_index
@@ -445,7 +526,7 @@ class EMGSession(EMGData):
         if recalculate:
             self.recordings_processed
             self.m_max
-
+    
     @property
     def recordings_processed (self):
         if self._recordings_processed is None:
@@ -461,11 +542,11 @@ class EMGSession(EMGData):
             for channel_idx in range(self.num_channels):
                 stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
                 m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_idx], 
-                                                                             self.m_start[channel_idx] + self.stim_start,
-                                                                             self.m_end[channel_idx] + self.stim_start, 
-                                                                             self.scan_rate, 
-                                                                             method=self.default_method) 
-                                                                             for recording in self.recordings_processed]                
+                                                                            (self.m_start[channel_idx] + self.stim_start),
+                                                                            (self.m_start[channel_idx] + self.stim_start + self.m_duration[channel_idx]), 
+                                                                            self.scan_rate, 
+                                                                            method=self.default_method) 
+                                                                            for recording in self.recordings_processed]                
                 try: # Check if the channel has a valid M-max amplitude.
                     channel_mmax = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
                     m_max.append(channel_mmax)
@@ -510,51 +591,71 @@ class EMGSession(EMGData):
         """
         stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
         m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
-                                                                    self.m_start[channel_index] + self.stim_start,
-                                                                    self.m_end[channel_index] + self.stim_start, 
+                                                                    (self.m_start[channel_index] + self.stim_start),
+                                                                    (self.m_start[channel_index] + self.stim_start + self.m_duration[channel_index]), 
                                                                     self.scan_rate, 
                                                                     method=method) 
                                                                     for recording in self.recordings_processed]
         return Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+    
+    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                window.start_times = m_start
+                window.durations = m_duration
+            elif window.name == "H-reflex":
+                window.start_times = h_start
+                window.durations = h_duration
+
+    def update_reflex_parameters(self):
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                self.m_start = window.start_times
+                self.m_duration = window.durations
+            elif window.name == "H-reflex":
+                self.h_start = window.start_times
+                self.h_duration = window.durations
 
     def update_window_settings(self):
         """
+        ***ONLY FOR USE IN JUPYTER NOTEBOOKS OR INTERACTIVE PYTHON ENVIRONMENTS***
+
         Opens a GUI to manually update the M-wave and H-reflex window settings for each channel using PyQt.
 
         This function should only be used if you are working in a Jupyter notebook or an interactive Python environment. Do not call this function in any other GUI environment.
         """
-        class ReflexSettings(QWidget):
-            def __init__(self, parent):
+        class ReflexSettingsDialog(QWidget):
+            def __init__(self, emg_parent : EMGSession):
                 super().__init__()
-                self.parent = parent
+                self.emg_parent = emg_parent
                 self.initUI()
 
             def initUI(self):
-                self.setWindowTitle(f"Update Reflex Window Settings: Session {self.parent.session_id}")
+                self.setWindowTitle(f"Update Reflex Window Settings: Session {self.emg_parent.session_id}")
                 layout = QVBoxLayout()
 
                 duration_layout = QHBoxLayout()
                 duration_layout.addWidget(QLabel("m_duration:"))
-                self.m_duration_entry = QLineEdit(str(self.parent.m_end[0] - self.parent.m_start[0]))
+                self.m_duration_entry = QLineEdit(str(self.emg_parent.m_duration[0]))
                 duration_layout.addWidget(self.m_duration_entry)
 
                 duration_layout.addWidget(QLabel("h_duration:"))
-                self.h_duration_entry = QLineEdit(str(self.parent.h_end[0] - self.parent.h_start[0]))
+                self.h_duration_entry = QLineEdit(str(self.emg_parent.h_duration[0]))
                 duration_layout.addWidget(self.h_duration_entry)
 
                 layout.addLayout(duration_layout)
 
                 self.entries = []
-                for i in range(self.parent.num_channels):
+                for i in range(self.emg_parent.num_channels):
                     channel_layout = QHBoxLayout()
                     channel_layout.addWidget(QLabel(f"Channel {i}:"))
 
                     channel_layout.addWidget(QLabel("m_start:"))
-                    m_start_entry = QLineEdit(str(self.parent.m_start[i]))
+                    m_start_entry = QLineEdit(str(self.emg_parent.m_start[i]))
                     channel_layout.addWidget(m_start_entry)
 
                     channel_layout.addWidget(QLabel("h_start:"))
-                    h_start_entry = QLineEdit(str(self.parent.h_start[i]))
+                    h_start_entry = QLineEdit(str(self.emg_parent.h_start[i]))
                     channel_layout.addWidget(h_start_entry)
 
                     layout.addLayout(channel_layout)
@@ -574,28 +675,35 @@ class EMGSession(EMGData):
                     logging.error("Invalid input for durations. Please enter valid numbers.")
                     return
 
+                m_start = []
+                h_start = []
                 for i, (m_start_entry, h_start_entry) in enumerate(self.entries):
                     try:
-                        m_start = float(m_start_entry.text())
-                        h_start = float(h_start_entry.text())
-
-                        self.parent.m_start[i] = m_start
-                        self.parent.m_end[i] = m_start + m_duration
-                        self.parent.h_start[i] = h_start
-                        self.parent.h_end[i] = h_start + h_duration
+                        m_start.append(float(m_start_entry.text()))
+                        h_start.append(float(h_start_entry.text()))
                     except ValueError:
                         logging.error(f"Invalid input for channel {i}. Skipping.")
-
+                
+                # Update the reflex windows in the parent object based on the new windows.
+                try:           
+                    self.emg_parent.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+                except Exception as e:
+                    logging.error(f"Error saving the following reflex settings: m_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}")
+                    logging.error(f"Error: {str(e)}")
+                    return
+                self.emg_parent.update_reflex_parameters()
+                self.emg_parent.reset_properties(recalculate=True)
+                
                 self.close()
 
         app = QApplication.instance()  # Check if there's an existing QApplication instance
         if not app:
             app = QApplication(sys.argv)
-            window = ReflexSettings(self)
+            window = ReflexSettingsDialog(self)
             window.show()
             app.exec()
         else:
-            window = ReflexSettings(self)
+            window = ReflexSettingsDialog(self)
             window.show()
 
     def session_parameters (self):
@@ -694,8 +802,7 @@ class EMGDataset(EMGData):
         self.animal_id : str = animal_id
         self.condition : str = condition
         self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
-        self._m_max = None
-        self.dataset_id = f"{self.date}_{self.animal_id}_{self.condition.replace(' ', '-')}"
+        self.temp = temp
 
         # Saving was disabled for now. It's better to save the dataset inside of the experiment class.
         if os.path.exists(self.save_path) and not temp:
@@ -703,7 +810,10 @@ class EMGDataset(EMGData):
         else:
             logging.info(f"Creating new dataset: {self.date} {self.animal_id} {self.condition}.")
             super().__init__()
-            self.plotter = EMGDatasetPlotter(self)    
+            self.plotter = EMGDatasetPlotter(self)
+            self.formatted_name = f"{self.date} {self.animal_id} {self.condition}"
+            self.dataset_id = f"{self.date}_{self.animal_id}_{self.condition.replace(' ', '-')}"
+            self._m_max = None    
             
             # Unpack the EMG sessions and exclude any sessions if needed.
             if isinstance(emg_sessions, str) or isinstance(emg_sessions, EMGSession):
@@ -731,10 +841,74 @@ class EMGDataset(EMGData):
                 self.num_channels : int = self.emg_sessions[0].num_channels
                 self.stim_start : float = self.emg_sessions[0].stim_start
                 self.channel_names : List[str] = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
-                self.latency_windows : LatencyWindow = self.emg_sessions[0].latency_windows.copy()
+                self.latency_windows : LatencyWindow = copy.deepcopy(self.emg_sessions[0].latency_windows)
+                self.update_reflex_parameters()
                 logging.info(f"Dataset {self.dataset_id} initialized with {len(self.emg_sessions)} sessions.")
                 # if not temp:
                 #     self.save_dataset(self.save_path)
+
+    def _upgrade_from_version(self, old_version):
+        old_version_parsed = parse_version(old_version)
+        try:
+            if old_version_parsed < parse_version('1.6.0'): # Upgrade from version 1.5.0 or older to 1.6.0.
+                # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
+                if not hasattr(self, 'latency_windows'):
+                    # if the data has a formatted name, try to use that for the error message.
+                    if hasattr(self, 'formatted_name'):
+                        raise ValueError(f"Dataset '{self.formatted_name}' is too old to upgrade. Delete the bin file and re-import the data.")
+                    else:
+                        raise ValueError("Dataset version is too old to upgrade. Delete the bin file and re-import the data.")
+                
+                # Store the current state of the object
+                current_state = self.__dict__.copy()
+
+                # Update the EMGSession instances in the dataset.
+                for session in self.emg_sessions:
+                    session._upgrade_from_version(old_version)
+                    session.reset_properties(recalculate=False)
+                
+                # Reinitialize the object
+                dataset_info = {
+                    'emg_sessions': current_state['emg_sessions'],
+                    'date': current_state['date'],
+                    'animal_id': current_state['animal_id'],
+                    'condition': current_state['condition'],
+                    }
+                try:
+                    dataset_info['emg_sessions_to_exclude'] = current_state['emg_sessions_to_exclude']
+                except KeyError:
+                    dataset_info['emg_sessions_to_exclude'] = []
+                dataset_info['save_path'] = None
+                dataset_info['temp'] = True
+
+                self.__init__(**dataset_info)
+                default_state = self.__dict__.copy()
+
+                # Update the new state with the old values
+                ignore_keys = {'plotter', 'version', 'm_end', 'h_end'}
+                for key, value in current_state.items():
+                    if (key not in ignore_keys) and (key not in default_state):
+                            self.__dict__[key] = value
+                            logging.info(f"Retained old key '{key}' during upgrade that was not in default state.")
+                    else:
+                        try:
+                            if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
+                                self.__dict__[key] = value
+                                logging.info(f"Retained old key '{key}' during upgrade.")
+                        except Exception as e:
+                            logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
+                            raise e
+                
+                # Save the dataset if it was not a temporary dataset.
+                try:
+                    if not current_state['temp']:
+                        self.save_dataset(self.save_path)
+                except KeyError:
+                    pass  
+        except Exception as e:
+            logging.error(f"Error upgrading dataset from version {old_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
+            raise e
+        # Add any other version upgrade checks below.
 
     def dataset_parameters(self):
         """
@@ -819,9 +993,6 @@ class EMGDataset(EMGData):
 
     #Properties for the EMGDataset class.
     @property
-    def formatted_name(self):
-        return f"{self.date} {self.animal_id} {self.condition}"
-    @property
     def m_max(self):
         if self._m_max is None:
             session_m_maxes = [session.m_max for session in self.emg_sessions]
@@ -894,7 +1065,8 @@ class EMGDataset(EMGData):
         self.emg_sessions = fresh_temp_dataset.emg_sessions
         channel_name_dict = {fresh_temp_dataset.channel_names[i]: self.channel_names[i] for i in range(self.num_channels)}
         self.rename_channels(channel_name_dict)
-        self.set_reflex_settings(self.m_start, self.m_end[0]-self.m_start[0], self.h_start, self.h_end[0]-self.h_start[0])
+        self.update_reflex_latency_windows(self.m_start, self.m_duration, self.h_start, self.h_duration)
+        self.update_reflex_parameters()
         self.apply_preferences(reset_properties=False)
         self.reset_properties(recalculate=True)
     
@@ -929,42 +1101,27 @@ class EMGDataset(EMGData):
         """
         return self.emg_sessions[session_idx]
 
-    def set_reflex_settings(self, m_start, m_duration, h_start, h_duration):
-        """
-        Overwrite the M-wave and H-reflex windows for all sessions in the dataset.
-
-        Args:
-            m_start (list): A list of M-wave window start times for each channel.
-            m_duration (list): A list of M-wave window durations for each channel.
-            h_start (list): A list of H-reflex window start times for each channel.
-            h_duration (list): A list of H-reflex window durations for each channel.
-        """
+    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                window.start_times = m_start
+                window.durations = m_duration
+            elif window.name == "H-reflex":
+                window.start_times = h_start
+                window.durations = h_duration
         for session in self.emg_sessions:
-            session.m_start = m_start
-            session.m_end = [(time + m_duration) for time in m_start]
-            session.h_start = h_start
-            session.h_end = [(time + h_duration) for time in h_start]
+            session.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
 
-            # Apply the preferences to the session latency windows.
-            for latency_window in session.latency_windows:
-                if latency_window.name == 'M-wave':
-                    latency_window.start_times = m_start
-                    latency_window.durations = [m_duration for _ in m_start]
-                elif latency_window.name == 'H-reflex':
-                    latency_window.start_times = h_start
-                    latency_window.durations = [h_duration for _ in h_start]
-        self.m_start = m_start
-        self.m_end = [(time + m_duration) for time in m_start]
-        self.h_start = h_start
-        self.h_end = [(time + h_duration) for time in h_start]
-
-        for latency_window in self.latency_windows:
-            if latency_window.name == 'M-wave':
-                latency_window.start_times = m_start
-                latency_window.durations = [m_duration for _ in m_start]
-            elif latency_window.name == 'H-reflex':
-                latency_window.start_times = h_start
-                latency_window.durations = [h_duration for _ in h_start]
+    def update_reflex_parameters(self):
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                self.m_start = window.start_times
+                self.m_duration = window.durations
+            elif window.name == "H-reflex":
+                self.h_start = window.start_times
+                self.h_duration = window.durations
+        for session in self.emg_sessions:
+            session.update_reflex_parameters()
 
     def rename_channels(self, new_names : dict[str]):
         """
@@ -973,40 +1130,21 @@ class EMGDataset(EMGData):
         Args:
             new_names (dict[str]): A dictionary mapping old channel names to new channel names.
         """
-        try:
-            # Rename the channels in each session.
-            for session in self.emg_sessions:
-                session.rename_channels(new_names)
-            # Rename the channels in the dataset.
-            for old_name, new_name in new_names.items():
-                try:
-                    channel_idx = self.channel_names.index(old_name)
-                    self.channel_names[channel_idx] = new_name
-                except ValueError:
-                    logging.info(f"The name '{old_name}' does not exist in the dataset. Channel names are still {self.channel_names}.")
-        except IndexError:
-            logging.error("Error: The number of new names does not match the number of channels in the dataset.")
-        
+        # Rename the channels in each session.
+        for session in self.emg_sessions:
+            session.rename_channels(new_names)
+        # Rename the channels in the dataset.
+        for i, new_name in enumerate(new_names.values()):
+            try:
+                self.channel_names[i] = new_name
+            except IndexError:
+                logging.warning("Error: The number of new names does not match the number of channels in this dataset.")
+    
     def apply_preferences(self, reset_properties=True):
         """
         Applies the preferences set in the config file to the dataset.
         """
-        config = load_config()
-        # Apply the preferences to the dataset.
-        self.bin_size = config['bin_size']
-        self.time_window_ms = config['time_window']
-        self.butter_filter_args = config['butter_filter_args']
-        self.default_method = config['default_method']
-        self.m_max_args = config['m_max_args']
-        self.default_channel_names = config['default_channel_names']
-
-        self.latency_window_style = config['latency_window_style']
-        self.m_color = config['m_color']
-        self.h_color = config['h_color']
-        self.title_font_size = config['title_font_size']
-        self.axis_label_font_size = config['axis_label_font_size']
-        self.tick_font_size = config['tick_font_size']
-        self.subplot_adjust_args = config['subplot_adjust_args']
+        self._load_config_settings() # Load the config settings from file.
 
         # Apply preferences to the session objects.
         for session in self.emg_sessions:
@@ -1015,7 +1153,7 @@ class EMGDataset(EMGData):
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGDatasetPlotter(self)
         for latency_window in self.latency_windows:
-            latency_window.linestyle = config['latency_window_style']
+            latency_window.linestyle = self.latency_window_style
         
         if reset_properties:
             self.reset_properties(recalculate=True)
@@ -1110,8 +1248,8 @@ class EMGDataset(EMGData):
             datasets = list(dataset_dict.keys())
             date, animal_id, condition = cls.getDatasetInfo(datasets[dataset_idx])
             # Future: Add a check to see if the dataset is already saved as a pickle file. If it is, load the pickle file instead of re-creating the dataset.
-            dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
-            dataset_oi.apply_preferences()
+            dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, 
+                                    emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
             return dataset_oi
         except FileExistsError as e:
             save_path = str(e)
@@ -1172,21 +1310,31 @@ class EMGDataset(EMGData):
         return True, "All sessions have consistent parameters"
 
 class EMGExperiment(EMGData):
-    def __init__(self, expt_id, expts_dict: List[str] = [], save_path: str = None, temp: bool = False):
-            dataset_dict, dataset_dict_keys = expts_dict[expt_id]
-            self.formatted_name = expt_id
+    def __init__(self, expt_id, expts_dict: List[str] = None, save_path: str = None, temp: bool = False):
+            try:
+                if expts_dict:
+                    self.dataset_dict, dataset_dict_keys = expts_dict[expt_id]
+                else:
+                    logging.info("Attempting to load experiment by making a new experiment dictionary from the output path.")
+                    expts_dict = EMGData.unpackPickleOutput(output_path=get_output_path())
+                    self.dataset_dict, dataset_dict_keys = expts_dict[expt_id]
+            except KeyError:
+                raise KeyError(f"Error: Experiment '{expt_id}' not found in the dataset dictionary.")
+            
             self.expt_id = expt_id.replace(' ', '_')
             self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.expt_id}.pickle")) if save_path is None else save_path
-
+            self.temp = temp
+                
             if os.path.exists(self.save_path) and not temp:
                 raise FileExistsError(f"Experiment already exists at {self.save_path}.")
             else:
                 logging.info(f"Creating new experiment: {self.expt_id}.")
                 super().__init__()
+                self.formatted_name = expt_id
                 self.plotter = EMGExperimentPlotter(self)
 
                 # Create a list of EMGDataset instances from the dataset dictionary.
-                emg_datasets_list = [EMGDataset.dataset_from_dataset_dict(dataset_dict, i, temp=True) for i in range(len(dataset_dict_keys))] # Type: List[EMGDataset]
+                emg_datasets_list = [EMGDataset.dataset_from_dataset_dict(self.dataset_dict, i, temp=True) for i in range(len(dataset_dict_keys))] # Type: List[EMGDataset]
                 
                 # Handle the case where only one dataset is passed as a string or an EMGDataset instance.
                 if isinstance(emg_datasets_list, EMGDataset) or isinstance(emg_datasets_list, str):
@@ -1207,12 +1355,82 @@ class EMGExperiment(EMGData):
                     # self.scan_rate : int = self.emg_datasets[0].scan_rate
                     # self.num_channels : int = self.emg_datasets[0].num_channels
                     # self.stim_start : float = self.emg_datasets[0].stim_start
-                    # self.channel_names : List[str] = self.emg_datasets[0].channel_names # not checked for consistency, but should be the same for all sessions.
-                    self.latency_windows : List[LatencyWindow] = self.emg_datasets[0].latency_windows.copy()
+
+                    # Get channel names and latency windows from the dataset with the longest list of channel names.
+                    self.channel_names : List[str] = self.emg_datasets[0].channel_names # not checked for consistency, but should be the same for all sessions.
+                    self.latency_windows : List[LatencyWindow] = copy.deepcopy(self.emg_datasets[0].latency_windows)
+                    # for dataset in self.emg_datasets:
+                    #     if len(dataset.channel_names) > len(self.channel_names):
+                    #         self.channel_names = dataset.channel_names
+                    #         self.latency_windows = dataset.latency_windows.copy()
+                    
+                    # Save the experiment if it is not a temporary experiment.
+                    self.update_reflex_parameters()
+                    self.apply_preferences(reset_properties=False)
                     if not temp:
                         self.save_experiment(self.save_path)
                         logging.info(f"Experiment saved to {self.save_path}")
                     logging.info(f"Experiment {self.expt_id} created successfully.")
+
+    def _upgrade_from_version(self, old_version):
+        old_version_parsed = parse_version(old_version)
+        try:
+            if old_version_parsed < parse_version('1.6.0'): # Upgrade from version 1.5.0 or older to 1.6.0.
+                # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
+                if not hasattr(self, 'latency_windows'):
+                    # if the data has a formatted name, try to use that for the error message.
+                    if hasattr(self, 'formatted_name'):
+                        raise ValueError(f"Dataset '{self.formatted_name}' is too old to upgrade. Delete the bin file and re-import the data.")
+                    else:
+                        raise ValueError("Dataset version is too old to upgrade. Delete the bin file and re-import the data.")
+                
+                # Store the current state of the object
+                current_state = self.__dict__.copy()
+
+                # Update the EMGExperiment's EMGDataset objects.
+                for dataset in self.emg_datasets:
+                    dataset._upgrade_from_version(old_version)
+                    dataset.reset_properties(recalculate=False)
+                
+                # Reinitialize a temp object
+                expt_info = {
+                    'expt_id': current_state['formatted_name'],
+                    'expts_dict': [],
+                    'save_path': None,
+                    'temp': True
+                    }
+
+                self.__init__(**expt_info)
+                default_state = self.__dict__.copy()
+
+                # Update the new state with the old values
+                ignore_keys = {'plotter', 'version', 'm_end', 'h_end'}
+                for key, value in current_state.items():
+                    if (key not in ignore_keys) and (key not in default_state):
+                            self.__dict__[key] = value
+                            logging.info(f"Retained old key '{key}' during upgrade that was not in default state.")
+                    else:
+                        try:
+                            if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
+                                self.__dict__[key] = value
+                                logging.info(f"Retained old key '{key}' during upgrade.")
+                        except Exception as e:
+                            logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
+                            raise e
+
+                self.update_reflex_parameters()
+                try:
+                    if not current_state['temp']:
+                        self.save_experiment(self.save_path)
+                        logging.info(f"Experiment saved to {self.save_path}")
+                except KeyError:
+                    # Save the experiment anyway... it's better to have a saved version than not.
+                    self.save_experiment(self.save_path)
+                    logging.info(f"Experiment saved to {self.save_path}")
+        except Exception as e:
+            logging.error(f"Error upgrading dataset from version {old_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
+            raise e
+        # Add any other version upgrade checks below.
 
     def experiment_parameters(self):
         """
@@ -1225,26 +1443,25 @@ class EMGExperiment(EMGData):
             logging.info(line)
         return report
 
+    def invert_channel_polarity(self, channel_index):
+        """
+        Inverts the polarity of a recording channel.
+
+        Args:
+            channel_index (int): The index of the channel to invert.
+        """
+        try:
+            for dataset in self.emg_datasets:
+                dataset.invert_channel_polarity(channel_index)
+            logging.info(f"Channel {channel_index} polarity has been inverted for all datasets in experiment {self.expt_id}.")
+        except IndexError:
+            logging.error(f"Error: Channel index {channel_index} is out of range for the number of channels in the dataset.")
+            
     def apply_preferences(self, reset_properties=True):
         """
         Applies the preferences set in the config file to the dataset.
         """
-        config = load_config()
-        # Apply the preferences to the dataset.
-        self.bin_size = config['bin_size']
-        self.time_window_ms = config['time_window']
-        self.butter_filter_args = config['butter_filter_args']
-        self.default_method = config['default_method']
-        self.m_max_args = config['m_max_args']
-        self.default_channel_names = config['default_channel_names']
-
-        self.latency_window_style = config['latency_window_style']
-        self.m_color = config['m_color']
-        self.h_color = config['h_color']
-        self.title_font_size = config['title_font_size']
-        self.axis_label_font_size = config['axis_label_font_size']
-        self.tick_font_size = config['tick_font_size']
-        self.subplot_adjust_args = config['subplot_adjust_args']
+        self._load_config_settings() # Load the config settings from file.
 
         # Apply preferences to the session objects.
         for dataset in self.emg_datasets:
@@ -1253,7 +1470,60 @@ class EMGExperiment(EMGData):
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGExperimentPlotter(self)
         for latency_window in self.latency_windows:
-            latency_window.linestyle = config['latency_window_style']
+            latency_window.linestyle = self.latency_window_style
+
+    def rename_channels(self, new_names : dict[str]):
+        # Rename the channels in the experiment.
+        for i, new_name in enumerate(new_names.values()):
+            try:
+                self.channel_names[i] = new_name
+            except IndexError:
+                self.channel_names.append(new_name)
+        
+        # Rename the channels in each dataset.
+        for dataset in self.emg_datasets:
+            try:
+                dataset.rename_channels(new_names)
+            except IndexError:
+                logging.error("Error: The number of new names does not match the number of channels in the dataset.")
+
+    def rename_experiment(self, new_name : str):
+        """
+        Renames the experiment and updates the formatted_name attribute.
+
+        Args:
+            new_name (str): The new name for the experiment.
+        """
+        self.save_path = os.path.join(get_output_bin_path(), f"{new_name}.pickle")
+        self.expt_id = new_name.replace(' ', '_')
+        self.formatted_name = new_name
+        logging.info(f"Experiment renamed to '{new_name}'.")
+
+    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                window.start_times = m_start
+                window.durations = m_duration
+            elif window.name == "H-reflex":
+                window.start_times = h_start
+                window.durations = h_duration
+        for dataset in self.emg_datasets:
+            dataset.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+
+    def update_reflex_parameters(self):
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                self.m_start = window.start_times
+                self.m_duration = window.durations
+            elif window.name == "H-reflex":
+                self.h_start = window.start_times
+                self.h_duration = window.durations
+        for dataset in self.emg_datasets:
+            dataset.update_reflex_parameters()
+
+    def reset_properties(self, recalculate: bool = False):
+        for dataset in self.emg_datasets:
+            dataset.reset_properties(recalculate=recalculate)
 
     def get_dataset(self, dataset_idx: int) -> EMGDataset:
         """
@@ -1264,7 +1534,7 @@ class EMGExperiment(EMGData):
     @property
     def dataset_names(self):
         return [dataset.formatted_name for dataset in self.emg_datasets]
-
+    
     def save_experiment(self, save_path=None):
         """
         Save the curated dataset object to disk.
@@ -1300,25 +1570,6 @@ class EMGExperiment(EMGData):
     @staticmethod
     def getExperimentInfo(experiment_name : str) -> tuple:
         pass
-
-    @classmethod
-    def experiment_from_experiment_dict(cls, experiment_dict: dict, experiment_idx: int, emg_datasets_to_exclude: List[str] = [], temp=True) -> 'EMGExperiment':
-        """
-        Instantiates an EMGExperiment from an experiment dictionary for downstream analysis.
-
-        Args:
-            experiment_dict (dict): A dictionary containing experiment information (keys = experiment names, values = experiment filepaths).
-            experiment_idx (int): The index of the experiment to be used.
-            emg_datasets_to_exclude (list, optional): A list of EMG datasets to exclude. Defaults to an empty list.
-            temp (bool, optional): Whether to create a temporary experiment object or save to the bin folder. Defaults to True.
-
-        Returns:
-            EMGExperiment: The experiment of interest for downstream analysis.
-        """
-        experiments = list(experiment_dict.keys())
-        expt_oi = EMGExperiment(experiment_dict[experiments[experiment_idx]], emg_datasets_to_exclude=emg_datasets_to_exclude, temp=temp)
-        expt_oi.apply_preferences()
-        return expt_oi
 
     def __unpackEMGDatasets(self, emg_datasets):
         """
