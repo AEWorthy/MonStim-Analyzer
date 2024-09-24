@@ -66,6 +66,8 @@ class MenuBar(QMenuBar):
         # recording_menu = edit_menu.addMenu("Recording")
 
         # Experiment level actions
+        update_window_action = experiment_menu.addAction("Update Reflex Time Windows")
+        update_window_action.triggered.connect(lambda: self.parent.update_reflex_time_windows('experiment'))
         invert_polarity_action = experiment_menu.addAction("Invert Channel Polarity")
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('experiment'))
         change_names_action = experiment_menu.addAction("Change Channel Names")
@@ -76,7 +78,7 @@ class MenuBar(QMenuBar):
 
         # Dataset level actions
         update_window_action = dataset_menu.addAction("Update Reflex Time Windows")
-        update_window_action.triggered.connect(self.parent.change_reflex_window_settings)
+        update_window_action.triggered.connect(lambda: self.parent.update_reflex_time_windows('dataset'))
         invert_polarity_action = dataset_menu.addAction("Invert Channel Polarity")
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('dataset'))
         change_names_action = dataset_menu.addAction("Change Channel Names")
@@ -86,11 +88,13 @@ class MenuBar(QMenuBar):
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
 
         # Session level actions
+        update_window_action = session_menu.addAction("Update Reflex Time Windows")
+        update_window_action.triggered.connect(lambda: self.parent.update_reflex_time_windows('session'))
         invert_polarity_action = session_menu.addAction("Invert Channel Polarity")
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('session'))
         change_names_action = session_menu.addAction("Change Channel Names")
         change_names_action.triggered.connect(lambda: self.parent.change_channel_names('session'))
-        edit_menu.addSeparator()
+        session_menu.addSeparator()
         reload_session_action = session_menu.addAction("Reload Current Session")
         reload_session_action.triggered.connect(self.confirm_reload_session)
           

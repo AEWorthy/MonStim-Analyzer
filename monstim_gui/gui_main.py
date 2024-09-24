@@ -133,10 +133,33 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.error(traceback.format_exc())
     
     # Menu bar functions
-    def change_reflex_window_settings(self):
+    def update_reflex_time_windows(self, level : str):
         logging.debug("Updating reflex window settings.")
+        match level: # Check the level of the reflex window settings update.
+            case 'experiment':
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+                    return
+                else:
+                    emg_data = self.current_experiment
+            case 'dataset':
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                else:
+                    emg_data = self.current_dataset
+            case 'session':
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                else:
+                    emg_data = self.current_session
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for updating reflex window settings.")
+                return
+                
         if self.current_session and self.current_dataset:
-            dialog = ReflexSettingsDialog(self.current_session, self.current_dataset, self)
+            dialog = ReflexSettingsDialog(emg_data, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.current_experiment.save_experiment()
                 self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
@@ -275,7 +298,32 @@ class EMGAnalysisGUI(QMainWindow):
         logging.debug("Renaming experiment.")
         if self.current_experiment:
             new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:")
+
             if ok and new_name:
+                try:
+                    # Rename bin file in output folder
+                    bin_file = self.current_experiment.save_path
+                    new_bin_file = os.path.join(get_output_bin_path(), f"{new_name}.pickle")
+                    if os.path.exists(bin_file):
+                        os.rename(bin_file, new_bin_file)
+                        logging.debug(f"Renamed bin file: {bin_file} -> {new_bin_file}.")
+                    else:
+                        logging.error(f"Bin file not found: {bin_file}. Could not rename current experiment.")
+
+                    # Rename experiment folder in data folder
+                    old_folder = os.path.join(self.output_path, self.current_experiment.formatted_name)
+                    new_folder = os.path.join(self.output_path, new_name)
+                    if os.path.exists(old_folder):
+                        os.rename(old_folder, new_folder)
+                        logging.debug(f"Renamed experiment folder: {old_folder} -> {new_folder}.")
+                    else:
+                        logging.error(f"Experiment folder not found: {old_folder}. Could not rename current experiment.")
+                except FileExistsError:
+                    QMessageBox.critical(self, "Error", f"An experiment with the name '{new_name}' already exists. Please choose a different name.")
+                    logging.error(f"An experiment with the name '{new_name}' already exists. Could not rename current experiment.")
+                    return
+                
+                # Update experiment name in the experiment object
                 self.current_experiment.rename_experiment(new_name)
                 self.current_experiment.save_experiment()
                 self.refresh_existing_experiments()
@@ -332,7 +380,8 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
-        logging.debug(f"Reloading current experiment: {self.current_experiment.expt_id}.") 
+        logging.debug(f"Reloading current experiment: {self.current_experiment.expt_id}.")
+        current_exepriment_combo_index = self.data_selection_widget.experiment_combo.currentIndex() 
         if self.current_experiment:
             # delete bin file in output folder
             bin_file = self.current_experiment.save_path
@@ -347,15 +396,18 @@ class EMGAnalysisGUI(QMainWindow):
             self.current_session = None
             
             self.refresh_existing_experiments()
+            self.data_selection_widget.experiment_combo.setCurrentIndex(current_exepriment_combo_index)
             
             logging.debug("Experiment reloaded successfully.")
             self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
 
     def refresh_existing_experiments(self):
         logging.debug("Refreshing existing experiments.")
+        current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
         self.plot_widget.update_plot_options() # Reset plot options
+        self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
         logging.debug("Existing experiments refreshed successfully.")
 
     def show_preferences_window(self):
@@ -455,18 +507,18 @@ class EMGAnalysisGUI(QMainWindow):
             experiment_name = self.expts_dict_keys[index]
             save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}.pickle"))
             logging.debug(f"Loading experiment: '{experiment_name}'.")
-            
             try:
                 # Load existing experiment if available
                 if os.path.exists(save_path):
                     self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
                     logging.debug(f"Experiment '{experiment_name}' loaded successfully from bin.")
                 else:
-                    self.current_experiment = EMGExperiment(experiment_name, self.expts_dict, save_path=save_path) # Type: EMGExperiment
+                    self.current_experiment = EMGExperiment(experiment_name, expts_dict=self.expts_dict, save_path=save_path, temp=False) # Type: EMGExperiment
                     logging.debug(f"Experiment '{experiment_name}' created to bin and loaded successfully.")
 
                 # Update current expt/dataset/session
                 self.data_selection_widget.update_dataset_combo()
+                self.status_bar.showMessage(f"Experiment '{experiment_name}' loaded successfully.", 5000)  # Show message for 5 seconds
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while loading experiment '{experiment_name}': {e}")
                 logging.error(f"An error occurred while loading experiment: {e}")

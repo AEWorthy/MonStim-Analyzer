@@ -494,7 +494,10 @@ class EMGSessionPlotter(EMGPlotter):
                 stimulus_v = recording['stimulus_v']
                              
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                             self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
+                                                                             (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
+                                                                             self.emg_object.scan_rate, method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -600,8 +603,16 @@ class EMGSessionPlotter(EMGPlotter):
                 stimulus_v = recording['stimulus_v']
                 
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                             self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
+                                                                             (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
+                                                                             self.emg_object.scan_rate, 
+                                                                             method=method)
+                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                 self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
+                                                                                 (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start, 
+                                                                                 self.emg_object.scan_rate, 
+                                                                                 method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -700,8 +711,16 @@ class EMGSessionPlotter(EMGPlotter):
                 
 
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                             self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
+                                                                             (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
+                                                                             self.emg_object.scan_rate, 
+                                                                             method=method)
+                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                 self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
+                                                                                (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                 self.emg_object.scan_rate, 
+                                                                                 method=method)
                 except ValueError:
                     raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -848,8 +867,14 @@ class EMGDatasetPlotter(EMGPlotter):
                         channel_data = recording['channel_data'][channel_index]
 
                         try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                     self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
+                                                                                     (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                     self.emg_object.scan_rate, method=method)
+                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                         self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
+                                                                                         (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                         self.emg_object.scan_rate, method=method)
                         except ValueError:
                             raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
@@ -969,8 +994,14 @@ class EMGDatasetPlotter(EMGPlotter):
                         channel_data = recording['channel_data'][channel_index]
                         
                         try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                     self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
+                                                                                     (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                     self.emg_object.scan_rate, method=method)
+                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                         self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
+                                                                                         (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                         self.emg_object.scan_rate, method=method)
                         except ValueError:
                             raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
 
@@ -1001,8 +1032,14 @@ class EMGDatasetPlotter(EMGPlotter):
                     channel_data = recording['channel_data'][channel_index]
                     
                     try:
-                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.m_start[channel_index] + self.emg_object.stim_start, self.emg_object.m_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
-                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, self.emg_object.h_start[channel_index] + self.emg_object.stim_start, self.emg_object.h_end[channel_index] + self.emg_object.stim_start, self.emg_object.scan_rate, method=method)
+                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                       self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
+                                                                                       (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                       self.emg_object.scan_rate, method=method)
+                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                                                                                           self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
+                                                                                           (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
+                                                                                           self.emg_object.scan_rate, method=method)
                     except ValueError:
                         raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
                 
