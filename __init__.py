@@ -1,6 +1,5 @@
 # Monstim_Analysis/__init__.py
-
-__version__ = '0.2.2-alpha'
+from monstim_gui.__init__ import __version__
 
 # Metadata
 __title__ = 'MonStim Analyzer'

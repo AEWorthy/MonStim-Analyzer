@@ -2,7 +2,7 @@
 
 # Before you package with Pyinstaller, be sure to do the following:
     #1: delete the config-user.yml file
-    #2: update all version numbers (.__init__, monstim_gui.__init__ and monstim_gui.splash)
+    #2: update all version numbers (monstim_gui.__init__ and monstim_gui.splash, and numbers below)
 
 # Run the following command to package the application:
 # pyinstaller --clean win-main.spec
@@ -11,10 +11,9 @@
 import os
 import shutil
 from PyInstaller.config import CONF
-from PyInstaller.utils.hooks import collect_data_files
 
-EXE_NAME = 'MonStim Analyzer v0.2.2'
-DIST_NAME = 'MonStim_Analyzer_v0.2.2-alpha'
+EXE_NAME = 'MonStim Analyzer v0.2.3'
+DIST_NAME = 'MonStim_Analyzer_v0.2.3-alpha'
 
 # Windows build
 
@@ -67,5 +66,4 @@ coll = COLLECT( # type: ignore
 os.makedirs(CONF['distpath'], exist_ok=True)
 
 # Copy the example_expts directory to the dist directory
-# shutil.copytree(os.path.join('files_to_process','example_expts'), os.path.join(CONF['distpath'], DIST_NAME, 'Example Experiments'))
 shutil.copy2('docs/readme.md', os.path.join(CONF['distpath'], DIST_NAME))
