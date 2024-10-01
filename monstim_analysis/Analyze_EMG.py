@@ -1481,7 +1481,7 @@ class EMGExperiment(EMGData):
                   f"Datasets ({len(self.emg_datasets)}): {[dataset.dataset_id for dataset in self.emg_datasets]}."]
 
         if self.warnings:
-            report.append(f'\n***Warnings from initialization***\n')
+            report.append('\n***Warnings from initialization***\n')
             for warning in self.warnings:
                 report.append(f'{warning}')
 
