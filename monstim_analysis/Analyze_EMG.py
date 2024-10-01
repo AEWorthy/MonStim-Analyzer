@@ -8,6 +8,7 @@ import pickle
 import copy
 import re
 import logging
+import warnings
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Union
@@ -22,7 +23,7 @@ from matplotlib.lines import Line2D
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 import monstim_analysis.Transform_EMG as Transform_EMG
 from monstim_utils import load_config, get_output_bin_path, deep_equal, get_output_path
-from monstim_analysis.version import __version__ as DATA_VERSION
+from .version import __version__ as DATA_VERSION
 
 # To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
 
@@ -33,6 +34,7 @@ class LatencyWindow:
     start_times: List[float]
     durations: List[float]
     linestyle: str = '--'
+    window_version: str = DATA_VERSION
 
     @property
     def end_times(self):
@@ -293,7 +295,7 @@ class EMGSession(EMGData):
 
         # Initialize the EMGSessionPlotter object and other attributes.      
         self.plotter = EMGSessionPlotter(self)
-        self.formatted_name = self.session_id.replace('_', ' ').title()
+        self.formatted_name = self.session_id.replace('_', ' ')
         self._recordings_processed = None
         self._m_max = None
 
@@ -318,7 +320,8 @@ class EMGSession(EMGData):
     def _upgrade_from_version(self, old_version):
         old_version_parsed = parse_version(old_version)
         try:
-            if old_version_parsed < parse_version('1.6.0'): # Upgrade from version 1.5.0 or older to 1.6.0.
+            if old_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
+                logging.info(f"Upgrading session {self.formatted_name} from version {old_version} to {DATA_VERSION}.")
                 # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
                 if not hasattr(self, 'latency_windows'):
                     # if the data has a formatted name, try to use that for the error message.
@@ -359,8 +362,21 @@ class EMGSession(EMGData):
                     else:
                         try:
                             if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
-                                self.__dict__[key] = value
-                                logging.info(f"Retained old key '{key}' during upgrade.")
+                                if key != 'latency_windows':
+                                    self.__dict__[key] = value
+                                    logging.info(f"Retained old key '{key}' during upgrade.")
+                                else:
+                                    # Update the default latency windows with the old values, and add any new windows.
+                                    for window in value:
+                                        if window.name not in [win.name for win in self.latency_windows]:
+                                            window.version = DATA_VERSION
+                                            self.latency_windows.append(window)
+                                        else:
+                                            for win in self.latency_windows:
+                                                if win.name == window.name:
+                                                    win.start_times = window.start_times
+                                                    win.durations = window.durations
+                                    logging.info("Retained latency window data during upgrade.")
                         except Exception as e:
                             logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
                             raise e
@@ -833,24 +849,23 @@ class EMGDataset(EMGData):
                 self._num_sessions_excluded = 0
 
             # Check that all sessions have the same parameters and set dataset parameters.
-            consistent, message = self.__check_session_consistency()
-            if not consistent:
-                logging.error(f"Error: {message}")
-            else:
-                self.scan_rate : int = self.emg_sessions[0].scan_rate
-                self.num_channels : int = self.emg_sessions[0].num_channels
-                self.stim_start : float = self.emg_sessions[0].stim_start
-                self.channel_names : List[str] = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
-                self.latency_windows : LatencyWindow = copy.deepcopy(self.emg_sessions[0].latency_windows)
-                self.update_reflex_parameters()
-                logging.info(f"Dataset {self.dataset_id} initialized with {len(self.emg_sessions)} sessions.")
-                # if not temp:
-                #     self.save_dataset(self.save_path)
+            self.__check_session_consistency()
+
+            self.scan_rate : int = self.emg_sessions[0].scan_rate
+            self.num_channels : int = self.emg_sessions[0].num_channels
+            self.stim_start : float = self.emg_sessions[0].stim_start
+            self.channel_names : List[str] = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
+            self.latency_windows : LatencyWindow = copy.deepcopy(self.emg_sessions[0].latency_windows)
+            self.update_reflex_parameters()
+            logging.info(f"Dataset {self.dataset_id} initialized with {len(self.emg_sessions)} sessions.")
+            # if not temp:
+            #     self.save_dataset(self.save_path)
 
     def _upgrade_from_version(self, old_version):
         old_version_parsed = parse_version(old_version)
         try:
-            if old_version_parsed < parse_version('1.6.0'): # Upgrade from version 1.5.0 or older to 1.6.0.
+            if old_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version to the current version.
+                logging.info(f"Upgrading dataset {self.formatted_name} from version {old_version} to {DATA_VERSION}.")
                 # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
                 if not hasattr(self, 'latency_windows'):
                     # if the data has a formatted name, try to use that for the error message.
@@ -883,9 +898,10 @@ class EMGDataset(EMGData):
 
                 self.__init__(**dataset_info)
                 default_state = self.__dict__.copy()
+                self.__dict__['temp'] = current_state['temp'] # Set the temp attribute to the old value.
 
                 # Update the new state with the old values
-                ignore_keys = {'plotter', 'version', 'm_end', 'h_end'}
+                ignore_keys = {'plotter', 'version', 'temp', 'm_end', 'h_end', 'original_emg_sessions'}
                 for key, value in current_state.items():
                     if (key not in ignore_keys) and (key not in default_state):
                             self.__dict__[key] = value
@@ -893,8 +909,21 @@ class EMGDataset(EMGData):
                     else:
                         try:
                             if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
-                                self.__dict__[key] = value
-                                logging.info(f"Retained old key '{key}' during upgrade.")
+                                if key != 'latency_windows':
+                                    self.__dict__[key] = value
+                                    logging.info(f"Retained old key '{key}' during upgrade.")
+                                else:
+                                    # Update the default latency windows with the old values, and add any new windows.
+                                    for window in value:
+                                        if window.name not in [win.name for win in self.latency_windows]:
+                                            window.version = DATA_VERSION
+                                            self.latency_windows.append(window)
+                                        else:
+                                            for win in self.latency_windows:
+                                                if win.name == window.name:
+                                                    win.start_times = window.start_times
+                                                    win.durations = window.durations
+                                    logging.info("Retained latency window data during upgrade.")
                         except Exception as e:
                             logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
                             raise e
@@ -1301,13 +1330,11 @@ class EMGDataset(EMGData):
 
         for session in self.emg_sessions[1:]:
             if session.scan_rate != reference_scan_rate:
-                return False, f"Inconsistent scan_rate for {session.session_id}: {session.scan_rate} != {reference_scan_rate}."
+                raise EMGDataConsistencyError(f"Inconsistent scan rate for {session.session_id} in {self.formatted_name}: {session.scan_rate} != {reference_scan_rate}.")
             if session.num_channels != reference_num_channels:
-                return False, f"Inconsistent num_channels for {session.session_id}: {session.num_channels} != {reference_num_channels}."
+                raise EMGDataConsistencyError(f"Inconsistent number of channels for {session.session_id} in {self.formatted_name}: {session.num_channels} != {reference_num_channels}.")
             if session.stim_start != reference_stim_start:
-                return False, f"Inconsistent stim_start for {session.session_id}: {session.stim_start} != {reference_stim_start}."
-
-        return True, "All sessions have consistent parameters"
+                raise EMGDataConsistencyError(f"Inconsistent stimulus start time for {session.session_id} in {self.formatted_name}: {session.stim_start} != {reference_stim_start}.")
 
 class EMGExperiment(EMGData):
     def __init__(self, expt_id, expts_dict: List[str] = None, save_path: str = None, temp: bool = False):
@@ -1347,42 +1374,42 @@ class EMGExperiment(EMGData):
                 self.emg_datasets = self.__unpackEMGDatasets(emg_datasets_list) # Convert file location strings into a list of EMGDataset instances.
 
                 # Check that all sessions have the same parameters and set dataset parameters.
-                consistent, message = True, ''
-                # consistent, message = self.__check_dataset_consistency()
-                if not consistent:
-                    logging.error(f"Error: {message}")
-                else:
-                    # self.scan_rate : int = self.emg_datasets[0].scan_rate
-                    # self.num_channels : int = self.emg_datasets[0].num_channels
-                    # self.stim_start : float = self.emg_datasets[0].stim_start
+                self.warnings = self.__check_dataset_consistency()
 
-                    # Get channel names and latency windows from the dataset with the longest list of channel names.
-                    self.channel_names : List[str] = self.emg_datasets[0].channel_names # not checked for consistency, but should be the same for all sessions.
-                    self.latency_windows : List[LatencyWindow] = copy.deepcopy(self.emg_datasets[0].latency_windows)
-                    # for dataset in self.emg_datasets:
-                    #     if len(dataset.channel_names) > len(self.channel_names):
-                    #         self.channel_names = dataset.channel_names
-                    #         self.latency_windows = dataset.latency_windows.copy()
-                    
-                    # Save the experiment if it is not a temporary experiment.
-                    self.update_reflex_parameters()
-                    self.apply_preferences(reset_properties=False)
-                    if not temp:
-                        self.save_experiment(self.save_path)
-                        logging.info(f"Experiment saved to {self.save_path}")
-                    logging.info(f"Experiment {self.expt_id} created successfully.")
+                # self.scan_rate : int = self.emg_datasets[0].scan_rate
+                self.num_channels : int = self.emg_datasets[0].num_channels
+                # self.stim_start : float = self.emg_datasets[0].stim_start
+
+                # Get channel names and latency windows from the dataset with the longest list of channel names.
+                self.channel_names : List[str] = self.emg_datasets[0].channel_names # not checked for consistency, but should be the same for all sessions.
+                self.latency_windows : List[LatencyWindow] = copy.deepcopy(self.emg_datasets[0].latency_windows)
+                for dataset in self.emg_datasets:
+                    if len(dataset.channel_names) > len(self.channel_names):
+                        self.channel_names = dataset.channel_names
+                        self.latency_windows = dataset.latency_windows.copy()
+                    if dataset.num_channels > self.num_channels:
+                        self.num_channels = dataset.num_channels
+                
+                # Save the experiment if it is not a temporary experiment.
+                self.update_reflex_parameters()
+                self.apply_preferences(reset_properties=False)
+                if not temp:
+                    self.save_experiment(self.save_path)
+                    logging.info(f"Experiment saved to {self.save_path}")
+                logging.info(f"Experiment {self.expt_id} created successfully.")
 
     def _upgrade_from_version(self, old_version):
         old_version_parsed = parse_version(old_version)
         try:
-            if old_version_parsed < parse_version('1.6.0'): # Upgrade from version 1.5.0 or older to 1.6.0.
+            if old_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
+                logging.info(f"Upgrading experiment {self.formatted_name} from version {old_version} to version {DATA_VERSION}.")
                 # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
                 if not hasattr(self, 'latency_windows'):
                     # if the data has a formatted name, try to use that for the error message.
                     if hasattr(self, 'formatted_name'):
-                        raise ValueError(f"Dataset '{self.formatted_name}' is too old to upgrade. Delete the bin file and re-import the data.")
+                        raise ValueError(f"Experiment '{self.formatted_name}' is too old to upgrade. Delete the bin file and re-import the data.")
                     else:
-                        raise ValueError("Dataset version is too old to upgrade. Delete the bin file and re-import the data.")
+                        raise ValueError("Experiment version is too old to upgrade. Delete the bin file and re-import the data.")
                 
                 # Store the current state of the object
                 current_state = self.__dict__.copy()
@@ -1402,9 +1429,10 @@ class EMGExperiment(EMGData):
 
                 self.__init__(**expt_info)
                 default_state = self.__dict__.copy()
+                self.__dict__['temp'] = current_state['temp'] # Set the temp attribute to the old value.
 
                 # Update the new state with the old values
-                ignore_keys = {'plotter', 'version', 'm_end', 'h_end'}
+                ignore_keys = {'plotter', 'version', 'temp', 'm_end', 'h_end'}
                 for key, value in current_state.items():
                     if (key not in ignore_keys) and (key not in default_state):
                             self.__dict__[key] = value
@@ -1412,8 +1440,22 @@ class EMGExperiment(EMGData):
                     else:
                         try:
                             if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
-                                self.__dict__[key] = value
-                                logging.info(f"Retained old key '{key}' during upgrade.")
+                                if key != 'latency_windows':
+                                    self.__dict__[key] = value
+                                    logging.info(f"Retained old key '{key}' during upgrade.")
+                                else:
+                                    # Update the default latency windows with the old values, and add any new windows.
+                                    for window in value:
+                                        if window.name not in [win.name for win in self.latency_windows]:
+                                            window.version = DATA_VERSION
+                                            self.latency_windows.append(window)
+                                        else:
+                                            for win in self.latency_windows:
+                                                if win.name == window.name:
+                                                    win.start_times = window.start_times
+                                                    win.durations = window.durations
+                                    logging.info("Retained latency window data during upgrade.")
+
                         except Exception as e:
                             logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
                             raise e
@@ -1438,6 +1480,11 @@ class EMGExperiment(EMGData):
         """
         report = [f"Experiment ID: {self.expt_id}",
                   f"Datasets ({len(self.emg_datasets)}): {[dataset.dataset_id for dataset in self.emg_datasets]}."]
+
+        if self.warnings:
+            report.append(f'\n***Warnings from initialization***\n')
+            for warning in self.warnings:
+                report.append(f'{warning}')
 
         for line in report:
             logging.info(line)
@@ -1610,14 +1657,28 @@ class EMGExperiment(EMGData):
             tuple: A tuple containing a boolean value indicating whether all datasets have consistent parameters and a message indicating the result.
         """
         reference_dataset = self.emg_datasets[0]
+        reference_scan_rate = reference_dataset.scan_rate
         reference_num_channels = reference_dataset.num_channels
-
+        reference_stim_start = reference_dataset.stim_start
+        
+        warnings = []
         for dataset in self.emg_datasets[1:]:
+            if dataset.scan_rate != reference_scan_rate:
+                warnings.append(f">> Inconsistent scan_rate for '{dataset.formatted_name}': {dataset.scan_rate} != {reference_scan_rate}.")
+                logging.warning(f"Inconsistent scan_rate for '{dataset.formatted_name}': {dataset.scan_rate} != {reference_scan_rate}.")
             if dataset.num_channels != reference_num_channels:
-                return False, f"Inconsistent num_channels for {dataset.formatted_name}: {dataset.num_channels} != {reference_num_channels}."
+                warnings.append(f">> Inconsistent num_channels for '{dataset.formatted_name}': {dataset.num_channels} != {reference_num_channels}.")
+                logging.warning(f"Inconsistent num_channels for '{dataset.formatted_name}': {dataset.num_channels} != {reference_num_channels}.")
+            if dataset.stim_start != reference_stim_start:
+                warnings.append(f">> Inconsistent stim_start for '{dataset.formatted_name}': {dataset.stim_start} != {reference_stim_start}.")
+                logging.warning(f"Inconsistent stim_start for '{dataset.formatted_name}': {dataset.stim_start} != {reference_stim_start}.")
+        return warnings
 
-        return True, "All datasets have consistent parameters"
-
+# custom exception classes for handling errors with EMGData consistency.
+class EMGDataConsistencyError(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 if __name__ == '__main__':
     from monstim_converter import pickle_data  # noqa: F401
