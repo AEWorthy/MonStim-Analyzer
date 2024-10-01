@@ -255,7 +255,6 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.error(traceback.format_exc())
                 return
 
-
             # Create a progress dialog to show the importing progress.
             progress_dialog = QProgressDialog("Processing...", "Cancel", 0, 100, self)
             progress_dialog.setWindowTitle("Importing Data")
@@ -272,19 +271,17 @@ class EMGAnalysisGUI(QMainWindow):
             # Finished signal.
             self.thread.finished.connect(progress_dialog.close)
             self.thread.finished.connect(self.refresh_existing_experiments)
-            self.thread.finished.connect(lambda: self.data_selection_widget.experiment_combo.setCurrentIndex(self.data_selection_widget.experiment_combo.count() - 1))
-            # self.thread.finished.connect(lambda: QMessageBox.information(self, "Success", "Data processed and imported successfully."))
+            self.thread.finished.connect(lambda: self.data_selection_widget.experiment_combo.setCurrentIndex(0))
             self.thread.finished.connect(lambda: self.status_bar.showMessage("Data processed and imported successfully.", 5000))  # Show message for 5 seconds
             self.thread.finished.connect(lambda: logging.info("Data processed and imported successfully."))
-            
+
             # Error signal.
             self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
             self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
             self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
-            
+
             # Canceled signal.
             self.thread.canceled.connect(progress_dialog.close)
-            # self.thread.canceled.connect(lambda: QMessageBox.information(self, "Canceled", "Data processing was canceled."))
             self.thread.canceled.connect(lambda: self.status_bar.showMessage("Data processing canceled.", 5000))  # Show message for 5 seconds
             self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
             self.thread.canceled.connect(self.refresh_existing_experiments)

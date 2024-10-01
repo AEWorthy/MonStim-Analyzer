@@ -6,10 +6,11 @@ from PyQt6.QtWidgets import QSplashScreen, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt
 
 from monstim_utils import get_source_path
+from monstim_gui import __version__
 
 SPLASH_INFO = {
     'program_name': "MonStim EMG Analyzer",
-    'version': "Version 0.2.3 (alpha)",
+    'version': f"Version {__version__} (alpha)",
     'description': "Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...",
     'copyright': "© 2024 Andrew Worthy"
 }
