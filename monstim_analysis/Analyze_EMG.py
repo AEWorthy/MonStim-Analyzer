@@ -8,7 +8,6 @@ import pickle
 import copy
 import re
 import logging
-import warnings
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Union
@@ -1482,7 +1481,7 @@ class EMGExperiment(EMGData):
                   f"Datasets ({len(self.emg_datasets)}): {[dataset.dataset_id for dataset in self.emg_datasets]}."]
 
         if self.warnings:
-            report.append(f'\n***Warnings from initialization***\n')
+            report.append('\n***Warnings from initialization***\n')
             for warning in self.warnings:
                 report.append(f'{warning}')
 
