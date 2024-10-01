@@ -53,8 +53,6 @@ def main(sys_frozen = True) -> int:
 
             QTimer.singleShot(3000, splash.close)
         
-        # logging.debug("Importing EMGAnalysisGUI")
-        # from monstim_gui import EMGAnalysisGUI
         logging.debug("Creating main window")
         gui = EMGAnalysisGUI()
         logging.debug("Showing main window")

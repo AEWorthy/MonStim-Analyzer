@@ -1,6 +1,6 @@
 # monstim_gui/__init__.py
 
-__version__ = '0.2.3' # Don't forget to update the splash screen version number
+__version__ = '0.2.4' # Don't forget to update the splash screen version number
 
 # Metadata
 __title__ = 'monstim_gui'
