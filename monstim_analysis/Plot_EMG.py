@@ -479,7 +479,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         raw_data_dict = {
             'channel_index': [],
-            'm_threshold': [],
+            'm_max_threshold': [],
             'm_max_amplitudes': [],
         }
         
@@ -542,7 +542,7 @@ class EMGSessionPlotter(EMGPlotter):
             # Get raw data
             datapoints = len(m_max_amplitudes)
             raw_data_dict['channel_index'].extend([channel_index]*datapoints)
-            raw_data_dict['m_threshold'].extend([mmax_low_stim]*datapoints)
+            raw_data_dict['m_max_threshold'].extend([mmax_low_stim]*datapoints)
             raw_data_dict['m_max_amplitudes'].extend(m_max_amplitudes)
 
         # Set labels and title
@@ -565,7 +565,7 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
-        raw_data_df.set_index(['channel_index', 'm_threshold'], inplace=True)
+        raw_data_df.set_index(['channel_index', 'm_max_threshold'], inplace=True)
         return raw_data_df
 
     def plot_reflexCurves (self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, canvas=None):
@@ -850,6 +850,15 @@ class EMGDatasetPlotter(EMGPlotter):
         # Get unique binned stimulus voltages
         stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size for recording in sorted_recordings])))
 
+        raw_data_dict = {
+            'channel_index': [],
+            'stimulus_v': [],
+            'avg_m_wave': [],
+            'stdev_m_wave': [],
+            'avg_h_wave': [],
+            'stdev_h_wave': []
+        }
+
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
             m_wave_means = []
@@ -899,6 +908,8 @@ class EMGDatasetPlotter(EMGPlotter):
             h_response_means = np.array(h_response_means)
             h_response_stds = np.array(h_response_stds)
 
+            m_wave_means, m_wave_stds = self.emg_object.get_avg_m_curve(channel_index, , )
+
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
                 if manual_mmax is not None:
@@ -910,6 +921,15 @@ class EMGDatasetPlotter(EMGPlotter):
                 h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
                 h_response_stds = [(amplitude / channel_m_max) for amplitude in h_response_stds]
 
+            # Append data to raw data dictionary - will be relative to M-max if specified.
+            raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
+            raw_data_dict['stimulus_v'].extend(stimulus_voltages)
+            raw_data_dict['avg_m_wave'].extend(m_wave_means)
+            raw_data_dict['stdev_m_wave'].extend(m_wave_stds)
+            raw_data_dict['avg_h_wave'].extend(h_response_means)
+            raw_data_dict['stdev_h_wave'].extend(h_response_stds)
+            
+            # Plot the M-wave and H-response amplitudes for each channel
             if self.emg_object.num_channels == 1:
                 ax.plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
                 ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
@@ -944,6 +964,11 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Show the plot
         self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
+        return raw_data_df
 
     def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
@@ -1123,24 +1148,34 @@ class EMGDatasetPlotter(EMGPlotter):
         all_m_max_amplitudes = []
         raw_data_dict = {
             'channel_index': [],
-            'm_threshold': [],
-            'm_max_amplitudes': [],
+            'session_id': [],
+            'm_max_threshold': [],
+            'm_max_amplitude': [],
         }
 
         for channel_index in range(self.emg_object.num_channels):
             m_max_amplitudes = []
+            m_max_thresholds = []
+            session_ids = []
             for session in self.emg_object.emg_sessions:
-                m_max = session.get_m_max(method=method, channel_index=channel_index)
-                m_max_amplitudes.append(m_max)
-
+                try:
+                    m_max, mmax_low_stim, _ = session.get_m_max(method=method, channel_index=channel_index, return_mmax_stim_range=True)
+                    m_max_amplitudes.append(m_max)
+                    m_max_thresholds.append(mmax_low_stim)
+                    session_ids.append(session.session_id)
+                except IndexError:
+                    m_max_amplitudes.append(np.nan)
+                    m_max_thresholds.append(np.nan)
+                    session_ids.append(session.session_id)
+                
             # Append M-wave amplitudes to superlist for y-axis adjustment.
-            all_m_max_amplitudes.extend(m_max_amplitudes)
+            all_m_max_amplitudes.extend(m_max_amplitudes)            
 
+            # Plot the M-wave amplitudes for each session
             m_x = 1
-        
             if self.emg_object.num_channels == 1:
                 ax.plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_max_amplitudes)}\nM-max: {m_max:.2f}mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
+                ax.annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
                 ax.errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticklabels(['M-response'])
@@ -1149,18 +1184,21 @@ class EMGDatasetPlotter(EMGPlotter):
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
                 axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nM-max: {m_max:.2f}mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
+                axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
                 axes[channel_index].errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
-
+                
+                axes[channel_index].set_xticks([m_x])
                 axes[channel_index].set_xticklabels(['M-response'])
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
                 axes[channel_index].set_ylim(0, 1.1 * max(all_m_max_amplitudes))
 
             # Append data to raw data dictionary
-            raw_data_dict['channel_index'].extend([channel_index]*len(m_max_amplitudes))
-            raw_data_dict['m_threshold'].extend([0]*len(m_max_amplitudes))
-            raw_data_dict['m_max_amplitudes'].extend(m_max_amplitudes)
+            datapoints = len(m_max_amplitudes)
+            raw_data_dict['channel_index'].extend([channel_index]*datapoints)
+            raw_data_dict['session_id'].extend(session_ids)
+            raw_data_dict['m_max_threshold'].extend(m_max_thresholds)
+            raw_data_dict['m_max_amplitude'].extend(m_max_amplitudes)
 
         # Set labels and title
         fig.suptitle('Average M-max')
@@ -1172,9 +1210,13 @@ class EMGDatasetPlotter(EMGPlotter):
             fig.supylabel(f'M-max (mV, {method})')
         
         # Show the plot
-        self.display_plot(canvas)        
-    
+        self.display_plot(canvas)
 
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index'], inplace=True)
+        return raw_data_df        
+   
 class EMGExperimentPlotter(EMGPlotter):
     def __init__(self, experiment):
         self.emg_object : 'EMGExperiment' = None # The EMGExperiment object to be imported.
@@ -1188,7 +1230,97 @@ class EMGExperimentPlotter(EMGPlotter):
             raise UnableToPlotError("Invalid data type for EMGExperimentPlotter. Please provide an EMGExperiment object.")
         
         self.set_plot_defaults()
-    
+
+    # EMGExperiment plotting functions
+    def plot_mmax(self, method : str = None, canvas : FigureCanvas = None):
+        """
+        Plots the average M-max of each dataset for each channel (animal averages).
+
+        Args:
+            method (str, optional): The method used to calculate the mean and standard deviation. Options are 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'. Default is 'rms'.
+
+        Returns:
+            None
+        """
+        # Set method to default if not specified.
+        if method is None:
+            method = self.emg_object.default_method
+
+        channel_names = self.emg_object.channel_names
+
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+
+        all_m_max_amplitudes = []
+        raw_data_dict = {
+            'channel_index': [],
+            'animal_id': [],
+            'avg_m_max_threshold': [],
+            'avg_m_max_amplitude': [],
+        }
+
+        for channel_index in range(self.emg_object.num_channels):
+            avg_m_max_amplitudes = []
+            avg_m_max_thresholds = []
+            animal_ids = []
+            for dataset in self.emg_object.emg_datasets:
+                try:
+                    avg_m_max, avg_mmax_low_stim = dataset.get_avg_m_max(method=method, channel_index=channel_index, return_avg_mmax_thresholds=True)
+                    avg_m_max_amplitudes.append(avg_m_max)
+                    avg_m_max_thresholds.append(avg_mmax_low_stim)
+                    animal_ids.append(dataset.animal_id)
+                except IndexError:
+                    avg_m_max_amplitudes.append(np.nan)
+                    avg_m_max_thresholds.append(np.nan)
+                    animal_ids.append(dataset.animal_id)
+                
+            # Append M-wave amplitudes to superlist for y-axis adjustment.
+            all_m_max_amplitudes.extend(avg_m_max_amplitudes)            
+
+            # Plot the M-wave amplitudes for each session
+            m_x = 1
+            if self.emg_object.num_channels == 1:
+                ax.plot(m_x, [avg_m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(avg_m_max_amplitudes)}\nAvg. M-max: {np.mean(avg_m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(avg_m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(avg_m_max_amplitudes)), ha='left', va='center', color='black')
+                ax.errorbar(m_x, np.mean(avg_m_max_amplitudes), yerr=np.std(avg_m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                
+                ax.set_xticklabels(['M-response'])
+                ax.set_title(f'{channel_names[0]}')                    
+                ax.set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
+                ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
+            else:
+                axes[channel_index].plot(m_x, [avg_m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(avg_m_max_amplitudes)}\nAvg. M-max: {np.mean(avg_m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(avg_m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(avg_m_max_amplitudes)), ha='left', va='center', color='black')
+                axes[channel_index].errorbar(m_x, np.mean(avg_m_max_amplitudes), yerr=np.std(avg_m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                
+                axes[channel_index].set_xticks([m_x])
+                axes[channel_index].set_xticklabels(['M-response'])
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                axes[channel_index].set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
+                axes[channel_index].set_ylim(0, 1.1 * max(all_m_max_amplitudes))
+
+            # Append data to raw data dictionary
+            datapoints = len(avg_m_max_amplitudes)
+            raw_data_dict['channel_index'].extend([channel_index]*datapoints)
+            raw_data_dict['animal_id'].extend(animal_ids)
+            raw_data_dict['avg_m_max_threshold'].extend(avg_m_max_thresholds)
+            raw_data_dict['avg_m_max_amplitude'].extend(avg_m_max_amplitudes)
+
+        # Set labels and title
+        fig.suptitle('Average M-max')
+        if self.emg_object.num_channels == 1:
+            ax.set_xlabel('Response Type')
+            ax.set_ylabel(f'M-max (mV, {method})')
+        else:
+            fig.supxlabel('Response Type')
+            fig.supylabel(f'M-max (mV, {method})')
+        
+        # Show the plot
+        self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index'], inplace=True)
+        return raw_data_df
 
 class UnableToPlotError(Exception):
     def __init__(self, message):

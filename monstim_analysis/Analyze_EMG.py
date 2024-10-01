@@ -593,7 +593,7 @@ class EMGSession(EMGData):
             logging.info(line)
         return report
 
-    def get_m_max(self, method, channel_index):
+    def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
         """
         Calculates the M-wave amplitude for a specific channel in the session.
 
@@ -604,6 +604,13 @@ class EMGSession(EMGData):
         Returns:
             float: The M-wave amplitude for the specified channel.
         """
+        stimulus_voltages, m_wave_amplitudes = self.get_m_curve(method, channel_index)
+        if return_mmax_stim_range:
+            return Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args, return_mmax_stim_range=True)
+        else:
+            return Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+    
+    def get_m_curve(self, method, channel_index):
         stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
         m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
                                                                     (self.m_start[channel_index] + self.stim_start),
@@ -611,8 +618,18 @@ class EMGSession(EMGData):
                                                                     self.scan_rate, 
                                                                     method=method) 
                                                                     for recording in self.recordings_processed]
-        return Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+        return stimulus_voltages, m_wave_amplitudes
     
+    def get_h_curve(self, method, channel_index):
+        stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
+        h_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
+                                                                   (self.h_start[channel_index] + self.stim_start),
+                                                                   (self.h_start[channel_index] + self.stim_start + self.h_duration[channel_index]), 
+                                                                   self.scan_rate, 
+                                                                   method=method) 
+                                                                   for recording in self.recordings_processed]
+        return stimulus_voltages, h_wave_amplitudes
+
     def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
             if window.name == "M-wave":
@@ -985,7 +1002,7 @@ class EMGDataset(EMGData):
         raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
         return raw_data
 
-    def get_avg_m_max(self, method, channel_index):
+    def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
         """
         Calculates the average M-wave amplitude for a specific channel in the dataset.
 
@@ -996,8 +1013,14 @@ class EMGDataset(EMGData):
         Returns:
             float: The average M-wave amplitude for the specified channel.
         """
-        m_wave_amplitudes = [session.get_m_max(method, channel_index) for session in self.emg_sessions if session.m_max[channel_index] is not None]
-        return np.mean(m_wave_amplitudes)
+        m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.emg_sessions if session.m_max[channel_index] is not None])
+        if return_avg_mmax_thresholds:
+            return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
+        else:
+            return np.mean(m_max_amplitudes)
+
+    def get_avg_m_curve(self, method, channel_index):
+        ''
 
     def invert_channel_polarity(self, channel_index):
         """
@@ -1488,6 +1511,40 @@ class EMGExperiment(EMGData):
         for line in report:
             logging.info(line)
         return report
+
+    def plot(self, plot_type: str = None, **kwargs):
+        """
+        Plots EMG data from the datasets in this experiment (animal averages) using the specified plot_type.
+
+        Args:
+            - plot_type (str): The type of plot to generate. Options include 'reflexCurves', 'mmax', and 'maxH'. Default is 'reflexCurves'.
+                Plot types are defined in the EMGDatasetPlotter class in Plot_EMG.py.
+            - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
+            - **kwargs: Additional keyword arguments to pass to the plotting function.
+                
+                The most common keyword arguments include:
+                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'. Default method is set in config.yml under 'default_method'.
+                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True) or as the actual recorded amplitude (False). Default is False.
+                - 'mmax_report' (bool): Whether to print the details of the M-max calculations (True) or not (False). Default is False.
+                - 'manual_mmax' (float): The manually set M-wave amplitude to use for plotting the reflex curves. Default is None.
+
+        Example Usages:
+            # Plot the reflex curves for each channel.
+            dataset.plot()
+
+            # Plot M-wave amplitudes for each channel.
+            dataset.plot(plot_type='mmax')
+
+            # Plot the reflex curves for each channel.
+            dataset.plot(plot_type='reflexCurves')
+
+            # Plot the reflex curves for each channel and print the M-max details.
+            dataset.plot(plot_type='reflexCurves', mmax_report=True)
+        """
+
+        # Call the appropriate plotting method from the plotter object
+        raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
+        return raw_data
 
     def invert_channel_polarity(self, channel_index):
         """
