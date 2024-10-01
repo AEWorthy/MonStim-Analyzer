@@ -177,6 +177,7 @@ class GUIExptImportingThread(QThread):
             if not self._is_canceled:
                 self.finished.emit()
                 self._is_finished = True
+
         except Exception as e:
             if not self._is_canceled:
                 self.error.emit(e)
@@ -202,4 +203,8 @@ if __name__ == '__main__':
     # Example usage of the pickle_data function with max_workers
     import multiprocessing
     max_workers = multiprocessing.cpu_count()  # Use the number of CPU cores
-    pickle_data('files_to_analyze', 'pickles', max_workers=max_workers)
+    try:
+        pickle_data('files_to_analyze', 'pickles', max_workers=max_workers)
+    except Exception as e:
+        logging.error(f'Error in main: {e}')
+        logging.error(traceback.format_exc())
