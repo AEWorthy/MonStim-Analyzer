@@ -588,42 +588,17 @@ class EMGSessionPlotter(EMGPlotter):
             'channel_index': [],
             'stimulus_V': [],
             'm_wave_amplitudes': [],
-            'h_response_amplitudes': [],
+            'h_wave_amplitudes': [],
         }
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
-            m_wave_amplitudes = []
-            h_response_amplitudes = []
-            stimulus_voltages = []
-
-            # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in self.emg_object.recordings_processed:
-                channel_data = recording['channel_data'][channel_index]
-                stimulus_v = recording['stimulus_v']
-                
-                try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                             self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
-                                                                             (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
-                                                                             self.emg_object.scan_rate, 
-                                                                             method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                 self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
-                                                                                 (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start, 
-                                                                                 self.emg_object.scan_rate, 
-                                                                                 method=method)
-                except ValueError:
-                    raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
-
-                m_wave_amplitudes.append(m_wave_amplitude)
-                h_response_amplitudes.append(h_response_amplitude)
-                stimulus_voltages.append(stimulus_v)
-            
-            # Convert superlists to numpy arrays.
-            m_wave_amplitudes = np.array(m_wave_amplitudes)
-            h_response_amplitudes = np.array(h_response_amplitudes)
-            stimulus_voltages = np.array(stimulus_voltages)
+            try:
+                stimulus_voltages = self.emg_object.stimulus_voltages
+                m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
+                h_wave_amplitudes = self.emg_object.get_h_wave_amplitudes(method=method, channel_index=channel_index)
+            except ValueError:
+                raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
@@ -635,17 +610,17 @@ class EMGSessionPlotter(EMGPlotter):
                     except Transform_EMG.NoCalculableMmaxError:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
                 m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
-                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+                h_wave_amplitudes = [amplitude / m_max for amplitude in h_wave_amplitudes]
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
             raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
             raw_data_dict['stimulus_V'].extend(stimulus_voltages)
             raw_data_dict['m_wave_amplitudes'].extend(m_wave_amplitudes)
-            raw_data_dict['h_response_amplitudes'].extend(h_response_amplitudes)
+            raw_data_dict['h_wave_amplitudes'].extend(h_wave_amplitudes)
 
             if self.emg_object.num_channels == 1:
                 ax.scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
-                ax.scatter(stimulus_voltages, h_response_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
+                ax.scatter(stimulus_voltages, h_wave_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
                 ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 if plot_legend:
@@ -653,13 +628,12 @@ class EMGSessionPlotter(EMGPlotter):
                     
             else:
                 axes[channel_index].scatter(stimulus_voltages, m_wave_amplitudes, color=self.emg_object.m_color, label='M-wave', marker='o')
-                axes[channel_index].scatter(stimulus_voltages, h_response_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
+                axes[channel_index].scatter(stimulus_voltages, h_wave_amplitudes, color=self.emg_object.h_color, label='H-response', marker='o')
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 if plot_legend:
                     axes[channel_index].legend()
                     
-
         # Set labels and title
         fig.suptitle('M-response and H-reflex Curves')
         if self.emg_object.num_channels == 1:
@@ -700,38 +674,9 @@ class EMGSessionPlotter(EMGPlotter):
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
-            m_wave_amplitudes = []
-            h_response_amplitudes = []
-            stimulus_voltages = []
-
-            # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in self.emg_object.recordings_processed:
-                channel_data = recording['channel_data'][channel_index]
-                stimulus_v = recording['stimulus_v']
-                
-
-                try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                             self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
-                                                                             (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
-                                                                             self.emg_object.scan_rate, 
-                                                                             method=method)
-                    h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                 self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
-                                                                                (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                 self.emg_object.scan_rate, 
-                                                                                 method=method)
-                except ValueError:
-                    raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
-
-                m_wave_amplitudes.append(m_wave_amplitude)
-                h_response_amplitudes.append(h_response_amplitude)
-                stimulus_voltages.append(stimulus_v)
-            
-            # Convert superlists to numpy arrays.
-            m_wave_amplitudes = np.array(m_wave_amplitudes)
-            h_response_amplitudes = np.array(h_response_amplitudes)
-            stimulus_voltages = np.array(stimulus_voltages)
+            m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
+            h_response_amplitudes = self.emg_object.get_h_wave_amplitudes(method=method, channel_index=channel_index)
+            stimulus_voltages = self.emg_object.stimulus_voltages
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
@@ -839,16 +784,10 @@ class EMGDatasetPlotter(EMGPlotter):
             method = self.emg_object.default_method
         channel_names = self.emg_object.channel_names
 
-        # Unpack processed session recordings.
-        recordings = []
-        for session in self.emg_object.emg_sessions:
-            recordings.extend(session.recordings_processed)
-        sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
-
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
 
         # Get unique binned stimulus voltages
-        stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size for recording in sorted_recordings])))
+        stimulus_voltages = self.emg_object.stimulus_voltages
 
         raw_data_dict = {
             'channel_index': [],
@@ -861,61 +800,15 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
-            m_wave_means = []
-            m_wave_stds = []
-            h_response_means = []
-            h_response_stds = []
-            for stimulus_v in stimulus_voltages:
-                m_wave_amplitudes = []
-                h_response_amplitudes = []
-                
-                # Append the M-wave and H-response amplitudes for the binned voltage into a list.
-                for recording in recordings:
-                    binned_stimulus_v = round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size
-                    if binned_stimulus_v == stimulus_v:
-                        channel_data = recording['channel_data'][channel_index]
-
-                        try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                     self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
-                                                                                     (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                     self.emg_object.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                         self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
-                                                                                         (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                         self.emg_object.scan_rate, method=method)
-                        except ValueError:
-                            raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'.")
-
-                        m_wave_amplitudes.append(m_wave_amplitude)
-                        h_response_amplitudes.append(h_response_amplitude)
-                
-                # Calculate the mean and standard deviation of the M-wave and H-response amplitudes for the binned voltage.
-                m_wave_mean = np.mean(m_wave_amplitudes)
-                m_wave_std = np.std(m_wave_amplitudes)
-                h_response_mean = np.mean(h_response_amplitudes)
-                h_response_std = np.std(h_response_amplitudes)
-
-                # Append the mean and standard deviation to the superlist.
-                m_wave_means.append(m_wave_mean)
-                m_wave_stds.append(m_wave_std)
-                h_response_means.append(h_response_mean)
-                h_response_stds.append(h_response_std)
-
-            # Convert superlists to numpy arrays.
-            m_wave_means = np.array(m_wave_means)
-            m_wave_stds = np.array(m_wave_stds)
-            h_response_means = np.array(h_response_means)
-            h_response_stds = np.array(h_response_stds)
-
-            m_wave_means, m_wave_stds = self.emg_object.get_avg_m_curve(channel_index, , )
+            m_wave_means, m_wave_stds = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
+            h_response_means, h_response_stds = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
                 if manual_mmax is not None:
                     channel_m_max = manual_mmax[channel_index]
                 else:
-                    channel_m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
+                    channel_m_max = self.emg_object.get_avg_m_max(method, channel_index)
                 m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
                 m_wave_stds = [(amplitude / channel_m_max) for amplitude in m_wave_stds]
                 h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
@@ -970,7 +863,7 @@ class EMGDatasetPlotter(EMGPlotter):
         raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
         return raw_data_df
 
-    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, canvas=None):
+    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, bin_margin=0, canvas=None):
         """
         Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
 
@@ -983,134 +876,90 @@ class EMGDatasetPlotter(EMGPlotter):
         Returns:
             None
         """
-
         # Set method to default if not specified.
         if method is None:
             method = self.emg_object.default_method
         channel_names = self.emg_object.channel_names
 
-        # Unpack processed session recordings.
-        recordings = []
-        for session in self.emg_object.emg_sessions:
-            recordings.extend(session.recordings_processed)
-        sorted_recordings = sorted(recordings, key=lambda x: x['stimulus_v'])
-
         fig, ax, axes = self.create_fig_and_axes(canvas=canvas, figsizes='small')
 
-        # Get unique binned stimulus voltages
-        stimulus_voltages = sorted(list(set([round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size for recording in sorted_recordings])))
+        raw_data_dict = {
+            'channel_index': [],
+            'stimulus_v': [],
+            'm_wave_amplitudes': [],
+            'h_wave_amplitudes': [],
+        }
 
         for channel_index in range(self.emg_object.num_channels):
-            if relative_to_mmax:
-                m_wave_means = []
-            max_h_reflex_voltage = None
-            max_h_reflex_amplitude = -float('inf')
+            # Get average H-wave amplitudes
+            h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
+            stimulus_voltages = self.emg_object.stimulus_voltages
+
+            # Find the voltage with the maximum average H-reflex amplitude
+            max_h_reflex_amplitude = max(h_response_means)
+            max_h_reflex_voltage = stimulus_voltages[h_response_means.index(max_h_reflex_amplitude)]
             
-            # Find the binned voltage where the average H-reflex amplitude is maximal and calculate the mean M-wave responses for M-max correction if relative_to_mmax is True.
-            for stimulus_v in stimulus_voltages:
-                if relative_to_mmax:
-                    m_wave_amplitudes = []
-                h_response_amplitudes = []
-                
-                # Append the M-wave and H-response amplitudes for the binned voltage into a list.
-                for recording in recordings:
-                    binned_stimulus_v = round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size
-                    if binned_stimulus_v == stimulus_v:
-                        channel_data = recording['channel_data'][channel_index]
-                        
-                        try:
-                            m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                     self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
-                                                                                     (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                     self.emg_object.scan_rate, method=method)
-                            h_response_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                         self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
-                                                                                         (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                         self.emg_object.scan_rate, method=method)
-                        except ValueError:
-                            raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
+            # Define the range of voltages around the max H-reflex voltage
+            voltage_indices = range(max(0, h_response_means.index(max_h_reflex_amplitude) - bin_margin),
+                                min(len(stimulus_voltages), h_response_means.index(max_h_reflex_amplitude) + bin_margin + 1))
+            marginal_voltages = [stimulus_voltages[i] for i in voltage_indices]
 
-                        if relative_to_mmax:
-                            m_wave_amplitudes.append(m_wave_amplitude)
-                        h_response_amplitudes.append(h_response_amplitude)
-                
-                if relative_to_mmax:
-                    # Append the M-wave mean to the superlist.
-                    m_wave_means.append(np.mean(m_wave_amplitudes))
-
-                # Calculate the mean H-response amplitude for the binned voltage.
-                h_response_mean = np.mean(h_response_amplitudes)
-
-                # Update maximum H-reflex amplitude and voltage if applicable
-                if h_response_mean > max_h_reflex_amplitude:
-                    max_h_reflex_amplitude = h_response_mean
-                    max_h_reflex_voltage = stimulus_v
-
-            # Get data to plot in whisker plot.
-
-            m_wave_amplitudes_max_h = []
-            h_response_amplitudes_max_h = []
-
-            for recording in recordings:
-                binned_stimulus_v = round(recording['stimulus_v'] / self.emg_object.bin_size) * self.emg_object.bin_size
-                if binned_stimulus_v == max_h_reflex_voltage:
-                    channel_data = recording['channel_data'][channel_index]
-                    
-                    try:
-                        m_wave_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                       self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
-                                                                                       (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                       self.emg_object.scan_rate, method=method)
-                        h_response_amplitude_max_h = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                                           self.emg_object.h_start[channel_index] + self.emg_object.stim_start, 
-                                                                                           (self.emg_object.h_start[channel_index] + self.emg_object.h_duration[channel_index]) + self.emg_object.stim_start,
-                                                                                           self.emg_object.scan_rate, method=method)
-                    except ValueError:
-                        raise UnableToPlotError(f"The method {method} is not supported. Please use 'rms', 'avg_rectified', or 'peak_to_trough'.")
-                
-                    m_wave_amplitudes_max_h.append(m_wave_amplitude_max_h)
-                    h_response_amplitudes_max_h.append(h_response_amplitude_max_h)
+            # Collect M-wave and H-response amplitudes for the marginal bins
+            stimulus_voltages = []
+            m_wave_amplitudes = []
+            h_response_amplitudes = []
+            for voltage in marginal_voltages:
+                m_waves = self.emg_object.get_m_wave_amplitudes_at_voltage(method, channel_index, voltage)
+                h_responses = self.emg_object.get_h_wave_amplitudes_at_voltage(method, channel_index, voltage)
+                m_wave_amplitudes.extend(m_waves)
+                h_response_amplitudes.extend(h_responses)
+                stimulus_voltages.extend([voltage] * len(m_waves))
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
-                m_wave_means = np.array(m_wave_means)
                 if manual_mmax is not None:
                     m_max = manual_mmax[channel_index]
-                else:     
+                else:
                     m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
-                m_wave_amplitudes_max_h = [amplitude / m_max for amplitude in m_wave_amplitudes_max_h]
-                h_response_amplitudes_max_h = [amplitude / m_max for amplitude in h_response_amplitudes_max_h]
+                m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+
+            # Append data to raw data dictionary
+            raw_data_dict['channel_index'].extend([channel_index] * len(m_wave_amplitudes))
+            raw_data_dict['stimulus_v'].extend(stimulus_voltages)
+            raw_data_dict['m_wave_amplitudes'].extend(m_wave_amplitudes)
+            raw_data_dict['h_wave_amplitudes'].extend(h_response_amplitudes)
 
             # Plot the M-wave and H-response amplitudes for the maximum H-reflex voltage.
             m_x = 1
             h_x = 2.5
             if self.emg_object.num_channels == 1:
-                ax.plot(m_x, [m_wave_amplitudes_max_h], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_wave_amplitudes_max_h)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes_max_h)), ha='center', color=self.emg_object.m_color)
-                ax.errorbar(m_x, np.mean(m_wave_amplitudes_max_h), yerr=np.std(m_wave_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
+                ax.plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
+                ax.errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
-                ax.plot(h_x, [h_response_amplitudes_max_h], color=self.emg_object.h_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.emg_object.h_color)
-                ax.errorbar(h_x, np.mean(h_response_amplitudes_max_h), yerr=np.std(h_response_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
+                ax.plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
+                ax.errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(['M-response', 'H-reflex'])
-                ax.set_title(f'{channel_names[0]} ({round(max_h_reflex_voltage + self.emg_object.bin_size / 2, 2)} ± {self.emg_object.bin_size/2}V)')
+                ax.set_title(f'{channel_names[0]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
                 ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
             else:
-                axes[channel_index].plot(m_x, [m_wave_amplitudes_max_h], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_wave_amplitudes_max_h)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes_max_h)), ha='center', color=self.emg_object.m_color)
-                axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes_max_h), yerr=np.std(m_wave_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
+                axes[channel_index].plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
+                axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
 
-                axes[channel_index].plot(h_x, [h_response_amplitudes_max_h], color=self.emg_object.h_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(h_response_amplitudes_max_h)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes_max_h)), ha='center', color=self.emg_object.h_color)
-                axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes_max_h), yerr=np.std(h_response_amplitudes_max_h), color='black', marker='+', markersize=10, capsize=10)
+                axes[channel_index].plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
+                axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
-                axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage + self.emg_object.bin_size / 2, 2)} ± {self.emg_object.bin_size/2}V)')
+                axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
                 axes[channel_index].set_xticks([m_x, h_x])
                 axes[channel_index].set_xticklabels(['M-response', 'H-reflex'])
                 axes[channel_index].set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
-        
+
         # Set labels and title
         fig.suptitle('EMG Responses at Max H-reflex Stimulation')
         if self.emg_object.num_channels == 1:
@@ -1126,6 +975,11 @@ class EMGDatasetPlotter(EMGPlotter):
 
         # Show the plot
         self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
+        return raw_data_df
 
     def plot_mmax(self, method : str = None, canvas : FigureCanvas = None):
         """
@@ -1232,6 +1086,101 @@ class EMGExperimentPlotter(EMGPlotter):
         self.set_plot_defaults()
 
     # EMGExperiment plotting functions
+    def plot_reflexCurves(self, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, canvas=None):
+        """
+        Plots the M-response and H-reflex curves for each channel.
+
+        Args:
+            channel_names (list): A list of custom channel names. If specified, the channel names will be used in the plot titles.
+            method (str): The method used to calculate the mean and standard deviation. Options are 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'. Default is 'rms'.
+
+        Returns:
+            None
+        """
+        # Set method to default if not specified.
+        if method is None:
+            method = self.emg_object.default_method
+        channel_names = self.emg_object.channel_names
+
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas)
+
+        # Get unique binned stimulus voltages
+        stimulus_voltages = self.emg_object.stimulus_voltages
+
+        raw_data_dict = {
+            'channel_index': [],
+            'stimulus_v': [],
+            'avg_m_wave': [],
+            'stdev_m_wave': [],
+            'avg_h_wave': [],
+            'stdev_h_wave': []
+        }
+
+        # Plot the M-wave and H-response amplitudes for each channel
+        for channel_index in range(self.emg_object.num_channels):
+            m_wave_means, m_wave_stds = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
+            h_response_means, h_response_stds = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
+
+            # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
+            if relative_to_mmax:
+                if manual_mmax is not None:
+                    channel_m_max = manual_mmax[channel_index]
+                else:
+                    channel_m_max = self.emg_object.get_avg_m_max(method, channel_index)
+                m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
+                m_wave_stds = [(amplitude / channel_m_max) for amplitude in m_wave_stds]
+                h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
+                h_response_stds = [(amplitude / channel_m_max) for amplitude in h_response_stds]
+
+            # Append data to raw data dictionary - will be relative to M-max if specified.
+            raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
+            raw_data_dict['stimulus_v'].extend(stimulus_voltages)
+            raw_data_dict['avg_m_wave'].extend(m_wave_means)
+            raw_data_dict['stdev_m_wave'].extend(m_wave_stds)
+            raw_data_dict['avg_h_wave'].extend(h_response_means)
+            raw_data_dict['stdev_h_wave'].extend(h_response_stds)
+            
+            # Plot the M-wave and H-response amplitudes for each channel
+            if self.emg_object.num_channels == 1:
+                ax.plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
+                ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
+                ax.plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
+                ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
+                ax.set_title(f'{channel_names[0]}')
+                ax.grid(True)
+                if plot_legend:
+                    ax.legend()
+            else:
+                axes[channel_index].plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
+                axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
+                axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
+                axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
+                axes[channel_index].set_title(f'{channel_names[channel_index]}')
+                axes[channel_index].grid(True)
+                if plot_legend:
+                    axes[channel_index].legend()
+
+        # Set labels and title
+        fig.suptitle('M-response and H-reflex Curves')
+        if self.emg_object.num_channels == 1:
+            ax.set_xlabel('Stimulus Voltage (V)')
+            ax.set_ylabel(f'Reflex Ampl. (mV, {method})')
+            if relative_to_mmax:
+                ax.set_ylabel(f'Reflex Ampl. (M-max, {method})')
+        else:
+            fig.supxlabel('Stimulus Voltage (V)')
+            fig.supylabel(f'Reflex Ampl. (mV, {method})')
+            if relative_to_mmax:
+                fig.supylabel(f'Reflex Ampl. (M-max, {method})')
+
+        # Show the plot
+        self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
+        return raw_data_df
+    
     def plot_mmax(self, method : str = None, canvas : FigureCanvas = None):
         """
         Plots the average M-max of each dataset for each channel (animal averages).
@@ -1320,6 +1269,124 @@ class EMGExperimentPlotter(EMGPlotter):
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(['channel_index'], inplace=True)
+        return raw_data_df
+
+    def plot_maxH(self, method=None, relative_to_mmax=False, manual_mmax=None, bin_margin=0, canvas=None):
+        """
+        Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
+
+        Args:
+            channel_names (list): List of custom channel names. Default is an empty list.
+            method (str): Method for calculating the amplitude. Options are 'rms', 'avg_rectified', or 'peak_to_trough'. Default is 'rms'.
+            relative_to_mmax (bool): Flag indicating whether to make the M-wave amplitudes relative to the maximum M-wave amplitude. Default is False.
+            manual_mmax (float): Manual value for the maximum M-wave amplitude. Default is None.
+
+        Returns:
+            None
+        """
+        # Set method to default if not specified.
+        if method is None:
+            method = self.emg_object.default_method
+        channel_names = self.emg_object.channel_names
+
+        fig, ax, axes = self.create_fig_and_axes(canvas=canvas, figsizes='small')
+
+        raw_data_dict = {
+            'channel_index': [],
+            'stimulus_v': [],
+            'avg_m_wave_amplitudes': [],
+            'avg_h_wave_amplitudes': [],
+        }
+
+        for channel_index in range(self.emg_object.num_channels):
+            # Get average H-wave amplitudes
+            h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
+            stimulus_voltages = self.emg_object.stimulus_voltages
+
+            # Find the voltage with the maximum average H-reflex amplitude
+            max_h_reflex_amplitude = max(h_response_means)
+            max_h_reflex_voltage = stimulus_voltages[h_response_means.index(max_h_reflex_amplitude)]
+            
+            # Define the range of voltages around the max H-reflex voltage
+            voltage_indices = range(max(0, h_response_means.index(max_h_reflex_amplitude) - bin_margin),
+                                min(len(stimulus_voltages), h_response_means.index(max_h_reflex_amplitude) + bin_margin + 1))
+            marginal_voltages = [stimulus_voltages[i] for i in voltage_indices]
+
+            # Collect M-wave and H-response amplitudes for the marginal bins
+            stimulus_voltages = []
+            m_wave_amplitudes = []
+            h_response_amplitudes = []
+            for voltage in marginal_voltages:
+                m_wave_avgs = self.emg_object.get_m_wave_amplitude_avgs_at_voltage(method, channel_index, voltage)
+                h_response_avgs = self.emg_object.get_h_wave_amplitude_avgs_at_voltage(method, channel_index, voltage)
+                m_wave_amplitudes.extend(m_wave_avgs)
+                h_response_amplitudes.extend(h_response_avgs)
+                stimulus_voltages.extend([voltage] * len(m_wave_avgs))
+
+            # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
+            if relative_to_mmax:
+                if manual_mmax is not None:
+                    m_max = manual_mmax[channel_index]
+                else:
+                    m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
+                m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+
+            # Append data to raw data dictionary
+            raw_data_dict['channel_index'].extend([channel_index] * len(m_wave_amplitudes))
+            raw_data_dict['stimulus_v'].extend(stimulus_voltages)
+            raw_data_dict['avg_m_wave_amplitudes'].extend(m_wave_amplitudes)
+            raw_data_dict['avg_h_wave_amplitudes'].extend(h_response_amplitudes)
+
+            # Plot the M-wave and H-response amplitudes for the maximum H-reflex voltage.
+            m_x = 1
+            h_x = 2.5
+            if self.emg_object.num_channels == 1:
+                ax.plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
+                ax.errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                
+                ax.plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
+                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
+                ax.errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                
+                ax.set_xticks([m_x, h_x])
+                ax.set_xticklabels(['M-response', 'H-reflex'])
+                ax.set_title(f'{channel_names[0]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
+                ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
+            else:
+                axes[channel_index].plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
+                axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+
+                axes[channel_index].plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
+                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
+                axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                
+                axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
+                axes[channel_index].set_xticks([m_x, h_x])
+                axes[channel_index].set_xticklabels(['M-response', 'H-reflex'])
+                axes[channel_index].set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
+
+        # Set labels and title
+        fig.suptitle('EMG Responses at Max H-reflex Stimulation')
+        if self.emg_object.num_channels == 1:
+            ax.set_xlabel('Response Type')
+            ax.set_ylabel(f'Avg. EMG Amp. (mV, {method})')
+            if relative_to_mmax:
+                ax.set_ylabel(f'Avg. EMG Amp. (M-max, {method})')
+        else:
+            fig.supxlabel('Response Type')
+            fig.supylabel(f'Avg. EMG Amp. (mV, {method})')
+            if relative_to_mmax:
+                fig.supylabel(f'Avg. EMG Amp. (M-max, {method})')
+
+        # Show the plot
+        self.display_plot(canvas)
+
+        # Create DataFrame with multi-level index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
         return raw_data_df
 
 class UnableToPlotError(Exception):

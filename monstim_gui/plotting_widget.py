@@ -40,8 +40,8 @@ class PlotWidget(QGroupBox):
                 "M-max": MMaxOptions
             },
             "experiment": {
-                # "Average Reflex Curves": AverageReflexCurvesOptions,
-                # "Max H-reflex": MaxHReflexOptions,
+                "Average Reflex Curves": AverageReflexCurvesOptions,
+                "Max H-reflex": MaxHReflexOptions,
                 "M-max": MMaxOptions
             }
         }
@@ -51,7 +51,7 @@ class PlotWidget(QGroupBox):
         self.last_plot_type = {
             "session": "EMG",
             "dataset": "Average Reflex Curves",
-            "experiment": "M-max"
+            "experiment": "Average Reflex Curves"
         }
         self.last_options = {
             "session": {plot_type: {} for plot_type in self.plot_options["session"]},
