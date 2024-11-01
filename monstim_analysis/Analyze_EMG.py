@@ -129,7 +129,7 @@ class EMGData(ABC):
         self.latency_windows.append(new_window)
   
     @abstractmethod
-    def _upgrade_from_version(self, old_version):
+    def _upgrade_from_version(self, current_version):
         pass
 
     @abstractmethod
@@ -283,7 +283,7 @@ class EMGSession(EMGData):
         self.stim_interval : float = session_info['stim_interval']
         self.emg_amp_gains : List[int] = [int(gain) for index, gain in enumerate(session_info['emg_amp_gains']) 
                                           if index < self.num_channels] # only include gains for the number of recorded channels.
-        
+
         # Access the raw EMG recordings. Sort by stimulus voltage and assign a unique recording ID to each recording.
         self.recordings_raw = sorted(session_data['recordings'], key=lambda x: x['stimulus_v'])
         for index, item in enumerate(self.recordings_raw):
@@ -316,12 +316,13 @@ class EMGSession(EMGData):
         self.update_reflex_parameters()
         logging.info(f"Session {self.session_id} initialized with {self.num_recordings} recordings.")
     
-    def _upgrade_from_version(self, old_version):
-        old_version_parsed = parse_version(old_version)
+    def _upgrade_from_version(self, current_version):
+        current_version_parsed = parse_version(current_version)
         try:
-            if old_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
-                logging.info(f"Upgrading session {self.formatted_name} from version {old_version} to {DATA_VERSION}.")
-                # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
+            if current_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
+                logging.info(f"Upgrading session {self.formatted_name} from version {current_version} to {DATA_VERSION}.")
+                
+                # Throw an error if version is too old to handle safely.
                 if not hasattr(self, 'latency_windows'):
                     # if the data has a formatted name, try to use that for the error message.
                     if hasattr(self, 'formatted_name'):
@@ -382,7 +383,7 @@ class EMGSession(EMGData):
                 
                 self.reset_properties(recalculate=False)
         except Exception as e:
-            logging.error(f"Error upgrading session from version {old_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
+            logging.error(f"Error upgrading session from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
             raise e
         # Add any other version upgrade checks below.
 
@@ -555,15 +556,8 @@ class EMGSession(EMGData):
             m_max = []
             
             for channel_idx in range(self.num_channels):
-                stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
-                m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_idx], 
-                                                                            (self.m_start[channel_idx] + self.stim_start),
-                                                                            (self.m_start[channel_idx] + self.stim_start + self.m_duration[channel_idx]), 
-                                                                            self.scan_rate, 
-                                                                            method=self.default_method) 
-                                                                            for recording in self.recordings_processed]                
                 try: # Check if the channel has a valid M-max amplitude.
-                    channel_mmax = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+                    channel_mmax = self.get_m_max(self.default_method, channel_idx, return_mmax_stim_range=False)
                     m_max.append(channel_mmax)
                 except Transform_EMG.NoCalculableMmaxError:
                     logging.info(f"Channel {channel_idx} does not have a valid M-max amplitude.")
@@ -574,6 +568,17 @@ class EMGSession(EMGData):
             
             self._m_max = m_max
         return self._m_max
+
+    @property
+    def stimulus_voltages(self):
+        """
+        Returns a list of stimulus voltages for each recording in the session.
+
+        Returns:
+            list: List of stimulus voltages for each recording in the session.
+        """
+        stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
+        return np.array(stimulus_voltages)
 
     # User methods for EMGSession class
     def m_max_report(self):
@@ -593,7 +598,7 @@ class EMGSession(EMGData):
             logging.info(line)
         return report
 
-    def get_m_max(self, method, channel_index):
+    def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
         """
         Calculates the M-wave amplitude for a specific channel in the session.
 
@@ -604,15 +609,32 @@ class EMGSession(EMGData):
         Returns:
             float: The M-wave amplitude for the specified channel.
         """
-        stimulus_voltages = [recording['stimulus_v'] for recording in self.recordings_processed]
+        m_wave_amplitudes = self.get_m_wave_amplitudes(method, channel_index)
+        if return_mmax_stim_range:
+            return Transform_EMG.get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args, return_mmax_stim_range=True)
+        else:
+            return Transform_EMG.get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+    
+    def get_m_wave_amplitudes(self, method, channel_index):
         m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
                                                                     (self.m_start[channel_index] + self.stim_start),
                                                                     (self.m_start[channel_index] + self.stim_start + self.m_duration[channel_index]), 
                                                                     self.scan_rate, 
                                                                     method=method) 
                                                                     for recording in self.recordings_processed]
-        return Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+        np.array(m_wave_amplitudes)
+        return m_wave_amplitudes
     
+    def get_h_wave_amplitudes(self, method, channel_index):
+        h_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
+                                                                   (self.h_start[channel_index] + self.stim_start),
+                                                                   (self.h_start[channel_index] + self.stim_start + self.h_duration[channel_index]), 
+                                                                   self.scan_rate, 
+                                                                   method=method) 
+                                                                   for recording in self.recordings_processed]
+        np.array(h_wave_amplitudes)
+        return h_wave_amplitudes
+
     def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
             if window.name == "M-wave":
@@ -860,11 +882,11 @@ class EMGDataset(EMGData):
             # if not temp:
             #     self.save_dataset(self.save_path)
 
-    def _upgrade_from_version(self, old_version):
-        old_version_parsed = parse_version(old_version)
+    def _upgrade_from_version(self, current_version):
+        current_version_parsed = parse_version(current_version)
         try:
-            if old_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version to the current version.
-                logging.info(f"Upgrading dataset {self.formatted_name} from version {old_version} to {DATA_VERSION}.")
+            if current_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version to the current version.
+                logging.info(f"Upgrading dataset {self.formatted_name} from version {current_version} to {DATA_VERSION}.")
                 # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
                 if not hasattr(self, 'latency_windows'):
                     # if the data has a formatted name, try to use that for the error message.
@@ -878,7 +900,7 @@ class EMGDataset(EMGData):
 
                 # Update the EMGSession instances in the dataset.
                 for session in self.emg_sessions:
-                    session._upgrade_from_version(old_version)
+                    session._upgrade_from_version(current_version)
                     session.reset_properties(recalculate=False)
                 
                 # Reinitialize the object
@@ -934,7 +956,7 @@ class EMGDataset(EMGData):
                 except KeyError:
                     pass  
         except Exception as e:
-            logging.error(f"Error upgrading dataset from version {old_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
+            logging.error(f"Error upgrading dataset from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
             raise e
         # Add any other version upgrade checks below.
 
@@ -985,7 +1007,25 @@ class EMGDataset(EMGData):
         raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
         return raw_data
 
-    def get_avg_m_max(self, method, channel_index):
+    def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
+        """
+        Calculates the average M-wave amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            return_avg_mmax_thresholds (bool): Whether to return the average M-max threshold values along with the amplitude. Default is False.
+
+        Returns:
+            float: The average M-wave amplitude for the specified channel.
+        """
+        m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.emg_sessions if session.m_max[channel_index] is not None])
+        if return_avg_mmax_thresholds:
+            return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
+        else:
+            return np.mean(m_max_amplitudes)
+
+    def get_avg_m_wave_amplitudes(self, method, channel_index):
         """
         Calculates the average M-wave amplitude for a specific channel in the dataset.
 
@@ -996,8 +1036,88 @@ class EMGDataset(EMGData):
         Returns:
             float: The average M-wave amplitude for the specified channel.
         """
-        m_wave_amplitudes = [session.get_m_max(method, channel_index) for session in self.emg_sessions if session.m_max[channel_index] is not None]
-        return np.mean(m_wave_amplitudes)
+        # Create a dictionary of M-wave amplitudes binned by stimulus voltage.
+        m_wave_bins = {voltage: [] for voltage in self.stimulus_voltages}
+        
+        # Add every M-wave amplitude to the appropriate bin.
+        for session in self.emg_sessions:
+            binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
+            m_wave_amplitudes = session.get_m_wave_amplitudes(method, channel_index)
+
+            for voltage, m_wave_amplitude in zip(binned_session_voltages, m_wave_amplitudes):
+                m_wave_bins[voltage].append(m_wave_amplitude)
+
+        # Calculate the average M-wave amplitude for each bin.
+        avg_m_wave_amplitudes = [np.mean(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        std_m_wave_amplitudes = [np.std(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        return avg_m_wave_amplitudes, std_m_wave_amplitudes
+
+    def get_m_wave_amplitudes_at_voltage(self, method, channel_index, voltage):
+        """
+        Calculates the M-wave amplitudes for a specific channel in the dataset at a specific stimulus voltage.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            voltage (float): The stimulus voltage to calculate the M-wave amplitude at.
+
+        Returns:
+            list: A list of M-wave amplitudes for the specified channel at the specified stimulus voltage.
+        """
+        m_wave_amplitudes = []
+        for session in self.emg_sessions:
+            binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
+            if voltage in binned_session_voltages:
+                session_voltage_index = np.where(binned_session_voltages == voltage)[0][0]
+                m_wave_amplitudes.append(session.get_m_wave_amplitudes(method, channel_index)[session_voltage_index])
+        return m_wave_amplitudes
+
+    def get_avg_h_wave_amplitudes(self, method, channel_index):
+        """
+        Calculates the average H-reflex amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the H-reflex amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the H-reflex amplitude for.
+
+        Returns:
+            float: The average H-reflex amplitude for the specified channel.
+        """
+        # Create a dictionary of H-wave amplitudes binned by stimulus voltage.
+        h_wave_bins = {voltage: [] for voltage in self.stimulus_voltages}
+        
+        # Add every H-wave amplitude to the appropriate bin.
+        for session in self.emg_sessions:
+            binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
+            h_wave_amplitudes = session.get_h_wave_amplitudes(method, channel_index)
+
+            for voltage, h_wave_amplitude in zip(binned_session_voltages, h_wave_amplitudes):
+                h_wave_bins[voltage].append(h_wave_amplitude)
+
+        # Calculate the average M-wave amplitude for each bin.
+        avg_h_wave_amplitudes = [np.mean(h_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        std_h_wave_amplitudes = [np.std(h_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        return avg_h_wave_amplitudes, std_h_wave_amplitudes
+
+    def get_h_wave_amplitudes_at_voltage(self, method, channel_index, voltage):
+        """
+        Calculates the H-wave amplitudes for a specific channel in the dataset at a specific stimulus voltage.
+
+        Args:
+            method (str): The method to use for calculating the H-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the H-wave amplitude for.
+            voltage (float): The stimulus voltage to calculate the H-wave amplitude at.
+
+        Returns:
+            list: A list of H-wave amplitudes for the specified channel at the specified stimulus voltage.
+        """
+        h_wave_amplitudes = []
+        for session in self.emg_sessions:
+            binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
+            if voltage in binned_session_voltages:
+                session_voltage_index = np.where(binned_session_voltages == voltage)[0][0]
+                h_wave_amplitudes.append(session.get_h_wave_amplitudes(method, channel_index)[session_voltage_index])
+        return h_wave_amplitudes
 
     def invert_channel_polarity(self, channel_index):
         """
@@ -1035,6 +1155,21 @@ class EMGDataset(EMGData):
             self._m_max = m_max
             logging.info(f"Average M-max values created for dataset {self.formatted_name}: {self._m_max}")
         return self._m_max
+
+    @property
+    def stimulus_voltages(self):
+        """
+        Returns a list of stimulus voltages for each recording in the dataset.
+
+        Returns:
+            list: Sorted list of stimulus voltages for each recording in the dataset.
+        """
+        binned_voltages = set()
+        for session in self.emg_sessions:
+            binned_voltage = np.round(session.stimulus_voltages / self.bin_size) * self.bin_size
+            binned_voltages.update(binned_voltage.tolist())
+
+        return np.array(sorted(binned_voltages))
 
     # User methods for manipulating the EMGSession instances in the dataset.
     def add_session(self, session : Union[EMGSession, str]):
@@ -1397,11 +1532,11 @@ class EMGExperiment(EMGData):
                     logging.info(f"Experiment saved to {self.save_path}")
                 logging.info(f"Experiment {self.expt_id} created successfully.")
 
-    def _upgrade_from_version(self, old_version):
-        old_version_parsed = parse_version(old_version)
+    def _upgrade_from_version(self, current_version):
+        current_version_parsed = parse_version(current_version)
         try:
-            if old_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
-                logging.info(f"Upgrading experiment {self.formatted_name} from version {old_version} to version {DATA_VERSION}.")
+            if current_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
+                logging.info(f"Upgrading experiment {self.formatted_name} from version {current_version} to version {DATA_VERSION}.")
                 # If no latency windows attribute, then throw an error (version is likely too old to handle safely).
                 if not hasattr(self, 'latency_windows'):
                     # if the data has a formatted name, try to use that for the error message.
@@ -1415,7 +1550,7 @@ class EMGExperiment(EMGData):
 
                 # Update the EMGExperiment's EMGDataset objects.
                 for dataset in self.emg_datasets:
-                    dataset._upgrade_from_version(old_version)
+                    dataset._upgrade_from_version(current_version)
                     dataset.reset_properties(recalculate=False)
                 
                 # Reinitialize a temp object
@@ -1469,7 +1604,7 @@ class EMGExperiment(EMGData):
                     self.save_experiment(self.save_path)
                     logging.info(f"Experiment saved to {self.save_path}")
         except Exception as e:
-            logging.error(f"Error upgrading dataset from version {old_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
+            logging.error(f"Error upgrading dataset from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
             raise e
         # Add any other version upgrade checks below.
 
@@ -1488,6 +1623,40 @@ class EMGExperiment(EMGData):
         for line in report:
             logging.info(line)
         return report
+
+    def plot(self, plot_type: str = None, **kwargs):
+        """
+        Plots EMG data from the datasets in this experiment (animal averages) using the specified plot_type.
+
+        Args:
+            - plot_type (str): The type of plot to generate. Options include 'reflexCurves', 'mmax', and 'maxH'. Default is 'reflexCurves'.
+                Plot types are defined in the EMGDatasetPlotter class in Plot_EMG.py.
+            - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
+            - **kwargs: Additional keyword arguments to pass to the plotting function.
+                
+                The most common keyword arguments include:
+                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'. Default method is set in config.yml under 'default_method'.
+                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True) or as the actual recorded amplitude (False). Default is False.
+                - 'mmax_report' (bool): Whether to print the details of the M-max calculations (True) or not (False). Default is False.
+                - 'manual_mmax' (float): The manually set M-wave amplitude to use for plotting the reflex curves. Default is None.
+
+        Example Usages:
+            # Plot the reflex curves for each channel.
+            dataset.plot()
+
+            # Plot M-wave amplitudes for each channel.
+            dataset.plot(plot_type='mmax')
+
+            # Plot the reflex curves for each channel.
+            dataset.plot(plot_type='reflexCurves')
+
+            # Plot the reflex curves for each channel and print the M-max details.
+            dataset.plot(plot_type='reflexCurves', mmax_report=True)
+        """
+
+        # Call the appropriate plotting method from the plotter object
+        raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
+        return raw_data
 
     def invert_channel_polarity(self, channel_index):
         """
@@ -1576,6 +1745,133 @@ class EMGExperiment(EMGData):
         Returns the EMGDataset object at the specified index.
         """
         return self.emg_datasets[dataset_idx]
+
+    @property
+    def stimulus_voltages(self):
+        """
+        Returns a list of stimulus voltages for each recording in the dataset.
+
+        Returns:
+            list: Sorted list of stimulus voltages for each recording in the dataset.
+        """
+        binned_voltages = set()
+        for session in self.emg_datasets:
+            binned_voltage = np.round(session.stimulus_voltages / self.bin_size) * self.bin_size
+            binned_voltages.update(binned_voltage.tolist())
+            
+        return np.array(sorted(binned_voltages))
+
+    def get_avg_m_wave_amplitudes(self, method, channel_index):
+        """
+        Calculates the average M-wave amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+
+        Returns:
+            float: The average M-wave amplitude for the specified channel.
+        """
+        # Create a dictionary of M-wave amplitudes binned by stimulus voltage.
+        m_wave_bins = {voltage: [] for voltage in self.stimulus_voltages}
+        
+        # Add every M-wave amplitude to the appropriate bin.
+        for dataset in self.emg_datasets:
+            binned_dataset_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in dataset.stimulus_voltages]
+            dataset_m_wave_amplitudes, _ = dataset.get_avg_m_wave_amplitudes(method, channel_index)
+
+            for voltage, m_wave_amplitude in zip(binned_dataset_voltages, dataset_m_wave_amplitudes):
+                m_wave_bins[voltage].append(m_wave_amplitude)
+
+        # Calculate the average M-wave amplitude for each bin.
+        avg_m_wave_amplitudes = [np.mean(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        std_m_wave_amplitudes = [np.std(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        return avg_m_wave_amplitudes, std_m_wave_amplitudes
+    
+    def get_m_wave_amplitude_avgs_at_voltage(self, method, channel_index, voltage):
+        """
+        Calculates the M-wave amplitudes for a specific channel in the dataset at a specific stimulus voltage.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            voltage (float): The stimulus voltage to calculate the M-wave amplitude at.
+
+        Returns:
+            list: A list of M-wave amplitudes for the specified channel at the specified stimulus voltage.
+        """
+        m_wave_amplitude_avgs = []
+        for dataset in self.emg_datasets:
+            if voltage in dataset.stimulus_voltages:
+                dataset_voltage_index = np.where(dataset.stimulus_voltages == voltage)[0][0]
+                avg_m_wave_amplitudes, _ = dataset.get_avg_m_wave_amplitudes(method, channel_index)
+                m_wave_amplitude_avgs.append(avg_m_wave_amplitudes[dataset_voltage_index])
+        return m_wave_amplitude_avgs 
+
+    def get_avg_h_wave_amplitudes(self, method, channel_index):
+        """
+        Calculates the average M-wave amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+
+        Returns:
+            float: The average M-wave amplitude for the specified channel.
+        """
+        # Create a dictionary of M-wave amplitudes binned by stimulus voltage.
+        h_wave_bins = {voltage: [] for voltage in self.stimulus_voltages}
+        
+        # Add every M-wave amplitude to the appropriate bin.
+        for dataset in self.emg_datasets:
+            binned_dataset_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in dataset.stimulus_voltages]
+            dataset_h_wave_amplitudes, _ = dataset.get_avg_h_wave_amplitudes(method, channel_index)
+
+            for voltage, h_wave_amplitude in zip(binned_dataset_voltages, dataset_h_wave_amplitudes):
+                h_wave_bins[voltage].append(h_wave_amplitude)
+
+        # Calculate the average M-wave amplitude for each bin.
+        avg_h_wave_amplitudes = [np.mean(h_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        std_h_wave_amplitudes = [np.std(h_wave_bins[voltage]) for voltage in self.stimulus_voltages]
+        return avg_h_wave_amplitudes, std_h_wave_amplitudes
+
+    def get_h_wave_amplitude_avgs_at_voltage(self, method, channel_index, voltage):
+        """
+        Calculates the M-wave amplitudes for a specific channel in the dataset at a specific stimulus voltage.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            voltage (float): The stimulus voltage to calculate the M-wave amplitude at.
+
+        Returns:
+            list: A list of M-wave amplitudes for the specified channel at the specified stimulus voltage.
+        """
+        h_wave_amplitude_avgs = []
+        for dataset in self.emg_datasets:
+            if voltage in dataset.stimulus_voltages:
+                dataset_voltage_index = np.where(dataset.stimulus_voltages == voltage)[0][0]
+                avg_h_wave_amplitudes, _ = dataset.get_avg_h_wave_amplitudes(method, channel_index)
+                h_wave_amplitude_avgs.append(avg_h_wave_amplitudes[dataset_voltage_index])
+        return h_wave_amplitude_avgs
+
+    def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
+        """
+        Calculates the average M-wave amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            return_avg_mmax_thresholds (bool): Whether to return the average M-max threshold values along with the amplitude. Default is False.
+
+        Returns:
+            float: The average M-wave amplitude for the specified channel.
+        """
+        m_max_amplitudes, m_max_thresholds = zip(*[dataset.get_avg_m_max(method, channel_index, return_avg_mmax_thresholds=True)[:2] for dataset in self.emg_datasets])
+        if return_avg_mmax_thresholds:
+            return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
+        else:
+            return np.mean(m_max_amplitudes)
 
     @property
     def dataset_names(self):

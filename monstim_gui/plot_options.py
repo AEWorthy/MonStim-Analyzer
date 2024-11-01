@@ -333,10 +333,20 @@ class MaxHReflexOptions(BasePlotOptions):
         relative_to_mmax_layout.addWidget(self.relative_to_mmax_checkbox)
         self.layout.addLayout(relative_to_mmax_layout)
 
+        # bin margin option (integer)
+        bin_margin_layout = QHBoxLayout()
+        self.bin_margin_label = QLabel("Bin Margin:")
+        self.bin_margin_input = FloatLineEdit(default_value=0)
+        self.bin_margin_input.setPlaceholderText("Bin Margin (# bins):")
+        bin_margin_layout.addWidget(self.bin_margin_label)
+        bin_margin_layout.addWidget(self.bin_margin_input)
+        self.layout.addLayout(bin_margin_layout)
+
     def get_options(self):
         return {
             "method": self.method_combo.currentText(),
-            "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked()
+            "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
+            "bin_margin": int(self.bin_margin_input.get_value())
         }
     
     def set_options(self, options):
@@ -346,3 +356,5 @@ class MaxHReflexOptions(BasePlotOptions):
                 self.method_combo.setCurrentIndex(index)
         if "relative_to_mmax" in options:
             self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
+        if "bin_margin" in options:
+            self.bin_margin_input.set_value(options["bin_margin"])

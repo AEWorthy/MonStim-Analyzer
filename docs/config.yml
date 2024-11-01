@@ -1,7 +1,7 @@
 # This YAML file contains the configuration parameters for the MonStim_CSV_Analysis program.
 
 # Basic Parameters.
-bin_size: 0.05 # bins for stimulus voltages (in V). default is 0.05.
+bin_size: 0.01 # bins for stimulus voltages (in V). default is 0.01.
 time_window: 8.0 # window of EMG time to plot (in ms). default is 10.
 default_method: 'rms' # (str) default method for EMG analysis. default is 'rms'.
 default_channel_names: # (list) default channel names for EMG analysis. default is ['LG', 'TA'].

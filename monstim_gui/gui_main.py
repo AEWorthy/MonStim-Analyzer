@@ -608,7 +608,7 @@ class EMGAnalysisGUI(QMainWindow):
                 else:
                     QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
-            else:
+            elif self.plot_widget.dataset_radio.isChecked():
                 logging.debug("Plotting dataset data.")
                 if self.current_dataset:
                     # If you have a similar plot method for dataset, use it here
@@ -620,6 +620,15 @@ class EMGAnalysisGUI(QMainWindow):
                 else:
                     QMessageBox.warning(self, "Warning", "Please select a dataset first.")
                     return
+            elif self.plot_widget.experiment_radio.isChecked():
+                logging.debug("Plotting experiment data.")
+                if self.current_experiment:
+                    # If you have a similar plot method for experiment, use it here
+                    raw_data = self.current_experiment.plot(
+                        plot_type=plot_type,
+                        **plot_options,
+                        canvas = self.plot_widget.canvas
+                    )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
             logging.error(f"An error occurred while plotting: {e}")
