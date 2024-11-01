@@ -1,4 +1,5 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit
+from PyQt6.QtGui import QIntValidator
 from .custom_gui_elements import FloatLineEdit
 from .plotting_cycler import RecordingCyclerWidget
 
@@ -336,8 +337,10 @@ class MaxHReflexOptions(BasePlotOptions):
         # bin margin option (integer)
         bin_margin_layout = QHBoxLayout()
         self.bin_margin_label = QLabel("Bin Margin:")
-        self.bin_margin_input = FloatLineEdit(default_value=0)
-        self.bin_margin_input.setPlaceholderText("Bin Margin (# bins):")
+        self.bin_margin_input = QLineEdit()
+        self.bin_margin_input.setValidator(QIntValidator())
+        self.bin_margin_input.setText("0")
+        self.bin_margin_input.setPlaceholderText("Bin Margin (integer)")
         bin_margin_layout.addWidget(self.bin_margin_label)
         bin_margin_layout.addWidget(self.bin_margin_input)
         self.layout.addLayout(bin_margin_layout)
@@ -346,7 +349,7 @@ class MaxHReflexOptions(BasePlotOptions):
         return {
             "method": self.method_combo.currentText(),
             "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
-            "bin_margin": int(self.bin_margin_input.get_value())
+            "bin_margin": int(self.bin_margin_input.text())
         }
     
     def set_options(self, options):
@@ -357,4 +360,4 @@ class MaxHReflexOptions(BasePlotOptions):
         if "relative_to_mmax" in options:
             self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
         if "bin_margin" in options:
-            self.bin_margin_input.set_value(options["bin_margin"])
+            self.bin_margin_input.set_text(str(options["bin_margin"]))
