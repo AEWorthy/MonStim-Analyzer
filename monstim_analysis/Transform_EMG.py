@@ -287,7 +287,7 @@ def detect_plateau(x, y, max_window_size, min_window_size, threshold):
 
 def get_avg_mmax (stimulus_voltages, m_wave_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, return_mmax_stim_range=False):
     """
-    Get the M-wave amplitude and stimulus voltage at M-max.
+    Get the M-wave amplitude and stimulus voltage at M-max for an EMG session.
     """
     # Convert the lists to numpy arrays.
     m_wave_amplitudes = np.array(m_wave_amplitudes)

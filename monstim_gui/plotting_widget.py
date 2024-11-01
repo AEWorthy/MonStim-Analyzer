@@ -18,7 +18,7 @@ class PlotWidget(QGroupBox):
     def __init__(self, parent: 'EMGAnalysisGUI'):
         super().__init__("Plotting", parent)
         self.parent = parent # Type: EMGAnalysisGUI
-        self.layout = QVBoxLayout()
+        self.layout = QVBoxLayout() # Type: QVBoxLayout
         self.create_view_selection()
         self.create_plot_type_selection()
         self.create_additional_options()
@@ -36,7 +36,13 @@ class PlotWidget(QGroupBox):
             },
             "dataset": {
                 "Average Reflex Curves": AverageReflexCurvesOptions,
-                "Max H-reflex": MaxHReflexOptions
+                "Max H-reflex": MaxHReflexOptions,
+                "M-max": MMaxOptions
+            },
+            "experiment": {
+                "Average Reflex Curves": AverageReflexCurvesOptions,
+                "Max H-reflex": MaxHReflexOptions,
+                "M-max": MMaxOptions
             }
         }
         self.current_option_widget: 'BasePlotOptions' = None
@@ -44,11 +50,13 @@ class PlotWidget(QGroupBox):
         # Store the last selected plot type and options for each view
         self.last_plot_type = {
             "session": "EMG",
-            "dataset": "Average Reflex Curves"
+            "dataset": "Average Reflex Curves",
+            "experiment": "Average Reflex Curves"
         }
         self.last_options = {
             "session": {plot_type: {} for plot_type in self.plot_options["session"]},
-            "dataset": {plot_type: {} for plot_type in self.plot_options["dataset"]}
+            "dataset": {plot_type: {} for plot_type in self.plot_options["dataset"]},
+            "experiment": {plot_type: {} for plot_type in self.plot_options["experiment"]}
         }
 
         # Initialize plot types and options
@@ -56,15 +64,19 @@ class PlotWidget(QGroupBox):
         self.update_plot_options()
 
     def create_view_selection(self):
+        self.layout.addWidget(QLabel("Select Data Level to Plot:"))
         view_layout = QHBoxLayout()
         self.view_group = QButtonGroup(self)
-        self.session_radio = QRadioButton("Single Session")
-        self.dataset_radio = QRadioButton("Entire Dataset")
+        self.session_radio = QRadioButton("Session")
+        self.dataset_radio = QRadioButton("Dataset")
+        self.experiment_radio = QRadioButton("Experiment")
         self.view_group.addButton(self.session_radio)
         self.view_group.addButton(self.dataset_radio)
+        self.view_group.addButton(self.experiment_radio)
         self.session_radio.setChecked(True)
         view_layout.addWidget(self.session_radio)
         view_layout.addWidget(self.dataset_radio)
+        view_layout.addWidget(self.experiment_radio)
         self.layout.addLayout(view_layout)
 
         self.view = "session"
@@ -98,7 +110,14 @@ class PlotWidget(QGroupBox):
         self.figure = self.parent.plot_pane.figure        
 
     def on_view_changed(self):
-        view = "session" if self.session_radio.isChecked() else "dataset"
+        match self.view_group.checkedButton():
+            case self.session_radio:
+                view = "session"
+            case self.dataset_radio:
+                view = "dataset"
+            case self.experiment_radio:
+                view = "experiment"
+        
         if view == self.view:
             return
 
