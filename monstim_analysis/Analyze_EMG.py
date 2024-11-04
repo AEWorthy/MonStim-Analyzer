@@ -1916,7 +1916,7 @@ class EMGExperiment(EMGData):
         logging.info(f"Saving experiment '{self.expt_id}' to {save_path}.")
             
         with open(save_path, 'wb') as file:
-            pickle.dump(self, file)
+            pickle.dump(self, file, protocol=pickle.HIGHEST_PROTOCOL)
     
     @staticmethod
     def load_experiment(save_path):
