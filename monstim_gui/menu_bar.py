@@ -86,6 +86,8 @@ class MenuBar(QMenuBar):
         dataset_menu.addSeparator()
         reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
+        remove_dataset_action = dataset_menu.addAction("Remove Current Dataset")
+        remove_dataset_action.triggered.connect(self.parent.remove_dataset)
 
         # Session level actions
         update_window_action = session_menu.addAction("Update Reflex Time Windows")
@@ -97,6 +99,8 @@ class MenuBar(QMenuBar):
         session_menu.addSeparator()
         reload_session_action = session_menu.addAction("Reload Current Session")
         reload_session_action.triggered.connect(self.confirm_reload_session)
+        remove_session_action = session_menu.addAction("Remove Current Session")
+        remove_session_action.triggered.connect(self.parent.remove_session)
           
     def create_help_menu(self):
         # Help menu

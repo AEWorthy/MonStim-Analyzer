@@ -1,6 +1,6 @@
 import logging
 from typing import TYPE_CHECKING
-from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
+from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
 from PyQt6.QtCore import Qt
 
 if TYPE_CHECKING:
@@ -31,6 +31,7 @@ class DataSelectionWidget(QGroupBox):
         self.dataset_label = QLabel("Select Dataset:")
         self.dataset_combo = QComboBox()
         self.dataset_combo.currentIndexChanged.connect(self.parent.load_dataset)
+
         dataset_layout.addWidget(self.dataset_label)
         dataset_layout.addWidget(self.dataset_combo)
         self.layout.addLayout(dataset_layout)
@@ -41,13 +42,8 @@ class DataSelectionWidget(QGroupBox):
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self.parent.load_session)
         
-        # button to remove session from dataset
-        self.remove_session_button = QPushButton("Remove Session")
-        self.remove_session_button.clicked.connect(self.parent.remove_session)
-        
         session_layout.addWidget(self.session_label)
         session_layout.addWidget(self.session_combo)
-        session_layout.addWidget(self.remove_session_button)
         self.layout.addLayout(session_layout)
     
     def update_experiment_combo(self):

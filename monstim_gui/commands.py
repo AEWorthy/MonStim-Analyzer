@@ -110,11 +110,27 @@ class RemoveSessionCommand(Command):
         self.gui.current_session = None
         self.gui.data_selection_widget.update_session_combo()
         
-      
     def undo(self):
         self.gui.current_dataset.add_session(self.removed_session)
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
+
+class RemoveDatasetCommand(Command):
+    def __init__(self, gui):
+        self.command_name = "Remove Dataset"
+        self.gui : 'EMGAnalysisGUI' = gui
+        self.removed_dataset = None
+    
+    def execute(self):
+        self.removed_dataset = self.gui.current_dataset
+        self.gui.current_experiment.remove_dataset(self.gui.current_dataset.dataset_id)
+        self.gui.current_dataset = None
+        self.gui.data_selection_widget.update_dataset_combo()
+
+    def undo(self):
+        self.gui.current_experiment.add_dataset(self.removed_dataset)
+        self.gui.current_dataset = self.removed_dataset
+        self.gui.data_selection_widget.update_dataset_combo()
         
 class InvertChannelPolarityCommand(Command):
     def __init__(self, gui, level : str, channel_indexes_to_invert : list[int]):

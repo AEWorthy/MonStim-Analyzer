@@ -30,7 +30,7 @@ from monstim_gui.data_selection_widget import DataSelectionWidget
 from monstim_gui.reports_widget import ReportsWidget
 from monstim_gui.plotting_widget import PlotWidget, PlotPane
 from monstim_gui.commands import (RemoveSessionCommand, CommandInvoker, ExcludeRecordingCommand, 
-                       RestoreRecordingCommand, InvertChannelPolarityCommand)
+                       RestoreRecordingCommand, InvertChannelPolarityCommand, RemoveDatasetCommand)
 from monstim_gui.dataframe_exporter import DataFrameDialog
 
 class EMGAnalysisGUI(QMainWindow):
@@ -118,6 +118,10 @@ class EMGAnalysisGUI(QMainWindow):
 
     def remove_session(self):
         command = RemoveSessionCommand(self)
+        self.command_invoker.execute(command)
+
+    def remove_dataset(self):
+        command = RemoveDatasetCommand(self)
         self.command_invoker.execute(command)
 
     def unpack_existing_experiments(self):
