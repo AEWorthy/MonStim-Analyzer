@@ -1182,30 +1182,32 @@ class EMGDataset(EMGData):
         Raises:
             TypeError: If the session is neither an instance of EMGSession nor a valid file path to a pickled EMGSession.
         """
-        if session in [session.session_id for session in self.emg_sessions]:
-            logging.warn(f"Session {session.session_id} is already in the dataset. It will not be re-added.")
-        else:
-            if isinstance(session, EMGSession):
+        if isinstance(session, EMGSession):
+            if session.session_id in [session.session_id for session in self.emg_sessions]:
+                logging.warning(f"Session {session.session_id} is already in the dataset. It will not be re-added.")
+            else:
                 # Add the session to the dataset.
                 self.emg_sessions.append(session)
                 self.emg_sessions = sorted(self.emg_sessions, key=lambda x: x.session_id)
-                
-            else:
-                try:
-                    self.emg_sessions.append(EMGSession(session))
-                except:  # noqa: E722
-                    raise TypeError("Expected an instance of EMGSession or a file path to a pickled EMGSession.")
-            
-            # Check that all sessions have the same parameters.
-            self.__check_session_consistency()
-            consistent, message = self.__check_session_consistency()
-            if not consistent:
-                logging.error(f"Error: {message}")
-            else:
-                self.scan_rate = self.emg_sessions[0].scan_rate
-                self.num_channels = self.emg_sessions[0].num_channels
-                self.stim_start = self.emg_sessions[0].stim_start
-            self.reset_properties(recalculate=True)
+        else:
+            try:
+                session = EMGSession(session)
+                if session.session_id in [session.session_id for session in self.emg_sessions]:
+                    logging.warning(f"Session {session.session_id} is already in the dataset. It will not be re-added.")
+                self.emg_sessions.append(session)
+            except:  # noqa: E722
+                raise TypeError("Expected an instance of EMGSession or a file path to a pickled EMGSession.")
+        
+        # Check that all sessions have the same parameters.
+        self.__check_session_consistency()
+        consistent, message = self.__check_session_consistency()
+        if not consistent:
+            logging.error(f"Error: {message}")
+        else:
+            self.scan_rate = self.emg_sessions[0].scan_rate
+            self.num_channels = self.emg_sessions[0].num_channels
+            self.stim_start = self.emg_sessions[0].stim_start
+        self.reset_properties(recalculate=True)
 
     def remove_session(self, session_id : str):
         """
@@ -1713,6 +1715,30 @@ class EMGExperiment(EMGData):
         self.expt_id = new_name.replace(' ', '_')
         self.formatted_name = new_name
         logging.info(f"Experiment renamed to '{new_name}'.")
+
+    def add_dataset(self, dataset : Union[EMGDataset, str]):
+        if isinstance(dataset, EMGDataset):
+            if dataset.dataset_id in [dataset.dataset_id for dataset in self.emg_datasets]:
+                logging.warning(f"Dataset {dataset.dataset_id} is already in the experiment. It will not be re-added.")
+            else:
+                self.emg_datasets.append(dataset)
+                self.emg_datasets = sorted(self.emg_datasets, key=lambda x: x.dataset_id)
+        else:
+            try:
+                dataset = EMGDataset(dataset)
+                if dataset.dataset_id in [dataset.dataset_id for dataset in self.emg_datasets]:
+                    logging.warning(f"Dataset {dataset.dataset_id} is already in the experiment. It will not be re-added.")
+                self.emg_datasets.append(dataset)
+            except:  # noqa: E722
+                raise TypeError("Expected an instance of EMGDataset or a file path to a pickled EMGDataset.")
+        self.reset_properties(recalculate=True)
+
+    def remove_dataset(self, dataset_id : str):
+        if dataset_id not in [dataset.dataset_id for dataset in self.emg_datasets]:
+            logging.warning(f"Error: Dataset {dataset_id} not found in the experiment.")
+        else:
+            self.emg_datasets = [dataset for dataset in self.emg_datasets if dataset.dataset_id != dataset_id]
+            self.reset_properties(recalculate=True)
 
     def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
