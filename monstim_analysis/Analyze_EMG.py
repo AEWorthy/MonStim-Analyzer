@@ -1019,7 +1019,12 @@ class EMGDataset(EMGData):
         Returns:
             float: The average M-wave amplitude for the specified channel.
         """
-        m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.emg_sessions if session.m_max[channel_index] is not None])
+        try:
+            m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.emg_sessions if session.m_max[channel_index] is not None])
+        except ValueError as e:
+            logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
+            return None
+        
         if return_avg_mmax_thresholds:
             return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
         else:
