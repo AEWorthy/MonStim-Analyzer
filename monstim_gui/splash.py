@@ -1,9 +1,16 @@
 import logging
 import os
 
-from PyQt6.QtGui import QPixmap, QFont
+from PyQt6.QtGui import QPixmap, QFont, QColor
 from PyQt6.QtWidgets import QSplashScreen, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt
+
+if __name__ == '__main__':
+    import sys
+    top_level_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    if top_level_dir not in sys.path:
+        print(f"Adding {top_level_dir} to sys.path.")
+        sys.path.insert(0, top_level_dir)
 
 from monstim_utils import get_source_path
 from monstim_gui import __version__
@@ -19,7 +26,8 @@ class SplashScreen(QSplashScreen):
     def __init__(self):
         logging.debug("Creating splash screen.")
         pixmap = QPixmap(400, 300)
-        pixmap.fill(Qt.GlobalColor.white)
+        offwhite = QColor(245, 245, 240)
+        pixmap.fill(offwhite)
         
         super().__init__(pixmap, Qt.WindowType.WindowStaysOnTopHint)
         
@@ -61,3 +69,11 @@ class SplashScreen(QSplashScreen):
         copyright.setStyleSheet("color: #999999;")
         copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
         layout.addWidget(copyright)
+
+if __name__ == '__main__':
+    import sys
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    splash = SplashScreen()
+    splash.show()
+    sys.exit(app.exec())
