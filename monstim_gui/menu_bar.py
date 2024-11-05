@@ -63,7 +63,6 @@ class MenuBar(QMenuBar):
         experiment_menu = edit_menu.addMenu("Experiment")
         dataset_menu = edit_menu.addMenu("Dataset")
         session_menu = edit_menu.addMenu("Session")
-        # recording_menu = edit_menu.addMenu("Recording")
 
         # Experiment level actions
         update_window_action = experiment_menu.addAction("Update Reflex Time Windows")
@@ -75,6 +74,8 @@ class MenuBar(QMenuBar):
         experiment_menu.addSeparator()
         reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
+        remove_experiment_action = experiment_menu.addAction("Remove Current Experiment")
+        remove_experiment_action.triggered.connect(self.parent.delete_experiment)
 
         # Dataset level actions
         update_window_action = dataset_menu.addAction("Update Reflex Time Windows")

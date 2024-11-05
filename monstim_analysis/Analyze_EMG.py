@@ -70,8 +70,8 @@ class EMGData(ABC):
         self.version = DATA_VERSION
         self.latency_windows: List[LatencyWindow] = []
         self.channel_names : List[str] = []
-        self.num_channels : int = 0
-        self.formatted_name : str = 'EMGData'
+        self.num_channels : int
+        self.formatted_name : str
         self.m_start : List[float] = []
         self.m_duration : List[float] = []
         self.h_start : List[float] = []
@@ -270,6 +270,7 @@ class EMGSession(EMGData):
         # Access session-wide information
         session_info : dict = session_data['session_info']
         self.session_id : str = session_info['session_id']
+        self.formatted_name = self.session_id.replace('_', ' ')
         self.num_channels : int = int(session_info['num_channels'])
         self.channel_names : List[str] = [self.default_channel_names[i] if i < len(self.default_channel_names) 
                                           else 'Channel ' + str(i) for i in range(self.num_channels)]
@@ -294,7 +295,6 @@ class EMGSession(EMGData):
 
         # Initialize the EMGSessionPlotter object and other attributes.      
         self.plotter = EMGSessionPlotter(self)
-        self.formatted_name = self.session_id.replace('_', ' ')
         self._recordings_processed = None
         self._m_max = None
 
@@ -334,21 +334,40 @@ class EMGSession(EMGData):
                 current_state = self.__dict__.copy()
                 
                 # Reinitialize the object
-                session_data = {
-                    'session_info': {
-                        'session_id': current_state['session_id'],
-                        'num_channels': current_state['num_channels'],
-                        'scan_rate': current_state['scan_rate'],
-                        'num_samples': current_state['num_samples'],
-                        'pre_stim_acquired': current_state['pre_stim_acquired'],
-                        'post_stim_acquired': current_state['post_stim_acquired'],
-                        'stim_delay': current_state['stim_delay'],
-                        'stim_duration': current_state['stim_duration'],
-                        'stim_interval': current_state['stim_interval'],
-                        'emg_amp_gains': current_state['emg_amp_gains']
-                    },
-                    'recordings': current_state['recordings_raw']
-                }
+                try:
+                    session_data = {
+                        'session_info': {
+                            'session_id': current_state['session_id'],
+                            'num_channels': current_state['num_channels'],
+                            'scan_rate': current_state['scan_rate'],
+                            'num_samples': current_state['num_samples'],
+                            'pre_stim_acquired': current_state['pre_stim_acquired'],
+                            'post_stim_acquired': current_state['post_stim_acquired'],
+                            'stim_delay': current_state['stim_delay'],
+                            'stim_duration': current_state['stim_duration'],
+                            'stim_interval': current_state['stim_interval'],
+                            'emg_amp_gains': current_state['emg_amp_gains']
+                        },
+                        'recordings': current_state['recordings_raw']
+                    }
+                except KeyError as e:
+                    # Account for older versions that had the 'num_channels' property and the '_num_channels' attribute.
+                    if e.args[0] == 'num_channels':
+                        session_data = {
+                        'session_info': {
+                            'session_id': current_state['session_id'],
+                            'num_channels': current_state['_num_channels'],
+                            'scan_rate': current_state['scan_rate'],
+                            'num_samples': current_state['num_samples'],
+                            'pre_stim_acquired': current_state['pre_stim_acquired'],
+                            'post_stim_acquired': current_state['post_stim_acquired'],
+                            'stim_delay': current_state['stim_delay'],
+                            'stim_duration': current_state['stim_duration'],
+                            'stim_interval': current_state['stim_interval'],
+                            'emg_amp_gains': current_state['emg_amp_gains']
+                        },
+                        'recordings': current_state['recordings_raw']
+                    }
 
                 self.__init__(session_data=session_data)
                 default_state = self.__dict__.copy()
@@ -826,7 +845,7 @@ class EMGDataset(EMGData):
         - num_channels (int): The number of channels in the EMG recordings.
     """
     
-    def __init__(self, emg_sessions, date, animal_id, condition, emg_sessions_to_exclude=[], save_path=None, temp=False):
+    def __init__(self, emg_sessions, date, animal_id, condition, emg_sessions_to_exclude=[], custom_save_path=None, temp=False):
         """
         Initialize an EMGDataset instance from a list of EMGSession instances for multi-session analyses and plotting.
 
@@ -838,8 +857,10 @@ class EMGDataset(EMGData):
         self.date : str = date
         self.animal_id : str = animal_id
         self.condition : str = condition
-        self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
+        self.formatted_name = f"{self.date} {self.animal_id} {self.condition}"
+        self.dataset_id = f"{self.date}_{self.animal_id}_{self.condition.replace(' ', '-')}"
         self.temp = temp
+        self.custom_save_path = custom_save_path
 
         # Saving was disabled for now. It's better to save the dataset inside of the experiment class.
         if os.path.exists(self.save_path) and not temp:
@@ -848,8 +869,6 @@ class EMGDataset(EMGData):
             logging.info(f"Creating new dataset: {self.date} {self.animal_id} {self.condition}.")
             super().__init__()
             self.plotter = EMGDatasetPlotter(self)
-            self.formatted_name = f"{self.date} {self.animal_id} {self.condition}"
-            self.dataset_id = f"{self.date}_{self.animal_id}_{self.condition.replace(' ', '-')}"
             self._m_max = None    
             
             # Unpack the EMG sessions and exclude any sessions if needed.
@@ -872,11 +891,12 @@ class EMGDataset(EMGData):
             # Check that all sessions have the same parameters and set dataset parameters.
             self.__check_session_consistency()
 
+            self.num_channels = min([session.num_channels for session in self.emg_sessions])
+            self.channel_names = copy.deepcopy(max([session.channel_names for session in self.emg_sessions]))
+            self.latency_windows = copy.deepcopy(max([session.latency_windows for session in self.emg_sessions], key=len))
+
             self.scan_rate : int = self.emg_sessions[0].scan_rate
-            self.num_channels : int = self.emg_sessions[0].num_channels
             self.stim_start : float = self.emg_sessions[0].stim_start
-            self.channel_names : List[str] = self.emg_sessions[0].channel_names # not checked for consistency, but should be the same for all sessions.
-            self.latency_windows : LatencyWindow = copy.deepcopy(self.emg_sessions[0].latency_windows)
             self.update_reflex_parameters()
             logging.info(f"Dataset {self.dataset_id} initialized with {len(self.emg_sessions)} sessions.")
             # if not temp:
@@ -914,7 +934,7 @@ class EMGDataset(EMGData):
                     dataset_info['emg_sessions_to_exclude'] = current_state['emg_sessions_to_exclude']
                 except KeyError:
                     dataset_info['emg_sessions_to_exclude'] = []
-                dataset_info['save_path'] = None
+                dataset_info['custom_save_path'] = None
                 dataset_info['temp'] = True
 
                 self.__init__(**dataset_info)
@@ -953,8 +973,22 @@ class EMGDataset(EMGData):
                 try:
                     if not current_state['temp']:
                         self.save_dataset(self.save_path)
+                        # Check if there is another save file with the old name and delete it.
+                        try:
+                            if os.path.exists(current_state['save_path']) and current_state['save_path'] != self.save_path:
+                                os.remove(current_state['save_path'])
+                                logging.info(f"Deleted old experiment file from {current_state['save_path']}.")
+                        except Exception as e:
+                            logging.error(f"Error deleting old experiment file from {current_state['save_path']}. Error: {str(e)}")
                 except KeyError:
-                    pass  
+                    self.save_dataset(self.save_path)
+                    # Check if there is another save file with the old name and delete it.
+                    try:
+                        if os.path.exists(current_state['save_path']) and current_state['save_path'] != self.save_path:
+                            os.remove(current_state['save_path'])
+                            logging.info(f"Deleted old experiment file from {current_state['save_path']}.")
+                    except Exception as e:
+                        logging.error(f"Error deleting old experiment file from {current_state['save_path']}. Error: {str(e)}")  
         except Exception as e:
             logging.error(f"Error upgrading dataset from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
             raise e
@@ -1023,7 +1057,10 @@ class EMGDataset(EMGData):
             m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.emg_sessions if session.m_max[channel_index] is not None])
         except ValueError as e:
             logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
-            return None
+            if return_avg_mmax_thresholds:
+                return None, None
+            else:
+                return None
         
         if return_avg_mmax_thresholds:
             return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
@@ -1146,6 +1183,13 @@ class EMGDataset(EMGData):
 
     #Properties for the EMGDataset class.
     @property
+    def save_path(self):
+        if self.custom_save_path is None:
+            return os.path.join(get_output_bin_path(),(f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
+        else:
+            return os.path.join(self.custom_save_path, (f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
+    
+    @property
     def m_max(self):
         if self._m_max is None:
             session_m_maxes = [session.m_max for session in self.emg_sessions]
@@ -1210,8 +1254,9 @@ class EMGDataset(EMGData):
             logging.error(f"Error: {message}")
         else:
             self.scan_rate = self.emg_sessions[0].scan_rate
-            self.num_channels = self.emg_sessions[0].num_channels
             self.stim_start = self.emg_sessions[0].stim_start
+            self.num_channels = min([session.num_channels for session in self.emg_sessions])
+
         self.reset_properties(recalculate=True)
 
     def remove_session(self, session_id : str):
@@ -1478,19 +1523,19 @@ class EMGDataset(EMGData):
                 raise EMGDataConsistencyError(f"Inconsistent stimulus start time for {session.session_id} in {self.formatted_name}: {session.stim_start} != {reference_stim_start}.")
 
 class EMGExperiment(EMGData):
-    def __init__(self, expt_id, expts_dict: List[str] = None, save_path: str = None, temp: bool = False):
+    def __init__(self, expt_name : str, expts_dict: List[str] = None, custom_save_path: str = None, temp: bool = False):
             try:
                 if expts_dict:
-                    self.dataset_dict, dataset_dict_keys = expts_dict[expt_id]
+                    self.dataset_dict, dataset_dict_keys = expts_dict[expt_name]
                 else:
                     logging.info("Attempting to load experiment by making a new experiment dictionary from the output path.")
                     expts_dict = EMGData.unpackPickleOutput(output_path=get_output_path())
-                    self.dataset_dict, dataset_dict_keys = expts_dict[expt_id]
+                    self.dataset_dict, dataset_dict_keys = expts_dict[expt_name]
             except KeyError:
-                raise KeyError(f"Error: Experiment '{expt_id}' not found in the dataset dictionary.")
-            
-            self.expt_id = expt_id.replace(' ', '_')
-            self.save_path = os.path.join(get_output_bin_path(),(save_path or f"{self.expt_id}.pickle")) if save_path is None else save_path
+                raise KeyError(f"Error: Experiment '{expt_name}' not found in the dataset dictionary.")
+            self.formatted_name = expt_name
+            self.expt_id = expt_name.replace(' ', '_')
+            self.custom_save_path = custom_save_path
             self.temp = temp
                 
             if os.path.exists(self.save_path) and not temp:
@@ -1498,7 +1543,6 @@ class EMGExperiment(EMGData):
             else:
                 logging.info(f"Creating new experiment: {self.expt_id}.")
                 super().__init__()
-                self.formatted_name = expt_id
                 self.plotter = EMGExperimentPlotter(self)
 
                 # Create a list of EMGDataset instances from the dataset dictionary.
@@ -1518,18 +1562,11 @@ class EMGExperiment(EMGData):
                 self.warnings = self.__check_dataset_consistency()
 
                 # self.scan_rate : int = self.emg_datasets[0].scan_rate
-                self.num_channels : int = self.emg_datasets[0].num_channels
                 # self.stim_start : float = self.emg_datasets[0].stim_start
 
-                # Get channel names and latency windows from the dataset with the longest list of channel names.
-                self.channel_names : List[str] = self.emg_datasets[0].channel_names # not checked for consistency, but should be the same for all sessions.
-                self.latency_windows : List[LatencyWindow] = copy.deepcopy(self.emg_datasets[0].latency_windows)
-                for dataset in self.emg_datasets:
-                    if len(dataset.channel_names) > len(self.channel_names):
-                        self.channel_names = dataset.channel_names
-                        self.latency_windows = dataset.latency_windows.copy()
-                    if dataset.num_channels > self.num_channels:
-                        self.num_channels = dataset.num_channels
+                self.num_channels = min([session.num_channels for session in self.emg_datasets])
+                self.channel_names = copy.deepcopy(max([dataset.channel_names for dataset in self.emg_datasets], key=len))
+                self.latency_windows = copy.deepcopy(max([dataset.latency_windows for dataset in self.emg_datasets], key=len))
                 
                 # Save the experiment if it is not a temporary experiment.
                 self.update_reflex_parameters()
@@ -1561,16 +1598,25 @@ class EMGExperiment(EMGData):
                     dataset.reset_properties(recalculate=False)
                 
                 # Reinitialize a temp object
+                try:
+                    expt_name = current_state['formatted_name']
+                    if expt_name == 'None':
+                        expt_name = current_state['expt_id'].replace('_', ' ')
+                    elif expt_name == 'EMGData':
+                        expt_name = current_state['expt_id'].replace('_', ' ')
+                except KeyError:
+                    expt_name = current_state['expt_id'].replace('_', ' ')
+
                 expt_info = {
-                    'expt_id': current_state['formatted_name'],
+                    'expt_name': expt_name,
                     'expts_dict': [],
-                    'save_path': None,
+                    'custom_save_path': None,
                     'temp': True
                     }
 
                 self.__init__(**expt_info)
                 default_state = self.__dict__.copy()
-                self.__dict__['temp'] = current_state['temp'] # Set the temp attribute to the old value.
+                self.__dict__['temp'] = False#current_state['temp'] # Set the temp attribute to the old value.
 
                 # Update the new state with the old values
                 ignore_keys = {'plotter', 'version', 'temp', 'm_end', 'h_end'}
@@ -1606,10 +1652,18 @@ class EMGExperiment(EMGData):
                     if not current_state['temp']:
                         self.save_experiment(self.save_path)
                         logging.info(f"Experiment saved to {self.save_path}")
+                        # Check if there is another save file with the old name and delete it.
+                        if os.path.exists(current_state['save_path']) and current_state['save_path'] != self.save_path:
+                            os.remove(current_state['save_path'])
+                            logging.info(f"Deleted old experiment file from {current_state['save_path']}.")
                 except KeyError:
                     # Save the experiment anyway... it's better to have a saved version than not.
                     self.save_experiment(self.save_path)
                     logging.info(f"Experiment saved to {self.save_path}")
+                    # Check if there is another save file with the old name and delete it.
+                    if os.path.exists(current_state['save_path']) and current_state['save_path'] != self.save_path:
+                        os.remove(current_state['save_path'])
+                        logging.info(f"Deleted old experiment file from {current_state['save_path']}.")
         except Exception as e:
             logging.error(f"Error upgrading dataset from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
             raise e
@@ -1638,7 +1692,7 @@ class EMGExperiment(EMGData):
         Args:
             - plot_type (str): The type of plot to generate. Options include 'reflexCurves', 'mmax', and 'maxH'. Default is 'reflexCurves'.
                 Plot types are defined in the EMGDatasetPlotter class in Plot_EMG.py.
-            - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
+            - channel_indices (list): A list of channel indices to plot. Default is all channels.
             - **kwargs: Additional keyword arguments to pass to the plotting function.
                 
                 The most common keyword arguments include:
@@ -1716,7 +1770,6 @@ class EMGExperiment(EMGData):
         Args:
             new_name (str): The new name for the experiment.
         """
-        self.save_path = os.path.join(get_output_bin_path(), f"{new_name}.pickle")
         self.expt_id = new_name.replace(' ', '_')
         self.formatted_name = new_name
         logging.info(f"Experiment renamed to '{new_name}'.")
@@ -1776,6 +1829,13 @@ class EMGExperiment(EMGData):
         Returns the EMGDataset object at the specified index.
         """
         return self.emg_datasets[dataset_idx]
+
+    @property
+    def save_path(self):
+        if self.custom_save_path is not None:
+            return os.path.join(self.custom_save_path, (f"{self.formatted_name}.pickle"))
+        else:
+            return os.path.join(get_output_bin_path(),(f"{self.formatted_name}.pickle"))            
 
     @property
     def stimulus_voltages(self):
@@ -1908,7 +1968,7 @@ class EMGExperiment(EMGData):
     def dataset_names(self):
         return [dataset.formatted_name for dataset in self.emg_datasets]
     
-    def save_experiment(self, save_path=None):
+    def save_experiment(self, save_path : Union[str, os.PathLike] = None):
         """
         Save the curated dataset object to disk.
 
@@ -1918,10 +1978,14 @@ class EMGExperiment(EMGData):
         if save_path is None:
             save_path = self.save_path
 
-        logging.info(f"Saving experiment '{self.expt_id}' to {save_path}.")
-            
-        with open(save_path, 'wb') as file:
-            pickle.dump(self, file, protocol=pickle.HIGHEST_PROTOCOL)
+        logging.info(f"Saving experiment '{self.formatted_name}' to {save_path}.")
+
+        try:
+            with open(save_path, 'wb') as file:
+                pickle.dump(self, file, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as e:
+            logging.error(f"Error saving experiment to {save_path}. Error: {str(e)}")
+            raise e
     
     @staticmethod
     def load_experiment(save_path):

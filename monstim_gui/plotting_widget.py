@@ -26,6 +26,7 @@ class PlotWidget(QGroupBox):
         self.import_canvas()
         self.setLayout(self.layout)
 
+    def initialize_plot_widget(self):
         self.plot_options = {
             "session": {
                 "EMG": EMGOptions,
