@@ -105,38 +105,66 @@ class EMGAnalysisGUI(QMainWindow):
    
     # Command functions
     def undo(self):
-        self.command_invoker.undo()
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            self.command_invoker.undo()
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def redo(self):
-        self.command_invoker.redo()
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            self.command_invoker.redo()
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def exclude_recording(self, recording_index):
-        command = ExcludeRecordingCommand(self, recording_index)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = ExcludeRecordingCommand(self, recording_index)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
     
     def restore_recording(self, recording_index):
-        command = RestoreRecordingCommand(self, recording_index)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = RestoreRecordingCommand(self, recording_index)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def remove_session(self):
-        command = RemoveSessionCommand(self)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = RemoveSessionCommand(self)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def remove_dataset(self):
-        command = RemoveDatasetCommand(self)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = RemoveDatasetCommand(self)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def unpack_existing_experiments(self):
         logging.debug("Unpacking existing experiments.")
         if os.path.exists(self.output_path):
             try:
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 self.expts_dict = EMGExperiment.unpackPickleOutput(self.output_path)
                 self.expts_dict_keys = list(self.expts_dict.keys())
                 logging.debug("Existing experiments unpacked successfully.")
             except Exception as e:
+                QApplication.restoreOverrideCursor()
                 QMessageBox.critical(self, "Error", f"An error occurred while unpacking existing experiments: {e}")
                 logging.error(f"An error occurred while unpacking existing experiments: {e}")
                 logging.error(traceback.format_exc())
+            finally:
+                QApplication.restoreOverrideCursor()
     
     # Menu bar functions
     def update_reflex_time_windows(self, level : str):
@@ -168,9 +196,13 @@ class EMGAnalysisGUI(QMainWindow):
             if self.current_session and self.current_dataset:
                 dialog = ReflexSettingsDialog(emg_data, self)
                 if dialog.exec() == QDialog.DialogCode.Accepted:
-                    self.current_experiment.save_experiment()
-                    self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
-                    logging.debug("Window settings updated successfully.")
+                    try:
+                        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+                        self.current_experiment.save_experiment()
+                        self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
+                        logging.debug("Window settings updated successfully.")
+                    finally:
+                        QApplication.restoreOverrideCursor()
             else:
                 QMessageBox.warning(self, "Warning", "Please select a session first.")
         finally:
