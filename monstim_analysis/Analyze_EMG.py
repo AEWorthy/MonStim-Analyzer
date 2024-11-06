@@ -1789,14 +1789,14 @@ class EMGExperiment(EMGData):
                 self.emg_datasets.append(dataset)
             except:  # noqa: E722
                 raise TypeError("Expected an instance of EMGDataset or a file path to a pickled EMGDataset.")
-        self.reset_properties(recalculate=True)
+        self.reset_properties(recalculate=False)
 
     def remove_dataset(self, dataset_id : str):
         if dataset_id not in [dataset.dataset_id for dataset in self.emg_datasets]:
             logging.warning(f"Error: Dataset {dataset_id} not found in the experiment.")
         else:
             self.emg_datasets = [dataset for dataset in self.emg_datasets if dataset.dataset_id != dataset_id]
-            self.reset_properties(recalculate=True)
+            self.reset_properties(recalculate=False)
 
     def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
