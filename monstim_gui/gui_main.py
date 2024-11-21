@@ -22,7 +22,7 @@ from monstim_analysis import EMGExperiment
 from monstim_converter import GUIExptImportingThread
 from monstim_gui.splash import SPLASH_INFO
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
-                           get_source_path, get_docs_path, get_config_path)
+                           get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
 from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, SelectChannelsDialog,
                                  LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
 from monstim_gui.menu_bar import MenuBar
@@ -36,6 +36,7 @@ from monstim_gui.dataframe_exporter import DataFrameDialog
 class EMGAnalysisGUI(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.has_unsaved_changes = False
         self.setWindowTitle("MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
         self.setGeometry(100, 100, 1000, 600)
@@ -198,7 +199,7 @@ class EMGAnalysisGUI(QMainWindow):
                 if dialog.exec() == QDialog.DialogCode.Accepted:
                     try:
                         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                        self.current_experiment.save_experiment()
+                        self.has_unsaved_changes = True
                         self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
                         logging.debug("Window settings updated successfully.")
                     finally:
@@ -267,8 +268,8 @@ class EMGAnalysisGUI(QMainWindow):
                     logging.info(f"Deleted existing experiment '{expt_name}' in 'data' folder.")
 
                     # Delete existing bin file in the output folder.
-                    logging.info(f"Checking for bin file: {os.path.join(get_output_bin_path(),(f'{expt_name}.pickle'))}.")
-                    bin_file = os.path.join(get_output_bin_path(),(f"{expt_name}.pickle"))
+                    logging.info(f"Checking for bin file: {os.path.join(get_output_bin_path(),(f'{expt_name}{BIN_EXTENSION}'))}.")
+                    bin_file = os.path.join(get_output_bin_path(),(f"{expt_name}{BIN_EXTENSION}"))
                     if os.path.exists(bin_file):
                         os.remove(bin_file)
                         logging.info(f"Deleted bin file: {bin_file}.")
@@ -348,7 +349,7 @@ class EMGAnalysisGUI(QMainWindow):
                     QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                     # Rename bin file in output folder
                     bin_file = self.current_experiment.save_path
-                    new_bin_file = os.path.join(get_output_bin_path(), f"{new_name}.pickle")
+                    new_bin_file = os.path.join(get_output_bin_path(), f"{new_name}{BIN_EXTENSION}")
                     if os.path.exists(bin_file):
                         os.rename(bin_file, new_bin_file)
                         logging.debug(f"Renamed bin file: {bin_file} -> {new_bin_file}.")
@@ -372,7 +373,7 @@ class EMGAnalysisGUI(QMainWindow):
                 
                 # Update experiment name in the experiment object
                 self.current_experiment.rename_experiment(new_name)
-                self.current_experiment.save_experiment()
+                self.has_unsaved_changes = True
                 self.refresh_existing_experiments()
                 self.status_bar.showMessage("Experiment renamed successfully.", 5000)
 
@@ -405,7 +406,7 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_dataset and self.current_session:
             self.current_dataset.reload_session(self.current_session.session_id)
             self.current_dataset.apply_preferences()
-            self.current_experiment.save_experiment()
+            self.has_unsaved_changes = True
             self.plot_widget.update_plot_options() # Reset plot options
 
             self.status_bar.showMessage("Session reloaded successfully.", 5000)  # Show message for 5 seconds
@@ -418,7 +419,7 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_dataset:
             self.current_dataset.reload_dataset_sessions()
             self.data_selection_widget.update_session_combo()
-            self.current_experiment.save_experiment()
+            self.has_unsaved_changes = True
             self.plot_widget.update_plot_options() # Reset plot options
 
             self.status_bar.showMessage("Dataset reloaded successfully.", 5000)  # Show message for 5 seconds
@@ -464,7 +465,7 @@ class EMGAnalysisGUI(QMainWindow):
             # Apply preferences to data
             if self.current_experiment:
                 self.current_experiment.apply_preferences()
-                self.current_experiment.save_experiment()
+                self.has_unsaved_changes = True
             self.status_bar.showMessage("Preferences applied successfully.", 5000)  # Show message for 5 seconds
             logging.debug("Preferences applied successfully.")
         else:
@@ -513,7 +514,7 @@ class EMGAnalysisGUI(QMainWindow):
                         case _:
                             QMessageBox.warning(self, "Warning", "Invalid level for selecting channels.")
                             return
-                    self.current_experiment.save_experiment()
+                    self.has_unsaved_changes = True
         finally:
             QApplication.restoreOverrideCursor()
             self.status_bar.showMessage("Channels selected successfully.", 5000)
@@ -562,7 +563,7 @@ class EMGAnalysisGUI(QMainWindow):
                             QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
                             return
                         
-                    self.current_experiment.save_experiment()
+                    self.has_unsaved_changes = True
                     self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
                     logging.debug("Channel names updated successfully.")
                 else:
@@ -600,10 +601,17 @@ class EMGAnalysisGUI(QMainWindow):
             self.help_window.show()
 
     # Data selection widget functions - will be called whenever their index changes.
+    def save_experiment(self):
+        if self.current_experiment:
+            self.current_experiment.save_experiment()
+            self.status_bar.showMessage("Experiment saved successfully.", 5000)
+            logging.debug("Experiment saved successfully.")
+            self.has_unsaved_changes = False
+
     def load_experiment(self, index):
         if index >= 0:
             experiment_name = self.expts_dict_keys[index]
-            save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}.pickle"))
+            save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}{BIN_EXTENSION}"))
             logging.debug(f"Loading experiment: '{experiment_name}'.")
             try:
                 QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
@@ -870,6 +878,36 @@ class EMGAnalysisGUI(QMainWindow):
             logging.info(f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".')
         else: # if the name was not changed, return the original, now-validated dataset path.
             validated_dataset_path = dataset_path
+
+    def show_save_confirmation_dialog(self):
+        """Show dialog asking user if they want to save before closing"""
+        if not self.current_experiment or not self.has_unsaved_changes:
+            return True
+            
+        reply = QMessageBox.question(
+        self,
+        'Save Changes?',
+        'Do you want to save the current experiment before closing?',
+        QMessageBox.StandardButton.Save | 
+        QMessageBox.StandardButton.Discard | 
+        QMessageBox.StandardButton.Cancel,
+        QMessageBox.StandardButton.Save
+    )
+        
+        if reply == QMessageBox.StandardButton.Save:
+            saved = self.save_experiment()
+            if saved:
+                QApplication.quit() # Close the application after saving.
+        elif reply == QMessageBox.StandardButton.Cancel:
+            return False
+        return True
+
+    def closeEvent(self, event):
+        """Handle application closing"""
+        if self.show_save_confirmation_dialog():
+            event.accept()
+        else:
+            event.ignore()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

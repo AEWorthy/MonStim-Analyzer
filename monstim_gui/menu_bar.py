@@ -28,12 +28,6 @@ class MenuBar(QMenuBar):
 
         file_menu.addSeparator()
 
-        # save_action = file_menu.addAction("Save Data")
-        # save_action.triggered.connect(self.parent.save_data)
-
-        # load_action = file_menu.addAction("Load Data")
-        # load_action.triggered.connect(self.parent.load_data)
-
         # refresh existing datasets button
         refresh_datasets_action = file_menu.addAction("Refresh Experiments List")
         refresh_datasets_action.triggered.connect(self.parent.refresh_existing_experiments)
@@ -44,6 +38,21 @@ class MenuBar(QMenuBar):
         # Preferences button
         preferences_action = file_menu.addAction("Preferences")
         preferences_action.triggered.connect(self.parent.show_preferences_window)
+
+        file_menu.addSeparator()
+
+        # Save button
+        save_action = file_menu.addAction("Save Current Experiment")
+        save_action.triggered.connect(self.parent.save_experiment)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
+
+        # Save As button
+        # save_as_action = file_menu.addAction("Save Current Experiment As")
+        # save_as_action.triggered.connect(self.parent.save_experiment_as)
+
+        # Exit button
+        exit_action = file_menu.addAction("Exit")
+        exit_action.triggered.connect(self.parent.close)
 
     def create_edit_menu(self):
         # Edit menu

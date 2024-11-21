@@ -10,6 +10,7 @@ import numpy as np
 DATA_PATH = 'files_to_process'
 OUTPUT_PATH = 'data'
 SAVED_DATASETS_PATH = 'datasets'
+BIN_EXTENSION = '.pkl'
 
 def to_camel_case(text : str):
     words = text.split()
@@ -141,3 +142,4 @@ class CustomLoader(yaml.SafeLoader):
 CustomLoader.add_constructor(
     u'tag:yaml.org,2002:python/tuple',
     CustomLoader.construct_python_tuple)
+

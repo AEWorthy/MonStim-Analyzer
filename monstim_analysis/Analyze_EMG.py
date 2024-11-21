@@ -21,7 +21,7 @@ from matplotlib.lines import Line2D
 
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 import monstim_analysis.Transform_EMG as Transform_EMG
-from monstim_utils import load_config, get_output_bin_path, deep_equal, get_output_path
+from monstim_utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION
 from .version import __version__ as DATA_VERSION
 
 # To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
@@ -68,6 +68,8 @@ class LatencyWindow:
 class EMGData(ABC):
     def __init__(self):
         self.version = DATA_VERSION
+        self._is_completed : bool = False
+        self._save_extention : str = BIN_EXTENSION
         self.latency_windows: List[LatencyWindow] = []
         self.channel_names : List[str] = []
         self.num_channels : int
@@ -77,6 +79,37 @@ class EMGData(ABC):
         self.h_start : List[float] = []
         self.h_duration : List[float] = []
         self._load_config_settings()
+
+    @staticmethod
+    def _save_compressed(obj, filepath):
+        """Base method for saving compressed pickle files"""
+        try:
+            with open(filepath, 'wb') as f:
+                pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as e:
+            logging.error(f"Error saving to {filepath}. Error: {str(e)}")
+            raise e
+
+    @staticmethod
+    def _load_compressed(filepath):
+        """Base method for loading compressed pickle files"""
+        try:
+            with open(filepath, 'rb') as f:
+                return pickle.load(f)
+        except Exception as e:
+            logging.error(f"Error loading from {filepath}. Error: {str(e)}")
+            raise e
+
+
+    @property
+    def is_completed(self):
+        return self._is_completed
+    
+    @is_completed.setter
+    def is_completed(self, value):
+        if not isinstance(value, bool):
+            raise ValueError("is_completed must be a boolean value.")
+        self._is_completed = value
 
     def _load_config_settings(self):
         _config = load_config()
@@ -854,6 +887,7 @@ class EMGDataset(EMGData):
             emg_sessions_to_exclude (list, optional): A list of session names to exclude from the dataset. Defaults to an empty list.
         """
         # Set dataset parameters
+        super().__init__()
         self.date : str = date
         self.animal_id : str = animal_id
         self.condition : str = condition
@@ -867,7 +901,6 @@ class EMGDataset(EMGData):
             raise FileExistsError(self.save_path)
         else:
             logging.info(f"Creating new dataset: {self.date} {self.animal_id} {self.condition}.")
-            super().__init__()
             self.plotter = EMGDatasetPlotter(self)
             self._m_max = None    
             
@@ -1185,9 +1218,9 @@ class EMGDataset(EMGData):
     @property
     def save_path(self):
         if self.custom_save_path is None:
-            return os.path.join(get_output_bin_path(),(f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
+            return os.path.join(get_output_bin_path(), (f"{self.date}_{self.animal_id}_{self.condition}{self._save_extention}"))
         else:
-            return os.path.join(self.custom_save_path, (f"{self.date}_{self.animal_id}_{self.condition}.pickle"))
+            return os.path.join(self.custom_save_path, (f"{self.date}_{self.animal_id}_{self.condition}{self._save_extention}"))
     
     @property
     def m_max(self):
@@ -1385,8 +1418,7 @@ class EMGDataset(EMGData):
             save_path = self.save_path
         logging.info(f"Saving dataset '{self.formatted_name}' to {save_path}.")
             
-        with open(save_path, 'wb') as file:
-            pickle.dump(self, file)
+        self._save_compressed(self, save_path)
 
     @staticmethod
     def load_dataset(save_path):
@@ -1401,7 +1433,7 @@ class EMGDataset(EMGData):
         """
         logging.info(f"Loading dataset from {save_path}.")
         with open(save_path, 'rb') as file:
-            dataset = pickle.load(file) # type: EMGDataset
+            dataset = EMGData._load_compressed(save_path)
             dataset.apply_preferences(reset_properties=False)
         return dataset
     
@@ -1533,16 +1565,17 @@ class EMGExperiment(EMGData):
                     self.dataset_dict, dataset_dict_keys = expts_dict[expt_name]
             except KeyError:
                 raise KeyError(f"Error: Experiment '{expt_name}' not found in the dataset dictionary.")
+            
+            super().__init__()
             self.formatted_name = expt_name
             self.expt_id = expt_name.replace(' ', '_')
             self.custom_save_path = custom_save_path
             self.temp = temp
-                
+
             if os.path.exists(self.save_path) and not temp:
                 raise FileExistsError(f"Experiment already exists at {self.save_path}.")
             else:
                 logging.info(f"Creating new experiment: {self.expt_id}.")
-                super().__init__()
                 self.plotter = EMGExperimentPlotter(self)
 
                 # Create a list of EMGDataset instances from the dataset dictionary.
@@ -1833,9 +1866,9 @@ class EMGExperiment(EMGData):
     @property
     def save_path(self):
         if self.custom_save_path is not None:
-            return os.path.join(self.custom_save_path, (f"{self.formatted_name}.pickle"))
+            return os.path.join(self.custom_save_path, (f"{self.formatted_name}{self._save_extention}"))
         else:
-            return os.path.join(get_output_bin_path(),(f"{self.formatted_name}.pickle"))            
+            return os.path.join(get_output_bin_path(),(f"{self.formatted_name}{self._save_extention}"))            
 
     @property
     def stimulus_voltages(self):
@@ -1979,13 +2012,8 @@ class EMGExperiment(EMGData):
             save_path = self.save_path
 
         logging.info(f"Saving experiment '{self.formatted_name}' to {save_path}.")
+        self._save_compressed(self, save_path)
 
-        try:
-            with open(save_path, 'wb') as file:
-                pickle.dump(self, file, protocol=pickle.HIGHEST_PROTOCOL)
-        except Exception as e:
-            logging.error(f"Error saving experiment to {save_path}. Error: {str(e)}")
-            raise e
     
     @staticmethod
     def load_experiment(save_path):
@@ -2000,7 +2028,7 @@ class EMGExperiment(EMGData):
         """
         logging.info(f"Reloading experiment from file: {save_path}.")
         with open(save_path, 'rb') as file:
-            experiment = pickle.load(file) # type: EMGExperiment
+            experiment = EMGData._load_compressed(save_path)
             experiment.apply_preferences(reset_properties=False)
             return experiment
 
