@@ -217,7 +217,7 @@ class EMGSessionPlotter(EMGPlotter):
             elif data_type in ['rectified_raw', 'rectified_filtered']:
                 attribute_name = f'recordings_{data_type}'
                 if not hasattr(self.emg_object, attribute_name):
-                    setattr(self.emg_object, attribute_name, self.emg_object._process_emg_data(apply_filter=(data_type == 'rectified_filtered'), rectify=True))
+                    setattr(self.emg_object, attribute_name, self.emg_object._process_emg_data(self.emg_object.recordings_raw, apply_filter=(data_type == 'rectified_filtered'), rectify=True))
                 return getattr(self.emg_object, attribute_name)
             else:
                 raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
