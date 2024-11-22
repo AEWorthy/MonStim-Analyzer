@@ -857,17 +857,17 @@ class EMGDatasetPlotter(EMGPlotter):
             'channel_index': [],
             'stimulus_v': [],
             'avg_m_wave': [],
-            'stdev_m_wave': [],
+            'stderr_m_wave': [],
             'avg_h_wave': [],
-            'stdev_h_wave': []
+            'stderr_h_wave': []
         }
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
             if channel_index not in channel_indices:
                 continue
-            m_wave_means, m_wave_stds = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
-            h_response_means, h_response_stds = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
+            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
+            h_response_means, h_response_error = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
@@ -878,33 +878,33 @@ class EMGDatasetPlotter(EMGPlotter):
                     if channel_m_max is None:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
                 m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
-                m_wave_stds = [(amplitude / channel_m_max) for amplitude in m_wave_stds]
+                m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
                 h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
-                h_response_stds = [(amplitude / channel_m_max) for amplitude in h_response_stds]
+                h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
             raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
             raw_data_dict['stimulus_v'].extend(stimulus_voltages)
             raw_data_dict['avg_m_wave'].extend(m_wave_means)
-            raw_data_dict['stdev_m_wave'].extend(m_wave_stds)
+            raw_data_dict['stderr_m_wave'].extend(m_wave_error)
             raw_data_dict['avg_h_wave'].extend(h_response_means)
-            raw_data_dict['stdev_h_wave'].extend(h_response_stds)
+            raw_data_dict['stderr_h_wave'].extend(h_response_error)
             
             # Plot the M-wave and H-response amplitudes for each channel
             if num_channels == 1:
                 ax.plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
-                ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
+                ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_error), np.array(m_wave_means) + np.array(m_wave_error), color='r', alpha=0.2)
                 ax.plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
-                ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
+                ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_error), np.array(h_response_means) + np.array(h_response_error), color='b', alpha=0.2)
                 ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 if plot_legend:
                     ax.legend()
             else:
                 axes[channel_index].plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
-                axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
+                axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_error), np.array(m_wave_means) + np.array(m_wave_error), color='r', alpha=0.2)
                 axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
-                axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
+                axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_error), np.array(h_response_means) + np.array(h_response_error), color='b', alpha=0.2)
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 if plot_legend:
@@ -1010,11 +1010,11 @@ class EMGDatasetPlotter(EMGPlotter):
             h_x = 2.5
             if num_channels == 1:
                 ax.plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
+                ax.annotate(f'n={len(m_wave_amplitudes)}\navg. = {np.average(m_wave_amplitudes):.2f}\nstd. = {np.std(m_wave_amplitudes):.2f}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='left', color=self.emg_object.m_color)
                 ax.errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
+                ax.annotate(f'n={len(h_response_amplitudes)}\navg. = {np.average(h_response_amplitudes):.2f}\nstd. = {np.std(h_response_amplitudes):.2f}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='left', color=self.emg_object.h_color)
                 ax.errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticks([m_x, h_x])
@@ -1023,11 +1023,11 @@ class EMGDatasetPlotter(EMGPlotter):
                 ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
             else:
                 axes[channel_index].plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
+                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}\navg. = {np.average(m_wave_amplitudes):.2f}\nstd. = {np.std(m_wave_amplitudes):.2f}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='left', color=self.emg_object.m_color)
                 axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
 
                 axes[channel_index].plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
+                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}\navg. = {np.average(h_response_amplitudes):.2f}\nstd. = {np.std(h_response_amplitudes):.2f}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='left', color=self.emg_object.h_color)
                 axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
@@ -1112,7 +1112,7 @@ class EMGDatasetPlotter(EMGPlotter):
             m_x = 1
             if num_channels == 1:
                 ax.plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
+                ax.annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nStdev. M-Max: {np.std(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
                 ax.errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticklabels(['M-response'])
@@ -1121,7 +1121,7 @@ class EMGDatasetPlotter(EMGPlotter):
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
                 axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
+                axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nStdev. M-Max: {np.std(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
                 axes[channel_index].errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
                 
                 axes[channel_index].set_xticks([m_x])
@@ -1199,17 +1199,17 @@ class EMGExperimentPlotter(EMGPlotter):
             'channel_index': [],
             'stimulus_v': [],
             'avg_m_wave': [],
-            'stdev_m_wave': [],
+            'stderr_m_wave': [],
             'avg_h_wave': [],
-            'stdev_h_wave': []
+            'stderr_h_wave': []
         }
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
             if channel_index not in channel_indices:
                 continue
-            m_wave_means, m_wave_stds = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
-            h_response_means, h_response_stds = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
+            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
+            h_response_means, h_response_error = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
@@ -1218,33 +1218,33 @@ class EMGExperimentPlotter(EMGPlotter):
                 else:
                     channel_m_max = self.emg_object.get_avg_m_max(method, channel_index)
                 m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
-                m_wave_stds = [(amplitude / channel_m_max) for amplitude in m_wave_stds]
+                m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
                 h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
-                h_response_stds = [(amplitude / channel_m_max) for amplitude in h_response_stds]
+                h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
             raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
             raw_data_dict['stimulus_v'].extend(stimulus_voltages)
             raw_data_dict['avg_m_wave'].extend(m_wave_means)
-            raw_data_dict['stdev_m_wave'].extend(m_wave_stds)
+            raw_data_dict['stderr_m_wave'].extend(m_wave_error)
             raw_data_dict['avg_h_wave'].extend(h_response_means)
-            raw_data_dict['stdev_h_wave'].extend(h_response_stds)
+            raw_data_dict['stderr_h_wave'].extend(h_response_error)
             
             # Plot the M-wave and H-response amplitudes for each channel
             if num_channels == 1:
                 ax.plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
-                ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
+                ax.fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_error), np.array(m_wave_means) + np.array(m_wave_error), color='r', alpha=0.2)
                 ax.plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
-                ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
+                ax.fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_error), np.array(h_response_means) + np.array(h_response_error), color='b', alpha=0.2)
                 ax.set_title(f'{channel_names[0]}')
                 ax.grid(True)
                 if plot_legend:
                     ax.legend()
             else:
                 axes[channel_index].plot(stimulus_voltages, m_wave_means, color=self.emg_object.m_color, label='M-wave')
-                axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_stds), np.array(m_wave_means) + np.array(m_wave_stds), color='r', alpha=0.2)
+                axes[channel_index].fill_between(stimulus_voltages, np.array(m_wave_means) - np.array(m_wave_error), np.array(m_wave_means) + np.array(m_wave_error), color='r', alpha=0.2)
                 axes[channel_index].plot(stimulus_voltages, h_response_means, color=self.emg_object.h_color, label='H-response')
-                axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_stds), np.array(h_response_means) + np.array(h_response_stds), color='b', alpha=0.2)
+                axes[channel_index].fill_between(stimulus_voltages, np.array(h_response_means) - np.array(h_response_error), np.array(h_response_means) + np.array(h_response_error), color='b', alpha=0.2)
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
                 axes[channel_index].grid(True)
                 if plot_legend:

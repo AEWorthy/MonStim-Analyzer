@@ -120,11 +120,15 @@ class DataSelectionWidget(QGroupBox):
         experiment_layout = QHBoxLayout()
         self.experiment_label = QLabel("Select Experiment:")
         self.experiment_combo = QComboBox()
-        self.experiment_combo.currentIndexChanged.connect(self.parent.save_experiment)
-        self.experiment_combo.currentIndexChanged.connect(self.parent.load_experiment)
+        self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
         experiment_layout.addWidget(self.experiment_label)
         experiment_layout.addWidget(self.experiment_combo)
         self.layout.addLayout(experiment_layout)
+
+    def on_experiment_combo_changed(self, index):
+        if self.parent.has_unsaved_changes:
+            self.parent.save_experiment()
+        self.parent.load_experiment(index)
 
     def create_dataset_selection(self):
         dataset_layout = QHBoxLayout()
@@ -160,7 +164,7 @@ class DataSelectionWidget(QGroupBox):
         self.dataset_combo.clear()
         if self.parent.current_experiment:
             for dataset in self.parent.current_experiment.emg_datasets:
-                self.dataset_combo.addItem(dataset.dataset_id)
+                self.dataset_combo.addItem(dataset.formatted_name)
                 index = self.dataset_combo.count() - 1
                 self.dataset_combo.setItemData(index, dataset.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.dataset_combo.setItemData(index, dataset.is_completed, Qt.ItemDataRole.UserRole)
@@ -171,9 +175,9 @@ class DataSelectionWidget(QGroupBox):
         self.session_combo.clear()
         if self.parent.current_dataset:
             for session in self.parent.current_dataset.emg_sessions:
-                self.session_combo.addItem(session.session_id)
+                self.session_combo.addItem(session.formatted_name)
                 index = self.session_combo.count() - 1
-                self.session_combo.setItemData(index, session.session_id, role=Qt.ItemDataRole.ToolTipRole)
+                self.session_combo.setItemData(index, session.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.session_combo.setItemData(index, session.is_completed, Qt.ItemDataRole.UserRole)
         else:
             logging.warning("Cannot update sessions combo. No dataset loaded.")

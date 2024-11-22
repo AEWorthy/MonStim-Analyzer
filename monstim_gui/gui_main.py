@@ -342,7 +342,7 @@ class EMGAnalysisGUI(QMainWindow):
     def rename_experiment(self):
         logging.debug("Renaming experiment.")
         if self.current_experiment:
-            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:")
+            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:", text=self.current_experiment.formatted_name)
 
             if ok and new_name:
                 try:
@@ -464,7 +464,7 @@ class EMGAnalysisGUI(QMainWindow):
         if window.exec() == QDialog.DialogCode.Accepted:
             # Apply preferences to data
             if self.current_experiment:
-                self.current_experiment.apply_preferences()
+                self.current_experiment.apply_preferences(reset_properties=False)
                 self.has_unsaved_changes = True
             self.status_bar.showMessage("Preferences applied successfully.", 5000)  # Show message for 5 seconds
             logging.debug("Preferences applied successfully.")

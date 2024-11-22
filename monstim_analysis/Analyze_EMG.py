@@ -20,7 +20,7 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
-import monstim_analysis.Transform_EMG as Transform_EMG
+from monstim_analysis.Transform_EMG import calculate_emg_amplitude, butter_bandpass_filter, get_avg_mmax, NoCalculableMmaxError
 from monstim_utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION
 from .version import __version__ as DATA_VERSION
 
@@ -174,7 +174,7 @@ class EMGData(ABC):
         pass
 
     @abstractmethod
-    def reset_properties(self, recalculate : bool = False):
+    def reset_cached_properties(self, recalculate : bool = False):
         pass
 
     @staticmethod
@@ -433,7 +433,7 @@ class EMGSession(EMGData):
                             logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
                             raise e
                 
-                self.reset_properties(recalculate=False)
+                self.reset_cached_properties(recalculate=False)
         except Exception as e:
             logging.error(f"Error upgrading session from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
             raise e
@@ -469,7 +469,7 @@ class EMGSession(EMGData):
         def __process_single_recording(recording):
             if apply_filter:
                 for i, channel_emg in enumerate(recording['channel_data']):
-                    filtered_emg = Transform_EMG.butter_bandpass_filter(channel_emg, self.scan_rate, **self.butter_filter_args)
+                    filtered_emg = butter_bandpass_filter(channel_emg, self.scan_rate, **self.butter_filter_args)
                     recording['channel_data'][i] = filtered_emg
             if rectify:
                 recording['channel_data'] = np.abs(recording['channel_data'])
@@ -516,7 +516,7 @@ class EMGSession(EMGData):
             latency_window.linestyle = self.latency_window_style
 
         if reset_properties:
-            self.reset_properties(recalculate=True)
+            self.reset_cached_properties()
 
     def exclude_recording(self, original_recording_index: int):
         """
@@ -528,7 +528,7 @@ class EMGSession(EMGData):
         if original_recording_index in self.excluded_recordings:
             raise ValueError("Recording is already excluded.")
 
-        self.reset_properties()
+        self.reset_cached_properties()
 
         # Add the recording to the list of excluded recordings and remove it from the active list of raw recordings.
         self.excluded_recordings.add(original_recording_index)
@@ -545,14 +545,14 @@ class EMGSession(EMGData):
         if original_recording_index not in self.excluded_recordings:
             raise ValueError("Recording is not excluded.")
         
-        self.reset_properties(recalculate=False)
+        self.reset_cached_properties(recalculate=False)
         
         recording = self._original_recordings.copy().pop(original_recording_index)
         self.recordings_raw.append(recording)
         self.excluded_recordings.remove(original_recording_index)
 
         self.recordings_raw = sorted(self.recordings_raw, key=lambda x: x['recording_id'])
-        self.reset_properties(recalculate=False)
+        self.reset_cached_properties(recalculate=False)
 
         logging.info(f"Recording {original_recording_index} has been restored.")
         return original_recording_index
@@ -563,7 +563,7 @@ class EMGSession(EMGData):
         """
         self.recordings_raw = copy.deepcopy(self._original_recordings)
         self.excluded_recordings = set()
-        self.reset_properties(recalculate=True)
+        self.reset_cached_properties(recalculate=False)
         logging.info("All recordings have been reloaded from the original state.")
 
     def invert_channel_polarity(self, channel_index):
@@ -575,9 +575,9 @@ class EMGSession(EMGData):
         """
         for recording in self.recordings_raw:
             recording['channel_data'][channel_index] *= -1
-        self.reset_properties(recalculate=True)
+        self.reset_cached_properties(recalculate=False)
     
-    def reset_properties(self, recalculate : bool = False):
+    def reset_cached_properties(self, recalculate : bool = False):
         """
         Resets the processed recordings and M-max properties. 
         This should be called after any changes to the raw recordings so that the properties are recalculated.
@@ -611,7 +611,7 @@ class EMGSession(EMGData):
                 try: # Check if the channel has a valid M-max amplitude.
                     channel_mmax = self.get_m_max(self.default_method, channel_idx, return_mmax_stim_range=False)
                     m_max.append(channel_mmax)
-                except Transform_EMG.NoCalculableMmaxError:
+                except NoCalculableMmaxError:
                     logging.info(f"Channel {channel_idx} does not have a valid M-max amplitude.")
                     m_max.append(None)
                 except ValueError as e:
@@ -663,12 +663,12 @@ class EMGSession(EMGData):
         """
         m_wave_amplitudes = self.get_m_wave_amplitudes(method, channel_index)
         if return_mmax_stim_range:
-            return Transform_EMG.get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args, return_mmax_stim_range=True)
+            return get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args, return_mmax_stim_range=True)
         else:
-            return Transform_EMG.get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+            return get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
     
     def get_m_wave_amplitudes(self, method, channel_index):
-        m_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
+        m_wave_amplitudes = [calculate_emg_amplitude(recording['channel_data'][channel_index], 
                                                                     (self.m_start[channel_index] + self.stim_start),
                                                                     (self.m_start[channel_index] + self.stim_start + self.m_duration[channel_index]), 
                                                                     self.scan_rate, 
@@ -678,7 +678,7 @@ class EMGSession(EMGData):
         return m_wave_amplitudes
     
     def get_h_wave_amplitudes(self, method, channel_index):
-        h_wave_amplitudes = [Transform_EMG.calculate_emg_amplitude(recording['channel_data'][channel_index], 
+        h_wave_amplitudes = [calculate_emg_amplitude(recording['channel_data'][channel_index], 
                                                                    (self.h_start[channel_index] + self.stim_start),
                                                                    (self.h_start[channel_index] + self.stim_start + self.h_duration[channel_index]), 
                                                                    self.scan_rate, 
@@ -781,7 +781,7 @@ class EMGSession(EMGData):
                     logging.error(f"Error: {str(e)}")
                     return
                 self.emg_parent.update_reflex_parameters()
-                self.emg_parent.reset_properties(recalculate=True)
+                self.emg_parent.reset_cached_properties(recalculate=False)
                 
                 self.close()
 
@@ -954,7 +954,7 @@ class EMGDataset(EMGData):
                 # Update the EMGSession instances in the dataset.
                 for session in self.emg_sessions:
                     session._upgrade_from_version(current_version)
-                    session.reset_properties(recalculate=False)
+                    session.reset_cached_properties(recalculate=False)
                 
                 # Reinitialize the object
                 dataset_info = {
@@ -1124,8 +1124,8 @@ class EMGDataset(EMGData):
 
         # Calculate the average M-wave amplitude for each bin.
         avg_m_wave_amplitudes = [np.mean(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
-        std_m_wave_amplitudes = [np.std(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
-        return avg_m_wave_amplitudes, std_m_wave_amplitudes
+        sem_m_wave_amplitudes = [np.std(m_wave_bins[voltage]) / np.sqrt(len(m_wave_bins[voltage])) for voltage in self.stimulus_voltages]
+        return avg_m_wave_amplitudes, sem_m_wave_amplitudes
 
     def get_m_wave_amplitudes_at_voltage(self, method, channel_index, voltage):
         """
@@ -1205,13 +1205,13 @@ class EMGDataset(EMGData):
             session.invert_channel_polarity(channel_index)
         logging.info(f"Channel {channel_index} polarity has been inverted for all sessions in dataset {self.dataset_id}.")
 
-    def reset_properties(self, recalculate : bool = False):
+    def reset_cached_properties(self, recalculate : bool = False):
         """
         Resets the processed recordings and M-max properties. 
         This should be called after any changes to the raw recordings so that the properties are recalculated.
         """
         for session in self.emg_sessions:
-            session.reset_properties(recalculate=recalculate)
+            session.reset_cached_properties(recalculate=recalculate)
         self._m_max = None
 
     #Properties for the EMGDataset class.
@@ -1281,16 +1281,14 @@ class EMGDataset(EMGData):
                 raise TypeError("Expected an instance of EMGSession or a file path to a pickled EMGSession.")
         
         # Check that all sessions have the same parameters.
-        self.__check_session_consistency()
-        consistent, message = self.__check_session_consistency()
-        if not consistent:
-            logging.error(f"Error: {message}")
-        else:
-            self.scan_rate = self.emg_sessions[0].scan_rate
-            self.stim_start = self.emg_sessions[0].stim_start
-            self.num_channels = min([session.num_channels for session in self.emg_sessions])
-
-        self.reset_properties(recalculate=True)
+        try:
+            self.__check_session_consistency()
+        except Exception as e:
+            logging.error(f"Error adding session to dataset: {str(e)}")
+            self.emg_sessions.remove(session)
+            raise e
+        
+        self.reset_cached_properties(recalculate=False)
 
     def remove_session(self, session_id : str):
         """
@@ -1303,7 +1301,7 @@ class EMGDataset(EMGData):
             logging.warning(f">! Error: session {session_id} not found in the dataset.")
         else:
             self.emg_sessions = [session for session in self.emg_sessions if session.session_id != session_id]
-            self.reset_properties(recalculate=True)
+            self.reset_cached_properties(recalculate=False)
     
     def reload_dataset_sessions(self):
         """
@@ -1316,7 +1314,7 @@ class EMGDataset(EMGData):
         self.update_reflex_latency_windows(self.m_start, self.m_duration, self.h_start, self.h_duration)
         self.update_reflex_parameters()
         self.apply_preferences(reset_properties=False)
-        self.reset_properties(recalculate=True)
+        self.reset_cached_properties(recalculate=False)
     
     def reload_session(self, session_id : str):
         """
@@ -1341,7 +1339,7 @@ class EMGDataset(EMGData):
         elif sessions_reloaded > 1:
             logging.warn(f"Warning: Multiple sessions with the ID {session_id} were found in the dataset. All sessions were reloaded.")
         
-        self.reset_properties(recalculate=True)
+        self.reset_cached_properties(recalculate=False)
 
     def get_session(self, session_idx: int) -> EMGSession:
         """
@@ -1396,7 +1394,7 @@ class EMGDataset(EMGData):
 
         # Apply preferences to the session objects.
         for session in self.emg_sessions:
-            session.apply_preferences(reset_properties=False)
+            session.apply_preferences(reset_properties=reset_properties)
 
         # Re-create the plotter object with the new preferences.
         self.plotter = EMGDatasetPlotter(self)
@@ -1404,7 +1402,7 @@ class EMGDataset(EMGData):
             latency_window.linestyle = self.latency_window_style
         
         if reset_properties:
-            self.reset_properties(recalculate=True)
+            self.reset_cached_properties(recalculate=False)
         
     # Save and load the dataset object.
     def save_dataset(self, save_path=None):
@@ -1432,7 +1430,7 @@ class EMGDataset(EMGData):
             EMGDataset: The loaded dataset object.
         """
         logging.info(f"Loading dataset from {save_path}.")
-        with open(save_path, 'rb') as file:
+        with open(save_path, 'rb'):
             dataset = EMGData._load_compressed(save_path)
             dataset.apply_preferences(reset_properties=False)
         return dataset
@@ -1628,7 +1626,7 @@ class EMGExperiment(EMGData):
                 # Update the EMGExperiment's EMGDataset objects.
                 for dataset in self.emg_datasets:
                     dataset._upgrade_from_version(current_version)
-                    dataset.reset_properties(recalculate=False)
+                    dataset.reset_cached_properties(recalculate=False)
                 
                 # Reinitialize a temp object
                 try:
@@ -1822,14 +1820,14 @@ class EMGExperiment(EMGData):
                 self.emg_datasets.append(dataset)
             except:  # noqa: E722
                 raise TypeError("Expected an instance of EMGDataset or a file path to a pickled EMGDataset.")
-        self.reset_properties(recalculate=False)
+        self.reset_cached_properties(recalculate=False)
 
     def remove_dataset(self, dataset_id : str):
         if dataset_id not in [dataset.dataset_id for dataset in self.emg_datasets]:
             logging.warning(f"Error: Dataset {dataset_id} not found in the experiment.")
         else:
             self.emg_datasets = [dataset for dataset in self.emg_datasets if dataset.dataset_id != dataset_id]
-            self.reset_properties(recalculate=False)
+            self.reset_cached_properties(recalculate=False)
 
     def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
@@ -1853,9 +1851,9 @@ class EMGExperiment(EMGData):
         for dataset in self.emg_datasets:
             dataset.update_reflex_parameters()
 
-    def reset_properties(self, recalculate: bool = False):
+    def reset_cached_properties(self, recalculate: bool = False):
         for dataset in self.emg_datasets:
-            dataset.reset_properties(recalculate=recalculate)
+            dataset.reset_cached_properties(recalculate=recalculate)
 
     def get_dataset(self, dataset_idx: int) -> EMGDataset:
         """
@@ -1909,8 +1907,8 @@ class EMGExperiment(EMGData):
 
         # Calculate the average M-wave amplitude for each bin.
         avg_m_wave_amplitudes = [np.mean(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
-        std_m_wave_amplitudes = [np.std(m_wave_bins[voltage]) for voltage in self.stimulus_voltages]
-        return avg_m_wave_amplitudes, std_m_wave_amplitudes
+        sem_m_wave_amplitudes = [np.std(m_wave_bins[voltage]) / np.sqrt(len(m_wave_bins[voltage])) for voltage in self.stimulus_voltages]
+        return avg_m_wave_amplitudes, sem_m_wave_amplitudes
     
     def get_m_wave_amplitude_avgs_at_voltage(self, method, channel_index, voltage):
         """
@@ -2013,8 +2011,7 @@ class EMGExperiment(EMGData):
 
         logging.info(f"Saving experiment '{self.formatted_name}' to {save_path}.")
         self._save_compressed(self, save_path)
-
-    
+ 
     @staticmethod
     def load_experiment(save_path):
         """
@@ -2027,7 +2024,7 @@ class EMGExperiment(EMGData):
             EMGExperiment: The loaded experiment object.
         """
         logging.info(f"Reloading experiment from file: {save_path}.")
-        with open(save_path, 'rb') as file:
+        with open(save_path, 'rb'):
             experiment = EMGData._load_compressed(save_path)
             experiment.apply_preferences(reset_properties=False)
             return experiment
