@@ -54,84 +54,6 @@ class ChangeChannelNamesDialog(QDialog):
     def get_new_names(self):
         return {old: input.text() for old, input in self.channel_inputs.items()}
 
-# class ReflexSettingsDialog(QDialog):
-#     def __init__(self, emg_data : 'EMGData', parent=None):
-#         super().__init__(parent)
-#         self.emg_data = emg_data
-
-#         self.setModal(True)
-#         self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.emg_data.formatted_name}")
-
-#         self.init_ui()
-
-#     def init_ui(self):
-#         layout = QVBoxLayout()
-
-#         # Duration
-#         duration_layout = QHBoxLayout()
-#         duration_layout.addWidget(QLabel("m_duration:"))
-#         self.m_duration_entry = QLineEdit(str(self.emg_data.m_duration[0]))
-#         duration_layout.addWidget(self.m_duration_entry)
-
-#         duration_layout.addWidget(QLabel("h_duration:"))
-#         self.h_duration_entry = QLineEdit(str(self.emg_data.h_duration[0]))
-#         duration_layout.addWidget(self.h_duration_entry)
-
-#         layout.addLayout(duration_layout)
-
-#         # Start times
-#         self.entries : list[tuple[QLineEdit, QLineEdit]] = []
-#         for i in range(len(self.emg_data.m_start)):
-#             channel_layout = QHBoxLayout()
-#             channel_layout.addWidget(QLabel(f"Channel {i}:"))
-
-#             channel_layout.addWidget(QLabel("m_start:"))
-#             m_start_entry = QLineEdit(str(self.emg_data.m_start[i]))
-#             channel_layout.addWidget(m_start_entry)
-
-#             channel_layout.addWidget(QLabel("h_start:"))
-#             h_start_entry = QLineEdit(str(self.emg_data.h_start[i]))
-#             channel_layout.addWidget(h_start_entry)
-
-#             layout.addLayout(channel_layout)
-#             self.entries.append((m_start_entry, h_start_entry))
-
-#         # Buttons
-#         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-#         button_box.accepted.connect(self.save_settings)
-#         button_box.rejected.connect(self.reject)
-#         layout.addWidget(button_box)
-
-#         self.setLayout(layout)
-
-#     def save_settings(self):
-#         try:
-#             m_duration = [float(self.m_duration_entry.text()) for _ in range(len(self.emg_data.m_start))]
-#             h_duration = [float(self.h_duration_entry.text()) for _ in range(len(self.emg_data.m_start))]
-#         except ValueError:
-#             QMessageBox.warning(self, "Invalid Input", "Invalid input for durations. Please enter valid numbers.")
-#             return
-
-#         m_start = []
-#         h_start = []
-#         for i, (m_start_entry, h_start_entry) in enumerate(self.entries):
-#             try:
-#                 m_start.append(float(m_start_entry.text()))
-#                 h_start.append(float(h_start_entry.text()))
-#             except ValueError:
-#                 QMessageBox.warning(self, "Invalid Input", f"Invalid input for channel {i}. Skipping.")
-
-#         try:           
-#             self.emg_data.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
-#         except Exception as e:
-#             QMessageBox.warning(self, "Error", f"Error saving settings: {str(e)}")
-#             logging.error(f"Error saving reflex settings: {str(e)}\n\tdataset: {self.dataset}\n\tm_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}")
-#             return
-        
-#         self.emg_data.update_reflex_parameters()
-#         self.emg_data.reset_properties(recalculate=False)
-
-#         self.accept()
 class ReflexSettingsDialog(QDialog):
     def __init__(self, emg_data: 'EMGData', parent=None):
         super().__init__(parent)
@@ -153,48 +75,59 @@ class ReflexSettingsDialog(QDialog):
         layout.addWidget(self.toggle_button)
 
         # Global settings layout
-        self.global_layout = QHBoxLayout()
-        self.global_layout.addWidget(QLabel("m_duration:"))
+        self.global_layout = QVBoxLayout()
+        self.global_durations_layout = QHBoxLayout()
+        self.global_starts_layout = QHBoxLayout()
+        
+        self.global_durations_layout.addWidget(QLabel("m_duration:"))
         self.global_m_duration_entry = QLineEdit(str(self.emg_data.m_duration[0]))
         self.global_m_duration_entry.installEventFilter(self)
-        self.global_layout.addWidget(self.global_m_duration_entry)
+        self.global_durations_layout.addWidget(self.global_m_duration_entry)
 
-        self.global_layout.addWidget(QLabel("h_duration:"))
+        self.global_durations_layout.addWidget(QLabel("h_duration:"))
         self.global_h_duration_entry = QLineEdit(str(self.emg_data.h_duration[0]))
         self.global_h_duration_entry.installEventFilter(self)
-        self.global_layout.addWidget(self.global_h_duration_entry)
+        self.global_durations_layout.addWidget(self.global_h_duration_entry)
 
-        self.global_layout.addWidget(QLabel("m_start:"))
+        self.global_starts_layout.addWidget(QLabel("m_start:"))
         self.global_m_start_entry = QLineEdit(str(self.emg_data.m_start[0]))
         self.global_m_start_entry.installEventFilter(self)
-        self.global_layout.addWidget(self.global_m_start_entry)
+        self.global_starts_layout.addWidget(self.global_m_start_entry)
 
-        self.global_layout.addWidget(QLabel("h_start:"))
+        self.global_starts_layout.addWidget(QLabel("h_start:"))
         self.global_h_start_entry = QLineEdit(str(self.emg_data.h_start[0]))
         self.global_h_start_entry.installEventFilter(self)
-        self.global_layout.addWidget(self.global_h_start_entry)
+        self.global_starts_layout.addWidget(self.global_h_start_entry)
 
+        self.global_layout.addLayout(self.global_durations_layout)
+        self.global_layout.addLayout(self.global_starts_layout)
         layout.addLayout(self.global_layout)
 
         # Per-channel settings layout
         self.per_channel_layout = QVBoxLayout()
         self.entries: list[tuple[QLineEdit, QLineEdit]] = []
+        self.labels: list[QLabel] = []
+        self.sub_labels: list[QLabel] = []
         for i in range(len(self.emg_data.m_start)):
-            channel_layout = QHBoxLayout()
-            channel_layout.addWidget(QLabel(f"Channel {i}:"))
-
-            channel_layout.addWidget(QLabel("m_start:"))
+            channel_label = QLabel(f"Channel {i}:")
+            m_start_label = QLabel("m_start:")
             m_start_entry = QLineEdit(str(self.emg_data.m_start[i]))
             m_start_entry.installEventFilter(self)
-            channel_layout.addWidget(m_start_entry)
-
-            channel_layout.addWidget(QLabel("h_start:"))
+            h_start_label = QLabel("h_start:")
             h_start_entry = QLineEdit(str(self.emg_data.h_start[i]))
             h_start_entry.installEventFilter(self)
+            
+            channel_layout = QHBoxLayout()
+            channel_layout.addWidget(channel_label)
+            channel_layout.addWidget(m_start_label)
+            channel_layout.addWidget(m_start_entry)
+            channel_layout.addWidget(h_start_label)
             channel_layout.addWidget(h_start_entry)
-
+            
             self.per_channel_layout.addLayout(channel_layout)
             self.entries.append((m_start_entry, h_start_entry))
+            self.labels.append(channel_label)
+            self.sub_labels.extend([m_start_label, h_start_label])
 
         layout.addLayout(self.per_channel_layout)
 
@@ -217,7 +150,10 @@ class ReflexSettingsDialog(QDialog):
             self.global_h_start_entry.setEnabled(True)
             for entry in self.entries:
                 for widget in entry:
+                    widget.setVisible(False)
                     widget.setEnabled(False)
+            for label in self.labels + self.sub_labels:
+                label.setVisible(False)
         else:
             self.toggle_button.setText("Switch to Global Start Times")
             self.global_layout.setEnabled(True)
@@ -225,7 +161,17 @@ class ReflexSettingsDialog(QDialog):
             self.global_h_start_entry.setEnabled(False)
             for entry in self.entries:
                 for widget in entry:
+                    widget.setVisible(True)
                     widget.setEnabled(True)
+            for label in self.labels + self.sub_labels:
+                label.setVisible(True)
+        
+        # Activate and update the layout
+        self.layout().activate()
+        
+        # Adjust the dialog size
+        self.adjustSize()
+        self.updateGeometry()
 
     def save_settings(self):
         try:
@@ -263,7 +209,7 @@ class ReflexSettingsDialog(QDialog):
             return
 
         self.emg_data.update_reflex_parameters()
-        self.emg_data.reset_properties(recalculate=False)
+        self.emg_data.reset_cached_properties(recalculate=False)
 
         self.accept()
 
