@@ -12,8 +12,8 @@ import os
 import shutil
 from PyInstaller.config import CONF
 
-EXE_NAME = 'MonStim Analyzer v0.2.6'
-DIST_NAME = 'MonStim_Analyzer_v0.2.6-alpha'
+EXE_NAME = 'MonStim Analyzer v0.3.0'
+DIST_NAME = 'MonStim_Analyzer_v0.3.0-alpha'
 
 # Windows build
 
