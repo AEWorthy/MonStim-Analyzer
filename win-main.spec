@@ -15,6 +15,7 @@ from PyInstaller.config import CONF
 EXE_NAME = 'MonStim Analyzer v0.3.0'
 DIST_NAME = 'MonStim_Analyzer_v0.3.0-alpha'
 
+
 # Windows build
 
 a = Analysis( # type: ignore
@@ -39,12 +40,11 @@ exe = EXE( # type: ignore
     [],
     exclude_binaries=True,
     name=EXE_NAME,
-    debug=False, # change to False for release, True for debug
+    debug=False, # False for release, True for debug
     bootloader_ignore_signals=False,
-    strip=True, # change to True for release, False for debug
     upx=True,
-    console=False, # change to False for release, True for debug
-    disable_windowed_traceback=False,
+    console=False, # False for release, True for debug
+    disable_windowed_traceback=True, # True for release, False for debug.
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
@@ -56,7 +56,6 @@ coll = COLLECT( # type: ignore
     exe,
     a.binaries,
     a.datas,
-    strip=True, # change to True for release, False for debug
     upx=True,
     upx_exclude=['PyQt6'],
     name=DIST_NAME
