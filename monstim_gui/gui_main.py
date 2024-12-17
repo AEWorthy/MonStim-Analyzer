@@ -651,11 +651,8 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_dataset and index >= 0:
             logging.debug(f"Loading session [{index}] from dataset '{self.current_dataset.dataset_id}'.")
             self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
-            try:
-                if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
-                    self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
-            except AttributeError:
-                logging.debug("No current option widget to reset max recordings.")
+            if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
+                self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
 
     # Reports functions.
     def show_session_report(self):

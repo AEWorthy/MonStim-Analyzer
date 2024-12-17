@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 class PlotWidget(QGroupBox):
     def __init__(self, parent: 'EMGAnalysisGUI'):
         super().__init__("Plotting", parent)
+        self.current_option_widget: 'BasePlotOptions' = None
         self.parent = parent # Type: EMGAnalysisGUI
         self.layout = QVBoxLayout() # Type: QVBoxLayout
         self.create_view_selection()
@@ -27,6 +28,7 @@ class PlotWidget(QGroupBox):
         self.setLayout(self.layout)
 
     def initialize_plot_widget(self):
+        # Occurs after the data has been loaded. Called from EMGAnalysisGUI.
         self.plot_options = {
             "session": {
                 "EMG": EMGOptions,
@@ -46,8 +48,7 @@ class PlotWidget(QGroupBox):
                 "M-max": MMaxOptions
             }
         }
-        self.current_option_widget: 'BasePlotOptions' = None
-
+        
         # Store the last selected plot type and options for each view
         self.last_plot_type = {
             "session": "EMG",

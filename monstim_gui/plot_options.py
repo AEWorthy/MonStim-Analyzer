@@ -47,13 +47,17 @@ class ChannelSelectorLayout(QHBoxLayout):
                 self.emg_data = gui_main.current_dataset
             case "experiment":
                 self.emg_data = gui_main.current_experiment
+            case _:
+                self.emg_data = None
+
+        temp_num_channels = self.emg_data.num_channels if self.emg_data is not None else 0
         
         self.channel_checkboxes : List[QCheckBox] = []
         grid_layout = QGridLayout()
         for i in range(6):
             checkbox = QCheckBox(f"Channel {i}")
             checkbox.setChecked(True)
-            if i >= self.emg_data.num_channels:
+            if i >= temp_num_channels:
                 checkbox.setChecked(False)
                 checkbox.setEnabled(False)
             row = i // 3
