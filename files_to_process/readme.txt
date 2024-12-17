@@ -1,5 +1,6 @@
 -In this folder, place directories containing CSV files previously converted from STM files
 (it is OK if STM or other filetypes are still present).
 
--Each directory should correspond to a single M-response/H-reflex recording session 
-(in other words, all files should have the same prefix: e.g., "AA86-0000" through "AA86-xxxx").
+-Directory trees should be organized such that the top level folder represents an 
+EMG Experiment containing folders of EMG Datasets with their own EMG Sessions folders inside. 
+STM/CSV files would be found in the lowest (Session) folders.

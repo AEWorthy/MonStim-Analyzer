@@ -22,8 +22,8 @@ from monstim_analysis import EMGExperiment
 from monstim_converter import GUIExptImportingThread
 from monstim_gui.splash import SPLASH_INFO
 from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
-                           get_source_path, get_docs_path, get_config_path)
-from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog,
+                           get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
+from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, SelectChannelsDialog,
                                  LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
 from monstim_gui.menu_bar import MenuBar
 from monstim_gui.data_selection_widget import DataSelectionWidget
@@ -36,6 +36,7 @@ from monstim_gui.dataframe_exporter import DataFrameDialog
 class EMGAnalysisGUI(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.has_unsaved_changes = False
         self.setWindowTitle("MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
         self.setGeometry(100, 100, 1000, 600)
@@ -60,6 +61,8 @@ class EMGAnalysisGUI(QMainWindow):
         # Load existing pickled experiments if available
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
+
+        self.plot_widget.initialize_plot_widget()
 
         self.command_invoker = CommandInvoker(self)
     
@@ -103,38 +106,66 @@ class EMGAnalysisGUI(QMainWindow):
    
     # Command functions
     def undo(self):
-        self.command_invoker.undo()
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            self.command_invoker.undo()
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def redo(self):
-        self.command_invoker.redo()
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            self.command_invoker.redo()
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def exclude_recording(self, recording_index):
-        command = ExcludeRecordingCommand(self, recording_index)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = ExcludeRecordingCommand(self, recording_index)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
     
     def restore_recording(self, recording_index):
-        command = RestoreRecordingCommand(self, recording_index)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = RestoreRecordingCommand(self, recording_index)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def remove_session(self):
-        command = RemoveSessionCommand(self)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = RemoveSessionCommand(self)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def remove_dataset(self):
-        command = RemoveDatasetCommand(self)
-        self.command_invoker.execute(command)
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+            command = RemoveDatasetCommand(self)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def unpack_existing_experiments(self):
         logging.debug("Unpacking existing experiments.")
         if os.path.exists(self.output_path):
             try:
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 self.expts_dict = EMGExperiment.unpackPickleOutput(self.output_path)
                 self.expts_dict_keys = list(self.expts_dict.keys())
                 logging.debug("Existing experiments unpacked successfully.")
             except Exception as e:
+                QApplication.restoreOverrideCursor()
                 QMessageBox.critical(self, "Error", f"An error occurred while unpacking existing experiments: {e}")
                 logging.error(f"An error occurred while unpacking existing experiments: {e}")
                 logging.error(traceback.format_exc())
+            finally:
+                QApplication.restoreOverrideCursor()
     
     # Menu bar functions
     def update_reflex_time_windows(self, level : str):
@@ -161,15 +192,22 @@ class EMGAnalysisGUI(QMainWindow):
             case _:
                 QMessageBox.warning(self, "Warning", "Invalid level for updating reflex window settings.")
                 return
-                
-        if self.current_session and self.current_dataset:
-            dialog = ReflexSettingsDialog(emg_data, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.current_experiment.save_experiment()
-                self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
-                logging.debug("Window settings updated successfully.")
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a session first.")
+        
+        try:
+            if self.current_session and self.current_dataset:
+                dialog = ReflexSettingsDialog(emg_data, self)
+                if dialog.exec() == QDialog.DialogCode.Accepted:
+                    try:
+                        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+                        self.has_unsaved_changes = True
+                        self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
+                        logging.debug("Window settings updated successfully.")
+                    finally:
+                        QApplication.restoreOverrideCursor()
+            else:
+                QMessageBox.warning(self, "Warning", "Please select a session first.")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def invert_channel_polarity(self, level : str):
         logging.debug("Inverting channel polarity.")
@@ -197,17 +235,21 @@ class EMGAnalysisGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Invalid level for inverting channel polarity.")
                 return
 
-        if dialog.exec():  # Show the dialog and wait for the user's response
-            channel_indexes_to_invert = dialog.get_selected_channel_indexes()
-            if not channel_indexes_to_invert:
-                QMessageBox.warning(self, "Warning", "Please select at least one channel to invert.")
-                return
+        try:
+            if dialog.exec():  # Show the dialog and wait for the user's response
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+                channel_indexes_to_invert = dialog.get_selected_channel_indexes()
+                if not channel_indexes_to_invert:
+                    QMessageBox.warning(self, "Warning", "Please select at least one channel to invert.")
+                    return
+                else:
+                    command = InvertChannelPolarityCommand(self, level, channel_indexes_to_invert)
+                    self.command_invoker.execute(command)
+                    self.status_bar.showMessage("Channel polarity inverted successfully.", 5000)
             else:
-                command = InvertChannelPolarityCommand(self, level, channel_indexes_to_invert)
-                self.command_invoker.execute(command)
-                self.status_bar.showMessage("Channel polarity inverted successfully.", 5000)
-        else:
-            QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def import_expt_data(self):
         logging.info("Importing new experiment data from CSV files.")
@@ -226,8 +268,8 @@ class EMGAnalysisGUI(QMainWindow):
                     logging.info(f"Deleted existing experiment '{expt_name}' in 'data' folder.")
 
                     # Delete existing bin file in the output folder.
-                    logging.info(f"Checking for bin file: {os.path.join(get_output_bin_path(),(f'{expt_name}.pickle'))}.")
-                    bin_file = os.path.join(get_output_bin_path(),(f"{expt_name}.pickle"))
+                    logging.info(f"Checking for bin file: {os.path.join(get_output_bin_path(),(f'{expt_name}{BIN_EXTENSION}'))}.")
+                    bin_file = os.path.join(get_output_bin_path(),(f"{expt_name}{BIN_EXTENSION}"))
                     if os.path.exists(bin_file):
                         os.remove(bin_file)
                         logging.info(f"Deleted bin file: {bin_file}.")
@@ -300,13 +342,14 @@ class EMGAnalysisGUI(QMainWindow):
     def rename_experiment(self):
         logging.debug("Renaming experiment.")
         if self.current_experiment:
-            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:")
+            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:", text=self.current_experiment.formatted_name)
 
             if ok and new_name:
                 try:
+                    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                     # Rename bin file in output folder
                     bin_file = self.current_experiment.save_path
-                    new_bin_file = os.path.join(get_output_bin_path(), f"{new_name}.pickle")
+                    new_bin_file = os.path.join(get_output_bin_path(), f"{new_name}{BIN_EXTENSION}")
                     if os.path.exists(bin_file):
                         os.rename(bin_file, new_bin_file)
                         logging.debug(f"Renamed bin file: {bin_file} -> {new_bin_file}.")
@@ -325,10 +368,12 @@ class EMGAnalysisGUI(QMainWindow):
                     QMessageBox.critical(self, "Error", f"An experiment with the name '{new_name}' already exists. Please choose a different name.")
                     logging.error(f"An experiment with the name '{new_name}' already exists. Could not rename current experiment.")
                     return
+                finally:
+                    QApplication.restoreOverrideCursor()
                 
                 # Update experiment name in the experiment object
                 self.current_experiment.rename_experiment(new_name)
-                self.current_experiment.save_experiment()
+                self.has_unsaved_changes = True
                 self.refresh_existing_experiments()
                 self.status_bar.showMessage("Experiment renamed successfully.", 5000)
 
@@ -361,7 +406,7 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_dataset and self.current_session:
             self.current_dataset.reload_session(self.current_session.session_id)
             self.current_dataset.apply_preferences()
-            self.current_experiment.save_experiment()
+            self.has_unsaved_changes = True
             self.plot_widget.update_plot_options() # Reset plot options
 
             self.status_bar.showMessage("Session reloaded successfully.", 5000)  # Show message for 5 seconds
@@ -374,7 +419,7 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_dataset:
             self.current_dataset.reload_dataset_sessions()
             self.data_selection_widget.update_session_combo()
-            self.current_experiment.save_experiment()
+            self.has_unsaved_changes = True
             self.plot_widget.update_plot_options() # Reset plot options
 
             self.status_bar.showMessage("Dataset reloaded successfully.", 5000)  # Show message for 5 seconds
@@ -419,13 +464,60 @@ class EMGAnalysisGUI(QMainWindow):
         if window.exec() == QDialog.DialogCode.Accepted:
             # Apply preferences to data
             if self.current_experiment:
-                self.current_experiment.apply_preferences()
-                self.current_experiment.save_experiment()
+                self.current_experiment.apply_preferences(reset_properties=False)
+                self.has_unsaved_changes = True
             self.status_bar.showMessage("Preferences applied successfully.", 5000)  # Show message for 5 seconds
             logging.debug("Preferences applied successfully.")
         else:
             QMessageBox.warning(self, "Warning", "No changes made to preferences.")
             logging.debug("No changes made to preferences.")
+
+    def select_channels(self, level : str):
+        logging.debug("Selecting channels.")
+        match level: # Check the level of the channel selection.
+            case 'experiment':
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+                    return
+                else:
+                    dialog = SelectChannelsDialog(self.current_experiment, self)
+            case 'dataset':
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                else:
+                    dialog = SelectChannelsDialog(self.current_dataset, self)
+            case 'session':
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                else:
+                    dialog = SelectChannelsDialog(self.current_session, self)
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for selecting channels.")
+                return
+        try:    
+            if dialog.exec():
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+                selected_channel_indexes = dialog.get_selected_channel_indexes()
+                if not selected_channel_indexes:
+                    QMessageBox.warning(self, "Warning", "Please select at least one channel.")
+                    return
+                else:
+                    match level:
+                        case 'experiment':
+                            self.current_experiment.select_channels(selected_channel_indexes)
+                        case 'dataset':
+                            self.current_dataset.select_channels(selected_channel_indexes)
+                        case 'session':
+                            self.current_session.select_channels(selected_channel_indexes)
+                        case _:
+                            QMessageBox.warning(self, "Warning", "Invalid level for selecting channels.")
+                            return
+                    self.has_unsaved_changes = True
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.status_bar.showMessage("Channels selected successfully.", 5000)
 
     def change_channel_names(self, level : str):
         logging.debug("Changing channel names.")
@@ -455,26 +547,30 @@ class EMGAnalysisGUI(QMainWindow):
 
         # Open dialog to change channel names
         dialog = ChangeChannelNamesDialog(self.channel_names, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            new_names = dialog.get_new_names()
-            if new_names:
-                match level:
-                    case 'experiment':
-                        self.current_experiment.rename_channels(new_names)
-                    case 'dataset':
-                        self.current_dataset.rename_channels(new_names)
-                    case 'session':
-                        self.current_session.rename_channels(new_names)
-                    case _:
-                        QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
-                        return
-                    
-                self.current_experiment.save_experiment()
-                self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
-                logging.debug("Channel names updated successfully.")
-            else:
-                QMessageBox.warning(self, "Warning", "No changes made to channel names.")
-                logging.debug("No changes made to channel names.")
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
+                new_names = dialog.get_new_names()
+                if new_names:
+                    match level:
+                        case 'experiment':
+                            self.current_experiment.rename_channels(new_names)
+                        case 'dataset':
+                            self.current_dataset.rename_channels(new_names)
+                        case 'session':
+                            self.current_session.rename_channels(new_names)
+                        case _:
+                            QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
+                            return
+                        
+                    self.has_unsaved_changes = True
+                    self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
+                    logging.debug("Channel names updated successfully.")
+                else:
+                    QMessageBox.warning(self, "Warning", "No changes made to channel names.")
+                    logging.debug("No changes made to channel names.")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def show_about_screen(self):
         dialog = AboutDialog(self)
@@ -505,18 +601,26 @@ class EMGAnalysisGUI(QMainWindow):
             self.help_window.show()
 
     # Data selection widget functions - will be called whenever their index changes.
+    def save_experiment(self):
+        if self.current_experiment:
+            self.current_experiment.save_experiment()
+            self.status_bar.showMessage("Experiment saved successfully.", 5000)
+            logging.debug("Experiment saved successfully.")
+            self.has_unsaved_changes = False
+
     def load_experiment(self, index):
         if index >= 0:
             experiment_name = self.expts_dict_keys[index]
-            save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}.pickle"))
+            save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}{BIN_EXTENSION}"))
             logging.debug(f"Loading experiment: '{experiment_name}'.")
             try:
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 # Load existing experiment if available
                 if os.path.exists(save_path):
                     self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
                     logging.debug(f"Experiment '{experiment_name}' loaded successfully from bin.")
                 else:
-                    self.current_experiment = EMGExperiment(experiment_name, expts_dict=self.expts_dict, save_path=save_path, temp=False) # Type: EMGExperiment
+                    self.current_experiment = EMGExperiment(experiment_name, expts_dict=self.expts_dict, temp=False) # Type: EMGExperiment
                     logging.debug(f"Experiment '{experiment_name}' created to bin and loaded successfully.")
 
                 # Update current expt/dataset/session
@@ -526,6 +630,8 @@ class EMGAnalysisGUI(QMainWindow):
                 QMessageBox.critical(self, "Error", f"An error occurred while loading experiment '{experiment_name}': {e}")
                 logging.error(f"An error occurred while loading experiment: {e}")
                 logging.error(traceback.format_exc())
+            finally:
+                QApplication.restoreOverrideCursor()
 
     def load_dataset(self, index):
         if index >= 0:
@@ -599,6 +705,7 @@ class EMGAnalysisGUI(QMainWindow):
         
         # Plot the data      
         try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             logging.debug(f'Plotting {plot_type} with options: {plot_options}.')
             if self.plot_widget.session_radio.isChecked():
                 logging.debug("Plotting session data.")
@@ -639,7 +746,10 @@ class EMGAnalysisGUI(QMainWindow):
             logging.error(f"Plot type: {plot_type}, options: {plot_options}")
             logging.error(f"Current session: {self.current_session}, current dataset: {self.current_dataset}")
             logging.error(traceback.format_exc())
+        finally:
+            QApplication.restoreOverrideCursor()
         logging.debug("Plotting complete.")
+
 
         self.plot_pane.layout.update()  # Refresh the layout of the plot pane
 
@@ -765,6 +875,36 @@ class EMGAnalysisGUI(QMainWindow):
             logging.info(f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".')
         else: # if the name was not changed, return the original, now-validated dataset path.
             validated_dataset_path = dataset_path
+
+    def show_save_confirmation_dialog(self):
+        """Show dialog asking user if they want to save before closing"""
+        if not self.current_experiment or not self.has_unsaved_changes:
+            return True
+            
+        reply = QMessageBox.question(
+        self,
+        'Save Changes?',
+        'Do you want to save the current experiment before closing?',
+        QMessageBox.StandardButton.Save | 
+        QMessageBox.StandardButton.Discard | 
+        QMessageBox.StandardButton.Cancel,
+        QMessageBox.StandardButton.Save
+    )
+        
+        if reply == QMessageBox.StandardButton.Save:
+            saved = self.save_experiment()
+            if saved:
+                QApplication.quit() # Close the application after saving.
+        elif reply == QMessageBox.StandardButton.Cancel:
+            return False
+        return True
+
+    def closeEvent(self, event):
+        """Handle application closing"""
+        if self.show_save_confirmation_dialog():
+            event.accept()
+        else:
+            event.ignore()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

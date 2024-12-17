@@ -1,7 +1,14 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout
 from PyQt6.QtGui import QIntValidator
 from .custom_gui_elements import FloatLineEdit
 from .plotting_cycler import RecordingCyclerWidget
+from typing import List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from monstim_gui import EMGAnalysisGUI
+    from .plotting_widget import PlotWidget
+
+
 
 # Things to do:
 # - change flag system to a more general system of latency windows.
@@ -10,8 +17,9 @@ from .plotting_cycler import RecordingCyclerWidget
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent : 'PlotWidget'):
         super().__init__(parent)
+        self.gui_main = parent.parent
         self.layout = QVBoxLayout(self)
         self.create_options()
 
@@ -27,6 +35,45 @@ class BasePlotOptions(QWidget):
         # To be implemented by subclasses
         pass
 
+class ChannelSelectorLayout(QHBoxLayout):
+    def __init__(self, gui_main : 'EMGAnalysisGUI'):
+        self.gui_main = gui_main
+        super().__init__()
+        plot_widget_view = gui_main.plot_widget.view # current level of analysis (session, dataset, experiment)
+        match plot_widget_view:
+            case "session":
+                self.emg_data = gui_main.current_session
+            case "dataset":
+                self.emg_data = gui_main.current_dataset
+            case "experiment":
+                self.emg_data = gui_main.current_experiment
+            case _:
+                self.emg_data = None
+
+        temp_num_channels = self.emg_data.num_channels if self.emg_data is not None else 0
+        
+        self.channel_checkboxes : List[QCheckBox] = []
+        grid_layout = QGridLayout()
+        for i in range(6):
+            checkbox = QCheckBox(f"Channel {i}")
+            checkbox.setChecked(True)
+            if i >= temp_num_channels:
+                checkbox.setChecked(False)
+                checkbox.setEnabled(False)
+            row = i // 3
+            col = i % 3
+            grid_layout.addWidget(checkbox, row, col)
+            self.channel_checkboxes.append(checkbox)
+        
+        self.addLayout(grid_layout)
+        
+    def get_selected_channels(self):
+        return [i for i in range(6) if self.channel_checkboxes[i].isChecked()]
+    
+    def set_selected_channels(self, selected_channels):
+        for i in range(6):
+            self.channel_checkboxes[i].setChecked(i in selected_channels)
+        
 # EMG Options
 class EMGOptions(BasePlotOptions):
     def create_options(self):
@@ -62,15 +109,22 @@ class EMGOptions(BasePlotOptions):
 
         # Add the latency_windows_layout to the main layout
         self.layout.addLayout(latency_windows_layout)
+
+        # Channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
     
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "data_type": self.data_type_combo.currentText(),
             "all_flags": self.all_windows_checkbox.isChecked(),
             "plot_legend": self.latency_legend_checkbox.isChecked()
         }
     
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "data_type" in options:
             index = self.data_type_combo.findText(options["data_type"])
             if index >= 0:
@@ -127,9 +181,14 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         # Recording Cycler
         self.recording_cycler = RecordingCyclerWidget(self)
         self.layout.addWidget(self.recording_cycler)
+
+        # Channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
     
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "data_type": self.data_type_combo.currentText(),
             "all_flags": self.all_windows_checkbox.isChecked(),
             "plot_legend": self.latency_legend_checkbox.isChecked(),
@@ -138,6 +197,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         }
     
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "data_type" in options:
             index = self.data_type_combo.findText(options["data_type"])
             if index >= 0:
@@ -179,14 +240,21 @@ class SuspectedHReflexesOptions(BasePlotOptions):
         self.layout.addWidget(self.plot_legend_label)
         self.layout.addWidget(self.plot_legend_checkbox)
 
+        # Channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
+
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "h_threshold": self.h_threshold_input.get_value(),
             "method": self.h_method_combo.currentText(),
             "plot_legend": self.plot_legend_checkbox.isChecked()
         }
 
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "h_threshold" in options:
             self.h_threshold_input.set_value(options["h_threshold"])
         if "method" in options:
@@ -226,14 +294,21 @@ class ReflexCurvesOptions(BasePlotOptions):
         plot_legend_layout.addWidget(self.plot_legend_checkbox)
         self.layout.addLayout(plot_legend_layout)
 
+        # Channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
+
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "method": self.method_combo.currentText(),
             "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
             "plot_legend": self.plot_legend_checkbox.isChecked()
         }
     
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "method" in options:
             index = self.method_combo.findText(options["method"])
             if index >= 0:
@@ -273,14 +348,21 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         plot_legend_layout.addWidget(self.plot_legend_checkbox)
         self.layout.addLayout(plot_legend_layout)
 
+        # Channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
+
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "method": self.method_combo.currentText(),
             "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
             "plot_legend": self.plot_legend_checkbox.isChecked()
         }
     
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "method" in options:
             index = self.method_combo.findText(options["method"])
             if index >= 0:
@@ -302,12 +384,19 @@ class MMaxOptions(BasePlotOptions):
         method_layout.addWidget(self.method_combo)
         self.layout.addLayout(method_layout)
 
+        # channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
+
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "method": self.method_combo.currentText()
         }
     
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "method" in options:
             index = self.method_combo.findText(options["method"])
             if index >= 0:
@@ -345,14 +434,21 @@ class MaxHReflexOptions(BasePlotOptions):
         bin_margin_layout.addWidget(self.bin_margin_input)
         self.layout.addLayout(bin_margin_layout)
 
+        # Channel selection
+        self.channel_selector = ChannelSelectorLayout(self.gui_main)
+        self.layout.addLayout(self.channel_selector)
+
     def get_options(self):
         return {
+            "channel_indices" : self.channel_selector.get_selected_channels(),
             "method": self.method_combo.currentText(),
             "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
             "bin_margin": int(self.bin_margin_input.text())
         }
     
     def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
         if "method" in options:
             index = self.method_combo.findText(options["method"])
             if index >= 0:

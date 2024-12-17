@@ -86,6 +86,8 @@ if __name__ == '__main__':
     logging.debug("Script running as main")
     sys.exit(main(sys_frozen=sys_frozen))
 
+
+
 # To create an executable:
 # pyinstaller EMGAnalysis.spec
 

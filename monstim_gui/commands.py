@@ -25,7 +25,7 @@ class CommandInvoker:
 
     def execute(self, command : Command):
         command.execute()
-        self.parent.current_experiment.save_experiment()
+        self.parent.has_unsaved_changes = True
         self.history.append(command)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
@@ -34,7 +34,7 @@ class CommandInvoker:
         if self.history:
             command = self.history.pop()
             command.undo()
-            self.parent.current_experiment.save_experiment()
+            self.parent.has_unsaved_changes = True
             self.redo_stack.append(command)
     
     def get_undo_command_name(self):
@@ -46,7 +46,7 @@ class CommandInvoker:
         if self.redo_stack:
             command = self.redo_stack.pop()
             command.execute()
-            self.parent.current_experiment.save_experiment()
+            self.parent.has_unsaved_changes = True
             self.history.append(command)
 
     def get_redo_command_name(self):
