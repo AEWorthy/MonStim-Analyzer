@@ -50,16 +50,18 @@ class ChannelSelectorLayout(QHBoxLayout):
             case _:
                 self.emg_data = None
 
-        temp_num_channels = self.emg_data.num_channels if self.emg_data is not None else 0
+        self.max_num_channels = self.emg_data.num_channels if self.emg_data is not None else 0
         
         self.channel_checkboxes : List[QCheckBox] = []
         grid_layout = QGridLayout()
         for i in range(6):
             checkbox = QCheckBox(f"Channel {i}")
-            checkbox.setChecked(True)
-            if i >= temp_num_channels:
+            if i >= self.max_num_channels:
                 checkbox.setChecked(False)
                 checkbox.setEnabled(False)
+            else:
+                checkbox.setChecked(True)
+                checkbox.setEnabled(True)
             row = i // 3
             col = i % 3
             grid_layout.addWidget(checkbox, row, col)
@@ -71,7 +73,7 @@ class ChannelSelectorLayout(QHBoxLayout):
         return [i for i in range(6) if self.channel_checkboxes[i].isChecked()]
     
     def set_selected_channels(self, selected_channels):
-        for i in range(6):
+        for i in range(self.max_num_channels):
             self.channel_checkboxes[i].setChecked(i in selected_channels)
         
 # EMG Options

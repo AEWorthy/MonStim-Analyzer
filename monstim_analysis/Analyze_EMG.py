@@ -2025,7 +2025,7 @@ class EMGExperiment(EMGData):
         """
         logging.info(f"Reloading experiment from file: {save_path}.")
         with open(save_path, 'rb'):
-            experiment = EMGData._load_compressed(save_path)
+            experiment = EMGData._load_compressed(save_path) # type: EMGExperiment
             experiment.apply_preferences(reset_properties=False)
             return experiment
 

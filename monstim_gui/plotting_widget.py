@@ -128,14 +128,6 @@ class PlotWidget(QGroupBox):
         self.update_plot_types()
         self.update_plot_options()
 
-    def update_plot_types(self):
-        self.plot_type_combo.blockSignals(True)
-        self.plot_type_combo.clear()
-        self.plot_type_combo.addItems(self.plot_options[self.view].keys())
-        self.plot_type_combo.setCurrentText(self.last_plot_type[self.view])
-        self.plot_type_combo.blockSignals(False)
-        self.on_plot_type_changed()
-
     def on_plot_type_changed(self):
         plot_type = self.plot_type_combo.currentText()
         if plot_type == self.last_plot_type[self.view]:
@@ -143,6 +135,20 @@ class PlotWidget(QGroupBox):
         self.save_current_options()
         self.last_plot_type[self.view] = plot_type
         self.update_plot_options()
+
+    def on_data_selection_changed(self):
+        try:
+            self.update_plot_options()
+        except AttributeError:
+            pass
+
+    def update_plot_types(self):
+        self.plot_type_combo.blockSignals(True)
+        self.plot_type_combo.clear()
+        self.plot_type_combo.addItems(self.plot_options[self.view].keys())
+        self.plot_type_combo.setCurrentText(self.last_plot_type[self.view])
+        self.plot_type_combo.blockSignals(False)
+        self.on_plot_type_changed()
 
     def update_plot_options(self):
         if self.current_option_widget:

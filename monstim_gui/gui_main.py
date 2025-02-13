@@ -407,7 +407,7 @@ class EMGAnalysisGUI(QMainWindow):
             self.current_dataset.reload_session(self.current_session.session_id)
             self.current_dataset.apply_preferences()
             self.has_unsaved_changes = True
-            self.plot_widget.update_plot_options() # Reset plot options
+            self.plot_widget.on_data_selection_changed() # Alert plot widget to update plot options, etc.
 
             self.status_bar.showMessage("Session reloaded successfully.", 5000)  # Show message for 5 seconds
             logging.debug("Session reloaded successfully.")
@@ -420,7 +420,7 @@ class EMGAnalysisGUI(QMainWindow):
             self.current_dataset.reload_dataset_sessions()
             self.data_selection_widget.update_session_combo()
             self.has_unsaved_changes = True
-            self.plot_widget.update_plot_options() # Reset plot options
+            self.plot_widget.on_data_selection_changed() # Reset plot options
 
             self.status_bar.showMessage("Dataset reloaded successfully.", 5000)  # Show message for 5 seconds
             logging.debug("Dataset reloaded successfully.")
@@ -445,6 +445,8 @@ class EMGAnalysisGUI(QMainWindow):
             
             self.refresh_existing_experiments()
             self.data_selection_widget.experiment_combo.setCurrentIndex(current_exepriment_combo_index)
+
+            self.plot_widget.on_data_selection_changed()
             
             logging.debug("Experiment reloaded successfully.")
             self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
@@ -454,7 +456,7 @@ class EMGAnalysisGUI(QMainWindow):
         current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
-        self.plot_widget.update_plot_options() # Reset plot options
+        self.plot_widget.on_data_selection_changed() # Reset plot options
         self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
         logging.debug("Existing experiments refreshed successfully.")
 
@@ -625,6 +627,7 @@ class EMGAnalysisGUI(QMainWindow):
 
                 # Update current expt/dataset/session
                 self.data_selection_widget.update_dataset_combo()
+                self.plot_widget.on_data_selection_changed() # Reset plot options
                 self.status_bar.showMessage(f"Experiment '{experiment_name}' loaded successfully.", 5000)  # Show message for 5 seconds
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while loading experiment '{experiment_name}': {e}")
@@ -646,6 +649,7 @@ class EMGAnalysisGUI(QMainWindow):
             # Update current dataset/session and channel names
             self.channel_names = self.current_dataset.channel_names
             self.data_selection_widget.update_session_combo()
+            self.plot_widget.on_data_selection_changed() # Reset plot options
 
     def load_session(self, index):
         if self.current_dataset and index >= 0:
@@ -653,6 +657,7 @@ class EMGAnalysisGUI(QMainWindow):
             self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
             if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
                 self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
+            self.plot_widget.on_data_selection_changed() # Reset plot options
 
     # Reports functions.
     def show_session_report(self):
