@@ -21,7 +21,11 @@ def extract_session_info_and_data(file_path):
         raise ValueError(f"The CSV file at {file_path} is empty.")
 
     # Extract metadata
-    data_start_marker = df[df.iloc[:, 0] == "Recorded Data (mV)"].index[0] # Find the index of the row containing "Recorded Data (mV)"
+    try:
+        data_start_marker = df[df.iloc[:, 0] == "Recorded Data (mV)"].index[0] # Find the index of the row containing "Recorded Data (mV)"
+    except IndexError as e:
+        logging.warning(f"Warning: 'Recorded Data (mV)' not found in file {file_path}. {str(e)}")
+        raise ValueError(f"Metadata row 'Recorded Data (mV)' not found in file {file_path}.")
     metadata = df.iloc[:data_start_marker].set_index(0)[1].to_dict() # Select all rows above the "Recorded Data (mV)" row as metadata
     data_start_index = data_start_marker + 1 # The data start index is the row right after "Recorded Data (mV)"
 
