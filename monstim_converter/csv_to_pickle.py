@@ -59,7 +59,7 @@ def extract_session_info_and_data(file_path):
     
     actual_num_samples = channel_data.shape[1]
     if actual_num_samples != session_info['num_samples']:
-        print(f"Warning: Number of samples in data ({actual_num_samples}) does not match metadata ({session_info['num_samples']}) in file {file_path}. Using actual number of samples.")
+        #logging.warning(f"Warning: Number of samples in data ({actual_num_samples}) does not match metadata ({session_info['num_samples']}) in file {file_path}. Using actual number of samples.")
         session_info['num_samples'] = actual_num_samples
 
     return session_info, stimulus_v, channel_data
@@ -69,7 +69,7 @@ def process_recording(recording_file, expected_session_id):
     session_info, stimulus_v, channel_data = extract_session_info_and_data(recording_file)
     
     if session_info['session_id'] != expected_session_id:
-        print(f'>! Error: multipleSessions_error for {session_info["session_id"]}.')
+        logging.error(f'>! Error: multipleSessions_error for {session_info["session_id"]}.')
         return None
 
     return {'stimulus_v': stimulus_v, 'channel_data': channel_data}
@@ -98,7 +98,7 @@ def process_session(dir, session_name, csv_paths, output_path):
     with open(os.path.join(output_path, save_name), 'wb') as pickle_file:
         pickle.dump(session_data, pickle_file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    print(f'> {len(recordings)} of {len(csv_paths)} CSVs processed from session "{session_name}".')
+    logging.info(f'> {len(recordings)} of {len(csv_paths)} CSVs processed from session "{session_name}".')
 
 def getDatasetSessionDict(dataset_path):
     """Helper function to create an output dict containing k,v pairs of session names and their corresponding CSV file locations."""
@@ -113,7 +113,8 @@ def getDatasetSessionDict(dataset_path):
     
     return dataset_session_dict
 
-def pickle_data(data_path, output_path, progress_callback = print, is_canceled_callback : bool = lambda: False, max_workers : int = 4):
+# Set progress_callback to 'print' if issues arise.
+def pickle_data(data_path, output_path, progress_callback = logging.info, is_canceled_callback : bool = lambda: False, max_workers : int = 4):
     """Main module function to create Pickle files from EMG datasets."""
     if progress_callback is None:
         progress_callback = lambda x: None  # noqa: E731
@@ -124,14 +125,14 @@ def pickle_data(data_path, output_path, progress_callback = print, is_canceled_c
     total_datasets = len(datasets)
     processed_datasets = 0
 
-    print(f'Datasets to process ({total_datasets}): {datasets}')
+    logging.info(f'Datasets to process ({total_datasets}): {datasets}')
 
     def process_sessions_for_dataset(dataset_dir):
         dataset_path = os.path.join(data_path, dataset_dir)
         dataset_session_dict = getDatasetSessionDict(dataset_path)
 
         if len(dataset_session_dict) <= 0:
-            print(f'>! Error: no CSV files detected in "{dataset_dir}." Make sure you converted STMs to CSVs.')
+            logging.error(f'>! Error: no CSV files detected in "{dataset_dir}." Make sure you converted STMs to CSVs.')
             return
 
         dataset_output_path = os.path.join(output_path, dataset_dir) if len(dataset_session_dict) > 1 else output_path
@@ -156,7 +157,7 @@ def pickle_data(data_path, output_path, progress_callback = print, is_canceled_c
         processed_datasets += 1
         progress_callback(int((processed_datasets / total_datasets) * 100))
 
-    print('Processing complete.')
+    logging.info('Processing complete.')
 
 class GUIExptImportingThread(QThread):
     progress : pyqtSignal = pyqtSignal(int)
@@ -191,6 +192,7 @@ class GUIExptImportingThread(QThread):
     def report_progress(self, value):
         if not self._is_canceled:
             self.progress.emit(value)
+        logging.info(f'CSV conversion progress: {value}%')
 
     def cancel(self):
         if not self._is_canceled and not self._is_finished:
@@ -208,7 +210,7 @@ if __name__ == '__main__':
     import multiprocessing
     max_workers = multiprocessing.cpu_count()  # Use the number of CPU cores
     try:
-        pickle_data('files_to_analyze', 'pickles', max_workers=max_workers)
+        pickle_data('files_to_analyze', 'pickle_output', max_workers=max_workers)
     except Exception as e:
         logging.error(f'Error in main: {e}')
         logging.error(traceback.format_exc())
