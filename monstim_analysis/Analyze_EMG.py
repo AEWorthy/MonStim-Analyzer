@@ -5,6 +5,7 @@ Classes to analyze and plot EMG data from individual sessions or an entire datas
 import os
 import sys
 import pickle
+import mmap
 import copy
 import re
 import logging
@@ -95,10 +96,27 @@ class EMGData(ABC):
         """Base method for loading compressed pickle files"""
         try:
             with open(filepath, 'rb') as f:
-                return pickle.load(f)
+                # Memory-map the file, size 0 means whole file
+                mmapped_file = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                # Load the pickle file from the memory-mapped file
+                data = pickle.load(mmapped_file)
+                mmapped_file.close()
+            return data
         except Exception as e:
             logging.error(f"Error loading from {filepath}. Error: {str(e)}")
             raise e
+
+
+
+    # @staticmethod
+    # def _load_compressed(filepath):
+    #     """Base method for loading compressed pickle files"""
+    #     try:
+    #         with open(filepath, 'rb') as f:
+    #             return pickle.load(f)
+    #     except Exception as e:
+    #         logging.error(f"Error loading from {filepath}. Error: {str(e)}")
+    #         raise e
 
 
     @property
