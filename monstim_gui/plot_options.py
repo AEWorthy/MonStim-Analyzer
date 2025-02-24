@@ -425,6 +425,15 @@ class MaxHReflexOptions(BasePlotOptions):
         relative_to_mmax_layout.addWidget(self.relative_to_mmax_checkbox)
         self.layout.addLayout(relative_to_mmax_layout)
 
+        # Max stim value option - float
+        max_stim_value_layout = QHBoxLayout()
+        self.max_stim_value_label = QLabel("Max Stim Value:")
+        self.max_stim_value_input = FloatLineEdit(default_value=10.0)
+        self.max_stim_value_input.setPlaceholderText("Max Stim Value (float):")
+        max_stim_value_layout.addWidget(self.max_stim_value_label)
+        max_stim_value_layout.addWidget(self.max_stim_value_input)
+        self.layout.addLayout(max_stim_value_layout)
+
         # bin margin option (integer)
         bin_margin_layout = QHBoxLayout()
         self.bin_margin_label = QLabel("Bin Margin:")
@@ -445,6 +454,7 @@ class MaxHReflexOptions(BasePlotOptions):
             "channel_indices" : self.channel_selector.get_selected_channels(),
             "method": self.method_combo.currentText(),
             "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
+            "max_stim_value": self.max_stim_value_input.get_value(),
             "bin_margin": int(self.bin_margin_input.text())
         }
     
@@ -457,5 +467,7 @@ class MaxHReflexOptions(BasePlotOptions):
                 self.method_combo.setCurrentIndex(index)
         if "relative_to_mmax" in options:
             self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
+        if "max_stim_value" in options:
+            self.max_stim_value_input.set_value(options["max_stim_value"])
         if "bin_margin" in options:
             self.bin_margin_input.set_text(str(options["bin_margin"]))

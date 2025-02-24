@@ -931,7 +931,7 @@ class EMGDatasetPlotter(EMGPlotter):
         raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
         return raw_data_df
 
-    def plot_maxH(self, channel_indices : List[int] = None, method=None, relative_to_mmax=False, manual_mmax=None, bin_margin=0, canvas=None):
+    def plot_maxH(self, channel_indices : List[int] = None, method=None, relative_to_mmax=False, manual_mmax=None, max_stim_value=None, bin_margin=0, canvas=None):
         """
         Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
 
@@ -970,6 +970,12 @@ class EMGDatasetPlotter(EMGPlotter):
             h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
             stimulus_voltages = self.emg_object.stimulus_voltages
 
+            # Filter out stimulus voltages greater than max_stim_value if specified
+            if max_stim_value is not None:
+                filtered_indices = [i for i, v in enumerate(stimulus_voltages) if v <= max_stim_value]
+                stimulus_voltages = [stimulus_voltages[i] for i in filtered_indices]
+                h_response_means = [h_response_means[i] for i in filtered_indices]
+
             # Find the voltage with the maximum average H-reflex amplitude
             max_h_reflex_amplitude = max(h_response_means)
             max_h_reflex_voltage = stimulus_voltages[h_response_means.index(max_h_reflex_amplitude)]
@@ -998,6 +1004,13 @@ class EMGDatasetPlotter(EMGPlotter):
                     m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
                 m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
                 h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+
+            # # Crop data if max_stim_value is specified
+            # if max_stim_value is not None:
+            #     mask = np.array(stimulus_voltages) <= max_stim_value
+            #     stimulus_voltages = np.array(stimulus_voltages)[mask]
+            #     m_wave_amplitudes = np.array(m_wave_amplitudes)[mask]
+            #     h_response_amplitudes = np.array(h_response_amplitudes)[mask]
 
             # Append data to raw data dictionary
             raw_data_dict['channel_index'].extend([channel_index] * len(m_wave_amplitudes))
