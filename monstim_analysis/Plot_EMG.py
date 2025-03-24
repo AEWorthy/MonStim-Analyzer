@@ -661,8 +661,11 @@ class EMGSessionPlotter(EMGPlotter):
                         m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
                     except Transform_EMG.NoCalculableMmaxError:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
-                m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
-                h_wave_amplitudes = [amplitude / m_max for amplitude in h_wave_amplitudes]
+                try:
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_wave_amplitudes = [amplitude / m_max for amplitude in h_wave_amplitudes]
+                except ZeroDivisionError:
+                    raise UnableToPlotError(f'M-max for channel {channel_index} is 0. Cannot divide by 0.')
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
             raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
@@ -743,8 +746,11 @@ class EMGSessionPlotter(EMGPlotter):
                     m_max = manual_mmax[channel_index]
                 else:
                     m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
-                m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
-                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]    
+                try:
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+                except ZeroDivisionError:
+                    raise UnableToPlotError(f'M-max for channel {channel_index} is 0. Cannot divide by 0.')
 
             # Smoothen the data
             m_wave_amplitudes = Transform_EMG.savgol_filter_y(m_wave_amplitudes)
@@ -877,10 +883,13 @@ class EMGDatasetPlotter(EMGPlotter):
                     channel_m_max = self.emg_object.get_avg_m_max(method, channel_index)
                     if channel_m_max is None:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
-                m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
-                m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
-                h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
-                h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
+                try:
+                    m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
+                    m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
+                    h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
+                    h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
+                except ZeroDivisionError:
+                    raise UnableToPlotError(f'M-max for channel {channel_index} is zero. Cannot divide by zero.')
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
             raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
@@ -1002,8 +1011,13 @@ class EMGDatasetPlotter(EMGPlotter):
                     m_max = manual_mmax[channel_index]
                 else:
                     m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
-                m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
-                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+                try:
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+                except TypeError:
+                    raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
+                except ZeroDivisionError:
+                    raise UnableToPlotError(f'M-max is zero for channel {channel_index}. Cannot divide by zero.')
 
             # # Crop data if max_stim_value is specified
             # if max_stim_value is not None:
@@ -1230,10 +1244,13 @@ class EMGExperimentPlotter(EMGPlotter):
                     channel_m_max = manual_mmax[channel_index]
                 else:
                     channel_m_max = self.emg_object.get_avg_m_max(method, channel_index)
-                m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
-                m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
-                h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
-                h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
+                try:
+                    m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
+                    m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
+                    h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
+                    h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
+                except ZeroDivisionError:
+                    raise UnableToPlotError(f'M-max for channel {channel_index} is zero. Cannot divide by zero.')
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
             raw_data_dict['channel_index'].extend([channel_index]*len(stimulus_voltages))
@@ -1450,8 +1467,13 @@ class EMGExperimentPlotter(EMGPlotter):
                     m_max = manual_mmax[channel_index]
                 else:
                     m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
-                m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
-                h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+                try: 
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
+                except TypeError:
+                    raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
+                except ZeroDivisionError:
+                    raise UnableToPlotError(f'M-max is zero for channel {channel_index}. Cannot divide by zero.')
 
             # Append data to raw data dictionary
             raw_data_dict['channel_index'].extend([channel_index] * len(m_wave_amplitudes))
