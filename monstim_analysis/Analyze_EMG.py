@@ -658,7 +658,7 @@ class EMGSession(EMGData):
         report = []
         for i, channel_m_max in enumerate(self.m_max):
             try:
-                line = f"- {self.channel_names[i]}: M-max amplitude = {channel_m_max:.2f} V"
+                line = f"- {self.channel_names[i]}: M-max amplitude ({self.default_method}) = {channel_m_max:.2f} V"
                 report.append(line)
             except TypeError:
                 line = f"- Channel {i} does not have a valid M-max amplitude."
