@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import copy
+import logging
 from typing import TYPE_CHECKING, List
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -222,8 +223,17 @@ class EMGSessionPlotter(EMGPlotter):
             else:
                 raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
 
-    def plot_channel_data(self, ax, time_axis, channel_data, start, end, stimulus_v, channel_index):
-        ax.plot(time_axis, channel_data[start:end], label=f"Stimulus Voltage: {stimulus_v}")
+    def plot_channel_data(self, ax, time_axis, channel_data, start, end, stimulus_v, channel_index, cmap='viridis_r', norm=None):
+        # Create a colormap and normalize stimulus voltage
+        colormap = plt.get_cmap(cmap)
+        if norm is None:
+            logging.warning("Normalization object not provided. Using default normalization.")
+            norm = plt.Normalize(vmin=self.emg_object.stimulus_voltages[0], vmax=self.emg_object.stimulus_voltages[-1])
+        
+        # Get the color for the current stimulus voltage
+        color = colormap(norm(stimulus_v))    
+        
+        ax.plot(time_axis, channel_data[start:end], color=color, label=f"Stimulus Voltage: {stimulus_v}")
         ax.set_title(f'{self.emg_object.channel_names[channel_index]}')
         ax.grid(True)
    
@@ -281,6 +291,9 @@ class EMGSessionPlotter(EMGPlotter):
         legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings(data_type)
 
+        # Create a normalization object for the stimulus voltages
+        norm = plt.Normalize(vmin=min(self.emg_object.stimulus_voltages), vmax=max(self.emg_object.stimulus_voltages))
+
         # Initialize a list to store structured raw data
         raw_data_dict = {
             'recording_index': [],
@@ -299,7 +312,7 @@ class EMGSessionPlotter(EMGPlotter):
                 current_ax = ax if num_channels == 1 else axes[channel_index]
                 
                 # Plot EMG data
-                self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, stimulus_v, channel_index)
+                self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, stimulus_v, channel_index, norm=norm)
                 self.plot_latency_windows(current_ax, all_flags, channel_index)
 
                 # Collect raw data with hierarchical index structure
