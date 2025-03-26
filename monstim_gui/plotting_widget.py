@@ -131,6 +131,7 @@ class PlotWidget(QGroupBox):
     def on_plot_type_changed(self):
         plot_type = self.plot_type_combo.currentText()
         if plot_type == self.last_plot_type[self.view]:
+            logging.debug(f"Plot type {plot_type} is already selected. No change needed. self.last_plot_type[self.view]: {self.last_plot_type[self.view]}")
             return
         self.save_current_options()
         self.last_plot_type[self.view] = plot_type
@@ -163,7 +164,10 @@ class PlotWidget(QGroupBox):
             self.additional_options_layout.addWidget(self.current_option_widget)
 
             if plot_type in self.last_options[self.view]:
+                logging.debug(f"Using last options for {self.view} - {plot_type}: {self.last_options[self.view][plot_type]}")
                 self.current_option_widget.set_options(self.last_options[self.view][plot_type])
+            else:
+                logging.debug(f"No last options found for {self.view} - {plot_type}. Using default options.")
         
         self.additional_options_layout.update()
         
@@ -175,6 +179,7 @@ class PlotWidget(QGroupBox):
             current_plot_type = self.last_plot_type[self.view]
             current_options = self.current_option_widget.get_options()
             self.last_options[self.view][current_plot_type] = current_options
+            logging.debug(f"Saved options for {self.view} - {current_plot_type}: {current_options}")
 
     def get_plot_options(self):
         if self.current_option_widget:
