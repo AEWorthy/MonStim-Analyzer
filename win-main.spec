@@ -57,7 +57,7 @@ coll = COLLECT( # type: ignore
     a.binaries,
     a.datas,
     upx=True,
-    upx_exclude=['PyQt6'],
+    upx_exclude=['PyQt6', 'Qt6Core.dll', 'Qt6Widgets.dll'],
     name=DIST_NAME
 )
 
