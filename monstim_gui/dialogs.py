@@ -552,7 +552,6 @@ class LatexHelpWindow(QWidget):
         return md.convert(markdown_content)
     
 class AboutDialog(QWidget):
-    logging.debug("Showing 'About' dialog")
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Program Information")
