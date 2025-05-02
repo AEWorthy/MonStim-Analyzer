@@ -6,7 +6,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from .plot_options import (EMGOptions, SuspectedHReflexesOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
+from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
                            MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
 
 if TYPE_CHECKING:
@@ -33,7 +33,6 @@ class PlotWidget(QGroupBox):
             "session": {
                 "EMG": EMGOptions,
                 "Single EMG Recordings": SingleEMGRecordingOptions,
-                "Suspected H-reflexes": SuspectedHReflexesOptions,
                 "Reflex Curves": ReflexCurvesOptions,
                 "M-max": MMaxOptions
             },
@@ -128,6 +127,21 @@ class PlotWidget(QGroupBox):
         self.update_plot_types()
         self.update_plot_options()
 
+    def on_plot_type_changed(self):
+        plot_type = self.plot_type_combo.currentText()
+        if plot_type == self.last_plot_type[self.view]:
+            logging.debug(f"Plot type {plot_type} is already selected. No change needed. self.last_plot_type[self.view]: {self.last_plot_type[self.view]}")
+            return
+        self.save_current_options()
+        self.last_plot_type[self.view] = plot_type
+        self.update_plot_options()
+
+    def on_data_selection_changed(self):
+        try:
+            self.update_plot_options()
+        except AttributeError:
+            pass
+
     def update_plot_types(self):
         self.plot_type_combo.blockSignals(True)
         self.plot_type_combo.clear()
@@ -135,14 +149,6 @@ class PlotWidget(QGroupBox):
         self.plot_type_combo.setCurrentText(self.last_plot_type[self.view])
         self.plot_type_combo.blockSignals(False)
         self.on_plot_type_changed()
-
-    def on_plot_type_changed(self):
-        plot_type = self.plot_type_combo.currentText()
-        if plot_type == self.last_plot_type[self.view]:
-            return
-        self.save_current_options()
-        self.last_plot_type[self.view] = plot_type
-        self.update_plot_options()
 
     def update_plot_options(self):
         if self.current_option_widget:
@@ -157,7 +163,10 @@ class PlotWidget(QGroupBox):
             self.additional_options_layout.addWidget(self.current_option_widget)
 
             if plot_type in self.last_options[self.view]:
+                logging.debug(f"Using last options for {self.view} - {plot_type}: {self.last_options[self.view][plot_type]}")
                 self.current_option_widget.set_options(self.last_options[self.view][plot_type])
+            else:
+                logging.debug(f"No last options found for {self.view} - {plot_type}. Using default options.")
         
         self.additional_options_layout.update()
         
@@ -169,6 +178,7 @@ class PlotWidget(QGroupBox):
             current_plot_type = self.last_plot_type[self.view]
             current_options = self.current_option_widget.get_options()
             self.last_options[self.view][current_plot_type] = current_options
+            logging.debug(f"Saved options for {self.view} - {current_plot_type}: {current_options}")
 
     def get_plot_options(self):
         if self.current_option_widget:

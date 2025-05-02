@@ -12,8 +12,8 @@ import os
 import shutil
 from PyInstaller.config import CONF
 
-EXE_NAME = 'MonStim Analyzer v0.3.0'
-DIST_NAME = 'MonStim_Analyzer_v0.3.0-alpha'
+EXE_NAME = 'MonStim Analyzer v0.3.1'
+DIST_NAME = 'MonStim_Analyzer_v0.3.1-alpha'
 
 
 # Windows build
@@ -57,7 +57,7 @@ coll = COLLECT( # type: ignore
     a.binaries,
     a.datas,
     upx=True,
-    upx_exclude=['PyQt6'],
+    upx_exclude=['PyQt6', 'Qt6Core.dll', 'Qt6Widgets.dll'],
     name=DIST_NAME
 )
 

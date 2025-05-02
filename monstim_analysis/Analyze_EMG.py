@@ -5,6 +5,7 @@ Classes to analyze and plot EMG data from individual sessions or an entire datas
 import os
 import sys
 import pickle
+import mmap
 import copy
 import re
 import logging
@@ -95,10 +96,38 @@ class EMGData(ABC):
         """Base method for loading compressed pickle files"""
         try:
             with open(filepath, 'rb') as f:
-                return pickle.load(f)
+                # Memory-map the file, size 0 means whole file
+                mmapped_file = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                # Load the pickle file from the memory-mapped file
+                data = pickle.load(mmapped_file)
+                mmapped_file.close()
+            return data
+        except EOFError:
+            try:
+                if not os.path.exists(filepath):
+                    raise FileNotFoundError(f"File not found: {filepath}")
+                if os.path.getsize(filepath) == 0:
+                    raise EOFError(f"File is empty: {filepath}")   
+                logging.info("Could not load as memory-mapped file. Attempting to load as a regular pickle file.")
+                with open(filepath, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logging.error(f"Error loading from {filepath}. Error: {str(e)}")
         except Exception as e:
             logging.error(f"Error loading from {filepath}. Error: {str(e)}")
             raise e
+
+
+
+    # @staticmethod
+    # def _load_compressed(filepath):
+    #     """Base method for loading compressed pickle files"""
+    #     try:
+    #         with open(filepath, 'rb') as f:
+    #             return pickle.load(f)
+    #     except Exception as e:
+    #         logging.error(f"Error loading from {filepath}. Error: {str(e)}")
+    #         raise e
 
 
     @property
@@ -640,7 +669,7 @@ class EMGSession(EMGData):
         report = []
         for i, channel_m_max in enumerate(self.m_max):
             try:
-                line = f"- {self.channel_names[i]}: M-max amplitude = {channel_m_max:.2f} V"
+                line = f"- {self.channel_names[i]}: M-max amplitude ({self.default_method}) = {channel_m_max:.2f} V"
                 report.append(line)
             except TypeError:
                 line = f"- Channel {i} does not have a valid M-max amplitude."
@@ -2025,8 +2054,21 @@ class EMGExperiment(EMGData):
         """
         logging.info(f"Reloading experiment from file: {save_path}.")
         with open(save_path, 'rb'):
-            experiment = EMGData._load_compressed(save_path)
-            experiment.apply_preferences(reset_properties=False)
+            experiment = EMGData._load_compressed(save_path) # type: EMGExperiment
+            try:
+                experiment.apply_preferences(reset_properties=False)
+            except AttributeError:
+                logging.warning("An AttributeError was encountered while applying preferences. This may be due to an older version of the experiment object.")
+                logging.info("Attempting to update the experiment to the most recent version.")
+                try:
+                    experiment._upgrade_from_version(experiment.version)
+                except AttributeError:
+                    try:
+                        experiment._upgrade_from_version('0.0.0') # If the version is not set, assume it's an old version and upgrade from 0.0.0.
+                        experiment.apply_preferences(reset_properties=False)
+                    except AttributeError:
+                        logging.error("Error loading experiment. It is recommended that you delete and re-import this experiment.")
+                        raise EMGDataConsistencyError("This experiment file is corrupted. It is recommended that you delete the bin file for this experiment in the /data/bin/ folder.")
             return experiment
 
     @staticmethod
