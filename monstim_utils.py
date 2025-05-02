@@ -7,7 +7,7 @@ import yaml
 from PyQt6.QtWidgets import QApplication
 import numpy as np
 
-DATA_PATH = 'files_to_process'
+DIST_PATH = 'dist'
 OUTPUT_PATH = 'data'
 SAVED_DATASETS_PATH = 'datasets'
 BIN_EXTENSION = '.pkl'
@@ -84,9 +84,7 @@ def get_data_path():
     if getattr(sys, 'frozen', False):
         data_path = get_base_path()
     else:
-        data_path = os.path.join(get_base_path(), DATA_PATH)
-        if not os.path.exists(data_path):
-            os.makedirs(data_path)
+        data_path = os.path.join(get_base_path(), DIST_PATH)
     return data_path
 
 def get_main_window():

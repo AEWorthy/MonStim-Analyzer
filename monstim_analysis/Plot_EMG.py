@@ -91,7 +91,8 @@ class EMGPlotter:
     
     def display_plot(self, canvas : FigureCanvas):
         if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
+            if not canvas.figure.get_constrained_layout():
+                canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
             plt.subplots_adjust(**self.emg_object.subplot_adjust_args)

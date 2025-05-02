@@ -2,94 +2,111 @@ import sys
 import os
 import traceback
 import logging
+from logging.handlers import RotatingFileHandler
 import argparse
 import multiprocessing
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication 
+from PyQt6.QtCore import QTimer, QStandardPaths, QCoreApplication
 
-# Constants
+
+QCoreApplication.setOrganizationName("WorthyLab")
+QCoreApplication.setApplicationName("MonStimAnalyzer")
 LOG_FILE = 'app.log'
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
+LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+IS_FROZEN = getattr(sys, 'frozen', False)
 
-def setup_logging(debug_mode: bool) -> None:
-    log_level = logging.DEBUG if debug_mode else logging.INFO
-    if hasattr(sys, '_MEIPASS'):
-        logging.basicConfig(filename=os.path.join(sys._MEIPASS, LOG_FILE), level=log_level, format=LOG_FORMAT)
-    else:
-        logging.basicConfig(filename=LOG_FILE, level=log_level, format=LOG_FORMAT)
-    if debug_mode: logging.info("Debug mode enabled")  # noqa: E701
-    logging.debug("Logging setup complete")
 
-def setup_matplotlib():
-    import matplotlib
-    matplotlib.use('QtAgg')  # Ensure compatibility with PyQt6
-    logging.getLogger('matplotlib').setLevel(logging.WARNING) # turn off matplotlib debugging messages
-    logging.debug("Matplotlib setup complete")
+def make_default_log_dir() -> str:
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    if not base:
+        base = os.getenv("APPDATA", r"C:\Users\%USERNAME%\AppData\Roaming")
+    log_dir = os.path.join(base, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
+
+def setup_logging(debug: bool, log_dir: str | None = None) -> None:
+    target_dir = log_dir or make_default_log_dir()
+    if not os.access(target_dir, os.W_OK):
+        raise RuntimeError(f"Cannot write to log directory: {target_dir}")
+    os.makedirs(target_dir, exist_ok=True)
+    log_path = os.path.join(target_dir, LOG_FILE)
+
+    # Set up the root logger.
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+    root.setLevel(logging.DEBUG)
+    
+    # Create a rotating file handler.
+    if not any(isinstance(h, RotatingFileHandler) for h in root.handlers):
+        file_h = RotatingFileHandler(
+            filename = log_path, 
+            maxBytes=10*1024*1024, 
+            backupCount=5,
+            encoding='utf-8')
+        file_h.setLevel(logging.DEBUG if debug else logging.INFO)
+        file_h.setFormatter(logging.Formatter(LOG_FORMAT))
+        root.addHandler(file_h)
+    
+    # Create a console handler if in debug mode.
+    if debug:
+        console_h = logging.StreamHandler()
+        console_h.setLevel(logging.DEBUG)
+        console_h.setFormatter(logging.Formatter(LOG_FORMAT))
+        root.addHandler(console_h)
+
+    logging.captureWarnings(True)  # Capture any Python warnings and log them too.
+    logging.getLogger("PyQt6").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    root.info(f"Logging to {log_path} (debug={debug})")    
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--log-dir', metavar='DIR', help='Path to write log files (overrides default)')
     return parser.parse_args()
 
 def exception_hook(exc_type, exc_value, exc_traceback):
     logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+    sys.exit(1)
 
-def main(sys_frozen = True) -> int:
-    logging.debug("Starting main function")
+def main(is_frozen : bool) -> int:
     try:
-        multiprocessing.freeze_support()
-        setup_matplotlib()
-
-        logging.debug("Creating QApplication")
         app = QApplication(sys.argv)
-
-        if sys_frozen:
-            # Display splash screen
+        if is_frozen: # Display splash screen if running as a frozen executable.
             from monstim_gui.splash import SplashScreen
             splash = SplashScreen()
             splash.show()
-
             QTimer.singleShot(3000, splash.close)
-        
-        logging.debug("Creating main window")
         gui = EMGAnalysisGUI()
-        logging.debug("Showing main window")
         gui.show()
-
-        logging.debug("Entering main event loop")
+        logging.info("Application started successfully.")
         return app.exec()
 
     except Exception as e:
         logging.error(f"Error in main function: {str(e)}")
         logging.error(traceback.format_exc())
         return 1
+    
+    finally:
+        logging.info("Application shutting down.")
 
 if __name__ == '__main__':
     args = parse_arguments()
-    sys_frozen = False
-    if getattr(sys, 'frozen', False):
-        # If running as a frozen executable, log to file
-        sys_frozen = True
-        setup_logging(args.debug)
-        logging.info("Running as frozen executable")
+    if IS_FROZEN:
+        setup_logging(debug=args.debug, log_dir=args.log_dir)
+        logging.info("Logger initialized. Running via frozen executable.")
     else:
-        # If running in an IDE, log to console
-        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
-        sys_frozen = False
-        logging.info("Running in IDE")
-
-    from monstim_gui import EMGAnalysisGUI
-        
+        setup_logging(debug=True)
+        logging.info("Logger initialized. Running via IDE.")
     sys.excepthook = exception_hook
-    logging.debug("Script running as main")
-    sys.exit(main(sys_frozen=sys_frozen))
+    
+    # Import the GUI module, matplotlib, and initialize multiprocessing after setting up logging.
+    from monstim_gui import EMGAnalysisGUI
+    import matplotlib
+    matplotlib.use('QtAgg')
+    multiprocessing.freeze_support()
 
-
-
-# To create an executable:
-# pyinstaller EMGAnalysis.spec
-
-# To create a debug executable:
-# pyinstaller EMGAnalysis.spec --debug
+    logging.info("Initialization complete. Starting application.")
+    sys.exit(main(IS_FROZEN))
