@@ -9,14 +9,18 @@
 
 
 import os
+import sys
 import shutil
 from PyInstaller.config import CONF
 
-EXE_NAME = 'MonStim Analyzer v0.3.1'
-DIST_NAME = 'MonStim_Analyzer_v0.3.1-alpha'
 
+project_root = os.path.abspath(os.getcwd())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+from monstim_gui import __version__
+EXE_NAME = f'MonStim Analyzer v{__version__}'
+DIST_NAME = f'MonStim_Analyzer_v{__version__}-alpha'
 
-# Windows build
 
 a = Analysis( # type: ignore
     ['main.py'],
@@ -61,8 +65,6 @@ coll = COLLECT( # type: ignore
     name=DIST_NAME
 )
 
-# Ensure the dist directory exists
+# Ensure the dist directory exists and copy the readme.md file to it
 os.makedirs(CONF['distpath'], exist_ok=True)
-
-# Copy the example_expts directory to the dist directory
 shutil.copy2('docs/readme.md', os.path.join(CONF['distpath'], DIST_NAME))
