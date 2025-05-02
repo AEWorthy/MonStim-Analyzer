@@ -39,7 +39,7 @@ class EMGAnalysisGUI(QMainWindow):
         self.has_unsaved_changes = False
         self.setWindowTitle("MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
-        self.setGeometry(100, 100, 1000, 600)
+        self.setGeometry(30, 30, 800, 770)
     
         # Initialize variables
         self.expts_dict = {}

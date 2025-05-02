@@ -29,12 +29,12 @@ m_color : 'red' # (str) color of M-response flags and plots.
 h_color : 'blue' # (str) color of H-reflex flags and plots.
 latency_window_style : ':' # (str) matplotlib linestyle character(s) for H/M-response flags.
 subplot_adjust_args: # dict fot subplots_adjust() function. default is below.
-  left: 0.1
-  right: 0.9
-  bottom: 0.15
-  top: 0.85
-  wspace: 0.1
-  hspace : 0.5
+  left: 0.07
+  right: 0.93
+  bottom: 0.10
+  top: 0.90
+  wspace: 0.15
+  hspace : 0.20
 
 # Reflex Parameters
 m_start: # (in ms). default is 1.0.

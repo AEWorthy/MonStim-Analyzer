@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+# import matplotlib.ticker as ticker # used in line 282
 import copy
 import logging
 from typing import TYPE_CHECKING, List
@@ -53,7 +54,7 @@ class EMGPlotter:
         if canvas:
             fig = canvas.figure # Type: matplotlib.figure.Figure
             fig.clear()
-            fig.set_tight_layout(True)
+            fig.set_constrained_layout(True)
             
             try:
                 # Use predefined size tuples
@@ -82,9 +83,9 @@ class EMGPlotter:
             # Create a new figure and axes
             scale = 2 # Scale factor for figure size relative to default
             if num_channels == 1:
-                fig, ax = plt.subplots(figsize=tuple([item * scale for item in single_channel_size_tuple])) # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot
+                fig, ax = plt.subplots(figsize=tuple([item * scale for item in single_channel_size_tuple]), constrained_layout=True) # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot
             else:
-                fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True) # Type: matplotlib.figure.Figure, numpy.ndarray
+                fig, axes = plt.subplots(nrows=1, ncols=num_channels, figsize=tuple([item * scale for item in multi_channel_size_tuple]), sharey=True, constrained_layout=True) # Type: matplotlib.figure.Figure, numpy.ndarray
 
         return fig, ax, axes # Type: matplotlib.figure.Figure, matplotlib.axes._subplots.AxesSubplot, numpy.ndarray
     
@@ -233,9 +234,15 @@ class EMGSessionPlotter(EMGPlotter):
         # Get the color for the current stimulus voltage
         color = colormap(norm(stimulus_v))    
         
-        ax.plot(time_axis, channel_data[start:end], color=color, label=f"Stimulus Voltage: {stimulus_v}")
+        line = ax.plot(time_axis, channel_data[start:end], color=color, label=f"Stimulus Voltage: {stimulus_v}")
         ax.set_title(f'{self.emg_object.channel_names[channel_index]}')
         ax.grid(True)
+
+        # Store the norm and colormap as attributes of the axis for later use
+        ax.norm = norm
+        ax.colormap = colormap
+
+        return line[0]
    
     def plot_latency_windows(self, ax, all_flags, channel_index):
         if all_flags:
@@ -246,8 +253,34 @@ class EMGSessionPlotter(EMGPlotter):
         #         if window.should_plot:
         #             window.plot(ax=ax, channel_index=channel_index)
 
-    def set_fig_labels_and_legends(self, fig, channel_indices : List[int], sup_title : str, x_title : str, y_title: str, plot_legend : bool, legend_elements : list = None):
+    def set_fig_labels_and_legends(self, fig, channel_indices : List[int], sup_title : str, x_title : str, y_title: str, plot_legend : bool, plot_colormap : bool = False, legend_elements : list = None):
         fig.suptitle(sup_title)
+        
+        # Get the norm and colormap from the first axis
+        if len(fig.axes) > 0:
+            ax = fig.axes[0]
+            if hasattr(ax, 'norm') and hasattr(ax, 'colormap') and plot_colormap:
+                # Create a scalar mappable for the colorbar
+                sm = plt.cm.ScalarMappable(cmap=ax.colormap, norm=ax.norm)
+                sm.set_array([])  # Empty array needed for the ScalarMappable
+                
+                # Add colorbar - position it based on the number of subplots
+                if len(channel_indices) == 1:
+                    fig.colorbar(sm, ax=ax, label='Stimulus Voltage (V)')
+                else:
+                    # add colorbar as a subplot to the right of the figure
+                    data_axes = fig.axes
+                    cbar = fig.colorbar(
+                        sm,
+                        ax=data_axes,
+                        orientation='vertical',
+                        fraction=0.02,   # width of cbar = 2% of figure width
+                        pad=0.02         # padding between plot and bar = 2% of figure width
+                    ) # Type: matplotlib.colorbar.Colorbar
+                    cbar.set_label('Stimulus Voltage (V)')
+                    # cbar.ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.1f V'))
+
+        
         if len(channel_indices) == 1:
             fig.gca().set_xlabel(x_title)
             fig.gca().set_ylabel(y_title)
@@ -260,7 +293,7 @@ class EMGSessionPlotter(EMGPlotter):
                 fig.legend(handles=legend_elements, loc='upper right')
 
     # EMGSession plotting functions
-    def plot_emg(self, channel_indices : List[int] = None, all_flags : bool = True, plot_legend : bool = True, data_type : str = 'filtered', canvas: FigureCanvas = None):
+    def plot_emg(self, channel_indices : List[int] = None, all_flags : bool = True, plot_legend : bool = True, plot_colormap: bool = False, data_type : str = 'filtered', canvas: FigureCanvas = None):
         """
         Plots EMG data from a Pickle file for a specified time window.
 
@@ -287,7 +320,7 @@ class EMGSessionPlotter(EMGPlotter):
             num_channels = len(channel_indices)
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes='large')
         legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings(data_type)
 
@@ -338,7 +371,7 @@ class EMGSessionPlotter(EMGPlotter):
         x_title = 'Time (ms)'
         y_title = 'EMG (mV)'
 
-        self.set_fig_labels_and_legends(fig, channel_indices, sup_title, x_title, y_title, plot_legend, legend_elements)
+        self.set_fig_labels_and_legends(fig, channel_indices, sup_title, x_title, y_title, plot_legend, legend_elements=legend_elements, plot_colormap=plot_colormap)
         self.display_plot(canvas)
 
         # Create DataFrame with multi-level index
@@ -346,7 +379,7 @@ class EMGSessionPlotter(EMGPlotter):
         raw_data_df.set_index(['recording_index', 'channel_index', 'stimulus_V', 'time_point'], inplace=True)
         return raw_data_df
 
-    def plot_singleEMG(self, channel_indices : List[int] = None, recording_index: int = 0, fixed_y_axis : bool = True, all_flags : bool = True, plot_legend: bool = True, data_type: str = 'filtered', canvas: FigureCanvas = None):
+    def plot_singleEMG(self, channel_indices : List[int] = None, recording_index: int = 0, fixed_y_axis : bool = True, all_flags : bool = True, plot_legend: bool = True, plot_colormap : bool = False, data_type: str = 'filtered', canvas: FigureCanvas = None):
         """
         Plots EMG data for a single recording.
 
@@ -378,7 +411,7 @@ class EMGSessionPlotter(EMGPlotter):
         }
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes='large')
         legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings(data_type, original=True)
 
@@ -428,7 +461,7 @@ class EMGSessionPlotter(EMGPlotter):
         x_title = 'Time (ms)'
         y_title = 'EMG (mV)'
 
-        self.set_fig_labels_and_legends(fig, channel_indices, sup_title, x_title, y_title, plot_legend, legend_elements)
+        self.set_fig_labels_and_legends(fig, channel_indices, sup_title, x_title, y_title, plot_legend, legend_elements=legend_elements, plot_colormap=plot_colormap)
         self.display_plot(canvas)
 
         # Create DataFrame with multi-level index
@@ -460,7 +493,7 @@ class EMGSessionPlotter(EMGPlotter):
             num_channels = len(channel_indices)
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes='large')
         # legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings('filtered')
 
@@ -496,6 +529,7 @@ class EMGSessionPlotter(EMGPlotter):
         self.display_plot(canvas)
     
     def plot_suspectedH(self, channel_indices : List[int] = None, h_threshold : float = 0.3, method : str = None, all_flags : bool = False, plot_legend : bool = False, canvas : FigureCanvas = None):
+        '''Deprecated. Use plot_emg_thresholded instead.'''
         has_h_reflex_latency_window = False
         for window in self.emg_object.latency_windows:
             if window.name.lower() in ('h-reflex', 'h_reflex', 'h reflex', 'hreflex'):

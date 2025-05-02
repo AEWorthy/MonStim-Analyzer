@@ -6,7 +6,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from .plot_options import (EMGOptions, SuspectedHReflexesOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
+from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
                            MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
 
 if TYPE_CHECKING:
@@ -33,7 +33,6 @@ class PlotWidget(QGroupBox):
             "session": {
                 "EMG": EMGOptions,
                 "Single EMG Recordings": SingleEMGRecordingOptions,
-                "Suspected H-reflexes": SuspectedHReflexesOptions,
                 "Reflex Curves": ReflexCurvesOptions,
                 "M-max": MMaxOptions
             },
