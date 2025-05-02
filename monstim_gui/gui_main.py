@@ -274,7 +274,7 @@ class EMGAnalysisGUI(QMainWindow):
                         os.remove(bin_file)
                         logging.info(f"Deleted bin file: {bin_file}.")
                     else:
-                        logging.info(f"Bin file not found: {bin_file}. Could not delete existing experiment if it exists.")  
+                        logging.warning(f"Bin file not found: {bin_file}. Could not delete existing experiment if it exists.")  
                 else: # Cancel importing the experiment.
                     logging.info(f"User chose not to overwrite existing experiment '{expt_name}' in the output folder.")
                     QMessageBox.warning(self, "Canceled", "The importation of your data was canceled.")
@@ -337,7 +337,7 @@ class EMGAnalysisGUI(QMainWindow):
             progress_dialog.canceled.connect(self.thread.cancel)
         else: # No directory selected.
             QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
-            logging.info("No CSV directory selected. Import canceled.")
+            logging.warning("No CSV directory selected. Import canceled.")
     
     def rename_experiment(self):
         logging.debug("Renaming experiment.")
@@ -354,7 +354,7 @@ class EMGAnalysisGUI(QMainWindow):
                         os.rename(bin_file, new_bin_file)
                         logging.debug(f"Renamed bin file: {bin_file} -> {new_bin_file}.")
                     else:
-                        logging.error(f"Bin file not found: {bin_file}. Could not rename current experiment.")
+                        logging.warning(f"Bin file not found: {bin_file}. Could not rename current experiment.")
 
                     # Rename experiment folder in data folder
                     old_folder = os.path.join(self.output_path, self.current_experiment.formatted_name)
@@ -363,10 +363,10 @@ class EMGAnalysisGUI(QMainWindow):
                         os.rename(old_folder, new_folder)
                         logging.debug(f"Renamed experiment folder: {old_folder} -> {new_folder}.")
                     else:
-                        logging.error(f"Experiment folder not found: {old_folder}. Could not rename current experiment.")
+                        logging.warning(f"Experiment folder not found: {old_folder}. Could not rename current experiment.")
                 except FileExistsError:
                     QMessageBox.critical(self, "Error", f"An experiment with the name '{new_name}' already exists. Please choose a different name.")
-                    logging.error(f"An experiment with the name '{new_name}' already exists. Could not rename current experiment.")
+                    logging.warning(f"An experiment with the name '{new_name}' already exists. Could not rename current experiment.")
                     return
                 finally:
                     QApplication.restoreOverrideCursor()
@@ -389,7 +389,7 @@ class EMGAnalysisGUI(QMainWindow):
                     os.remove(bin_file)
                     logging.debug(f"Deleted bin file: {bin_file}.")
                 else:
-                    logging.error(f"Bin file not found: {bin_file}. Could not delete current experiment.")
+                    logging.warning(f"Bin file not found: {bin_file}. Could not delete current experiment.")
                 
                 # delete experiment folder in data folder
                 shutil.rmtree(os.path.join(self.output_path, self.current_experiment.expt_id))
@@ -437,7 +437,7 @@ class EMGAnalysisGUI(QMainWindow):
                 os.remove(bin_file)
                 logging.debug(f"Deleted bin file: {bin_file}.")
             else:
-                logging.error(f"Bin file not found: {bin_file}. Could not delete current experiment.")
+                logging.warning(f"Bin file not found: {bin_file}. Could not delete current experiment.")
             
             self.current_experiment = None
             self.current_dataset = None
@@ -707,44 +707,27 @@ class EMGAnalysisGUI(QMainWindow):
         plot_type = self.plot_type_dict.get(plot_type_raw)
         plot_options = self.plot_widget.get_plot_options()
         raw_data = None # Type: pd.DataFrame
+
+        if self.plot_widget.session_radio.isChecked():
+            level = 'session'
+            level_object = self.current_session
+        elif self.plot_widget.dataset_radio.isChecked():
+            level = 'dataset'
+            level_object = self.current_dataset
+        elif self.plot_widget.experiment_radio.isChecked():
+            level = 'experiment'
+            level_object = self.current_experiment
         
+        logging.info(f"Plot Created. level: {level} type: {plot_type}, options: {plot_options}, return_raw_data: {return_raw_data}.")
         # Plot the data      
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            logging.debug(f'Plotting {plot_type} with options: {plot_options}.')
-            if self.plot_widget.session_radio.isChecked():
-                logging.debug("Plotting session data.")
-                if self.current_session:
-                    # Assuming plot_type corresponds to the data_type in plot_emg
-                    raw_data = self.current_session.plot(
-                        plot_type=plot_type,
-                        **plot_options,
-                        canvas = self.plot_widget.canvas
-                    )
-                else:
-                    QMessageBox.warning(self, "Warning", "Please select a session first.")
-                    return
-            elif self.plot_widget.dataset_radio.isChecked():
-                logging.debug("Plotting dataset data.")
-                if self.current_dataset:
-                    # If you have a similar plot method for dataset, use it here
-                    raw_data = self.current_dataset.plot(
-                        plot_type=plot_type,
-                        **plot_options,
-                        canvas = self.plot_widget.canvas
-                    )
-                else:
-                    QMessageBox.warning(self, "Warning", "Please select a dataset first.")
-                    return
-            elif self.plot_widget.experiment_radio.isChecked():
-                logging.debug("Plotting experiment data.")
-                if self.current_experiment:
-                    # If you have a similar plot method for experiment, use it here
-                    raw_data = self.current_experiment.plot(
-                        plot_type=plot_type,
-                        **plot_options,
-                        canvas = self.plot_widget.canvas
-                    )
+            if level_object:
+                raw_data = level_object.plot(
+                    plot_type=plot_type,
+                    **plot_options,
+                    canvas = self.plot_widget.canvas
+                )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
             logging.error(f"An error occurred while plotting: {e}")
@@ -753,16 +736,12 @@ class EMGAnalysisGUI(QMainWindow):
             logging.error(traceback.format_exc())
         finally:
             QApplication.restoreOverrideCursor()
-        logging.debug("Plotting complete.")
-
 
         self.plot_pane.layout.update()  # Refresh the layout of the plot pane
 
         if return_raw_data:
-            logging.debug("Returning raw data.")
             return raw_data
         else:
-            logging.debug("Not returning raw data.")
             return
 
     def get_raw_data(self):
