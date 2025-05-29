@@ -23,7 +23,7 @@ from matplotlib.lines import Line2D
 from monstim_analysis.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 from monstim_analysis.Transform_EMG import calculate_emg_amplitude, butter_bandpass_filter, get_avg_mmax, NoCalculableMmaxError
 from monstim_analysis.core.utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION
-from .version import __version__ as DATA_VERSION
+from monstim_analysis.core.version import __version__ as DATA_VERSION
 
 # To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
 
