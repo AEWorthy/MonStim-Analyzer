@@ -3,6 +3,7 @@ import os
 import sys
 from typing import List
 import yaml
+from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 import numpy as np
@@ -37,7 +38,7 @@ def get_base_path():
             base_path = os.path.dirname(sys.executable)
     else:
         # Running in a normal Python environment
-        base_path = os.path.dirname(os.path.abspath(__file__))
+        base_path = base_path = Path(__file__).resolve().parent.parent.parent
 
     return base_path
 

@@ -21,7 +21,7 @@ if __name__ == '__main__':
 from monstim_analysis import EMGExperiment
 from monstim_converter import GUIExptImportingThread
 from monstim_gui.splash import SPLASH_INFO
-from monstim_utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
+from monstim_analysis.core.utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
 from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, SelectChannelsDialog,
                                  LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
