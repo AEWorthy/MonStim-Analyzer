@@ -35,7 +35,6 @@ def infer_ds_ex(csv_path: Path, base_dir: Path):
     experiment = grandparent.name if grandparent != base_dir else None
     return dataset, experiment
 
-
 def detect_format(path: Path) -> str:
     """
     Inspect the first handful of lines to pick a format tag.

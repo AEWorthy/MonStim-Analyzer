@@ -1,4 +1,4 @@
-# monstim_analysis/__init__.py
+# monstim_signals/__init__.py
 
 # Version
 from .core.version import __version__ as __version__

@@ -1,6 +1,11 @@
 from pathlib import Path
 import pandas as pd
+import sys
 from typing import Any
+# Ensure the project root is in sys.path for sibling imports
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 from monstim_signals.core.data_models import StimCluster
 
 def detect_format(path: Path) -> str:
