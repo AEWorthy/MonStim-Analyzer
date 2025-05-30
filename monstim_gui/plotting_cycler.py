@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QGridLayout, QPushButton, QSpinBox, QLabel, QGroupBox
 from PyQt6.QtGui import QValidator
-from monstim_analysis.core.utils import get_main_window
+from monstim_signals.core.utils import get_main_window
 if TYPE_CHECKING:
     from monstim_gui import EMGAnalysisGUI  # noqa: F401
 

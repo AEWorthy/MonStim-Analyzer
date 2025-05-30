@@ -20,11 +20,11 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-from monstim_analysis.core.utils import get_source_path, CustomLoader
+from monstim_signals.core.utils import get_source_path, CustomLoader
 from monstim_gui.splash import SPLASH_INFO
 
 if TYPE_CHECKING:
-    from monstim_analysis import EMGData
+    from monstim_signals import EMGData
 
 
 class WebEnginePage(QWebEnginePage):

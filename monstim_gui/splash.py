@@ -12,7 +12,7 @@ if __name__ == '__main__':
         print(f"Adding {top_level_dir} to sys.path.")
         sys.path.insert(0, top_level_dir)
 
-from monstim_analysis.core.utils import get_source_path
+from monstim_signals.core.utils import get_source_path
 from monstim_gui import __version__
 
 SPLASH_INFO = {

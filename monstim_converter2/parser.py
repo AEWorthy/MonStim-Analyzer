@@ -1,11 +1,7 @@
-import re
-import os
-import sys
 from pathlib import Path
-import numpy as np
 import pandas as pd
 from typing import Any
-from monstim_analysis.core.data_models import StimCluster
+from monstim_signals.core.data_models import StimCluster
 
 def detect_format(path: Path) -> str:
     """

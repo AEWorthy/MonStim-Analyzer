@@ -18,10 +18,10 @@ if __name__ == '__main__':
     if top_level_dir not in sys.path:
         print(f"Adding {top_level_dir} to sys.path.")
         sys.path.insert(0, top_level_dir)
-from monstim_analysis import EMGExperiment
+from monstim_signals import EMGExperiment
 from monstim_converter import GUIExptImportingThread
 from monstim_gui.splash import SPLASH_INFO
-from monstim_analysis.core.utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
+from monstim_signals.core.utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
 from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, SelectChannelsDialog,
                                  LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)

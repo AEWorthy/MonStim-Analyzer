@@ -7,10 +7,10 @@ import logging
 from typing import TYPE_CHECKING, List
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-import monstim_analysis.Transform_EMG as Transform_EMG
+import monstim_signals.Transform_EMG as Transform_EMG
 
 if TYPE_CHECKING:
-    from monstim_analysis.Analyze_EMG import EMGData
+    from monstim_signals.Analyze_EMG import EMGData
 
 # Desired changes:
 # - make flag numbers, positions, colors, and names customizable as a preference.
@@ -131,7 +131,7 @@ class EMGSessionPlotter(EMGPlotter):
         
         super().__init__(session)
 
-        from monstim_analysis.Analyze_EMG import EMGSession
+        from monstim_signals.Analyze_EMG import EMGSession
         if isinstance(session, EMGSession):
             self.emg_object = session # Type: EMGSession
         else:
@@ -853,7 +853,7 @@ class EMGDatasetPlotter(EMGPlotter):
         
         super().__init__(dataset)
 
-        from monstim_analysis.Analyze_EMG import EMGDataset
+        from monstim_signals.Analyze_EMG import EMGDataset
         if isinstance(dataset, EMGDataset):
             self.emg_object = dataset # Type: EMGDataset
         else:
@@ -1235,7 +1235,7 @@ class EMGExperimentPlotter(EMGPlotter):
 
         super().__init__(experiment)
 
-        from monstim_analysis.Analyze_EMG import EMGExperiment
+        from monstim_signals.Analyze_EMG import EMGExperiment
         if isinstance(experiment, EMGExperiment):
             self.emg_object = experiment # Type: EMGExperiment
         else:

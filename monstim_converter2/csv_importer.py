@@ -1,12 +1,7 @@
 import h5py
 from pathlib import Path
-import re
 import os
-import yaml
 import json
-import numpy as np
-import pandas as pd
-from pathlib import Path
 
 from parser import parse
 
@@ -58,7 +53,7 @@ def detect_format(path: Path) -> str:
     raise ValueError(f"Could not detect MonStim version for {path}. "
                      "Please ensure it is a valid MonStim CSV file.")
 
-def csv_to_store(csv_path, h5_path):
+def csv_to_store(csv_path, h5_path : Path):
     '''Convert a CSV file to an HDF5 file with metadata and data.
     This verion is compatible for MonStim V3H and later.'''
 
@@ -70,6 +65,12 @@ def csv_to_store(csv_path, h5_path):
                           compression='gzip')
         for k,v in meta.items():
             h5.attrs[k]=v
+
+    # Write annotations
+    annot_path = h5_path.with_suffix('.annot.json')
+    if not annot_path.exists():
+        with annot_path.open('w') as f:
+            json.dump(meta, f, indent=4)
 
 if __name__ == '__main__':
     current_path = __file__

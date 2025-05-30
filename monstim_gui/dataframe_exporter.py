@@ -3,7 +3,7 @@ import pandas as pd
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QTableView, QPushButton, QHBoxLayout, QFileDialog, QScrollArea
 from PyQt6.QtCore import Qt, QAbstractTableModel
 
-from monstim_analysis.core.utils import get_base_path
+from monstim_signals.core.utils import get_base_path
 
 class PandasModel(QAbstractTableModel):
     def __init__(self, data):

@@ -4,7 +4,7 @@
 from .core.version import __version__ as __version__
 
 # Metadata
-__title__ = 'monstim_analysis'
+__title__ = 'monstim_signals'
 __description__ = 'Main module for MonStim analysis tools'
 __author__ = 'Andrew Worthy'
 __email__ = 'aeworth@emory.edu'
