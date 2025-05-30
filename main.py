@@ -15,6 +15,7 @@ QCoreApplication.setApplicationName("MonStimAnalyzer")
 LOG_FILE = 'app.log'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
 IS_FROZEN = getattr(sys, 'frozen', False)
+CONSOLE_DEBUG_MODE = False # Only relevant if not frozen
 
 
 def make_default_log_dir() -> str:
@@ -52,7 +53,10 @@ def setup_logging(debug: bool, log_dir: str | None = None) -> None:
     # Create a console handler if in debug mode.
     if debug:
         console_h = logging.StreamHandler()
-        console_h.setLevel(logging.DEBUG)
+        if CONSOLE_DEBUG_MODE:
+            console_h.setLevel(logging.DEBUG)
+        else:
+            console_h.setLevel(logging.INFO)
         console_h.setFormatter(logging.Formatter(LOG_FORMAT))
         root.addHandler(console_h)
 
