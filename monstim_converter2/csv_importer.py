@@ -4,6 +4,7 @@ import os
 import json
 
 from parser import parse
+from monstim_signals.core.version import __version__ as VERSION
 
 
 
@@ -62,20 +63,32 @@ def csv_to_store(csv_path, h5_path : Path):
         h5.create_dataset('raw', data=arr,
                           chunks=(min(30000,arr.shape[0]), arr.shape[1]),
                           compression='gzip')
-        for k,v in meta.items():
-            h5.attrs[k]=v
+        h5.attrs['scan_rate'] = meta.get('scan_rate')
+        h5.attrs['num_channels'] = meta.get('num_channels')
+        h5.attrs['channel_types'] = meta.get('channel_types')
+
 
     # Write annotations
+    meta_path = h5_path.with_suffix('.meta.json')
+    if not meta_path.exists():
+        with meta_path.open('w') as f:
+            json.dump(meta, f, indent=4)
+
     annot_path = h5_path.with_suffix('.annot.json')
     if not annot_path.exists():
-        with annot_path.open('w') as f:
-            json.dump(meta, f, indent=4)
+        default = {
+          "version":VERSION,
+          "excluded":False,
+          "channels":[{"invert":False} for _ in range(meta['num_channels'])],
+          "cache":{}
+        }
+        json.dump(default, annot_path.open('w'), indent=2)
 
 if __name__ == '__main__':
     current_path = __file__
     base_path = Path.resolve(Path(current_path).parent.parent)
     data_path = os.path.join(base_path, 'EXAMPLE DATA')
-    store_root = Path(os.path.join(current_path, 'data_store'))
+    store_root = Path(os.path.join(base_path, 'data_store'))
 
     all_csv = discover_csv(Path(data_path))
 
@@ -94,17 +107,17 @@ if __name__ == '__main__':
                .setdefault(sess, [])\
                .append(csv_path)
     
-    # for expt_name, ds_dict in experiments.items():
-    #     for ds_name, ses_dict in ds_dict.items():
-    #         for sess_name, csv_list in ses_dict.items():
-    #             print(f"Experiment: '{expt_name}', Dataset: '{ds_name}', Session: '{sess_name}', Recordings: {len(csv_list)}")
+    for expt_name, ds_dict in experiments.items():
+        for ds_name, ses_dict in ds_dict.items():
+            for sess_name, csv_list in ses_dict.items():
+                print(f"Experiment: '{expt_name}', Dataset: '{ds_name}', Session: '{sess_name}', Recordings: {len(csv_list)}")
 
     experiments: dict[str, dict[str, dict[str, list[Path]]]] = experiments
     for expt, ds_dict in experiments.items():
         for ds, ses_dict in ds_dict.items():
             for sess, csv_list in ses_dict.items():
                 for csv_path in csv_list:
-                    out_dir = store_root / expt / ds / sess
+                    out_dir = store_root / expt / ds / sess / csv_path.stem
                     out_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -114,7 +127,9 @@ if __name__ == '__main__':
                     # 1) CSV → HDF5
                     csv_to_store(csv_path, h5_fp)
                     if not annot_fp.exists():
-                        raise RuntimeError(f"Annotation file {annot_fp} does not exist. There was an error in the conversion process.")
+                        with annot_fp.open('w') as f:
+                            meta, _ = parse(csv_path)
+                            json.dump(meta, f, indent=4)
 
     
     # csv_to_store(os.path.join(os.path.dirname(current_path), 'rec.csv'),

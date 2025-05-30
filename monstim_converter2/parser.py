@@ -2,11 +2,12 @@ from pathlib import Path
 import pandas as pd
 import sys
 from typing import Any
+from dataclasses import asdict
 # Ensure the project root is in sys.path for sibling imports
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
-from monstim_signals.core.data_models import StimCluster
+from monstim_signals.core.data_models import StimCluster  # noqa: E402
 
 def detect_format(path: Path) -> str:
     """
@@ -44,9 +45,9 @@ CANONICAL_META = {
 }
 
 DEFAULT_META = {
-    'amplitude_gain': 1.0,     # fallback if absent
-    'force_gain':     100.0,   # example default
-    # … any other fields you want guaranteed …
+    # 'amplitude_gain': 1.0,     # fallback if absent
+    # 'force_gain':     100.0,   # example default
+    # # … any other fields you want guaranteed …
 }
 
 REVERSE_META_MAP = {
@@ -63,13 +64,6 @@ def normalize_meta(raw_meta: dict[str,str]) -> dict[str,Any]:
     """
     meta = {}
     for k, v in raw_meta.items():
-        key = k.strip()
-        canon = REVERSE_META_MAP.get(key.lower())
-        if not canon:
-            # if it’s completely unknown, carry it under its original name
-            meta[key.lower().replace(' ', '_')] = v
-            continue
-
         # convert strings to numbers when possible
         val: Any = v
         if v.isdigit():
@@ -79,6 +73,13 @@ def normalize_meta(raw_meta: dict[str,str]) -> dict[str,Any]:
                 val = float(v)
             except ValueError:
                 pass
+
+        key = k.strip()
+        canon = REVERSE_META_MAP.get(key.lower())
+        if not canon:
+            # if it’s completely unknown, carry it under its original name
+            meta[key.lower().replace(' ', '_')] = val
+            continue
 
         meta[canon] = val
 
@@ -125,12 +126,12 @@ def parse_v3d(path: Path):
         stim_max_v    = None,  # not provided in v3d format
         
         pulse_shape   = None,  # not provided in v3d format
-        num_pulses    = int(raw_meta['# of Pulses in stim train']),
+        num_pulses    = int(float(raw_meta['# of Pulses in stim train'])),
         pulse_period  = float(raw_meta['Stim Train pulse period (ms)']),
         peak_duration = float(raw_meta['Stimulus duration (ms)']),
         ramp_duration = None  # not provided in v3d format
     ))
-    meta['stim_clusters'] = clusters
+    meta['stim_clusters'] = [asdict(c) for c in clusters]
     
     # Set additional metadata
     meta['num_samples'] = int(data.shape[0])
@@ -172,7 +173,7 @@ def parse_v3h(path: Path):
             stim_delay    = float(raw_meta[f'Stim specs cluster array {i}.Start Delay (ms)']),
             stim_duration = None, # not provided in v3h format
             stim_type     = raw_meta[f'Stim type cluster array {i}.Stimulus Output'],
-            stim_v        = float(raw_meta[f'Stim. {i}']),
+            stim_v        = float(raw_meta[f'Stim. {i+1}']),
             stim_min_v    = float(raw_meta[f'Stim specs cluster array {i}.Initial Stimulus ampl.']),
             stim_max_v    = float(raw_meta[f'Stim specs cluster array {i}.Maximum Stimulus']),
             
@@ -182,7 +183,7 @@ def parse_v3h(path: Path):
             peak_duration = float(raw_meta[f'Stim specs cluster array {i}.Peak Level time (ms)']),
             ramp_duration       = float(raw_meta[f'Stim specs cluster array {i}.Ramp/Rel. time (ms)'])
         ))
-    meta['stim_clusters'] = clusters
+    meta['stim_clusters'] = [asdict(c) for c in clusters]
 
     
     # Set additional metadata

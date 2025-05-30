@@ -7,7 +7,9 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 import numpy as np
+from monstim_signals.core.version import __version__
 
+DATA_VERSION = __version__
 DIST_PATH = 'dist'
 OUTPUT_PATH = 'data'
 SAVED_DATASETS_PATH = 'datasets'
