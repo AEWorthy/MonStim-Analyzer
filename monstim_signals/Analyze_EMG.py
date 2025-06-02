@@ -18,13 +18,17 @@ from abc import ABC, abstractmethod
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 import numpy as np
 
+from pathlib import Path
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from monstim_signals.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 from monstim_signals.Transform_EMG import calculate_emg_amplitude, butter_bandpass_filter, get_avg_mmax, NoCalculableMmaxError
 from monstim_signals.core.utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION, DATA_VERSION
 from monstim_signals.core.data_models import LatencyWindow
 
 
-    
 # Parent EMG data class. Mainly for loading config settings.
 class EMGData(ABC):
     def __init__(self):
@@ -76,19 +80,6 @@ class EMGData(ABC):
         except Exception as e:
             logging.error(f"Error loading from {filepath}. Error: {str(e)}")
             raise e
-
-
-
-    # @staticmethod
-    # def _load_compressed(filepath):
-    #     """Base method for loading compressed pickle files"""
-    #     try:
-    #         with open(filepath, 'rb') as f:
-    #             return pickle.load(f)
-    #     except Exception as e:
-    #         logging.error(f"Error loading from {filepath}. Error: {str(e)}")
-    #         raise e
-
 
     @property
     def is_completed(self):
@@ -149,10 +140,6 @@ class EMGData(ABC):
         """
         new_window = LatencyWindow(name, color, start_times, durations, linestyle)
         self.latency_windows.append(new_window)
-  
-    @abstractmethod
-    def _upgrade_from_version(self, current_version):
-        pass
 
     @abstractmethod
     def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
@@ -169,6 +156,7 @@ class EMGData(ABC):
     @staticmethod
     def unpackPickleOutput (output_path):
         """
+        LEGACY USE ONLY.
         Unpacks a list of EMG session Pickle files and outputs a dictionary with k/v pairs of session names and the session Pickle location.
 
         Args:
@@ -276,7 +264,7 @@ class EMGSession(EMGData):
         process_emg_data(apply_filter=False, rectify=False): Processes EMG data by applying a bandpass filter and/or rectifying the data.
         session_parameters(): Prints EMG recording session parameters from a Pickle file.
     """
-    def __init__(self, pickled_raw_data=None, session_data=None):
+    def __init__(self, pickled_raw_data : Path = None, session_data : dict =None):
         super().__init__()
         if pickled_raw_data:
             self.pickled_raw_data = pickled_raw_data
@@ -286,7 +274,7 @@ class EMGSession(EMGData):
         elif session_data:
             self._initialize_from_data(session_data)
         else:
-            raise ValueError("Either pickled_raw_data or session_data must be provided.")
+            raise ValueError("Either a pickled_raw_data, or session_data must be provided to initialize the EMGSession.")
 
     def _initialize_from_data(self, session_data):
         # Access session-wide information
@@ -338,96 +326,6 @@ class EMGSession(EMGData):
         self.update_reflex_parameters()
         logging.info(f"Session {self.session_id} initialized with {self.num_recordings} recordings.")
     
-    def _upgrade_from_version(self, current_version):
-        current_version_parsed = parse_version(current_version)
-        try:
-            if current_version_parsed < parse_version(DATA_VERSION): # Upgrade from any version older than the current version.
-                logging.info(f"Upgrading session {self.formatted_name} from version {current_version} to {DATA_VERSION}.")
-                
-                # Throw an error if version is too old to handle safely.
-                if not hasattr(self, 'latency_windows'):
-                    # if the data has a formatted name, try to use that for the error message.
-                    if hasattr(self, 'formatted_name'):
-                        raise ValueError(f"Dataset '{self.formatted_name}' is too old to upgrade. Delete the bin file and re-import the data.")
-                    else:
-                        raise ValueError("Dataset version is too old to upgrade. Delete the bin file and re-import the data.")
-                
-                # Store the current state of the object
-                current_state = self.__dict__.copy()
-                
-                # Reinitialize the object
-                try:
-                    session_data = {
-                        'session_info': {
-                            'session_id': current_state['session_id'],
-                            'num_channels': current_state['num_channels'],
-                            'scan_rate': current_state['scan_rate'],
-                            'num_samples': current_state['num_samples'],
-                            'pre_stim_acquired': current_state['pre_stim_acquired'],
-                            'post_stim_acquired': current_state['post_stim_acquired'],
-                            'stim_delay': current_state['stim_delay'],
-                            'stim_duration': current_state['stim_duration'],
-                            'stim_interval': current_state['stim_interval'],
-                            'emg_amp_gains': current_state['emg_amp_gains']
-                        },
-                        'recordings': current_state['recordings_raw']
-                    }
-                except KeyError as e:
-                    # Account for older versions that had the 'num_channels' property and the '_num_channels' attribute.
-                    if e.args[0] == 'num_channels':
-                        session_data = {
-                        'session_info': {
-                            'session_id': current_state['session_id'],
-                            'num_channels': current_state['_num_channels'],
-                            'scan_rate': current_state['scan_rate'],
-                            'num_samples': current_state['num_samples'],
-                            'pre_stim_acquired': current_state['pre_stim_acquired'],
-                            'post_stim_acquired': current_state['post_stim_acquired'],
-                            'stim_delay': current_state['stim_delay'],
-                            'stim_duration': current_state['stim_duration'],
-                            'stim_interval': current_state['stim_interval'],
-                            'emg_amp_gains': current_state['emg_amp_gains']
-                        },
-                        'recordings': current_state['recordings_raw']
-                    }
-
-                self.__init__(session_data=session_data)
-                default_state = self.__dict__.copy()
-
-                # Update the new state with the old values
-                ignore_keys = {'plotter', 'version', 'm_end', 'h_end', '_original_recordings', '_recordings_processed', '_m_max'}
-                for key, value in current_state.items():
-                    if (key not in ignore_keys) and (key not in default_state):
-                            self.__dict__[key] = value
-                            logging.info(f"Retained old key '{key}' during upgrade that was not in default state.")
-                    else:
-                        try:
-                            if (key not in ignore_keys) and (key not in default_state or not deep_equal(default_state[key], value)):
-                                if key != 'latency_windows':
-                                    self.__dict__[key] = value
-                                    logging.info(f"Retained old key '{key}' during upgrade.")
-                                else:
-                                    # Update the default latency windows with the old values, and add any new windows.
-                                    for window in value:
-                                        if window.name not in [win.name for win in self.latency_windows]:
-                                            window.version = DATA_VERSION
-                                            self.latency_windows.append(window)
-                                        else:
-                                            for win in self.latency_windows:
-                                                if win.name == window.name:
-                                                    win.start_times = window.start_times
-                                                    win.durations = window.durations
-                                    logging.info("Retained latency window data during upgrade.")
-                        except Exception as e:
-                            logging.error(f"Error comparing key '{key}' to default value. Error: {str(e)}")
-                            raise e
-                
-                self.reset_cached_properties(recalculate=False)
-        except Exception as e:
-            logging.error(f"Error upgrading session from version {current_version}. If this problem persists, try to delete and re-import this experiment: {str(e)}")
-            raise e
-        # Add any other version upgrade checks below.
-
     def _process_emg_data(self, recordings, apply_filter=False, rectify=False):
         """
         Process EMG data by applying a bandpass filter and/or rectifying the data.
@@ -2098,54 +1996,95 @@ class EMGDataConsistencyError(Exception):
         super().__init__(self.message)
 
 if __name__ == '__main__':
-    from monstim_converter import pickle_data  # noqa: F401
-    from Analyze_EMG import EMGData,EMGDataset
+    import h5py
+    import json
+    from pathlib import Path
 
-    #Process CSVs into Pickle files: 'files_to_analyze' --> 'output'
-    # pickle_data(DATA_PATH, OUTPUT_PATH) # If pickles are already created, comment this line out.
 
-    # Create dictionaries of Pickle datasets and single sessions that are in the 'output' directory.
-    dataset_dict, datasets = EMGData.unpackPickleOutput(get_output_bin_path())
-    for idx, dataset in enumerate(datasets):
-        print(f'dataset index {idx}: {dataset}')
-
-    # Define dataset of interest for downstream analysis.
-    sessions_to_exclude = [] # Add any sessions to exclude from the dataset here.
-    dataset_idx = int(input('Dataset of Interest (index):')) # pick the dataset index of interest from the generate list above.
-    dataset_oi = EMGDataset.dataset_from_dataset_dict(dataset_dict, dataset_idx, sessions_to_exclude)
+    recording_path = r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG and Force data\250515 WT7 postdec vibes -3\WT41\WT41-0000.etx'
     
-    # Display dataset parameters.
-    dataset_oi.dataset_parameters()
+    
+    meta_fp = Path(recording_path).with_suffix('.meta.json')
+    with meta_fp.open('r') as f:
+        meta = json.load(f)
 
-    # Define session of interest for downstream analysis.
-    session_idx = int(input('Session of Interest (index):')) # pick the session index of interest from the generate list above
-    session_oi = dataset_oi.get_session(session_idx)
+    annot_fp = Path(recording_path).with_suffix('.annot.json')
+    with annot_fp.open('r') as f:
+        annot = json.load(f)
 
-    # Display session parameters.
-    session_oi.session_parameters()
+    h5_fp = Path(recording_path).with_suffix('.raw.h5')
+    with h5py.File(h5_fp, 'r') as h5:
+        arr = h5['raw'][()]
+    print(arr.shape)
 
-    # Visualize single EMG session raw and filtered
-    session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='filtered')
-    # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='raw')
-    session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='rectified_filtered')
-    # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='rectified_raw')
+    recording_dict = {
+        'channel_data': arr.astype(np.float32),
+        'stimulus_v': meta['stim_clusters'][0]['stim_v'], # Need way to identify/select primary stimulus cluster (stim_channel_to_control; ch 1-4).
+    }
+    print(f'Recording dictionary created with {len(recording_dict["channel_data"])} samples and {recording_dict["channel_data"].shape[1]} channels.')
 
-    # Use the update_window_settings method to temporarily change the reflex window settings and then replot. Otherwise comment out.
-    # session_oi.update_window_settings()
+    session_info = {
+        'session_id': meta.get('session_id', 'unknown_session'),
+        'num_channels': meta.get('num_channels', None),
+        'scan_rate': meta.get('scan_rate', None),
+        'num_samples': recording_dict['channel_data'].shape[0],
+        'pre_stim_acquired': meta.get('pre_stim_acquired', None),
+        'post_stim_acquired': meta.get('post_stim_acquired', None),
+        'stim_delay': meta.get('stim_delay', None),
+        'stim_duration': meta.get('stim_duration', None),
+        'stim_interval': meta.get('stim_interval', None),
+        'emg_amp_gains': meta.get('emg_amp_gains', None),
+        }
+    print(f'Session info: {session_info}')
+
+
+
+
+    # #Process CSVs into Pickle files: 'files_to_analyze' --> 'output'
+    # # pickle_data(DATA_PATH, OUTPUT_PATH) # If pickles are already created, comment this line out.
+
+    # # Create dictionaries of Pickle datasets and single sessions that are in the 'output' directory.
+    # dataset_dict, datasets = EMGData.unpackPickleOutput(get_output_bin_path())
+    # for idx, dataset in enumerate(datasets):
+    #     print(f'dataset index {idx}: {dataset}')
+
+    # # Define dataset of interest for downstream analysis.
+    # sessions_to_exclude = [] # Add any sessions to exclude from the dataset here.
+    # dataset_idx = int(input('Dataset of Interest (index):')) # pick the dataset index of interest from the generate list above.
+    # dataset_oi = EMGDataset.dataset_from_dataset_dict(dataset_dict, dataset_idx, sessions_to_exclude)
+    
+    # # Display dataset parameters.
+    # dataset_oi.dataset_parameters()
+
+    # # Define session of interest for downstream analysis.
+    # session_idx = int(input('Session of Interest (index):')) # pick the session index of interest from the generate list above
+    # session_oi = dataset_oi.get_session(session_idx)
+
+    # # Display session parameters.
+    # session_oi.session_parameters()
+
+    # # Visualize single EMG session raw and filtered
     # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='filtered')
+    # # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='raw')
+    # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='rectified_filtered')
+    # # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='rectified_raw')
 
-    # Inspect session reflex curves and suspected H-reflex trials with these methods.
-    session_oi.plot(plot_type='reflexCurves')
-    session_oi.plot(plot_type='reflexCurves', relative_to_mmax=True)
+    # # Use the update_window_settings method to temporarily change the reflex window settings and then replot. Otherwise comment out.
+    # # session_oi.update_window_settings()
+    # # session_oi.plot(plot_type = 'emg', m_flags=True, h_flags=True, data_type='filtered')
 
-    # M-max analysis and visualization.
-    session_oi.m_max_report()
-    session_oi.plot(plot_type = 'mmax')
+    # # Inspect session reflex curves and suspected H-reflex trials with these methods.
+    # session_oi.plot(plot_type='reflexCurves')
+    # session_oi.plot(plot_type='reflexCurves', relative_to_mmax=True)
 
-    # Visualize the entire dataset's avereaged reflex curves with these methods of the dataset object.
-    dataset_oi.plot(plot_type = 'reflexCurves', relative_to_mmax=True, mmax_report=True)
+    # # M-max analysis and visualization.
+    # session_oi.m_max_report()
+    # session_oi.plot(plot_type = 'mmax')
 
-    # Visualize the entire dataset's avereaged reflex values at H-max with this method of the dataset object.
-    dataset_oi.plot(plot_type = 'maxH', relative_to_mmax=True)
+    # # Visualize the entire dataset's avereaged reflex curves with these methods of the dataset object.
+    # dataset_oi.plot(plot_type = 'reflexCurves', relative_to_mmax=True, mmax_report=True)
 
-    print('Done!')
+    # # Visualize the entire dataset's avereaged reflex values at H-max with this method of the dataset object.
+    # dataset_oi.plot(plot_type = 'maxH', relative_to_mmax=True)
+
+    # print('Done!')

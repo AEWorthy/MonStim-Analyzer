@@ -4,7 +4,6 @@ from matplotlib.lines import Line2D
 from monstim_signals.core.utils import DATA_VERSION
 
 
-
 # To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
 @dataclass
 class LatencyWindow:

@@ -3,13 +3,21 @@ from pathlib import Path
 import os
 import json
 
-from parser import parse
+import sys
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from monstim_converter2.csv_parser import parse
 from monstim_signals.core.version import __version__ as VERSION
 
 
-
-def discover_csv(base: Path, pattern='*.csv', max_depth = 2):
-    all_csv = list(base.rglob("*.csv"))
+def discover_files_by_ext(base: Path, pattern='*.csv') -> list[Path]:
+    """
+    Discover all files in the given base directory and its subdirectories that match the given pattern.
+    The pattern is typically '*.csv' to find all CSV files: returns a list of Paths to CSV files that are non-empty.
+    """
+    all_csv = list(base.rglob(pattern))
     return [csv for csv in all_csv if csv.is_file() and csv.stat().st_size > 0]
 
 def parse_session_rec(csv_path: Path):
@@ -20,21 +28,21 @@ def parse_session_rec(csv_path: Path):
     """
     stem = csv_path.stem  # e.g. "AB12-0034"
     if "-" in stem:
-        sess, rec = stem.split("-", 1)
-        if len(sess) == 4 and rec.isdigit() and len(rec) == 4:
-            return sess, rec
+        session_id, recording_id = stem.split("-", 1)
+        if len(session_id) == 4 and recording_id.isdigit() and len(recording_id) == 4:
+            return session_id, recording_id
     return None, None
 
 def infer_ds_ex(csv_path: Path, base_dir: Path):
     """
-    dataset = immediate parent folder (if not base_dir)
-    experiment = grandparent folder (if not base_dir)
+    dataset_name = immediate parent folder (if not base_dir)
+    experiment_name = grandparent folder (if not base_dir)
     """
     parent = csv_path.parent
-    dataset    = parent.name    if parent != base_dir else None
+    dataset_name    = parent.name    if parent != base_dir else None
     grandparent = parent.parent
-    experiment = grandparent.name if grandparent != base_dir else None
-    return dataset, experiment
+    experiment_name = grandparent.name if grandparent != base_dir else None
+    return dataset_name, experiment_name
 
 def detect_format(path: Path) -> str:
     """
@@ -53,12 +61,16 @@ def detect_format(path: Path) -> str:
     raise ValueError(f"Could not detect MonStim version for {path}. "
                      "Please ensure it is a valid MonStim CSV file.")
 
-def csv_to_store(csv_path, h5_path : Path):
+def csv_to_store(csv_path : Path, output_fp : Path):
     '''Convert a CSV file to an HDF5 file with metadata and data.
-    This verion is compatible for MonStim V3H and later.'''
+    This verion is compatible for MonStim V3D and later.'''
 
     meta, arr = parse(csv_path)
+    meta['session_id'] = output_fp.stem.split('-')[0]  # Use the first part of the filename as session ID
+    meta['recording_id'] = output_fp.stem.split('-')[1] if '-' in output_fp.stem else None
 
+
+    h5_path = output_fp.with_suffix('.raw.h5')
     with h5py.File(h5_path,'w') as h5:
         h5.create_dataset('raw', data=arr,
                           chunks=(min(30000,arr.shape[0]), arr.shape[1]),
@@ -67,14 +79,13 @@ def csv_to_store(csv_path, h5_path : Path):
         h5.attrs['num_channels'] = meta.get('num_channels')
         h5.attrs['channel_types'] = meta.get('channel_types')
 
-
     # Write annotations
-    meta_path = h5_path.with_suffix('.meta.json')
+    meta_path = output_fp.with_suffix('.meta.json')
     if not meta_path.exists():
         with meta_path.open('w') as f:
             json.dump(meta, f, indent=4)
 
-    annot_path = h5_path.with_suffix('.annot.json')
+    annot_path = output_fp.with_suffix('.annot.json')
     if not annot_path.exists():
         default = {
           "version":VERSION,
@@ -90,59 +101,48 @@ if __name__ == '__main__':
     data_path = os.path.join(base_path, 'EXAMPLE DATA')
     store_root = Path(os.path.join(base_path, 'data_store'))
 
-    all_csv = discover_csv(Path(data_path))
+    all_csv = discover_files_by_ext(Path(data_path), pattern='*.csv')
 
     experiments = {}
 
     for csv_path in all_csv:
+        # Parse name/id information from the CSV path/filename
         sess, rec = parse_session_rec(csv_path)
         ds, ex = infer_ds_ex(csv_path, data_path)
-
-        # Failsafe naming
-        ds = ds or sess
-        ex = ex or ds
-
+        ds = ds or sess # If no dataset name, use session name
+        ex = ex or ds # If no experiment name, use dataset name
+        
+        # Store the CSV path in a nested dictionary structure
         experiments.setdefault(ex, {})\
                .setdefault(ds, {})\
                .setdefault(sess, [])\
                .append(csv_path)
     
+    # Print the discovered structure for debugging
+    print(f"Found {len(all_csv)} CSV files in {data_path}:")
     for expt_name, ds_dict in experiments.items():
         for ds_name, ses_dict in ds_dict.items():
             for sess_name, csv_list in ses_dict.items():
-                print(f"Experiment: '{expt_name}', Dataset: '{ds_name}', Session: '{sess_name}', Recordings: {len(csv_list)}")
+                print(f"  > Experiment: '{expt_name}', Dataset: '{ds_name}', Session: '{sess_name}', Recordings: {len(csv_list)}")
 
+    # Create the output directory structure
     experiments: dict[str, dict[str, dict[str, list[Path]]]] = experiments
     for expt, ds_dict in experiments.items():
         for ds, ses_dict in ds_dict.items():
             for sess, csv_list in ses_dict.items():
                 for csv_path in csv_list:
-                    out_dir = store_root / expt / ds / sess / csv_path.stem
+                    out_dir = store_root / expt / ds / sess# / csv_path.stem
                     out_dir.mkdir(parents=True, exist_ok=True)
 
+                    filename = csv_path.stem
+                    output_fp    = out_dir / f"{filename}.ext"
+                    annot_fp = output_fp.with_suffix('.annot.json')
 
-                    h5_fp    = out_dir / "rec.h5"
-                    annot_fp = out_dir / "rec.annot.json"
+                    # create the HDF5 file and meta JSON
+                    csv_to_store(csv_path, output_fp)
 
-                    # 1) CSV → HDF5
-                    csv_to_store(csv_path, h5_fp)
+                    # Create an annotation file if it doesn't exist
                     if not annot_fp.exists():
                         with annot_fp.open('w') as f:
                             meta, _ = parse(csv_path)
                             json.dump(meta, f, indent=4)
-
-    
-    # csv_to_store(os.path.join(os.path.dirname(current_path), 'rec.csv'),
-    #              os.path.join(os.path.dirname(current_path), 'rec.h5'))
-
-    # with h5py.File(os.path.join(os.path.dirname(current_path), 'rec.h5')) as h5:
-    #     sr = float(h5.attrs['A/D Monitor Rate (Hz)'])
-    #     thirty_ms = int(sr*0.03)
-    #     channel_idx = 1
-    #     snippet = h5['raw'][:thirty_ms,channel_idx]   # 30-ms of ch0
-    #     # list all attributes
-    #     attrs = {k: h5.attrs[k] for k in h5.attrs}    
-    # print(snippet)
-    # print(f"Snippet length: {len(snippet)}")
-    # print("Attributes:", attrs)
-
