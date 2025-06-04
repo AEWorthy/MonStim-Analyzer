@@ -1,12 +1,13 @@
 from pathlib import Path
 import pandas as pd
-import sys
+# import sys
 from typing import Any
 from dataclasses import asdict
-# Ensure the project root is in sys.path for sibling imports
-project_root = Path(__file__).resolve().parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+
+# # Ensure the project root is in sys.path for sibling imports
+# project_root = Path(__file__).resolve().parent.parent
+# if str(project_root) not in sys.path:
+#     sys.path.insert(0, str(project_root))
 from monstim_signals.core.data_models import StimCluster
 
 def detect_format(path: Path) -> str:
@@ -43,7 +44,7 @@ CANONICAL_META = {
     'scan_rate': ['Scan Rate (Hz)', 'A/D Monitor Rate (Hz)'],
     'pre_stim_acquired': ['Pre-Stim Acq. time (ms)'],
     'post_stim_acquired': ['Post-Stim Acq. time (ms)'],
-    'stim_channel_to_control': ['Stim Channel to Control (1-4)'], # channels 1-4
+    'primary_stim': ['Stim Channel to Control (1-4)'], # channels 1-4
     'stim_delay': ['Start Delay (ms)'],
 }
 
@@ -135,6 +136,7 @@ def parse_v3d(path: Path):
     # Set additional metadata
     meta['num_samples'] = int(data.shape[0])
     meta['emg_amp_gains'] = [int(float(raw_meta[f'EMG amp gain ch {i}'])) for i in range(1, int(float(meta['num_emg_channels'])) + 1)]
+    meta['primary_stim'] = 1 # default to channel 1 for v3d
 
     return meta, data
 
@@ -182,7 +184,6 @@ def parse_v3h(path: Path):
             ramp_duration = float(raw_meta[f'Stim specs cluster array {i}.Ramp/Rel. time (ms)'])
         ))
     meta['stim_clusters'] = [asdict(c) for c in clusters]
-
     
     # Set additional metadata
     meta['num_samples'] = int(data.shape[0])

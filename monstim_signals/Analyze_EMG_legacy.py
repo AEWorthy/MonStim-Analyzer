@@ -26,7 +26,7 @@ from monstim_signals.core.data_models import LatencyWindow
 
     
 # Parent EMG data class. Mainly for loading config settings.
-class EMGData(ABC):
+class SignalData(ABC):
     def __init__(self):
         self.version = DATA_VERSION
         self._is_completed : bool = False
@@ -245,7 +245,7 @@ class EMGData(ABC):
         return valid_formats[0]
 
 # Three main classes for EMG analysis. Children of the EMGData class.
-class EMGSession(EMGData):
+class EMGSession(SignalData):
     """
     Class for analyzing and plotting data from a single recording session of variable channel numbers for within-session analyses and plotting.
     One session contains multiple recordings that will make up, for example, a single M-curve.
@@ -848,7 +848,7 @@ class EMGSession(EMGData):
         raw_data = getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
         return raw_data
 
-class EMGDataset(EMGData):
+class EMGDataset(SignalData):
     """
     Class for a dataset of EMGSession instances for multi-session analyses and plotting.
 
@@ -1420,7 +1420,7 @@ class EMGDataset(EMGData):
         """
         logging.info(f"Loading dataset from {save_path}.")
         with open(save_path, 'rb'):
-            dataset = EMGData._load_compressed(save_path)
+            dataset = SignalData._load_compressed(save_path)
             dataset.apply_preferences(reset_properties=False)
         return dataset
     
@@ -1448,7 +1448,7 @@ class EMGDataset(EMGData):
             animal_id = match.group(2)
             condition = match.group(3)
 
-            parsed_date, format_info = EMGData.parse_date(date_string, preferred_date_format)
+            parsed_date, format_info = SignalData.parse_date(date_string, preferred_date_format)
             
             if isinstance(parsed_date, datetime):
                 formatted_date = parsed_date.strftime('%Y-%m-%d')
@@ -1541,14 +1541,14 @@ class EMGDataset(EMGData):
             if session.stim_start != reference_stim_start:
                 raise EMGDataConsistencyError(f"Inconsistent stimulus start time for {session.session_id} in {self.formatted_name}: {session.stim_start} != {reference_stim_start}.")
 
-class EMGExperiment(EMGData):
+class EMGExperiment(SignalData):
     def __init__(self, expt_name : str, expts_dict: List[str] = None, custom_save_path: str = None, temp: bool = False):
             try:
                 if expts_dict:
                     self.dataset_dict, dataset_dict_keys = expts_dict[expt_name]
                 else:
                     logging.info("Attempting to load experiment by making a new experiment dictionary from the output path.")
-                    expts_dict = EMGData.unpackPickleOutput(output_path=get_output_path())
+                    expts_dict = SignalData.unpackPickleOutput(output_path=get_output_path())
                     self.dataset_dict, dataset_dict_keys = expts_dict[expt_name]
             except KeyError:
                 raise KeyError(f"Error: Experiment '{expt_name}' not found in the dataset dictionary.")
@@ -2014,7 +2014,7 @@ class EMGExperiment(EMGData):
         """
         logging.info(f"Reloading experiment from file: {save_path}.")
         with open(save_path, 'rb'):
-            experiment = EMGData._load_compressed(save_path) # type: EMGExperiment
+            experiment = SignalData._load_compressed(save_path) # type: EMGExperiment
             try:
                 experiment.apply_preferences(reset_properties=False)
             except AttributeError:
@@ -2099,13 +2099,13 @@ class EMGDataConsistencyError(Exception):
 
 if __name__ == '__main__':
     from monstim_converter import pickle_data  # noqa: F401
-    from Analyze_EMG import EMGData,EMGDataset
+    from Analyze_EMG import SignalData,EMGDataset
 
     #Process CSVs into Pickle files: 'files_to_analyze' --> 'output'
     # pickle_data(DATA_PATH, OUTPUT_PATH) # If pickles are already created, comment this line out.
 
     # Create dictionaries of Pickle datasets and single sessions that are in the 'output' directory.
-    dataset_dict, datasets = EMGData.unpackPickleOutput(get_output_bin_path())
+    dataset_dict, datasets = SignalData.unpackPickleOutput(get_output_bin_path())
     for idx, dataset in enumerate(datasets):
         print(f'dataset index {idx}: {dataset}')
 

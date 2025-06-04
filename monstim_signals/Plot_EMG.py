@@ -6,11 +6,12 @@ import copy
 import logging
 from typing import TYPE_CHECKING, List
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.lines import Line2D
 
 import monstim_signals.Transform_EMG as Transform_EMG
 
 if TYPE_CHECKING:
-    from monstim_signals.Analyze_EMG import EMGData
+    from monstim_signals.Analyze_EMG import SignalData
 
 # Desired changes:
 # - make flag numbers, positions, colors, and names customizable as a preference.
@@ -25,7 +26,7 @@ class EMGPlotter:
         emg_object: The EMG data object to be imported.
     """
     def __init__(self, emg_object):
-        self.emg_object : 'EMGData' = emg_object
+        self.emg_object : 'SignalData' = emg_object
         
     def set_plot_defaults(self):
         """
@@ -248,11 +249,21 @@ class EMGSessionPlotter(EMGPlotter):
     def plot_latency_windows(self, ax, all_flags, channel_index):
         if all_flags:
             for window in self.emg_object.latency_windows:
-                window.plot(ax=ax, channel_index=channel_index)
-        # else:
-        #     for window in self.emg_object.latency_windows:
-        #         if window.should_plot:
-        #             window.plot(ax=ax, channel_index=channel_index)
+                start_exists = end_exists = False
+                for line in ax.lines:
+                    if isinstance(line, Line2D):
+                        if line.get_xdata()[0] == window.start_times[channel_index] and line.get_color() == window.color:
+                            start_exists = True
+                        elif line.get_xdata()[0] == window.end_times[channel_index] and line.get_color() == window.color:
+                            end_exists = True
+                        if start_exists and end_exists:
+                            break
+                
+                if not start_exists:
+                    ax.axvline(window.start_times[channel_index], color=window.color, linestyle=window.linestyle)
+                
+                if not end_exists:
+                    ax.axvline(window.end_times[channel_index], color=window.color, linestyle=window.linestyle)
 
     def set_fig_labels_and_legends(self, fig, channel_indices : List[int], sup_title : str, x_title : str, y_title: str, plot_legend : bool, plot_colormap : bool = False, legend_elements : list = None):
         fig.suptitle(sup_title)

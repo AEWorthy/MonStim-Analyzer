@@ -24,7 +24,7 @@ from monstim_signals.core.utils import get_source_path, CustomLoader
 from monstim_gui.splash import SPLASH_INFO
 
 if TYPE_CHECKING:
-    from monstim_signals import EMGData
+    from monstim_signals import SignalData
 
 
 class WebEnginePage(QWebEnginePage):
@@ -55,7 +55,7 @@ class ChangeChannelNamesDialog(QDialog):
         return {old: input.text() for old, input in self.channel_inputs.items()}
 
 class ReflexSettingsDialog(QDialog):
-    def __init__(self, emg_data: 'EMGData', parent=None):
+    def __init__(self, emg_data: 'SignalData', parent=None):
         super().__init__(parent)
         self.emg_data = emg_data
 
@@ -633,7 +633,7 @@ class PlotWindowDialog(QDialog):
         event.accept()
 
 class InvertChannelPolarityDialog(QDialog):
-    def __init__(self, emg_data : 'EMGData', parent=None):
+    def __init__(self, emg_data : 'SignalData', parent=None):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowTitle("Invert Channel Polarity")
@@ -677,7 +677,7 @@ class InvertChannelPolarityDialog(QDialog):
         return [i for i, checkbox in enumerate(self.checkboxes) if checkbox.isChecked()]
 
 class SelectChannelsDialog(QDialog):
-    def __init__(self, emg_data : 'EMGData', parent=None):
+    def __init__(self, emg_data : 'SignalData', parent=None):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowTitle("Select Channels")
