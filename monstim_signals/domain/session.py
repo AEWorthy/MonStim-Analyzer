@@ -149,10 +149,7 @@ class Session:
         This assumes that each recording's primary cluster stim_v is the amplitude for that recording.
         """
         return [rec.meta.primary_stim.stim_v for rec in self.recordings]
-    # ──────────────────────────────────────────────────────────────────
-    # 0) Cached properties and cache reset methods
-    # ──────────────────────────────────────────────────────────────────
-    @cached_property
+    @property
     def recordings(self) -> List[Recording]:
         """
         Return a list of active recordings in the session.
@@ -162,6 +159,9 @@ class Session:
             rec for rec in self._all_recordings 
             if rec.id not in self.excluded_recordings
         ]
+    # ──────────────────────────────────────────────────────────────────
+    # 0) Cached properties and cache reset methods
+    # ──────────────────────────────────────────────────────────────────
     @cached_property
     def recordings_raw(self) -> List[np.ndarray]:
         """
@@ -303,6 +303,10 @@ class Session:
             del self.__dict__["recordings_raw"]
         if "recordings_processed" in self.__dict__:
             del self.__dict__["recordings_processed"]
+        if "recordings_filtered" in self.__dict__:
+            del self.__dict__["recordings_filtered"]
+        if "recordings_rectified_raw" in self.__dict__:
+            del self.__dict__["recordings_rectified_raw"]
     # ──────────────────────────────────────────────────────────────────
     # 1) Properties for GUI & analysis code
     # ──────────────────────────────────────────────────────────────────

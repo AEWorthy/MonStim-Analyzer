@@ -10,7 +10,7 @@ __author__ = 'Andrew Worthy'
 __email__ = 'aeworth@emory.edu'
 
 # Import functions
-from .Analyze_EMG import SignalData, EMGSession, EMGDataset, EMGExperiment
+# from .Analyze_EMG import SignalData, Session, EMGDataset, EMGExperiment
 
 # Define __all__ for module
-__all__ = ['SignalData', 'EMGSession', 'EMGDataset', 'EMGExperiment']
+# __all__ = ['SignalData', 'Session', 'EMGDataset', 'EMGExperiment']

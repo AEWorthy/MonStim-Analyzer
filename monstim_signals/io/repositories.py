@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 from dataclasses import asdict
 
-from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot, SessionAnnot
+from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot, SessionAnnot, DatasetAnnot
 from monstim_signals.domain.recording  import Recording
 from monstim_signals.domain.session    import Session
 from monstim_signals.domain.dataset    import Dataset
@@ -164,6 +164,8 @@ class DatasetRepository:
         `folder` might be Path("/data/ExperimentRoot/Dataset_01").
         """
         self.folder = folder
+        self.dataset_id = folder.name  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
+        self.dataset_js = folder / "dataset.annot.json"
 
     def load(self) -> Dataset:
         # 1) Each subfolder of `folder` is a session
@@ -172,10 +174,18 @@ class DatasetRepository:
         # 2) Load each Session
         sessions = [SessionRepository(sess_folder).load() for sess_folder in session_folders]
 
-        # 3) Build a Dataset domain object
-        dataset_id = self.folder.name  # e.g. "Dataset_01"
+        # 3) Load or create dataset annotation JSON 
+        if self.dataset_js.exists():
+            session_annot_dict = json.loads(self.dataset_js.read_text())
+            dataset_annot = DatasetAnnot.from_dict(session_annot_dict)
+        else: # If no session.annot.json, initialize a brand‐new one
+            logging.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one.")
+            dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+            self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
+
+        # 4) Build a Dataset domain object
         dataset = Dataset(
-            dataset_id=dataset_id,
+            dataset_id=self.dataset_id,
             sessions=sessions,
             repo=self
         )

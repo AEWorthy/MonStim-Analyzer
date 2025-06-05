@@ -4,7 +4,7 @@ Script to test various functionalities of the MonStim Signals library, including
 This script is intended for development and testing purposes, and should not be used in production.
 '''
 
-def test_csv_importer():
+def test_csv_importer(overwrite_annot: bool = False):
     import os
     from monstim_signals.io.csv_importer import discover_by_ext, parse_session_rec, infer_ds_ex, csv_to_store
     from pathlib import Path
@@ -51,7 +51,7 @@ def test_csv_importer():
                     output_fp    = out_dir / f"{filename}.ext"
 
                     # create the HDF5 file and meta JSON
-                    csv_to_store(csv_path, output_fp, overwrite_h5=True, overwrite_meta=True, overwrite_annot=False)
+                    csv_to_store(csv_path, output_fp, overwrite_h5=True, overwrite_meta=True, overwrite_annot=overwrite_annot)
 
 def test_domain_loading():
     from pathlib import Path
@@ -60,7 +60,7 @@ def test_domain_loading():
     session_path = Path(r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG-only data\240829 C328.1 post-dec mcurve_long-\RX35')
     session = SessionRepository(session_path).load()
     print(f"Session ID: {session.id}, Recordings: {session.num_recordings}, Channels: {session.num_channels}, Scan Rate: {session.scan_rate} Hz")
-    print("Stim Amplitudes:", session.stim_amplitudes)
+    print("Stim Amplitudes:", session.stimulus_voltages)
     print("Recordings:")
     for rec in session.recordings:
         print(f"  {rec.id}: {rec.num_channels} channels, {rec.scan_rate} Hz")
@@ -83,9 +83,10 @@ def test_session_object():
     session = SessionRepository(session_path).load()
     
     session.session_parameters()
-    session.m_max_report()
-    session.plot(plot_type="mmax")
-    session.plot(plot_type="reflexCurves", channel=1, all_flags=True)
+    # print(session.recordings_filtered[0])
+    session.plotter.plot_emg(channel_indices=[0, 1],data_type='filtered')
+    session.plotter.plot_emg(channel_indices=[0, 1],data_type='raw')
+    session.plotter.plot_emg(channel_indices=[0, 1],data_type='rectified_filtered')
 
 if __name__ == "__main__":
     import sys
@@ -94,6 +95,6 @@ if __name__ == "__main__":
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    # test_csv_importer()
+    # test_csv_importer(overwrite_annot=True)
     # test_domain_loading()
     test_session_object()

@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLin
 import numpy as np
 from pathlib import Path
 
-from monstim_signals.Plot_EMG import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
+from monstim_signals.plotting.Plot_EMG_legacy import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
 from monstim_signals.Transform_EMG import calculate_emg_amplitude, butter_bandpass_filter, get_avg_mmax, NoCalculableMmaxError
 from monstim_signals.core.utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION, DATA_VERSION
 from monstim_signals.core.data_models import LatencyWindow
@@ -213,7 +213,7 @@ class SignalData(ABC):
         return valid_formats[0]
 
 # Three main classes for EMG analysis. Children of the EMGData class.
-class EMGSession(SignalData):
+class Session(SignalData):
     """
     Class for analyzing and plotting data from a single recording session of variable channel numbers for within-session analyses and plotting.
     One session contains multiple recordings that will make up, for example, a single M-curve.
@@ -581,7 +581,7 @@ class EMGSession(SignalData):
         This function should only be used if you are working in a Jupyter notebook or an interactive Python environment. Do not call this function in any other GUI environment.
         """
         class ReflexSettingsDialog(QWidget):
-            def __init__(self, emg_parent : EMGSession):
+            def __init__(self, emg_parent : Session):
                 super().__init__()
                 self.emg_parent = emg_parent
                 self.initUI()
@@ -772,33 +772,33 @@ class EMGDataset(SignalData):
             self._m_max = None    
             
             # Unpack the EMG sessions and exclude any sessions if needed.
-            if isinstance(emg_sessions, str) or isinstance(emg_sessions, EMGSession):
+            if isinstance(emg_sessions, str) or isinstance(emg_sessions, Session):
                 emg_sessions = [emg_sessions]
             self.original_emg_sessions = emg_sessions
-            self.emg_sessions: List[EMGSession] = []
+            self.sessions: List[Session] = []
 
             logging.info(f"Unpacking {len(emg_sessions)} EMG sessions...")
-            self.emg_sessions = self.__unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
+            self.sessions = self.__unpackEMGSessions(emg_sessions) # Convert file location strings into a list of EMGSession instances.
             
             # Exclude any sessions if needed.
             if len(emg_sessions_to_exclude) > 0:
                 logging.warning(f"Excluding the following sessions from the dataset: {emg_sessions_to_exclude}")
-                self.emg_sessions = [session for session in self.emg_sessions if session.session_id not in emg_sessions_to_exclude]
-                self._num_sessions_excluded = len(emg_sessions) - len(self.emg_sessions)
+                self.sessions = [session for session in self.sessions if session.session_id not in emg_sessions_to_exclude]
+                self._num_sessions_excluded = len(emg_sessions) - len(self.sessions)
             else:
                 self._num_sessions_excluded = 0
 
             # Check that all sessions have the same parameters and set dataset parameters.
             self.__check_session_consistency()
 
-            self.num_channels = min([session.num_channels for session in self.emg_sessions])
-            self.channel_names = copy.deepcopy(max([session.channel_names for session in self.emg_sessions]))
-            self.latency_windows = copy.deepcopy(max([session.latency_windows for session in self.emg_sessions], key=len))
+            self.num_channels = min([session.num_channels for session in self.sessions])
+            self.channel_names = copy.deepcopy(max([session.channel_names for session in self.sessions]))
+            self.latency_windows = copy.deepcopy(max([session.latency_windows for session in self.sessions], key=len))
 
-            self.scan_rate : int = self.emg_sessions[0].scan_rate
-            self.stim_start : float = self.emg_sessions[0].stim_start
+            self.scan_rate : int = self.sessions[0].scan_rate
+            self.stim_start : float = self.sessions[0].stim_start
             self.update_reflex_parameters()
-            logging.info(f"Dataset {self.dataset_id} initialized with {len(self.emg_sessions)} sessions.")
+            logging.info(f"Dataset {self.dataset_id} initialized with {len(self.sessions)} sessions.")
             # if not temp:
             #     self.save_dataset(self.save_path)
 
@@ -819,7 +819,7 @@ class EMGDataset(SignalData):
                 current_state = self.__dict__.copy()
 
                 # Update the EMGSession instances in the dataset.
-                for session in self.emg_sessions:
+                for session in self.sessions:
                     session._upgrade_from_version(current_version)
                     session.reset_cached_properties(recalculate=False)
                 
@@ -898,7 +898,7 @@ class EMGDataset(SignalData):
         """
         Logs EMG dataset parameters.
         """
-        report = [f"EMG Sessions ({len(self.emg_sessions)}): {[session.session_id for session in self.emg_sessions]}.",
+        report = [f"EMG Sessions ({len(self.sessions)}): {[session.session_id for session in self.sessions]}.",
                     f"Date: {self.date}",
                     f"Animal ID: {self.animal_id}",
                     f"Condition: {self.condition}"]
@@ -954,7 +954,7 @@ class EMGDataset(SignalData):
             float: The average M-wave amplitude for the specified channel.
         """
         try:
-            m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.emg_sessions if session.m_max[channel_index] is not None])
+            m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.sessions if session.m_max[channel_index] is not None])
         except ValueError as e:
             logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
             if return_avg_mmax_thresholds:
@@ -982,7 +982,7 @@ class EMGDataset(SignalData):
         m_wave_bins = {voltage: [] for voltage in self.stimulus_voltages}
         
         # Add every M-wave amplitude to the appropriate bin.
-        for session in self.emg_sessions:
+        for session in self.sessions:
             binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
             m_wave_amplitudes = session.get_m_wave_amplitudes(method, channel_index)
 
@@ -1007,7 +1007,7 @@ class EMGDataset(SignalData):
             list: A list of M-wave amplitudes for the specified channel at the specified stimulus voltage.
         """
         m_wave_amplitudes = []
-        for session in self.emg_sessions:
+        for session in self.sessions:
             binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
             if voltage in binned_session_voltages:
                 session_voltage_index = np.where(binned_session_voltages == voltage)[0][0]
@@ -1029,7 +1029,7 @@ class EMGDataset(SignalData):
         h_wave_bins = {voltage: [] for voltage in self.stimulus_voltages}
         
         # Add every H-wave amplitude to the appropriate bin.
-        for session in self.emg_sessions:
+        for session in self.sessions:
             binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
             h_wave_amplitudes = session.get_h_wave_amplitudes(method, channel_index)
 
@@ -1054,7 +1054,7 @@ class EMGDataset(SignalData):
             list: A list of H-wave amplitudes for the specified channel at the specified stimulus voltage.
         """
         h_wave_amplitudes = []
-        for session in self.emg_sessions:
+        for session in self.sessions:
             binned_session_voltages = [round(voltage / self.bin_size) * self.bin_size for voltage in session.stimulus_voltages]
             if voltage in binned_session_voltages:
                 session_voltage_index = np.where(binned_session_voltages == voltage)[0][0]
@@ -1068,7 +1068,7 @@ class EMGDataset(SignalData):
         Args:
             channel_index (int): The index of the channel to invert.
         """
-        for session in self.emg_sessions:
+        for session in self.sessions:
             session.invert_channel_polarity(channel_index)
         logging.info(f"Channel {channel_index} polarity has been inverted for all sessions in dataset {self.dataset_id}.")
 
@@ -1077,7 +1077,7 @@ class EMGDataset(SignalData):
         Resets the processed recordings and M-max properties. 
         This should be called after any changes to the raw recordings so that the properties are recalculated.
         """
-        for session in self.emg_sessions:
+        for session in self.sessions:
             session.reset_cached_properties(recalculate=recalculate)
         self._m_max = None
 
@@ -1092,7 +1092,7 @@ class EMGDataset(SignalData):
     @property
     def m_max(self):
         if self._m_max is None:
-            session_m_maxes = [session.m_max for session in self.emg_sessions]
+            session_m_maxes = [session.m_max for session in self.sessions]
             m_max = []
             # separate each channel's m_max into separate arrays and average them.
             for channel_index in range(self.num_channels):
@@ -1114,14 +1114,14 @@ class EMGDataset(SignalData):
             list: Sorted list of stimulus voltages for each recording in the dataset.
         """
         binned_voltages = set()
-        for session in self.emg_sessions:
+        for session in self.sessions:
             binned_voltage = np.round(session.stimulus_voltages / self.bin_size) * self.bin_size
             binned_voltages.update(binned_voltage.tolist())
 
         return np.array(sorted(binned_voltages))
 
     # User methods for manipulating the EMGSession instances in the dataset.
-    def add_session(self, session : Union[EMGSession, str]):
+    def add_session(self, session : Union[Session, str]):
         """
         Adds an EMGSession to the emg_sessions list of this EMGDataset.
 
@@ -1131,19 +1131,19 @@ class EMGDataset(SignalData):
         Raises:
             TypeError: If the session is neither an instance of EMGSession nor a valid file path to a pickled EMGSession.
         """
-        if isinstance(session, EMGSession):
-            if session.session_id in [session.session_id for session in self.emg_sessions]:
+        if isinstance(session, Session):
+            if session.session_id in [session.session_id for session in self.sessions]:
                 logging.warning(f"Session {session.session_id} is already in the dataset. It will not be re-added.")
             else:
                 # Add the session to the dataset.
-                self.emg_sessions.append(session)
-                self.emg_sessions = sorted(self.emg_sessions, key=lambda x: x.session_id)
+                self.sessions.append(session)
+                self.sessions = sorted(self.sessions, key=lambda x: x.session_id)
         else:
             try:
-                session = EMGSession(session)
-                if session.session_id in [session.session_id for session in self.emg_sessions]:
+                session = Session(session)
+                if session.session_id in [session.session_id for session in self.sessions]:
                     logging.warning(f"Session {session.session_id} is already in the dataset. It will not be re-added.")
-                self.emg_sessions.append(session)
+                self.sessions.append(session)
             except:  # noqa: E722
                 raise TypeError("Expected an instance of EMGSession or a file path to a pickled EMGSession.")
         
@@ -1152,7 +1152,7 @@ class EMGDataset(SignalData):
             self.__check_session_consistency()
         except Exception as e:
             logging.error(f"Error adding session to dataset: {str(e)}")
-            self.emg_sessions.remove(session)
+            self.sessions.remove(session)
             raise e
         
         self.reset_cached_properties(recalculate=False)
@@ -1164,10 +1164,10 @@ class EMGDataset(SignalData):
         Args:
             session_id (str): The session_id of the session to be removed.
         """
-        if session_id not in [session.session_id for session in self.emg_sessions]:
+        if session_id not in [session.session_id for session in self.sessions]:
             logging.warning(f">! Error: session {session_id} not found in the dataset.")
         else:
-            self.emg_sessions = [session for session in self.emg_sessions if session.session_id != session_id]
+            self.sessions = [session for session in self.sessions if session.session_id != session_id]
             self.reset_cached_properties(recalculate=False)
     
     def reload_dataset_sessions(self):
@@ -1175,7 +1175,7 @@ class EMGDataset(SignalData):
         Reloads the dataset, adding any removed sessions back to the dataset.
         """
         fresh_temp_dataset = EMGDataset(self.original_emg_sessions, self.date, self.animal_id, self.condition, temp=True)
-        self.emg_sessions = fresh_temp_dataset.emg_sessions
+        self.sessions = fresh_temp_dataset.sessions
         channel_name_dict = {fresh_temp_dataset.channel_names[i]: self.channel_names[i] for i in range(self.num_channels)}
         self.rename_channels(channel_name_dict)
         self.change_reflex_latency_windows(self.m_start, self.m_duration, self.h_start, self.h_duration)
@@ -1193,7 +1193,7 @@ class EMGDataset(SignalData):
         session_reloaded = False
         sessions_reloaded = 0
 
-        for session in self.emg_sessions:
+        for session in self.sessions:
             if session_id == session.session_id:
                 session.reload_recordings()
                 session.channel_names = self.channel_names
@@ -1208,11 +1208,11 @@ class EMGDataset(SignalData):
         
         self.reset_cached_properties(recalculate=False)
 
-    def get_session(self, session_idx: int) -> EMGSession:
+    def get_session(self, session_idx: int) -> Session:
         """
         Returns the EMGSession object at the specified index.
         """
-        return self.emg_sessions[session_idx]
+        return self.sessions[session_idx]
 
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
@@ -1222,7 +1222,7 @@ class EMGDataset(SignalData):
             elif window.name == "H-reflex":
                 window.start_times = h_start
                 window.durations = h_duration
-        for session in self.emg_sessions:
+        for session in self.sessions:
             session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
 
     def update_reflex_parameters(self):
@@ -1233,7 +1233,7 @@ class EMGDataset(SignalData):
             elif window.name == "H-reflex":
                 self.h_start = window.start_times
                 self.h_duration = window.durations
-        for session in self.emg_sessions:
+        for session in self.sessions:
             session.update_reflex_parameters()
 
     def rename_channels(self, new_names : dict[str]):
@@ -1244,7 +1244,7 @@ class EMGDataset(SignalData):
             new_names (dict[str]): A dictionary mapping old channel names to new channel names.
         """
         # Rename the channels in each session.
-        for session in self.emg_sessions:
+        for session in self.sessions:
             session.rename_channels(new_names)
         # Rename the channels in the dataset.
         for i, new_name in enumerate(new_names.values()):
@@ -1260,7 +1260,7 @@ class EMGDataset(SignalData):
         self._load_config_settings() # Load the config settings from file.
 
         # Apply preferences to the session objects.
-        for session in self.emg_sessions:
+        for session in self.sessions:
             session.apply_preferences(reset_properties=reset_properties)
 
         # Re-create the plotter object with the new preferences.
@@ -1387,9 +1387,9 @@ class EMGDataset(SignalData):
         pickled_sessions = []
         for session in emg_sessions:
             if isinstance(session, str): # If list object is dtype(string), then convert to an EMGSession.
-                session = EMGSession(session) # replace the string with an actual session object.
+                session = Session(session) # replace the string with an actual session object.
                 pickled_sessions.append(session)
-            elif isinstance(session, EMGSession):
+            elif isinstance(session, Session):
                 logging.info(f"Session {session.session_id} is already an EMGSession instance with {session.num_recordings} recordings.")
                 pickled_sessions.append(session)
             else:
@@ -1406,12 +1406,12 @@ class EMGDataset(SignalData):
         Returns:
             tuple: A tuple containing a boolean value indicating whether all sessions have consistent parameters and a message indicating the result.
         """
-        reference_session = self.emg_sessions[0]
+        reference_session = self.sessions[0]
         reference_scan_rate = reference_session.scan_rate
         reference_num_channels = reference_session.num_channels
         reference_stim_start = reference_session.stim_start
 
-        for session in self.emg_sessions[1:]:
+        for session in self.sessions[1:]:
             if session.scan_rate != reference_scan_rate:
                 raise EMGDataConsistencyError(f"Inconsistent scan rate for {session.session_id} in {self.formatted_name}: {session.scan_rate} != {reference_scan_rate}.")
             if session.num_channels != reference_num_channels:

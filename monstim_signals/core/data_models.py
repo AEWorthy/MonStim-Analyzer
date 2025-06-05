@@ -84,19 +84,20 @@ class RecordingMeta:
     """
     Describes a single recording (one .raw.h5 + .meta.json).
     """
-    recording_id      : str         # e.g. "WT41-0000"
-    num_channels    : int
-    scan_rate       : int           # in Hz or samples/sec
-    pre_stim_acquired: int          # number of ms acquired before the first stimulus
-    post_stim_acquired: int         # number of ms acquired after the last stimulus
-    channel_types   : List[str]     # e.g. ["EMG", "Force", "Accelerometer"]
-    emg_amp_gains   : List[int]     # e.g. [1000, 1000, 1000] (gain for each EMG channel)
-    stim_clusters   : List[StimCluster]
-    primary_stim : StimCluster | int | None = None  # (1-based index) primary stimulus cluster
-    num_samples     : int | None = None          # filled lazily
-    meta_version    : str = DATA_VERSION
+    recording_id         : str          # e.g. "WT41-0000"
+    num_channels         : int          # number of channels in the recording
+    scan_rate            : int          # in Hz or samples/sec
+    pre_stim_acquired    : int          # number of ms acquired before the first stimulus
+    post_stim_acquired   : int          # number of ms acquired after the last stimulus
+    recording_interval   : float        # in seconds, time between consecutive recordings/stimuli
+    channel_types        : List[str]    # e.g. ["EMG", "Force", "Accelerometer"]
+    emg_amp_gains        : List[int]    # e.g. [1000, 1000, 1000] (gain for each EMG channel)
+    stim_clusters        : List[StimCluster]                # list of StimCluster objects, one per stimulus cluster
+    primary_stim         : StimCluster | int | None = None  # (1-based index) primary stimulus cluster
+    num_samples          : int | None = None                # filled lazily
+    meta_version         : str = DATA_VERSION               # version of the meta format, e.g. "0.0.1"
     def __post_init__(self):
-        if not isinstance(self.primary_stim, StimCluster):
+        if self.primary_stim and not isinstance(self.primary_stim, StimCluster):
             if isinstance(self.primary_stim, int):
                 self.primary_stim = self.stim_clusters[self.primary_stim - 1] if self.primary_stim > 0 else None
             else:
@@ -151,11 +152,7 @@ class RecordingAnnot:
         for invalid_key in raw.keys() - valid:
             logging.warning(f"Invalid key '{invalid_key}' found in RecordingAnnot dict. Ignoring it.")
 
-        # 2) Convert channels if present
-        ch_list = filtered.get("channels", [])
-        filtered["channels"] = [SignalChannel(**d) for d in ch_list]
-
-        # 3) Now call the real constructor
+        # 2) Now call the real constructor
         return RecordingAnnot(**filtered)
     
 @dataclass
@@ -167,7 +164,7 @@ class SessionAnnot:
       - Optional cached m_max values (small arrays)
       - Custom channel_names (if user renamed channels)
     """
-    excluded_recordings  : List[int] = field(default_factory=list)
+    excluded_recordings  : List[str] = field(default_factory=list)
     latency_windows      : List[LatencyWindow] = field(default_factory=list)
     channels             : List[SignalChannel] = field(default_factory=list)
     m_max_values         : List[float] = field(default_factory=list)
@@ -215,10 +212,68 @@ class SessionAnnot:
         for invalid_key in raw.keys() - valid:
             logging.warning(f"Invalid key '{invalid_key}' found in SessionAnnot dict. Ignoring it.")
 
-        # 2) Convert latency_windows if present
+        # 2) Convert latency_windows and channels if present
         lw_list = filtered.get("latency_windows", [])
         filtered["latency_windows"] = [LatencyWindow(**d) for d in lw_list]
+        ch_list = filtered.get("channels", [])
+        filtered["channels"] = [SignalChannel(**d) for d in ch_list]
 
         # 3) Now call the real constructor
         return SessionAnnot(**filtered)
+    
+@dataclass
+class DatasetAnnot:
+    """
+    Holds all user edits for a Dataset:
+      - Custom latency windows (persisting user tweaks)
+      - Optional cached m_max values (small arrays)
+      - Custom channel_names (if user renamed channels)
+    """
+    date: str |None = None  # Date of dataset collection: e.g., "240829" for 29 Aug 2024
+    animal_id: str = None # e.g., "C328.1"
+    condition: str = None # e.g., "post-dec mcurve_long-"
+    excluded_sessions: List[str] = field(default_factory=list)
+    version: str = "0.0.0"
+
+    @staticmethod
+    def create_empty(num_channels: int = 0) -> 'DatasetAnnot':
+        """
+        Create an empty DatasetAnnot with default values.
+        """
+        return DatasetAnnot(
+            excluded_sessions=[],
+            version=DATA_VERSION
+        )
+    def from_ds_name(cls, dataset_name: str) -> 'DatasetAnnot':
+        """
+        Create a DatasetAnnot from a dataset name.
+        This is useful for initializing an annotation object for a new dataset.
+        """
+        from monstim_signals.io.string_parser import parse_dataset_name
+        try:
+            # TODO make date formatting configurable
+            date, animal_id, condition = parse_dataset_name(dataset_name, preferred_date_format='YYYYMMDD') 
+        except ValueError:
+            date = animal_id = condition = None
+        
+        return DatasetAnnot(
+            date=date,
+            animal_id=animal_id,
+            condition=condition,
+            excluded_sessions=[],
+            version=DATA_VERSION
+        )
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> 'DatasetAnnot':
+        """
+        Build a DatasetAnnot from a JSON dict that may contain extra keys.
+        """
+        # 1) Filter out unexpected keys
+        valid = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in raw.items() if k in valid}
+        for invalid_key in raw.keys() - valid:
+            logging.warning(f"Invalid key '{invalid_key}' found in DatasetAnnot dict. Ignoring it.")
+
+        # 2) Now call the real constructor
+        return DatasetAnnot(**filtered)
 

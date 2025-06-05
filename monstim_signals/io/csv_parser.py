@@ -45,7 +45,8 @@ CANONICAL_META = {
     'pre_stim_acquired': ['Pre-Stim Acq. time (ms)'],
     'post_stim_acquired': ['Post-Stim Acq. time (ms)'],
     'primary_stim': ['Stim Channel to Control (1-4)'], # channels 1-4
-    'stim_delay': ['Start Delay (ms)']
+    'stim_delay': ['Start Delay (ms)'],
+    'recording_interval': ['Inter-Stim delay (sec)'],
 }
 
 REVERSE_META_MAP = {

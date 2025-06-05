@@ -67,6 +67,7 @@ def parse_dataset_name(dataset_name : str, preferred_date_format : str = None) -
 
         Args:
             dataset_name (str): The name of the dataset in the format '[YYMMDD] [AnimalID] [Condition]'.
+            preferred_date_format (str, optional): The preferred date format to return. Options are 'YYMMDD', 'DDMMYY', 'MMDDYY', 'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY'.
 
         Returns:
             tuple: A tuple containing the extracted information in the following order: (date, animal_id, condition).
