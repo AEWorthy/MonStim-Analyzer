@@ -11,7 +11,7 @@ from monstim_signals.core.data_models import SessionAnnot, LatencyWindow, StimCl
 from monstim_signals.core.utils import load_config
 from monstim_signals.domain.recording import Recording
 from monstim_signals.Transform_EMG import butter_bandpass_filter, calculate_emg_amplitude, get_avg_mmax, NoCalculableMmaxError
-from monstim_signals.Plot_EMG import EMGSessionPlotter
+from monstim_signals.plotting.session_plotter import SessionPlotter
 # ──────────────────────────────────────────────────────────────────
 class Session:
     """
@@ -27,7 +27,7 @@ class Session:
         self._load_config_settings()
         self._load_session_parameters()
         self._initialize_annotations()
-        self.plotter = EMGSessionPlotter(self)
+        self.plotter = SessionPlotter(self)
         self.update_latency_window_parameters()
 
     def _load_config_settings(self):
@@ -62,16 +62,22 @@ class Session:
 
         # Stimulus parameters
         self.stim_clusters : List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
+        self.primary_stim : StimCluster = getattr(first_meta, 'primary_stim' , None)  # the primary StimCluster for this session
+        if self.primary_stim is None:
+            logging.warning(f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster.")
+            self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
+            if self.primary_stim is None:
+                logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+                raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
         self.pre_stim_acquired    = first_meta.pre_stim_acquired
         self.post_stim_acquired   = first_meta.post_stim_acquired
-        self.primary_stim : StimCluster = first_meta.primary_stim  # the primary StimCluster for this session
         self.stim_delay           = self.primary_stim.stim_delay # in ms, delay
         self.stim_duration        = self.primary_stim.stim_duration
         self.stim_start : float   = self.stim_delay + self.pre_stim_acquired
         
         # Parameters that may sometimes be None
-        self.stim_interval : float = getattr(first_meta, 'stim_interval', None) # in seconds, time between recordings (if applicable)
-        self.emg_amp_gains        = getattr(first_meta, 'emg_amp_gains', None)  # default to 1000 if not specified
+        self.recording_interval : float = getattr(first_meta, 'recording_interval', None) # in seconds, time between recordings (if applicable)
+        self.emg_amp_gains : List[int]  = getattr(first_meta, 'emg_amp_gains', None)  # default to 1000 if not specified
   
     def _initialize_annotations(self):
         self.channel_names = [self.annot.channels[i].name for i in range(self.num_channels)]
@@ -112,7 +118,7 @@ class Session:
         """
         self._load_config_settings()  # Reload config settings to ensure they are up-to-date
 
-        self.plotter = EMGSessionPlotter(self)
+        self.plotter = SessionPlotter(self)
         for window in self.latency_windows:
             window.linestyle = self.latency_window_style
             window.color = self.m_color if window.name == "M-wave" else window.color
@@ -144,7 +150,7 @@ class Session:
         """
         return [rec.meta.primary_stim.stim_v for rec in self.recordings]
     # ──────────────────────────────────────────────────────────────────
-    # 1) Useful properties for GUI & analysis code
+    # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
     @cached_property
     def recordings(self) -> List[Recording]:
@@ -164,50 +170,78 @@ class Session:
         """
         recordings = []
         for rec in self.recordings:
-            raw_data = [rec.raw_view() for rec in self.recordings]
+            raw_data = rec.raw_view()
             for ch in range(rec.meta.num_channels):
                 if self.annot.channels[ch].invert:
                     raw_data[:, ch] *= -1.0
             recordings.append(raw_data)
+        return recordings
     @cached_property
-    def recordings_processed(self) -> List[np.ndarray]:
+    def recordings_filtered(self) -> List[np.ndarray]:
         """
         Return a list of processed data arrays for each recording.
         Each array is of shape (num_samples, num_channels).
         This applies a butter bandpass filter to the raw data and inverts if
         indicated in the channel annotations in the session annot.json file.
         """
-        def _process_single_recording(self, rec: Recording) -> np.ndarray:
+        def _process_single_recording(rec: Recording) -> np.ndarray:
             """
             Process a single recording's raw data with the butter bandpass filter.
             """
             raw_data = rec.raw_view()
-
             bf_args = getattr(self, "butter_filter_args", {"lowcut":None, "highcut":None, "order":None})
-            filtered = butter_bandpass_filter(
-                raw_data,
-                fs=self.scan_rate,
-                lowcut=bf_args["lowcut"],
-                highcut=bf_args["highcut"],
-                order=bf_args["order"]
-            )
-
-            # apply inversion flags
+            
+            filtered_channels = []
             for ch in range(rec.meta.num_channels):
+                channel_data = raw_data[:, ch]
+                filtered = butter_bandpass_filter(
+                    channel_data,
+                    fs=self.scan_rate,
+                    lowcut=bf_args["lowcut"],
+                    highcut=bf_args["highcut"],
+                    order=bf_args["order"]
+                )
+
                 if self.annot.channels[ch].invert:
-                    filtered[:, ch] *= -1.0
-            return filtered
+                    filtered = -filtered
+                filtered_channels.append(filtered)
+            return np.column_stack(filtered_channels)
        
         max_workers = (os.cpu_count() - 1) or 1 # Use all available CPU cores
-        processed_list : List[np.ndarray] = []
+        filtered_recordings : List[np.ndarray] = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_process_single_recording, (self,rec)): rec for rec in self.recordings}
+            futures = {executor.submit(_process_single_recording, rec): rec for rec in self.recordings}
             
             for future in futures:
                 filtered_array = future.result()  # this blocks until that recording is done
-                processed_list.append(filtered_array)
+                filtered_recordings.append(filtered_array)
 
-        return processed_list
+        return filtered_recordings
+    @cached_property
+    def recordings_rectified_raw(self) -> List[np.ndarray]:
+        """
+        Return a list of rectified raw data arrays for each recording.
+        Each array is of shape (num_samples, num_channels).
+        This applies a rectification to the raw data and inverts if indicated in the channel annotations.
+        """
+        recordings = []
+        for rec in self.recordings:
+            raw_data = rec.raw_view()
+            rectified = np.abs(raw_data)
+            recordings.append(rectified)
+        return recordings
+    @cached_property
+    def recordings_rectified_filtered(self) -> List[np.ndarray]:
+        """
+        Return a list of rectified filtered data arrays for each recording.
+        Each array is of shape (num_samples, num_channels).
+        This applies a rectification to the filtered data and inverts if indicated in the channel annotations.
+        """
+        recordings = []
+        for rec in self.recordings_filtered:
+            rectified = np.abs(rec)
+            recordings.append(rectified)
+        return recordings
     @cached_property
     def m_max(self) -> List[float]:
         """
@@ -227,9 +261,94 @@ class Session:
                     logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
                     results.append(None)
         return results
-    
-    
 
+    def reset_all_caches(self):
+        """
+        Reset all cached properties in the session.
+        This is used after changing any session parameters or excluding/including recordings.
+        """
+        self.reset_recordings_cache()
+        self.reset_cached_reflex_properties()
+        self.update_latency_window_parameters()
+        
+    def update_latency_window_parameters(self):
+        '''
+        Update the M-wave and H-reflex start times and durations from the latency windows.
+        This is called after loading the session or when latency windows are modified.
+        '''
+        for window in self.latency_windows:
+            if window.name == "M-wave":
+                self.m_start = window.start_times
+                self.m_duration = window.durations
+            elif window.name == "H-reflex":
+                self.h_start = window.start_times
+                self.h_duration = window.durations
+
+    def reset_cached_reflex_properties(self):
+        """
+        Reset the cached M-wave max values.
+        This is used after changing the latency windows or excluding/including recordings from the session set.
+        """
+        if "m_max" in self.__dict__:
+            del self.__dict__["m_max"]
+
+    def reset_recordings_cache (self):
+        """
+        Reset the cached processed recordings.
+        This is used after changing the filter parameters or excluding/including recordings from the session set.
+        """
+        if "recordings" in self.__dict__:
+            del self.__dict__["recordings"]
+        if "recordings_raw" in self.__dict__:
+            del self.__dict__["recordings_raw"]
+        if "recordings_processed" in self.__dict__:
+            del self.__dict__["recordings_processed"]
+    # ──────────────────────────────────────────────────────────────────
+    # 1) Properties for GUI & analysis code
+    # ──────────────────────────────────────────────────────────────────
+    def plot(self, plot_type: str = None, **kwargs):
+        """
+        Plots EMG data from a single session using the specified plot_type.
+
+        Args:
+            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH', 'mmax', and 'reflexCurves', and 'mCurvesSmoothened'.
+                Plot types are defined in the EMGSessionPlotter class in Plot_EMG.py.
+            - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
+            - **kwargs: Additional keyword arguments to pass to the plotting function.
+                
+                The most common keyword arguments include:
+                - 'data_type' (str): The type of data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'. Default is 'filtered'.
+                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'. Default method is set in config.yml under 'default_method'.
+                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True) or as the actual recorded amplitude (False). Default is False.
+                - 'all_flags' (bool): Whether to plot flags at all windows (True) or not (False). Default is False.
+                
+                Less common keyword arguments include:
+                - 'm_flags' (bool): Whether to plot flags at the M-wave window (True) or not (False). Default is False.
+                - 'h_flags' (bool): Whether to plot flags at the H-reflex window (True) or not (False). Default is False.
+                - 'h_threshold' (float): The threshold for detecting the H-reflex in the suspectedH plot. Default is 0.3.
+                - 'mmax_report' (bool): Whether to print the details of the M-max calculations (True) or not (False). Default is False.
+                - 'manual_mmax' (float): The manually set M-wave amplitude to use for plotting the reflex curves. Default is None.
+
+        Example Usages:
+            # Plot filtered EMG data
+                session.plot()
+
+            # Plot raw EMG data with flags at the M-wave and H-reflex windows
+            session.plot(data_type='raw', all_flags=True)
+
+            # Plot all EMG data with the M-wave and H-reflex windows highlighted
+            session.plot(plot_type='suspectedH')
+
+            # Plot M-wave amplitudes for each channel
+            session.plot(plot_type='mmax')
+
+            # Plot the reflex curves for each channel
+            session.plot(plot_type='reflexCurves')
+        """
+        # Call the appropriate plotting method from the plotter object
+        raw_data = getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
+        return raw_data
+    
     def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
         """
         Calculates the M-wave amplitude for a specific channel in the session.
@@ -253,7 +372,7 @@ class Session:
                                                                     (self.m_start[channel_index] + self.stim_start + self.m_duration[channel_index]), 
                                                                     self.scan_rate, 
                                                                     method=method) 
-                                                                    for recording in self.recordings_processed]
+                                                                    for recording in self.recordings_filtered]
         np.array(m_wave_amplitudes)
         return m_wave_amplitudes
     
@@ -263,41 +382,9 @@ class Session:
                                                                    (self.h_start[channel_index] + self.stim_start + self.h_duration[channel_index]), 
                                                                    self.scan_rate, 
                                                                    method=method) 
-                                                                   for recording in self.recordings_processed]
+                                                                   for recording in self.recordings_filtered]
         np.array(h_wave_amplitudes)
         return h_wave_amplitudes
-
-    #WIP
-
-    def response_curve(self, channel: int, window: LatencyWindow) -> List[float]:
-        # """
-        # Example: for a given channel and a LatencyWindow (e.g. H-reflex),
-        # compute the max value in that window minus baseline, for each recording.
-        # Returns a list of [resp_at_stim1, resp_at_stim2, …] sorted by stim amplitude.
-        # """
-        # results = []
-        # for rec in self.recordings:
-        #     # 1) get the raw slice for that channel & window
-        #     start = window.start_times[channel]
-        #     end   = start + window.durations[channel]
-        #     # Convert ms → sample index: (ms/1000)*scan_rate
-        #     i0 = int(start/1000 * rec.scan_rate)
-        #     i1 = int(end/1000 * rec.scan_rate)
-        #     tr = rec.raw_view(ch=channel, t=slice(i0, i1))
-        #     baseline = np.mean(rec.raw_view(ch=channel, t=slice(0, int(rec.scan_rate*window.start_times[channel]/1000))))
-        #     resp = np.max(tr) - baseline
-        #     results.append(resp)
-        # return results
-        raise NotImplementedError("response_curve method is not implemented yet.")
-
-    @property
-    def stim_amplitudes(self) -> List[float]:
-        """
-        Return a list of stimulus amplitudes for each recording in the session.
-        This assumes that each recording's primary cluster stim_v is the amplitude for that recording.
-        """
-        return [rec.stim_amplitude for rec in self.recordings]
-
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
@@ -312,6 +399,17 @@ class Session:
         if self.repo is not None:
             self.repo.save(self)
     
+    def invert_channel_polarity(self, channel: int):
+        """
+        Invert the signal for a specific channel across all recordings in the session.
+        This is a user action that modifies the channel's invert flag.
+        """
+        self.annot.channels[channel].invert = not self.annot.channels[channel].invert
+        if self.repo is not None:
+            self.repo.save(self)
+        self.reset_recordings_cache()
+        self.reset_cached_reflex_properties()
+
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
             if window.name == "M-wave":
@@ -383,18 +481,6 @@ class Session:
         self.reset_all_caches()
         if self.repo is not None:
             self.repo.save(self)
-
-    def invert_channel_polarity(self, channel: int):
-        """
-        Invert the signal for a specific channel across all recordings in the session.
-        This is a user action that modifies the channel's invert flag.
-        """
-        self.annot.channels[channel].invert = not self.annot.channels[channel].invert
-        if self.repo is not None:
-            self.repo.save(self)
-        self.reset_recordings_cache()
-        self.reset_cached_reflex_properties()
-
     # ──────────────────────────────────────────────────────────────────
     # 3) Methods for CLI/Jupyter use only
     # ──────────────────────────────────────────────────────────────────
@@ -488,61 +574,20 @@ class Session:
             window = ReflexSettingsDialog(self)
             window.show()
     # ──────────────────────────────────────────────────────────────────
-    # 3) Update/reset methods
-    # ──────────────────────────────────────────────────────────────────
-    def reset_all_caches(self):
-        """
-        Reset all cached properties in the session.
-        This is used after changing any session parameters or excluding/including recordings.
-        """
-        self.reset_recordings_cache()
-        self.reset_cached_reflex_properties()
-        self.update_latency_window_parameters()
-        
-    def update_latency_window_parameters(self):
-        '''
-        Update the M-wave and H-reflex start times and durations from the latency windows.
-        This is called after loading the session or when latency windows are modified.
-        '''
-        for window in self.latency_windows:
-            if window.name == "M-wave":
-                self.m_start = window.start_times
-                self.m_duration = window.durations
-            elif window.name == "H-reflex":
-                self.h_start = window.start_times
-                self.h_duration = window.durations
-
-    def reset_cached_reflex_properties(self):
-        """
-        Reset the cached M-wave max values.
-        This is used after changing the latency windows or excluding/including recordings from the session set.
-        """
-        if "m_max" in self.__dict__:
-            del self.__dict__["m_max"]
-
-    def reset_recordings_cache (self):
-        """
-        Reset the cached processed recordings.
-        This is used after changing the filter parameters or excluding/including recordings from the session set.
-        """
-        if "recordings" in self.__dict__:
-            del self.__dict__["recordings"]
-        if "recordings_raw" in self.__dict__:
-            del self.__dict__["recordings_raw"]
-        if "recordings_processed" in self.__dict__:
-            del self.__dict__["recordings_processed"]
-    # ──────────────────────────────────────────────────────────────────
-    # 3) Clean‐up
+    # 4) Clean‐up
     # ──────────────────────────────────────────────────────────────────
     def close(self):
         for rec in self.recordings:
             rec.close()
     # ──────────────────────────────────────────────────────────────────
-    # 4) Object representation and reports
+    # 5) Object representation and reports
     # ──────────────────────────────────────────────────────────────────
     def session_parameters(self) -> dict[str, Any]:
         """
-        Logs EMG recording session parameters from a Pickle file.
+        Logs Session object parameters and returns a dictionary with the session parameters.
+        This includes session ID, number of recordings, number of channels, scan rate,
+        number of samples, pre-stimulus and post-stimulus acquisition times, stimulus delay,
+        stimulus duration, recording interval, and EMG amplifier gains.
         """
         report = [f"Session Parameters for {self.formatted_name}",
                   "========================================",
@@ -555,7 +600,7 @@ class Session:
                   f"Post-Stim Acq. time (ms): {self.post_stim_acquired}",
                   f"Stimulus Delay (ms): {self.stim_delay}",
                   f"Stimulus Duration (ms): {self.stim_duration}",
-                  f"Stimulus Interval (s): {self.stim_interval if self.stim_interval else 'Not specified'}",
+                  f"Recording Interval (s): {self.recording_interval if self.recording_interval else 'Not specified'}",
                   f"EMG Amp Gains: {self.emg_amp_gains if self.emg_amp_gains else 'Not specified'}",]        
         
         for line in report:
