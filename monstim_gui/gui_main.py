@@ -12,17 +12,12 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QF
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
-# Adds the parent directory to the path so that the monstim_analysis and monstim_utils modules can be imported
-if __name__ == '__main__':
-    top_level_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    if top_level_dir not in sys.path:
-        print(f"Adding {top_level_dir} to sys.path.")
-        sys.path.insert(0, top_level_dir)
 from monstim_signals import EMGExperiment
-from monstim_converter import GUIExptImportingThread
-from monstim_gui.splash import SPLASH_INFO
+from monstim_signals.io.csv_to_pickle import GUIExptImportingThread
 from monstim_signals.core.utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
+
+from monstim_gui.splash import SPLASH_INFO
 from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, SelectChannelsDialog,
                                  LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog)
 from monstim_gui.menu_bar import MenuBar
@@ -663,7 +658,7 @@ class EMGAnalysisGUI(QMainWindow):
     def show_session_report(self):
         logging.debug("Showing session parameters report.")
         if self.current_session:
-            report = self.current_session.session_parameters()
+            report = self.current_session.report_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Session Report", report, self)
             dialog.exec()

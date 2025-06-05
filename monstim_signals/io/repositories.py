@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 from dataclasses import asdict
 
-from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot
+from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot, SessionAnnot
 from monstim_signals.domain.recording  import Recording
 from monstim_signals.domain.session    import Session
 from monstim_signals.domain.dataset    import Dataset
@@ -44,7 +44,7 @@ class RecordingRepository:
         else:
             # If no annot.json, initialize a brand‐new one:
             logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
-            annot = RecordingAnnot.from_meta(meta)
+            annot = RecordingAnnot.create_empty(meta)
             self.annot_js.write_text(json.dumps(asdict(annot_dict), indent=2))
 
         # 3) Open HDF5 file in read‐only mode; pass the dataset itself (lazy)
@@ -68,13 +68,7 @@ class RecordingRepository:
         Only rewrite the annot JSON (we assume meta/raw never change).
         This is called when the user edits the recording's annotation.
         """
-        updated = {
-            "excluded": recording.annot.excluded,
-            "channels": [ch.__dict__ for ch in recording.annot.channels],
-            "cache": recording.annot.cache,
-            "version": recording.annot.version
-        }
-        self.annot_js.write_text(json.dumps(updated, indent=2))
+        self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
 
     @staticmethod
     def discover_in_folder(folder: Path) -> Iterator['RecordingRepository']:
@@ -102,35 +96,63 @@ class SessionRepository:
         `folder` is a Path to a session‐level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
         """
         self.folder = folder
+        self.session_id = folder.name  # e.g. "AA00"
+        self.session_js = folder / "session.annot.json"
 
     def load(self) -> Session:
-        """
-        1) Discover all recordings in this folder
-        2) Load each via RecordingRepository
-        3) Sort them by stimulus amplitude
-        4) Wrap them in a domain `Session` object
-        """
+        # 1) Discover all recordings in this folder
         recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-
-        # 1) Load each Recording object
         recordings = [repo.load() for repo in recording_repos]
 
         # 2) Sort by the primary StimCluster’s stim_v
         recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
 
-        # 3) Build a Session domain object
-        session_id = self.folder.name  # e.g. "AA00"
+        # 3) Load or create session annotation JSON 
+        if self.session_js.exists():
+            session_annot_dict = json.loads(self.session_js.read_text())
+            session_annot = SessionAnnot.from_dict(session_annot_dict)
+        else: # If no session.annot.json, initialize a brand‐new one
+            if recordings:
+                logging.info(f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one.")
+                session_annot = SessionAnnot.from_meta(recordings[0].meta)
+            else:
+                logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
+                session_annot = SessionAnnot.create_empty(self.session_id)
+            self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
+
+        # 4) Build a Session domain object
         session = Session(
-            session_id=session_id,
+            session_id=self.session_id,
             recordings=recordings,
+            annot=session_annot,
             repo=self
         )
         return session
 
     def save(self, session: Session) -> None:
+        self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
         for rec in session.recordings:
-            # Save each recording's annotation
             rec.repo.save(rec)
+    
+    def discover_in_folder(folder: Path) -> Iterator['SessionRepository']:
+        """
+        Given a folder Path, yield a SessionRepository for each session subfolder.
+        E.g. if folder contains:
+            AA00, AA01, AA02
+        then this yields:
+            SessionRepository(Path("folder/AA00"))
+            SessionRepository(Path("folder/AA01"))
+            SessionRepository(Path("folder/AA02"))
+        """
+        for sess_folder in folder.iterdir():
+            if sess_folder.is_dir() and (sess_folder / "session.annot.json").exists():
+                logging.info(f"Discovered session: {sess_folder.name}")
+                yield SessionRepository(sess_folder)
+            elif sess_folder.is_dir() and any(sess_folder.glob("*.raw.h5")):
+                logging.info(f"Discovered session without annot: {sess_folder.name}")
+                yield SessionRepository(sess_folder)  # still yield, but no session.annot.json
+            else:
+                logging.warning(f"No valid session found in {sess_folder}.")
 
 class DatasetRepository:
     """

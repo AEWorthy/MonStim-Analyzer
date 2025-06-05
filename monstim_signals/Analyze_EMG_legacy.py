@@ -23,8 +23,6 @@ from monstim_signals.Transform_EMG import calculate_emg_amplitude, butter_bandpa
 from monstim_signals.core.utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION, DATA_VERSION
 from monstim_signals.core.data_models import LatencyWindow
 
-
-    
 # Parent EMG data class. Mainly for loading config settings.
 class SignalData(ABC):
     def __init__(self):
@@ -76,19 +74,6 @@ class SignalData(ABC):
         except Exception as e:
             logging.error(f"Error loading from {filepath}. Error: {str(e)}")
             raise e
-
-
-
-    # @staticmethod
-    # def _load_compressed(filepath):
-    #     """Base method for loading compressed pickle files"""
-    #     try:
-    #         with open(filepath, 'rb') as f:
-    #             return pickle.load(f)
-    #     except Exception as e:
-    #         logging.error(f"Error loading from {filepath}. Error: {str(e)}")
-    #         raise e
-
 
     @property
     def is_completed(self):
@@ -197,6 +182,16 @@ class SignalData(ABC):
 
     @staticmethod
     def parse_date(date_string, preferred_format=None):
+        """
+        Parses a date string and returns a datetime object and its format.
+        Args:
+            date_string (str): The date string to parse. Must be 6 or 8 characters long.
+            preferred_format (str, optional): The preferred format to return. Options are 'YYMMDD', 'DDMMYY', 'MMDDYY', 'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY'.
+        Returns:
+            tuple: A tuple containing the parsed datetime object and its format name, or None if the date string is invalid.
+        Raises:
+            ValueError: If the date string is not 6 or 8 characters long.
+        """
         
         def is_valid_date(year, month, day):
             try:
@@ -2098,7 +2093,7 @@ class EMGDataConsistencyError(Exception):
         super().__init__(self.message)
 
 if __name__ == '__main__':
-    from monstim_converter import pickle_data  # noqa: F401
+    from monstim_signals.io.csv_to_pickle import pickle_data  # noqa: F401
     from Analyze_EMG import SignalData,EMGDataset
 
     #Process CSVs into Pickle files: 'files_to_analyze' --> 'output'

@@ -122,7 +122,7 @@ class SignalData(ABC):
         self.latency_windows.append(new_window)
 
     @abstractmethod
-    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+    def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         pass
 
     @abstractmethod
@@ -554,7 +554,7 @@ class EMGSession(SignalData):
         np.array(h_wave_amplitudes)
         return h_wave_amplitudes
 
-    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+    def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
             if window.name == "M-wave":
                 window.start_times = m_start
@@ -642,7 +642,7 @@ class EMGSession(SignalData):
                 
                 # Update the reflex windows in the parent object based on the new windows.
                 try:           
-                    self.emg_parent.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+                    self.emg_parent.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
                 except Exception as e:
                     logging.error(f"Error saving the following reflex settings: m_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}")
                     logging.error(f"Error: {str(e)}")
@@ -662,7 +662,7 @@ class EMGSession(SignalData):
             window = ReflexSettingsDialog(self)
             window.show()
 
-    def session_parameters (self):
+    def report_parameters (self):
         """
         Logs EMG recording session parameters from a Pickle file.
         """
@@ -1178,7 +1178,7 @@ class EMGDataset(SignalData):
         self.emg_sessions = fresh_temp_dataset.emg_sessions
         channel_name_dict = {fresh_temp_dataset.channel_names[i]: self.channel_names[i] for i in range(self.num_channels)}
         self.rename_channels(channel_name_dict)
-        self.update_reflex_latency_windows(self.m_start, self.m_duration, self.h_start, self.h_duration)
+        self.change_reflex_latency_windows(self.m_start, self.m_duration, self.h_start, self.h_duration)
         self.update_reflex_parameters()
         self.apply_preferences(reset_properties=False)
         self.reset_cached_properties(recalculate=False)
@@ -1214,7 +1214,7 @@ class EMGDataset(SignalData):
         """
         return self.emg_sessions[session_idx]
 
-    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+    def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
             if window.name == "M-wave":
                 window.start_times = m_start
@@ -1223,7 +1223,7 @@ class EMGDataset(SignalData):
                 window.start_times = h_start
                 window.durations = h_duration
         for session in self.emg_sessions:
-            session.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+            session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
 
     def update_reflex_parameters(self):
         for window in self.latency_windows:
@@ -1304,7 +1304,7 @@ class EMGDataset(SignalData):
     
     # Static methods for extracting information from dataset names and dataset dictionaries.
     @staticmethod
-    def getDatasetInfo(dataset_name : str, preferred_date_format : str = None) -> tuple:
+    def parse_dataset_name(dataset_name : str, preferred_date_format : str = None) -> tuple:
         """
         Extracts information from a dataset' directory name.
 
@@ -1358,7 +1358,7 @@ class EMGDataset(SignalData):
         """
         try: 
             datasets = list(dataset_dict.keys())
-            date, animal_id, condition = cls.getDatasetInfo(datasets[dataset_idx])
+            date, animal_id, condition = cls.parse_dataset_name(datasets[dataset_idx])
             # Future: Add a check to see if the dataset is already saved as a pickle file. If it is, load the pickle file instead of re-creating the dataset.
             dataset_oi = EMGDataset(dataset_dict[datasets[dataset_idx]], date, animal_id, condition, 
                                     emg_sessions_to_exclude=emg_sessions_to_exclude, temp=temp)
@@ -1696,7 +1696,7 @@ class EMGExperiment(SignalData):
             self.emg_datasets = [dataset for dataset in self.emg_datasets if dataset.dataset_id != dataset_id]
             self.reset_cached_properties(recalculate=False)
 
-    def update_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
+    def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         for window in self.latency_windows:
             if window.name == "M-wave":
                 window.start_times = m_start
@@ -1705,7 +1705,7 @@ class EMGExperiment(SignalData):
                 window.start_times = h_start
                 window.durations = h_duration
         for dataset in self.emg_datasets:
-            dataset.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+            dataset.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
 
     def update_reflex_parameters(self):
         for window in self.latency_windows:

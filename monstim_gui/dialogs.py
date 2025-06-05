@@ -202,7 +202,7 @@ class ReflexSettingsDialog(QDialog):
                     return
 
         try:
-            self.emg_data.update_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+            self.emg_data.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error saving settings: {str(e)}")
             logging.error(f"Error saving reflex settings: {str(e)}\n\tdataset: {self.dataset}\n\tm_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}")

@@ -104,5 +104,5 @@ def csv_to_store(csv_path : Path, output_fp : Path, overwrite_h5: bool = False, 
         if annot_path.exists() and overwrite_annot:
             logging.warning(f"Annotation file {annot_path} already exists. Overwriting it.")
         with annot_path.open('w') as f:
-            annot = RecordingAnnot.from_meta_dict(meta_dict)
+            annot = RecordingAnnot.create_empty()
             json.dump(asdict(annot), annot_path.open('w'), indent=2)

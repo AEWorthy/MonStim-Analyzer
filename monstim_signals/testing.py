@@ -76,6 +76,16 @@ def test_domain_loading():
     for ds in exp.datasets:
         print(ds.id, ds.num_sessions)
 
+def test_session_object():
+    from monstim_signals.io.repositories import SessionRepository
+
+    session_path = Path(r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG-only data\240829 C328.1 post-dec mcurve_long-\RX35')
+    session = SessionRepository(session_path).load()
+    
+    session.session_parameters()
+    session.m_max_report()
+    session.plot(plot_type="mmax")
+    session.plot(plot_type="reflexCurves", channel=1, all_flags=True)
 
 if __name__ == "__main__":
     import sys
@@ -85,4 +95,5 @@ if __name__ == "__main__":
         sys.path.insert(0, str(project_root))
 
     # test_csv_importer()
-    test_domain_loading()
+    # test_domain_loading()
+    test_session_object()

@@ -4,8 +4,10 @@ from typing import List, Dict, Any
 import logging
 from monstim_signals.core.utils import DATA_VERSION
 
-# To do: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
-@dataclass
+# -----------------------------------------------------------------------
+# Basic data models for MonStim Signals
+# -----------------------------------------------------------------------
+@dataclass # TODO: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
 class LatencyWindow:
     name: str
     color: str
@@ -53,7 +55,30 @@ class StimCluster:
             self.pulse_shape = "Square"  # Default to Square if not specified
         if self.ramp_duration is None:
             self.ramp_duration = 0.0  # Default to 0 if not specified
-        
+
+@dataclass
+class SignalChannel:
+    invert : bool = False
+    name : str = "[NAME]"  # e.g. "TA", "SOL", "VL"
+    unit : str = "unit(s)"
+    type_override : str | None = None  # e.g. "EMG", "Force", "Accelerometer"
+
+    @staticmethod
+    def create_empty() -> 'SignalChannel':
+        """
+        Create an empty ChannelAnnot with default values.
+        """
+        return SignalChannel(
+            invert=False,
+            name="[NAME]",
+            unit="unit(s)",
+            type_override=None
+        )
+
+# -----------------------------------------------------------------------
+# Recording permanent metadata
+# This is stored in the .meta.json file alongside the .raw.h5 file.
+# -----------------------------------------------------------------------
 @dataclass
 class RecordingMeta:
     """
@@ -93,75 +118,28 @@ class RecordingMeta:
         # 3) Now call the real constructor
         return cls(**filtered)
 
-@dataclass
-class ChannelAnnot:
-    invert : bool = False
-    name : str = "[NAME]"  # e.g. "TA", "SOL", "VL"
-    unit : str = "unit(s)"
-    type_override : str | None = None  # e.g. "EMG", "Force", "Accelerometer"
-
-    @staticmethod
-    def create_empty() -> 'ChannelAnnot':
-        """
-        Create an empty ChannelAnnot with default values.
-        """
-        return ChannelAnnot(
-            invert=False,
-            name="[NAME]",
-            unit="unit(s)",
-            type_override=None
-        )
-
+# -----------------------------------------------------------------------
+# Annotation data structures for recordings and sessions
+# -----------------------------------------------------------------------
 @dataclass
 class RecordingAnnot:
     """
     Holds user‐editable flags for one recording.
     e.g., which channels to invert, exclude, or cached computations.
     """
-    excluded : bool = False
-    channels : List[ChannelAnnot] = field(default_factory=list)
     cache    : Dict[str, Any] = field(default_factory=dict)
     version  : str = "0.0.0"
 
     @staticmethod
-    def create_empty(num_channels : int = 0) -> 'RecordingAnnot':
+    def create_empty() -> 'RecordingAnnot':
         """
         Create an empty RecordingAnnot with default values.
         """
         return RecordingAnnot(
             version=DATA_VERSION,
-            excluded=False,
-            channels=[ChannelAnnot.create_empty() for _ in range(num_channels)],
             cache={}
             )
-    
-    @classmethod
-    def from_meta(cls, meta: RecordingMeta) -> 'RecordingAnnot':
-        """
-        Create a RecordingAnnot from a RecordingMeta object.
-        Initializes channels based on the number of channels in the meta.
-        """
-        annot = cls.create_empty(num_channels=meta.num_channels)
-        
-        # Fill in channel names and units based on meta
-        for i in range(meta.num_channels):
-            channel = annot.channels[i] if i < len(annot.channels) else ChannelAnnot.create_empty()
-            channel_type = meta.channel_types[i] if i < len(meta.channel_types) else None
-            channel.name = channel_type if (channel_type not in (None, 'unknown', 'emg')) else f"Channel {i+1}"
-            channel.unit = 'V'
-            annot.channels[i] = channel
-
-        return annot
-    
-    @classmethod
-    def from_meta_dict(cls, raw: dict[str, Any]) -> 'RecordingAnnot':
-        """
-        Build a RecordingAnnot from a JSON dict that may contain extra keys.
-        This is a convenience method to create an annot from a meta dict.
-        """
-        meta = RecordingMeta.from_dict(raw)
-        return cls.from_meta(meta)
-    
+       
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> 'RecordingAnnot':
         """
@@ -175,7 +153,72 @@ class RecordingAnnot:
 
         # 2) Convert channels if present
         ch_list = filtered.get("channels", [])
-        filtered["channels"] = [ChannelAnnot(**d) for d in ch_list]
+        filtered["channels"] = [SignalChannel(**d) for d in ch_list]
 
         # 3) Now call the real constructor
         return RecordingAnnot(**filtered)
+    
+@dataclass
+class SessionAnnot:
+    """
+    Holds all user edits for a Session:
+      - Which recordings to exclude
+      - Custom latency windows (persisting user tweaks)
+      - Optional cached m_max values (small arrays)
+      - Custom channel_names (if user renamed channels)
+    """
+    excluded_recordings  : List[int] = field(default_factory=list)
+    latency_windows      : List[LatencyWindow] = field(default_factory=list)
+    channels             : List[SignalChannel] = field(default_factory=list)
+    m_max_values         : List[float] = field(default_factory=list)
+    version              : str = "0.0.0"
+
+    @staticmethod
+    def create_empty(num_channels : int = 0) -> 'SessionAnnot':
+        """
+        Create an empty SessionAnnot with default values.
+        """
+        return SessionAnnot(
+            excluded_recordings=[],
+            latency_windows=[],
+            channels=[SignalChannel.create_empty() for _ in range(num_channels)],
+            m_max_values=[],
+            version=DATA_VERSION
+        )
+    
+    @classmethod
+    def from_meta(cls, recording_meta: RecordingMeta) -> 'SessionAnnot':
+        """
+        Create a RecordingAnnot from a RecordingMeta object.
+        Initializes channels based on the number of channels in the meta.
+        """
+        annot = cls.create_empty(num_channels=recording_meta.num_channels)
+        
+        # Fill in channel names and units based on meta
+        for i in range(recording_meta.num_channels):
+            channel = annot.channels[i] if i < len(annot.channels) else SignalChannel.create_empty()
+            channel_type = recording_meta.channel_types[i] if i < len(recording_meta.channel_types) else None
+            channel.name = channel_type if (channel_type not in (None, 'unknown', 'emg')) else f"Ch{i}"
+            channel.unit = 'V'
+            annot.channels[i] = channel
+
+        return annot
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> 'SessionAnnot':
+        """
+        Build a SessionAnnot from a JSON dict that may contain extra keys.
+        """
+        # 1) Filter out unexpected keys
+        valid = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in raw.items() if k in valid}
+        for invalid_key in raw.keys() - valid:
+            logging.warning(f"Invalid key '{invalid_key}' found in SessionAnnot dict. Ignoring it.")
+
+        # 2) Convert latency_windows if present
+        lw_list = filtered.get("latency_windows", [])
+        filtered["latency_windows"] = [LatencyWindow(**d) for d in lw_list]
+
+        # 3) Now call the real constructor
+        return SessionAnnot(**filtered)
+
