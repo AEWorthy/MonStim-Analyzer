@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING, List
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-import monstim_analysis.Transform_EMG as Transform_EMG
+from monstim_signals import transform
 
 if TYPE_CHECKING:
     from monstim_analysis.Analyze_EMG import EMGData
@@ -509,7 +509,7 @@ class EMGSessionPlotter(EMGPlotter):
                 if channel_index not in channel_indices:
                     continue
                 current_ax = ax if num_channels == 1 else axes[channel_index]
-                latency_window_oi_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                latency_window_oi_amplitude = transform.calculate_emg_amplitude(channel_data,
                                                                              latency_window_oi.start_times[channel_index] + self.emg_object.stim_start, 
                                                                              latency_window_oi.end_times[channel_index] + self.emg_object.stim_start, 
                                                                              self.emg_object.scan_rate,  
@@ -587,7 +587,7 @@ class EMGSessionPlotter(EMGPlotter):
                 stimulus_v = recording['stimulus_v']
                              
                 try:
-                    m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
+                    m_wave_amplitude = transform.calculate_emg_amplitude(channel_data,
                                                                              self.emg_object.m_start[channel_index] + self.emg_object.stim_start, 
                                                                              (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index]) + self.emg_object.stim_start,
                                                                              self.emg_object.scan_rate, method=method)
@@ -602,7 +602,7 @@ class EMGSessionPlotter(EMGPlotter):
             stimulus_voltages = np.array(stimulus_voltages)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
-            m_max, mmax_low_stim, _ = Transform_EMG.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, return_mmax_stim_range=True, **self.emg_object.m_max_args)
+            m_max, mmax_low_stim, _ = transform.get_avg_mmax(stimulus_voltages, m_wave_amplitudes, return_mmax_stim_range=True, **self.emg_object.m_max_args)
             
             # Filter out M-wave amplitudes below the M-max stimulus threshold.
             mask = (stimulus_voltages >= mmax_low_stim)
@@ -707,7 +707,7 @@ class EMGSessionPlotter(EMGPlotter):
                 else:
                     try:
                         m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
-                    except Transform_EMG.NoCalculableMmaxError:
+                    except transform.NoCalculableMmaxError:
                         raise UnableToPlotError(f'M-max could not be calculated for channel {channel_index}.')
                 try:
                     m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
@@ -801,7 +801,7 @@ class EMGSessionPlotter(EMGPlotter):
                     raise UnableToPlotError(f'M-max for channel {channel_index} is 0. Cannot divide by 0.')
 
             # Smoothen the data
-            m_wave_amplitudes = Transform_EMG.savgol_filter_y(m_wave_amplitudes)
+            m_wave_amplitudes = transform.savgol_filter_y(m_wave_amplitudes)
             # h_response_amplitudes = np.gradient(m_wave_amplitudes, stimulus_voltages)
 
             if num_channels == 1:

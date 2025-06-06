@@ -19,7 +19,12 @@ from PyQt6.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, QLabel, QLin
 import numpy as np
 
 from monstim_signals.plotting.Plot_EMG_legacy import EMGSessionPlotter, EMGDatasetPlotter, EMGExperimentPlotter
-from monstim_signals.Transform_EMG import calculate_emg_amplitude, butter_bandpass_filter, get_avg_mmax, NoCalculableMmaxError
+from monstim_signals.transform import (
+    calculate_emg_amplitude,
+    butter_bandpass_filter,
+    get_avg_mmax,
+    NoCalculableMmaxError,
+)
 from monstim_signals.core.utils import load_config, get_output_bin_path, deep_equal, get_output_path, BIN_EXTENSION, DATA_VERSION
 from monstim_signals.core.data_models import LatencyWindow
 
