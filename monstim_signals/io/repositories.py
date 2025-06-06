@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 from dataclasses import asdict
 
-from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot, SessionAnnot, DatasetAnnot
+from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot, SessionAnnot, DatasetAnnot, ExperimentAnnot
 from monstim_signals.domain.recording  import Recording
 from monstim_signals.domain.session    import Session
 from monstim_signals.domain.dataset    import Dataset
@@ -212,12 +212,20 @@ class ExperimentRepository:
         `folder` might be Path("/data/ExperimentRoot").
         """
         self.folder = folder
+        self.expt_js = folder / "experiment.annot.json"
 
     def load(self) -> 'Experiment':
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
         datasets = [DatasetRepository(ds_folder).load() for ds_folder in dataset_folders]
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
-        expt = Experiment(expt_id, datasets=datasets, repo=self)
+        if self.expt_js.exists():
+            annot_dict = json.loads(self.expt_js.read_text())
+            annot = ExperimentAnnot.from_dict(annot_dict)
+        else:
+            logging.info(f"Experiment annotation file '{self.expt_js}' not found. Creating a new one.")
+            annot = ExperimentAnnot.create_empty()
+            self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
+        expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self)
         return expt
     
     def save(self, expt: Experiment) -> None:
@@ -226,5 +234,6 @@ class ExperimentRepository:
         If I want experiment‐level annotations in the future, write them here.
         This is called when the user edits any dataset's sessions.
         """
+        self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))
         for ds in expt.datasets:
             ds.repo.save(ds)

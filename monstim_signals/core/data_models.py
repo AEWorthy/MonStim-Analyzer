@@ -279,3 +279,26 @@ class DatasetAnnot:
         # 2) Now call the real constructor
         return DatasetAnnot(**filtered)
 
+# -----------------------------------------------------------------------
+# Experiment annotation
+# -----------------------------------------------------------------------
+
+@dataclass
+class ExperimentAnnot:
+    """Annotation information for an :class:`Experiment`."""
+    excluded_datasets: List[str] = field(default_factory=list)
+    version: str = DATA_VERSION
+
+    @staticmethod
+    def create_empty() -> 'ExperimentAnnot':
+        """Return a blank annotation object."""
+        return ExperimentAnnot(excluded_datasets=[], version=DATA_VERSION)
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> 'ExperimentAnnot':
+        valid = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in raw.items() if k in valid}
+        for invalid_key in raw.keys() - valid:
+            logging.warning(f"Invalid key '{invalid_key}' found in ExperimentAnnot dict. Ignoring it.")
+        return ExperimentAnnot(**filtered)
+
