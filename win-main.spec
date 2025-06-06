@@ -19,7 +19,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 from monstim_gui import __version__
 EXE_NAME = f'MonStim Analyzer v{__version__}'
-DIST_NAME = f'MonStim_Analyzer_v{__version__}-alpha'
+DIST_NAME = f'MonStim_Analyzer_v{__version__}-beta'
 
 
 a = Analysis( # type: ignore

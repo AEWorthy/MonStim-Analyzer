@@ -1,7 +1,7 @@
 # EMG Processing and Analysis
 
 ## Data Acquisition
-Electromyographic (EMG) signals were recorded using [insert equipment details]. The sampling rate was set at [insert scan_rate] Hz.
+Electromyographic (EMG) signals were recorded using standard bipolar surface electrodes. The sampling rate was set at 4000 Hz.
 
 ## EMG Pre-processing
 Raw EMG signals were pre-processed using a series of steps to improve signal quality and prepare the data for analysis.
@@ -44,9 +44,9 @@ To determine the maximum M-wave amplitude (M-max), we employed an adaptive algor
 
 1. The stimulus-response curve was smoothed using a Savitzky-Golay filter with a window length of 25% of the total data points and a polynomial order of 3.
 
-2. A sliding window approach was used to detect the plateau region. The window size was initially set to [insert max_window_size] data points and decreased to a minimum of [insert min_window_size] points if no plateau was detected.
+2. A sliding window approach was used to detect the plateau region. The window size was initially set to 20 data points and decreased to a minimum of 3 points if no plateau was detected.
 
-3. For each window, the standard deviation of the M-wave amplitudes was calculated. A plateau was identified when the standard deviation fell below a threshold of [insert threshold] times the overall standard deviation of the data.
+3. For each window, the standard deviation of the M-wave amplitudes was calculated. A plateau was identified when the standard deviation fell below a threshold of 0.3 times the overall standard deviation of the data.
 
 4. The M-max was calculated as the mean amplitude within the detected plateau region:
 
