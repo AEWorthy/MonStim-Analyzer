@@ -170,7 +170,11 @@ class EMGExperimentPlotter(BasePlotter):
                         channel_index=channel_index,
                         return_avg_mmax_thresholds=True,
                     )
-                except Exception:
+
+                except ValueError:
+                    avg_m_max = None
+                    avg_mmax_low_stim = None
+                except AttributeError:
                     avg_m_max = None
                     avg_mmax_low_stim = None
                 avg_m_max_amplitudes_raw.append(avg_m_max)

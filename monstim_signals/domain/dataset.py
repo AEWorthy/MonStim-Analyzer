@@ -193,7 +193,9 @@ class Dataset:
                 )
                 m_max_amplitudes.append(m_max)
                 m_max_thresholds.append(mmax_low_stim)
-            except Exception as e:
+                
+            except ValueError as e:
+
                 logging.warning(
                     f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}"
                 )
