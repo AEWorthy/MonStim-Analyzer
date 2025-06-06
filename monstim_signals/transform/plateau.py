@@ -7,6 +7,9 @@ from scipy import signal
 def savgol_filter_y(y, polyorder=3):
     """Smooth data using a Savitzky-Golay filter."""
     window_length = int((len(y) / 100) * 25)
+    window_length = max(window_length, polyorder + 2)  # Ensure minimum size
+    if window_length % 2 == 0:  # Ensure oddness
+        window_length += 1
     return signal.savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
 
