@@ -675,7 +675,7 @@ class EMGAnalysisGUI(QMainWindow):
     def show_session_report(self):
         logging.debug("Showing session parameters report.")
         if self.current_session:
-            report = self.current_session.report_parameters()
+            report = self.current_session.session_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Session Report", report, self)
             dialog.exec()

@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from monstim_signals.domain.dataset import Dataset
-from monstim_signals.plotting.experiment_plotter import EMGExperimentPlotter
+from monstim_signals.plotting.experiment_plotter import ExperimentPlotter
 from monstim_signals.core.data_models import ExperimentAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
 
@@ -19,7 +19,7 @@ class Experiment:
         self.repo = repo
 
         self._load_config_settings()
-        self.plotter = EMGExperimentPlotter(self)
+        self.plotter = ExperimentPlotter(self)
 
         self.__check_dataset_consistency()
         if self.datasets:
@@ -247,7 +247,8 @@ class Experiment:
                 raise NotImplementedError(f"Dataset {ds.id} does not have a close_all method.")
 
     def experiment_parameters(self):
-        report = [f"Experiment ID: {self.id}",
+        report = [f" Experiment Parameters for Experiment '{self.id}':",
+                  "===============================",
                   f"Datasets ({len(self.datasets)}): {[ds.id for ds in self.datasets]}."]
         for line in report:
             logging.info(line)

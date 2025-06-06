@@ -13,7 +13,7 @@ def test_csv_importer(overwrite_annot: bool = False):
     current_path = __file__
     base_path = Path.resolve(Path(current_path).parent.parent)
     data_path = os.path.join(base_path, 'EXAMPLE DATA')
-    store_root = Path(os.path.join(base_path, 'data_store'))
+    store_root = Path(os.path.join(base_path, 'data'))
 
     all_csv = discover_by_ext(Path(data_path), pattern='*.csv')
 
@@ -61,7 +61,7 @@ def test_domain_loading():
     from monstim_signals.io.repositories import SessionRepository, DatasetRepository, ExperimentRepository
 
     base = Path(__file__).resolve().parent.parent
-    session_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-' / 'RX35'
+    session_path = base / 'data' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-' / 'RX35'
     session = SessionRepository(session_path).load()
     print(f"Session ID: {session.id}, Recordings: {session.num_recordings}, Channels: {session.num_channels}, Scan Rate: {session.scan_rate} Hz")
     print("Stim Amplitudes:", session.stimulus_voltages)
@@ -69,13 +69,13 @@ def test_domain_loading():
     for rec in session.recordings:
         print(f"  {rec.id}: {rec.num_channels} channels, {rec.scan_rate} Hz")
 
-    dataset_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-'
+    dataset_path = base / 'data' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-'
     dataset = DatasetRepository(dataset_path).load()
     print(dataset)
     for sess in dataset.sessions:
         print(sess.id, sess.num_recordings, sess.num_channels, sess.scan_rate)
 
-    exp_path = base / 'data_store' / 'EMG-only data'
+    exp_path = base / 'data' / 'EMG-only data'
     exp = ExperimentRepository(exp_path).load()
     print(exp)
     for ds in exp.datasets:
@@ -88,7 +88,7 @@ def test_session_object():
     from monstim_signals.io.repositories import SessionRepository
 
     base = Path(__file__).resolve().parent.parent
-    session_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-' / 'RX35'
+    session_path = base / 'data' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-' / 'RX35'
     session = SessionRepository(session_path).load()
 
     # Print parameters and build caches
@@ -117,7 +117,7 @@ def test_dataset_object():
     from monstim_signals.io.repositories import DatasetRepository
 
     base = Path(__file__).resolve().parent.parent
-    dataset_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-'
+    dataset_path = base / 'data' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-'
     dataset = DatasetRepository(dataset_path).load()
 
     dataset.dataset_parameters()
@@ -135,7 +135,7 @@ def test_experiment_object():
     from monstim_signals.io.repositories import ExperimentRepository
 
     base = Path(__file__).resolve().parent.parent
-    exp_path = base / 'data_store' / 'EMG-only data'
+    exp_path = base / 'data' / 'EMG-only data'
     exp = ExperimentRepository(exp_path).load()
 
     exp.experiment_parameters()
@@ -156,5 +156,5 @@ if __name__ == "__main__":
     # test_csv_importer(overwrite_annot=True) # works
     # test_domain_loading() # works
     test_session_object() # works
-    test_dataset_object()
-    test_experiment_object()
+    test_dataset_object() # works
+    test_experiment_object() # works

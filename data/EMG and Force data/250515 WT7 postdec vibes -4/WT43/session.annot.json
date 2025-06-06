@@ -1,0 +1,78 @@
+{
+  "excluded_recordings": [],
+  "latency_windows": [
+    {
+      "name": "M-wave",
+      "color": "red",
+      "start_times": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "durations": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "linestyle": ":",
+      "window_version": "1.7.2"
+    },
+    {
+      "name": "H-reflex",
+      "color": "blue",
+      "start_times": [
+        3.2,
+        3.2,
+        3.2,
+        3.2,
+        3.2,
+        3.2
+      ],
+      "durations": [
+        1.5,
+        1.5,
+        1.5,
+        1.5,
+        1.5,
+        1.5
+      ],
+      "linestyle": ":",
+      "window_version": "1.7.2"
+    }
+  ],
+  "channels": [
+    {
+      "invert": false,
+      "name": "Ch0",
+      "unit": "V",
+      "type_override": null
+    },
+    {
+      "invert": false,
+      "name": "Ch1",
+      "unit": "V",
+      "type_override": null
+    },
+    {
+      "invert": false,
+      "name": "force",
+      "unit": "V",
+      "type_override": null
+    },
+    {
+      "invert": false,
+      "name": "length",
+      "unit": "V",
+      "type_override": null
+    }
+  ],
+  "m_max_values": [],
+  "is_completed": false,
+  "version": "1.7.2"
+}

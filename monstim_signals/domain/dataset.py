@@ -341,7 +341,9 @@ class Dataset:
         """
         Logs EMG dataset parameters.
         """
-        report = [f"EMG Sessions ({len(self.sessions)}): {[session.id for session in self.sessions]}.",
+        report = [f"Dataset Parameters for '{self.formatted_name}':",
+                  "===============================",
+                  f"EMG Sessions ({len(self.sessions)}): {[session.id for session in self.sessions]}.",
                   f"Date: {self.date}",
                   f"Animal ID: {self.animal_id}",
                   f"Condition: {self.condition}"]

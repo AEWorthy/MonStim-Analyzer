@@ -101,6 +101,14 @@ class Session:
         self.emg_amp_gains : List[int]  = getattr(first_meta, 'emg_amp_gains', None)  # default to 1000 if not specified
   
     def _initialize_annotations(self):
+        # Check in case of empty list annot
+        if len(self.annot.channels) != self.num_channels:
+            from monstim_signals.core.data_models import SignalChannel
+            logging.warning(f"Session {self.id} has {len(self.annot.channels)} channels in annot, but {self.num_channels} channels in recordings. Reinitializing channel annotations.")
+            self.annot.channels = [
+                SignalChannel(name=self.default_channel_names[i] if i < len(self.default_channel_names) else f"Channel {i+1}", invert=False, type_override=None)
+                for i in range(self.num_channels)
+            ]
         self.channel_names = [self.annot.channels[i].name for i in range(self.num_channels)]
         self.channel_units = [self.annot.channels[i].unit for i in range(self.num_channels)]
         self.channel_types = [self.annot.channels[i].type_override
@@ -626,8 +634,8 @@ class Session:
         number of samples, pre-stimulus and post-stimulus acquisition times, stimulus delay,
         stimulus duration, recording interval, and EMG amplifier gains.
         """
-        report = [f"Session Parameters for {self.formatted_name}",
-                  "========================================",
+        report = [f"Session Parameters for '{self.formatted_name}'",
+                  "===============================",
                   f"Session ID: {self.id}",
                   f"# of Recordings (including any excluded ones): {self.num_recordings}", 
                   f"# of Channels: {self.num_channels}",
@@ -643,6 +651,28 @@ class Session:
         for line in report:
             logging.info(line)
         return report
+    
+    def m_max_report(self):
+        """
+        Logs the M-wave amplitudes for each channel in the session.
+        """
+        report = [f"Session M-max Report for '{self.formatted_name}'",
+                  "==============================="]
+        print(self.m_max)
+        for i, channel_name in enumerate(self.channel_names):
+            try:
+                channel_m_max = self.get_m_max(self.default_method, i, return_mmax_stim_range=False)
+                line = f"- {channel_name}: M-max amplitude ({self.default_method}) = {channel_m_max:.2f} V"
+                report.append(line)
+            except TypeError:
+                line = f"- Channel {i} does not have a valid M-max amplitude."
+                report.append(line)
+
+        for line in report:
+            logging.info(line)
+        return report
+
+
     def __repr__(self):
         return f"Session(session_id={self.id}, num_recordings={self.num_recordings})"
     def __str__(self):

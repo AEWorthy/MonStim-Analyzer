@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from monstim_signals.domain.experiment import Experiment
 
 
-class EMGExperimentPlotter(BasePlotter):
+class ExperimentPlotter(BasePlotter):
     def __init__(self, experiment):
         from monstim_signals.domain.experiment import Experiment
         if not isinstance(experiment, Experiment):
@@ -409,5 +409,3 @@ class EMGExperimentPlotter(BasePlotter):
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(['channel_index', 'stimulus_v'], inplace=True)
         return raw_data_df
-
-

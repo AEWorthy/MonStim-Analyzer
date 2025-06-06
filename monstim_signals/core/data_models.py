@@ -179,7 +179,7 @@ class SessionAnnot:
         return SessionAnnot(
             excluded_recordings=[],
             latency_windows=[],
-            channels=[SignalChannel.create_empty() for _ in range(num_channels)],
+            channels=[SignalChannel.create_empty() for _ in range(num_channels) if num_channels > 0],
             m_max_values=[],
             is_completed=False,
             version=DATA_VERSION

@@ -117,7 +117,7 @@ class SessionRepository:
                 session_annot = SessionAnnot.from_meta(recordings[0].meta)
             else:
                 logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
-                session_annot = SessionAnnot.create_empty(self.session_id)
+                session_annot = SessionAnnot.create_empty()
             self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
 
         # 4) Build a Session domain object
