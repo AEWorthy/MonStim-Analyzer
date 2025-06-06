@@ -1,6 +1,5 @@
 import json
 import h5py
-import os
 from pathlib import Path
 from dataclasses import asdict
 from typing import Any, Callable
