@@ -128,15 +128,11 @@ class Experiment:
         self.reset_all_caches()
 
     def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
-        m_wave_bins = {v: [] for v in self.stimulus_voltages}
-        for ds in self.datasets:
-            binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
-            m_wave, _ = ds.get_avg_m_wave_amplitudes(method, channel_index)
-            for volt, amp in zip(binned, m_wave):
-                m_wave_bins[volt].append(amp)
-        avg = [np.mean(m_wave_bins[v]) for v in self.stimulus_voltages]
-        sem = [np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v])) for v in self.stimulus_voltages]
-        return avg, sem
+        return self._aggregate_wave_amplitudes(
+            method=method,
+            channel_index=channel_index,
+            amplitude_func=lambda ds: ds.get_avg_m_wave_amplitudes(method, channel_index)
+        )
 
     def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
         amps = []
