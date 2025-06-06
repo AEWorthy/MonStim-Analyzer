@@ -143,7 +143,10 @@ class Experiment:
             for volt, amp in zip(binned, avg_vals):
                 wave_bins[volt].append(amp)
         avg = [np.mean(wave_bins[v]) for v in self.stimulus_voltages]
-        sem = [np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v])) for v in self.stimulus_voltages]
+        sem = [
+            np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v])) if len(wave_bins[v]) > 0 else None
+            for v in self.stimulus_voltages
+        ]
         return avg, sem
 
     def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
