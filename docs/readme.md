@@ -5,10 +5,10 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 
 ## Installation
 1. **Download** the MonStim EMG Analyzer zip file from GitHub: https://github.com/AEWorthy/MonStim_Analysis/releases
-    - Windows Users: Download `MonStim-Analyzer-v0.5.0-WIN.zip`
+    - Windows Users: Download `MonStim-Analyzer-v0.4.0-WIN.zip`
     - Mac Users: A public Mac version is currently unavailable.
 2. **Extract** the contents of the zip file to a location of your choice on your computer.
-3. **Navigate** to the extracted folder and locate the `MonStim Analyzer v0.5.0.exe` file.
+3. **Navigate** to the extracted folder and locate the `MonStim Analyzer v0.4.0.exe` file.
     - Note: Please keep all program files in the unzipped directory and work directly from there.
 
 ## Features
@@ -19,7 +19,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 - **Hierarchical Data Management**: Load and manage multiple EMG recording sessions as a dataset, and store multiple datasets as experiments. Exclude unwanted recordings/sessions/datasets at runtime and reload from the originals if desired.
 
 ## Running the Application
-1. Double-click on `MonStim Analyzer v0.5.0.exe` to launch the application.
+1. Double-click on `MonStim Analyzer v0.4.0.exe` to launch the application.
     - Note: Your system may aggresively warn you that this program may be a virus. It is an unsigned program because I am an individual developer.
     - Additional Note: The program may take a while to load, especially the first time you use it.
 2. The MonStim EMG Analyzer main window will appear, ready for use.
