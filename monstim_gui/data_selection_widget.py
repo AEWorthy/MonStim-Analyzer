@@ -82,12 +82,12 @@ class DataSelectionWidget(QGroupBox):
             return
         
         menu = QMenu(self)
-        action_text = "Mark as Incomplete" if current_obj.is_completed else "Mark as Complete"
+        action_text = "Mark as Incomplete" if getattr(current_obj, 'is_completed', False) else "Mark as Complete"
         toggle_action = menu.addAction(action_text)
         
         if menu.exec(self.sender().mapToGlobal(pos)) == toggle_action:
             # Toggle completion
-            current_obj.is_completed = not current_obj.is_completed
+            current_obj.is_completed = not getattr(current_obj, 'is_completed', False)
             self.parent.has_unsaved_changes = True
             # Update visual state
             self.update_completion_status(level)
@@ -106,8 +106,8 @@ class DataSelectionWidget(QGroupBox):
             }.get(level)
             
             # Set completion status in item data
-            combo.setItemData(combo.currentIndex(), 
-                            current_obj.is_completed, 
+            combo.setItemData(combo.currentIndex(),
+                            getattr(current_obj, 'is_completed', False),
                             Qt.ItemDataRole.UserRole)
             combo.update()
 
@@ -163,22 +163,22 @@ class DataSelectionWidget(QGroupBox):
     def update_dataset_combo(self):
         self.dataset_combo.clear()
         if self.parent.current_experiment:
-            for dataset in self.parent.current_experiment.emg_datasets:
+            for dataset in self.parent.current_experiment.datasets:
                 self.dataset_combo.addItem(dataset.formatted_name)
                 index = self.dataset_combo.count() - 1
                 self.dataset_combo.setItemData(index, dataset.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
-                self.dataset_combo.setItemData(index, dataset.is_completed, Qt.ItemDataRole.UserRole)
+                self.dataset_combo.setItemData(index, getattr(dataset, 'is_completed', False), Qt.ItemDataRole.UserRole)
         else:
             logging.warning("Cannot update datasets combo. No experiment loaded.")
 
     def update_session_combo(self):
         self.session_combo.clear()
         if self.parent.current_dataset:
-            for session in self.parent.current_dataset.emg_sessions:
+            for session in self.parent.current_dataset.sessions:
                 self.session_combo.addItem(session.formatted_name)
                 index = self.session_combo.count() - 1
                 self.session_combo.setItemData(index, session.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
-                self.session_combo.setItemData(index, session.is_completed, Qt.ItemDataRole.UserRole)
+                self.session_combo.setItemData(index, getattr(session, 'is_completed', False), Qt.ItemDataRole.UserRole)
         else:
             logging.warning("Cannot update sessions combo. No dataset loaded.")
 
