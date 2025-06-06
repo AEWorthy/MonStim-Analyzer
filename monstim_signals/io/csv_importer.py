@@ -175,7 +175,7 @@ def import_experiment(
                     try:
                         f.result()
                     except Exception:
-                        logging.error('Error processing CSV')
+                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
                         logging.error(traceback.format_exc())
         else:
             for sess_name, paths in sess_map.items():
