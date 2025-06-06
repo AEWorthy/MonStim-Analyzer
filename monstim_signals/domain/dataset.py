@@ -1,12 +1,13 @@
 # monstim_signals/domain/dataset.py
 from typing import List, Any, TYPE_CHECKING
-import copy
 import logging
 import numpy as np
 
 from monstim_signals.plotting.dataset_plotter import DatasetPlotter
 from monstim_signals.domain.session import Session
-from monstim_signals.core.data_models import DatasetAnnot
+from monstim_signals.core.data_models import DatasetAnnot, LatencyWindow
+from monstim_signals.core.utils import load_config
+from monstim_signals.Transform_EMG import calculate_emg_amplitude
 
 if TYPE_CHECKING:
     
@@ -19,24 +20,35 @@ class Dataset:
     E.g. Dataset_1(Animal_A) has sessions AA00, AA01, …
     """
     def __init__(self, dataset_id: str, sessions: List[Session], annot: DatasetAnnot, repo: Any = None):
-        self.id    : str = dataset_id # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
+        self.id : str = dataset_id
         self._all_sessions : List[Session] = sessions
         self.annot         : DatasetAnnot = annot
         self.repo          : DatasetRepository = repo
 
+        self._load_config_settings()
+
         self.plotter = DatasetPlotter(self)
 
-        # TODO: Make this more robust to session changes: esp. latency windows and channel names.
+        # Ensure all sessions share the same recording parameters
         self.__check_session_consistency()
 
-        self.num_channels = min([session.num_channels for session in self.sessions])
-        self.channel_names = copy.deepcopy(max([session.channel_names for session in self.sessions]))
-        self.latency_windows = copy.deepcopy(max([session.latency_windows for session in self.sessions], key=len))
-        self.scan_rate : int = self.sessions[0].scan_rate
-        self.stim_start : float = self.sessions[0].stim_start
+        self.scan_rate: int = self.sessions[0].scan_rate
+        self.stim_start: float = self.sessions[0].stim_start
 
         self.update_latency_window_parameters()
-        logging.info(f"Dataset {self.dataset_id} initialized with {len(self.sessions)} sessions.")
+        logging.info(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
+
+    def _load_config_settings(self) -> None:
+        _config = load_config()
+        self.bin_size = _config["bin_size"]
+        self.default_method = _config["default_method"]
+        self.m_color = _config["m_color"]
+        self.h_color = _config["h_color"]
+        # Plot styling shared with Session objects
+        self.title_font_size = _config["title_font_size"]
+        self.axis_label_font_size = _config["axis_label_font_size"]
+        self.tick_font_size = _config["tick_font_size"]
+        self.subplot_adjust_args = _config["subplot_adjust_args"]
     
     @property
     def date(self) -> str:
@@ -69,6 +81,7 @@ class Dataset:
     @property
     def num_sessions(self) -> int:
         return len(self.sessions)
+
     @property
     def excluded_sessions(self) -> List[Session]:
         """
@@ -76,9 +89,31 @@ class Dataset:
         This is useful for filtering out sessions that do not meet certain criteria.
         """
         return set(self.annot.excluded_sessions)
+
     @property
     def sessions(self) -> List[Session]:
-            return [sess for sess in self._all_sessions if sess.id not in self.excluded_sessions]
+        return [sess for sess in self._all_sessions if sess.id not in self.excluded_sessions]
+
+    @property
+    def num_channels(self) -> int:
+        return min(session.num_channels for session in self.sessions)
+
+    @property
+    def channel_names(self) -> List[str]:
+        return max((session.channel_names for session in self.sessions), key=len)
+
+    @property
+    def latency_windows(self) -> List[LatencyWindow]:
+        return self.sessions[0].latency_windows
+
+    @property
+    def stimulus_voltages(self) -> np.ndarray:
+        """Return sorted unique stimulus voltages binned by `bin_size`."""
+        binned_voltages = set()
+        for session in self.sessions:
+            vols = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
+            binned_voltages.update(vols.tolist())
+        return np.array(sorted(binned_voltages))
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
@@ -163,6 +198,69 @@ class Dataset:
         else:
             return np.mean(m_max_amplitudes)
 
+    def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
+        """Average M-wave amplitudes for each stimulus bin across sessions."""
+        m_wave_bins = {v: [] for v in self.stimulus_voltages}
+        for session in self.sessions:
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
+            m_wave = session.get_m_wave_amplitudes(method, channel_index)
+            for volt, amp in zip(binned, m_wave):
+                m_wave_bins[volt].append(amp)
+        avg = [np.mean(m_wave_bins[v]) for v in self.stimulus_voltages]
+        sem = [np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v])) for v in self.stimulus_voltages]
+        return avg, sem
+
+    def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
+        amps = []
+        for session in self.sessions:
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
+            if voltage in binned:
+                idx = np.where(binned == voltage)[0][0]
+                amps.append(session.get_m_wave_amplitudes(method, channel_index)[idx])
+        return amps
+
+    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int):
+        """Average H-reflex amplitudes for each stimulus bin across sessions."""
+        h_wave_bins = {v: [] for v in self.stimulus_voltages}
+        for session in self.sessions:
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
+            h_wave = session.get_h_wave_amplitudes(method, channel_index)
+            for volt, amp in zip(binned, h_wave):
+                h_wave_bins[volt].append(amp)
+        avg = [np.mean(h_wave_bins[v]) for v in self.stimulus_voltages]
+        std = [np.std(h_wave_bins[v]) for v in self.stimulus_voltages]
+        return avg, std
+
+    def get_h_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
+        amps = []
+        for session in self.sessions:
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
+            if voltage in binned:
+                idx = np.where(binned == voltage)[0][0]
+                amps.append(session.get_h_wave_amplitudes(method, channel_index)[idx])
+        return amps
+
+    def session_response_map(self, channel: int, window: tuple[float, float]) -> dict[str, list[float]]:
+        """Return per-session response amplitudes within ``window``.
+
+        This helper is used by :class:`Experiment` to build aggregated response
+        maps across multiple datasets."""
+        start_ms, end_ms = window
+        result: dict[str, list[float]] = {}
+        for session in self.sessions:
+            amplitudes = []
+            for rec_array in session.recordings_filtered:
+                amp = calculate_emg_amplitude(
+                    rec_array[:, channel],
+                    start_ms + session.stim_start,
+                    end_ms + session.stim_start,
+                    session.scan_rate,
+                    method=self.default_method,
+                )
+                amplitudes.append(amp)
+            result[session.id] = amplitudes
+        return result
+
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
@@ -235,3 +333,4 @@ class Dataset:
         return f"Dataset: {self.id} with {self.num_sessions} sessions"
     def __len__(self) -> int:
         return self.num_sessions
+
