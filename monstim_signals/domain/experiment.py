@@ -136,7 +136,7 @@ class Experiment:
             for volt, amp in zip(binned_voltages, m_wave):
                 m_wave_bins[volt].append(amp)
 
-        avg = [float(np.mean(m_wave_bins[v])) for v in self.stimulus_voltages]
+        avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else 0.0 for v in self.stimulus_voltages]
         sem = [float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else 0.0
                for v in self.stimulus_voltages]
         return avg, sem
