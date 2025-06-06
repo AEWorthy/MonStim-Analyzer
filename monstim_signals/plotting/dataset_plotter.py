@@ -345,7 +345,7 @@ class DatasetPlotter(BasePlotter):
                         channel_index=channel_index,
                         return_mmax_stim_range=True,
                     )
-                except Exception:
+                except (ValueError, AttributeError):  # Replace with specific exceptions raised by get_m_max
                     m_max = np.nan
                     mmax_low_stim = np.nan
                 m_max_amplitudes.append(m_max)
