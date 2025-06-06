@@ -2,6 +2,7 @@
 from typing import List, Any
 import copy
 import logging
+import numpy as np
 
 from monstim_signals.domain.session import Session
 from monstim_signals.plotting.dataset_plotter import DatasetPlotter
@@ -131,6 +132,33 @@ class Dataset:
         # Call the appropriate plotting method from the plotter object
         raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
         return raw_data
+    
+    def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
+        """
+        Calculates the average M-wave amplitude for a specific channel in the dataset.
+
+        Args:
+            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            return_avg_mmax_thresholds (bool): Whether to return the average M-max threshold values along with the amplitude. Default is False.
+
+        Returns:
+            float: The average M-wave amplitude for the specified channel.
+        """
+        try:
+            m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.sessions if session.m_max[channel_index] is not None])
+        except ValueError as e:
+            logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
+            if return_avg_mmax_thresholds:
+                return None, None
+            else:
+                return None
+        
+        if return_avg_mmax_thresholds:
+            return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
+        else:
+            return np.mean(m_max_amplitudes)
+
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
