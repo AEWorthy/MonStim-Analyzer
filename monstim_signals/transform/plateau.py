@@ -33,7 +33,7 @@ def detect_plateau(y, max_window_size, min_window_size, threshold):
         )
         return plateau_start_idx, plateau_end_idx
     elif max_window_size > min_window_size:
-        return detect_plateau(x, y, max_window_size - 1, min_window_size, threshold)
+        return detect_plateau(y, max_window_size - 1, min_window_size, threshold)
     else:
         logging.warning("No plateau region detected.")
         return None, None
@@ -50,7 +50,7 @@ def get_avg_mmax(
     """Return the M-max amplitude and optionally its stimulus range."""
     m_wave_amplitudes = np.array(m_wave_amplitudes)
     plateau_start_idx, plateau_end_idx = detect_plateau(
-        stimulus_voltages, m_wave_amplitudes, max_window_size, min_window_size, threshold
+        m_wave_amplitudes, max_window_size, min_window_size, threshold
     )
     if plateau_start_idx is not None and plateau_end_idx is not None:
         plateau_data = np.array(m_wave_amplitudes[plateau_start_idx:plateau_end_idx])

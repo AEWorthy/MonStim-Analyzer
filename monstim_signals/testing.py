@@ -3,6 +3,7 @@
 Script to test various functionalities of the MonStim Signals library, including CSV import and domain loading.
 This script is intended for development and testing purposes, and should not be used in production.
 '''
+import logging
 
 def test_csv_importer(overwrite_annot: bool = False):
     import os
@@ -55,6 +56,7 @@ def test_csv_importer(overwrite_annot: bool = False):
 
 def test_domain_loading():
     """Load example Session, Dataset and Experiment and print summaries."""
+    logging.info("Testing domain loading for Session, Dataset, and Experiment objects")
     from pathlib import Path
     from monstim_signals.io.repositories import SessionRepository, DatasetRepository, ExperimentRepository
 
@@ -81,6 +83,7 @@ def test_domain_loading():
 
 def test_session_object():
     """Thoroughly test Session loading and plotting capabilities."""
+    logging.info("Testing Session object loading and plotting routines")
     from pathlib import Path
     from monstim_signals.io.repositories import SessionRepository
 
@@ -96,14 +99,20 @@ def test_session_object():
         _ = session.get_m_max(method=session.default_method, channel_index=idx)
 
     # Run representative plotting functions
+    logging.info('Plotting filtered EMG data for first two channels')
     session.plotter.plot_emg(channel_indices=[0, 1], data_type='filtered')
+    logging.info('Plotting raw EMG data for first two channels')
     session.plotter.plot_emg(channel_indices=[0, 1], data_type='raw')
+    logging.info('Plotting M-wave curves for first two channels')
     session.plotter.plot_mmax(channel_indices=[0, 1])
+    logging.info('Plotting MaxH for first two channels')
     session.plotter.plot_reflexCurves(channel_indices=[0, 1])
+    logging.info('Plotting M-wave curves with smoothing for first two channels')
     session.plotter.plot_m_curves_smoothened(channel_indices=[0, 1])
 
 def test_dataset_object():
     """Load a Dataset, display parameters and test its plotting routines."""
+    logging.info("Testing Dataset object loading and plotting routines")
     from pathlib import Path
     from monstim_signals.io.repositories import DatasetRepository
 
@@ -112,12 +121,16 @@ def test_dataset_object():
     dataset = DatasetRepository(dataset_path).load()
 
     dataset.dataset_parameters()
+    logging.info("Plotting reflex curves for first two channels")
     dataset.plotter.plot_reflexCurves(channel_indices=[0, 1])
+    logging.info("Plotting M-wave curves for first two channels")
     dataset.plotter.plot_mmax(channel_indices=[0, 1])
+    logging.info("Plotting MaxH for first two channels")
     dataset.plotter.plot_maxH(channel_indices=[0, 1])
 
 def test_experiment_object():
     """Load an Experiment, display parameters and test plotting routines."""
+    logging.info("Testing Experiment object loading and plotting routines")
     from pathlib import Path
     from monstim_signals.io.repositories import ExperimentRepository
 
@@ -126,8 +139,11 @@ def test_experiment_object():
     exp = ExperimentRepository(exp_path).load()
 
     exp.experiment_parameters()
+    logging.info("Plotting reflex curves for first two channels")
     exp.plotter.plot_reflexCurves(channel_indices=[0, 1])
+    logging.info("Plotting M-wave curves for first two channels")
     exp.plotter.plot_mmax(channel_indices=[0, 1])
+    logging.info("Plotting MaxH for first two channels")
     exp.plotter.plot_maxH(channel_indices=[0, 1])
 
 if __name__ == "__main__":
@@ -138,7 +154,7 @@ if __name__ == "__main__":
         sys.path.insert(0, str(project_root))
 
     # test_csv_importer(overwrite_annot=True)
-    # test_domain_loading()
-    # test_session_object()
-    # test_dataset_object()
-    # test_experiment_object()
+    test_domain_loading()
+    test_session_object()
+    test_dataset_object()
+    test_experiment_object()

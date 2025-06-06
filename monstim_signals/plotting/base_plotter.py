@@ -88,7 +88,7 @@ class BasePlotter:
                 canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
             canvas.draw()
         else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
+            # plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
 class UnableToPlotError(Exception):

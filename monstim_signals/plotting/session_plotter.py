@@ -567,12 +567,7 @@ class SessionPlotter(BasePlotter):
             fig.supylabel(f'Reflex Ampl. (mV, {method})')
 
         # Show the plot
-        if canvas:
-            canvas.figure.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            canvas.draw()
-        else:
-            plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
-            plt.show()
+        self.display_plot(canvas)
 
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)

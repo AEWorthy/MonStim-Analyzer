@@ -254,7 +254,7 @@ class DatasetAnnot:
         from monstim_signals.io.string_parser import parse_dataset_name
         try:
             # TODO make date formatting configurable
-            date, animal_id, condition = parse_dataset_name(dataset_name, preferred_date_format='YYYYMMDD') 
+            date, animal_id, condition = parse_dataset_name(dataset_name, preferred_date_format='YYMMDD') 
         except ValueError:
             date = animal_id = condition = None
         
