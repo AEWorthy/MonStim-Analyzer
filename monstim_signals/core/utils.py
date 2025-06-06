@@ -7,7 +7,7 @@ from pathlib import Path
 
 try:
     from PyQt6.QtWidgets import QApplication
-except Exception:  # Allow headless environments
+except ImportError:  # Allow headless environments
     QApplication = None
 import numpy as np
 from monstim_signals.core.version import __version__
