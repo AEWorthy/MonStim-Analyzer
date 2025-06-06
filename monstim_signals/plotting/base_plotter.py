@@ -93,7 +93,6 @@ class BasePlotter:
 
     def _set_y_axis_limits(self, ax, values, fallback=1.0):
         """Set a reasonable y-axis limit based on ``values``."""
-        import numpy as np
 
         if len(values) == 0:
             y_max = fallback
