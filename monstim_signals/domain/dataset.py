@@ -7,7 +7,7 @@ from monstim_signals.plotting.dataset_plotter import DatasetPlotter
 from monstim_signals.domain.session import Session
 from monstim_signals.core.data_models import DatasetAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
-from monstim_signals.Transform_EMG import calculate_emg_amplitude
+from monstim_signals.transform import calculate_emg_amplitude
 
 if TYPE_CHECKING:
     

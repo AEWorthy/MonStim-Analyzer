@@ -10,7 +10,12 @@ import numpy as np
 from monstim_signals.core.data_models import SessionAnnot, LatencyWindow, StimCluster
 from monstim_signals.core.utils import load_config
 from monstim_signals.domain.recording import Recording
-from monstim_signals.Transform_EMG import butter_bandpass_filter, calculate_emg_amplitude, get_avg_mmax, NoCalculableMmaxError
+from monstim_signals.transform import (
+    butter_bandpass_filter,
+    calculate_emg_amplitude,
+    get_avg_mmax,
+    NoCalculableMmaxError,
+)
 from monstim_signals.plotting.session_plotter import SessionPlotter
 
 if TYPE_CHECKING:
