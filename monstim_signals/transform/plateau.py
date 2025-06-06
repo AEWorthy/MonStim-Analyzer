@@ -13,7 +13,7 @@ def savgol_filter_y(y, polyorder=3):
     return signal.savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
 
-def detect_plateau(x, y, max_window_size, min_window_size, threshold):
+def detect_plateau(y, max_window_size, min_window_size, threshold):
     """Detect a plateau region in a reflex curve."""
     plateau_start_idx = None
     plateau_end_idx = None
