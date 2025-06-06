@@ -155,6 +155,6 @@ if __name__ == "__main__":
 
     # test_csv_importer(overwrite_annot=True) # works
     # test_domain_loading() # works
-    # test_session_object() # works
-    # test_dataset_object()
+    test_session_object() # works
+    test_dataset_object()
     test_experiment_object()
