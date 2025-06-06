@@ -97,7 +97,7 @@ class RestoreRecordingCommand(Command):
             self.gui.current_session.exclude_recording(self.recording_index)
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
-
+#TODO: Change to exclude rather than remove
 class RemoveSessionCommand(Command):
     def __init__(self, gui):
         self.command_name = "Remove Session"
@@ -115,7 +115,7 @@ class RemoveSessionCommand(Command):
         self.gui.current_dataset._all_sessions.insert(self.idx, self.removed_session)
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
-
+# TODO: Change to exclude rather than remove
 class RemoveDatasetCommand(Command):
     def __init__(self, gui):
         self.command_name = "Remove Dataset"
