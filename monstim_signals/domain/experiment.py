@@ -127,45 +127,19 @@ class Experiment:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
         self.reset_all_caches()
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-    def _aggregate_wave_amplitudes(self, method: str, channel_index: int,
-                                   amplitude_func) -> tuple[list[float], list[float]]:
-        """Aggregate amplitudes across datasets.
-
-        Parameters
-        ----------
-        method:
-            Amplitude calculation method.
-        channel_index:
-            Index of the channel to aggregate.
-        amplitude_func:
-            Function returning ``(avg, err)`` for a dataset.
-
-        Returns
-        -------
-        tuple[list[float], list[float]]
-            Averaged amplitudes and standard errors for each stimulus bin.
-        """
-        bins: dict[float, list[float]] = {v: [] for v in self.stimulus_voltages}
+    def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
+        """Average M-wave amplitudes for each stimulus bin across datasets."""
+        m_wave_bins = {v: [] for v in self.stimulus_voltages}
         for ds in self.datasets:
             binned_voltages = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
-            amps, _ = amplitude_func(ds)
-            for v, amp in zip(binned_voltages, amps):
-                bins[v].append(amp)
+            m_wave, _ = ds.get_avg_m_wave_amplitudes(method, channel_index)
+            for volt, amp in zip(binned_voltages, m_wave):
+                m_wave_bins[volt].append(amp)
 
-        avg = [float(np.mean(bins[v])) for v in self.stimulus_voltages]
-        sem = [float(np.std(bins[v]) / np.sqrt(len(bins[v]))) if bins[v] else 0.0
+        avg = [float(np.mean(m_wave_bins[v])) for v in self.stimulus_voltages]
+        sem = [float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else 0.0
                for v in self.stimulus_voltages]
         return avg, sem
-
-    def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
-        return self._aggregate_wave_amplitudes(
-            method=method,
-            channel_index=channel_index,
-            amplitude_func=lambda ds: ds.get_avg_m_wave_amplitudes(method, channel_index)
-        )
 
     def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
         amps = []
