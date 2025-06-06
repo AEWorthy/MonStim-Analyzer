@@ -9,6 +9,7 @@ import multiprocessing
 from PyQt6.QtWidgets import QApplication 
 from PyQt6.QtCore import QTimer, QStandardPaths, QCoreApplication
 
+#TODO: Test importation functionality of the GUI
 
 QCoreApplication.setOrganizationName("WorthyLab")
 QCoreApplication.setApplicationName("MonStimAnalyzer")
