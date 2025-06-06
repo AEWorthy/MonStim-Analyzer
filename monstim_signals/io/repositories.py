@@ -187,6 +187,7 @@ class DatasetRepository:
         dataset = Dataset(
             dataset_id=self.dataset_id,
             sessions=sessions,
+            annot=dataset_annot,
             repo=self
         )
         return dataset
@@ -197,6 +198,7 @@ class DatasetRepository:
         (If I want dataset‐level annotations in the future, write them here.)
         This is called when the user edits any session's recordings.
         """
+        self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
         for session in dataset.sessions:
             session.repo.save(session)
 

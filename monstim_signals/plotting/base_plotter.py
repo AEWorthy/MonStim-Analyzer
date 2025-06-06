@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+try:
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+except Exception:  # Fallback when Qt bindings are unavailable
+    from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:

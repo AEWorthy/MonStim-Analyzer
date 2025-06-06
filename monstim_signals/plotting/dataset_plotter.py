@@ -339,16 +339,16 @@ class DatasetPlotter(BasePlotter):
             m_max_amplitudes = []
             m_max_thresholds = []
             session_ids = []
-            for session in self.emg_object.emg_sessions:
+            for session in self.emg_object.sessions:
                 try:
                     m_max, mmax_low_stim, _ = session.get_m_max(method=method, channel_index=channel_index, return_mmax_stim_range=True)
                     m_max_amplitudes.append(m_max)
                     m_max_thresholds.append(mmax_low_stim)
-                    session_ids.append(session.session_id)
+                    session_ids.append(session.id)
                 except IndexError:
                     m_max_amplitudes.append(np.nan)
                     m_max_thresholds.append(np.nan)
-                    session_ids.append(session.session_id)
+                    session_ids.append(session.id)
                 
             # Append M-wave amplitudes to superlist for y-axis adjustment.
             all_m_max_amplitudes.extend(m_max_amplitudes)            

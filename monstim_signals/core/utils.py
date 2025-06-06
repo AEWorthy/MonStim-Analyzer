@@ -5,7 +5,10 @@ from typing import List
 import yaml
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication
+try:
+    from PyQt6.QtWidgets import QApplication
+except Exception:  # Allow headless environments
+    QApplication = None
 import numpy as np
 from monstim_signals.core.version import __version__
 
