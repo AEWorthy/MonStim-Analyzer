@@ -1,3 +1,5 @@
+"""Splash screen displayed during application startup."""
+
 import logging
 import os
 
