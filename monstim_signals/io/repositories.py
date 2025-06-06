@@ -32,7 +32,7 @@ class RecordingRepository:
         self.meta_js = stem.with_suffix(".meta.json")
         self.annot_js= stem.with_suffix(".annot.json")
 
-    def load(self) -> Recording:
+    def load(self) -> 'Recording':
         # 1) Load meta JSON (immutable, record‐time facts)
         meta_dict = json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
@@ -99,7 +99,7 @@ class SessionRepository:
         self.session_id = folder.name  # e.g. "AA00"
         self.session_js = folder / "session.annot.json"
 
-    def load(self) -> Session:
+    def load(self) -> 'Session':
         # 1) Discover all recordings in this folder
         recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
         recordings = [repo.load() for repo in recording_repos]
@@ -167,7 +167,7 @@ class DatasetRepository:
         self.dataset_id = folder.name  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
         self.dataset_js = folder / "dataset.annot.json"
 
-    def load(self) -> Dataset:
+    def load(self) -> 'Dataset':
         # 1) Each subfolder of `folder` is a session
         session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
 
@@ -211,7 +211,7 @@ class ExperimentRepository:
         """
         self.folder = folder
 
-    def load(self) -> Experiment:
+    def load(self) -> 'Experiment':
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
         datasets = [DatasetRepository(ds_folder).load() for ds_folder in dataset_folders]
         expt_id = self.folder.name  # e.g. "ExperimentRoot"

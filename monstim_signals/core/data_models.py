@@ -244,6 +244,8 @@ class DatasetAnnot:
             excluded_sessions=[],
             version=DATA_VERSION
         )
+    
+    @classmethod
     def from_ds_name(cls, dataset_name: str) -> 'DatasetAnnot':
         """
         Create a DatasetAnnot from a dataset name.

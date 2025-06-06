@@ -1,7 +1,7 @@
 # monstim_signals/domain/session.py
 import os
 import logging
-from typing import List, Any
+from typing import List, Any, TYPE_CHECKING
 from functools import cached_property
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
@@ -12,6 +12,12 @@ from monstim_signals.core.utils import load_config
 from monstim_signals.domain.recording import Recording
 from monstim_signals.Transform_EMG import butter_bandpass_filter, calculate_emg_amplitude, get_avg_mmax, NoCalculableMmaxError
 from monstim_signals.plotting.session_plotter import SessionPlotter
+
+if TYPE_CHECKING:
+    from monstim_signals.io.repositories import SessionRepository
+    from monstim_signals.core.data_models import SessionAnnot
+    from monstim_signals.domain.recording import Recording
+
 # ──────────────────────────────────────────────────────────────────
 class Session:
     """
@@ -19,10 +25,10 @@ class Session:
     all belonging to one “session” (animal & date).
     """
     def __init__(self, session_id : str, recordings : List[Recording], annot : SessionAnnot, repo : Any = None):
-        self.id               = session_id
-        self._all_recordings  = recordings
-        self.annot            = annot  # SessionAnnot, holds user edits like exclude flags, etc.
-        self.repo             = repo  # back‐pointer to SessionRepository
+        self.id : str                            = session_id
+        self._all_recordings  : List[Recording]  = recordings
+        self.annot : SessionAnnot                = annot
+        self.repo  : SessionRepository           = repo
 
         self._load_config_settings()
         self._load_session_parameters()

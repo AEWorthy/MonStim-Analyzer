@@ -1,13 +1,17 @@
 # monstim_signals/domain/dataset.py
-from typing import List, Any
+from typing import List, Any, TYPE_CHECKING
 import copy
 import logging
 import numpy as np
 
-from monstim_signals.domain.session import Session
 from monstim_signals.plotting.dataset_plotter import DatasetPlotter
+from monstim_signals.domain.session import Session
 from monstim_signals.core.data_models import DatasetAnnot
-from monstim_signals.io.repositories import DatasetRepository
+
+if TYPE_CHECKING:
+    
+    
+    from monstim_signals.io.repositories import DatasetRepository
 
 class Dataset:
     """
