@@ -362,10 +362,7 @@ class DatasetPlotter(BasePlotter):
                 ax.set_xticklabels(['M-response'])
                 ax.set_title(f'{channel_names[0]}')                    
                 ax.set_xlim(m_x-1, m_x+1.5)  # Center data points
-                y_max = np.nanmax(all_m_max_amplitudes)
-                if np.isnan(y_max):
-                    y_max = 1.0
-                ax.set_ylim(0, 1.1 * y_max)
+                self._set_y_axis_limits(ax, all_m_max_amplitudes)
             else:
                 axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
                 axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nStdev. M-Max: {np.std(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
