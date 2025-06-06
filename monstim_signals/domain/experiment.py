@@ -186,14 +186,25 @@ class Experiment:
         return amps
 
     def get_avg_m_max(self, method: str, channel_index: int, return_avg_mmax_thresholds: bool = False):
-        m_max, m_thresh = zip(*[
-            ds.get_avg_m_max(method, channel_index, return_avg_mmax_thresholds=True)[:2]
-            for ds in self.datasets if ds.get_avg_m_max(method, channel_index) is not None
-        ])
+        m_max_list = []
+        m_thresh_list = []
+        for ds in self.datasets:
+            mmax, mthresh = ds.get_avg_m_max(
+                method, channel_index, return_avg_mmax_thresholds=True
+            )
+            if mmax is not None:
+                m_max_list.append(mmax)
+                m_thresh_list.append(mthresh)
+
+        if not m_max_list:
+            if return_avg_mmax_thresholds:
+                return None, None
+            return None
+
         if return_avg_mmax_thresholds:
-            return np.mean(m_max), np.mean(m_thresh)
+            return float(np.mean(m_max_list)), float(np.mean(m_thresh_list))
         else:
-            return np.mean(m_max)
+            return float(np.mean(m_max_list))
 
     def reset_all_caches(self):
         for ds in self.datasets:

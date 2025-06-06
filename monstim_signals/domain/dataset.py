@@ -184,19 +184,29 @@ class Dataset:
         Returns:
             float: The average M-wave amplitude for the specified channel.
         """
-        try:
-            m_max_amplitudes, m_max_thresholds = zip(*[session.get_m_max(method, channel_index, return_mmax_stim_range=True)[:2] for session in self.sessions if session.m_max[channel_index] is not None])
-        except ValueError as e:
-            logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
+        m_max_amplitudes = []
+        m_max_thresholds = []
+        for session in self.sessions:
+            try:
+                m_max, mmax_low_stim, _ = session.get_m_max(
+                    method, channel_index, return_mmax_stim_range=True
+                )
+                m_max_amplitudes.append(m_max)
+                m_max_thresholds.append(mmax_low_stim)
+            except Exception as e:
+                logging.warning(
+                    f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}"
+                )
+
+        if not m_max_amplitudes:
             if return_avg_mmax_thresholds:
                 return None, None
-            else:
-                return None
-        
+            return None
+
         if return_avg_mmax_thresholds:
-            return np.mean(m_max_amplitudes), np.mean(m_max_thresholds)
+            return float(np.mean(m_max_amplitudes)), float(np.mean(m_max_thresholds))
         else:
-            return np.mean(m_max_amplitudes)
+            return float(np.mean(m_max_amplitudes))
 
     def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
         """Average M-wave amplitudes for each stimulus bin across sessions."""
