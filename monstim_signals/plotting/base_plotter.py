@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-except Exception:  # Fallback when Qt bindings are unavailable
+except ImportError:  # Fallback when Qt bindings are unavailable
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from typing import TYPE_CHECKING, List
 
