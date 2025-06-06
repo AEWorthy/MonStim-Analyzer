@@ -60,7 +60,7 @@ def get_avg_mmax(
                 plateau_data[plateau_data < np.max(plateau_data)]
             )
             logging.info(
-                f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data)}"
+                f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data[plateau_data < np.max(plateau_data)])}"
             )
         logging.info(f"\tM-max amplitude: {m_max}")
         if return_mmax_stim_range:
