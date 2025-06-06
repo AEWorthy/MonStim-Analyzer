@@ -27,7 +27,7 @@ def detect_plateau(y, max_window_size, min_window_size, threshold):
         else:
             plateau_start_idx = None
             plateau_end_idx = None
-    if plateau_start_idx and plateau_end_idx is not None:
+    if plateau_start_idx is not None and plateau_end_idx is not None:
         logging.info(
             f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD."
         )
