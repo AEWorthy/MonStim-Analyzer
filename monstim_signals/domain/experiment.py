@@ -134,6 +134,21 @@ class Experiment:
             amplitude_func=lambda ds: ds.get_avg_m_wave_amplitudes(method, channel_index)
         )
 
+    def _aggregate_wave_amplitudes(self, method: str, channel_index: int, amplitude_func):
+        """Aggregate wave amplitudes across datasets."""
+        wave_bins = {v: [] for v in self.stimulus_voltages}
+        for ds in self.datasets:
+            binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            avg_vals, _ = amplitude_func(ds)
+            for volt, amp in zip(binned, avg_vals):
+                wave_bins[volt].append(amp)
+        avg = [np.mean(wave_bins[v]) for v in self.stimulus_voltages]
+        sem = [
+            np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v])) if len(wave_bins[v]) > 0 else None
+            for v in self.stimulus_voltages
+        ]
+        return avg, sem
+
     def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
         amps = []
         for ds in self.datasets:

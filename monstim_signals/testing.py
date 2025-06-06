@@ -54,10 +54,12 @@ def test_csv_importer(overwrite_annot: bool = False):
                     csv_to_store(csv_path, output_fp, overwrite_h5=True, overwrite_meta=True, overwrite_annot=overwrite_annot)
 
 def test_domain_loading():
+    """Load example Session, Dataset and Experiment and print summaries."""
     from pathlib import Path
     from monstim_signals.io.repositories import SessionRepository, DatasetRepository, ExperimentRepository
 
-    session_path = Path(r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG-only data\240829 C328.1 post-dec mcurve_long-\RX35')
+    base = Path(__file__).resolve().parent.parent
+    session_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-' / 'RX35'
     session = SessionRepository(session_path).load()
     print(f"Session ID: {session.id}, Recordings: {session.num_recordings}, Channels: {session.num_channels}, Scan Rate: {session.scan_rate} Hz")
     print("Stim Amplitudes:", session.stimulus_voltages)
@@ -65,28 +67,68 @@ def test_domain_loading():
     for rec in session.recordings:
         print(f"  {rec.id}: {rec.num_channels} channels, {rec.scan_rate} Hz")
 
-    dataset = DatasetRepository(Path(r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG-only data\240829 C328.1 post-dec mcurve_long-')).load()
+    dataset_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-'
+    dataset = DatasetRepository(dataset_path).load()
     print(dataset)
     for sess in dataset.sessions:
         print(sess.id, sess.num_recordings, sess.num_channels, sess.scan_rate)
 
-
-    exp = ExperimentRepository(Path(r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG-only data')).load()
+    exp_path = base / 'data_store' / 'EMG-only data'
+    exp = ExperimentRepository(exp_path).load()
     print(exp)
     for ds in exp.datasets:
         print(ds.id, ds.num_sessions)
 
 def test_session_object():
+    """Thoroughly test Session loading and plotting capabilities."""
+    from pathlib import Path
     from monstim_signals.io.repositories import SessionRepository
 
-    session_path = Path(r'C:\Users\aewor\Documents\GitHub\MonStim_Analysis\data_store\EMG-only data\240829 C328.1 post-dec mcurve_long-\RX35')
+    base = Path(__file__).resolve().parent.parent
+    session_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-' / 'RX35'
     session = SessionRepository(session_path).load()
-    
+
+    # Print parameters and build caches
     session.session_parameters()
-    # print(session.recordings_filtered[0])
-    session.plotter.plot_emg(channel_indices=[0, 1],data_type='filtered')
-    session.plotter.plot_emg(channel_indices=[0, 1],data_type='raw')
-    session.plotter.plot_emg(channel_indices=[0, 1],data_type='rectified_filtered')
+    _ = session.recordings_raw
+    _ = session.recordings_filtered
+    for idx in range(min(2, session.num_channels)):
+        _ = session.get_m_max(method=session.default_method, channel_index=idx)
+
+    # Run representative plotting functions
+    session.plotter.plot_emg(channel_indices=[0, 1], data_type='filtered')
+    session.plotter.plot_emg(channel_indices=[0, 1], data_type='raw')
+    session.plotter.plot_mmax(channel_indices=[0, 1])
+    session.plotter.plot_reflexCurves(channel_indices=[0, 1])
+    session.plotter.plot_m_curves_smoothened(channel_indices=[0, 1])
+
+def test_dataset_object():
+    """Load a Dataset, display parameters and test its plotting routines."""
+    from pathlib import Path
+    from monstim_signals.io.repositories import DatasetRepository
+
+    base = Path(__file__).resolve().parent.parent
+    dataset_path = base / 'data_store' / 'EMG-only data' / '240829 C328.1 post-dec mcurve_long-'
+    dataset = DatasetRepository(dataset_path).load()
+
+    dataset.dataset_parameters()
+    dataset.plotter.plot_reflexCurves(channel_indices=[0, 1])
+    dataset.plotter.plot_mmax(channel_indices=[0, 1])
+    dataset.plotter.plot_maxH(channel_indices=[0, 1])
+
+def test_experiment_object():
+    """Load an Experiment, display parameters and test plotting routines."""
+    from pathlib import Path
+    from monstim_signals.io.repositories import ExperimentRepository
+
+    base = Path(__file__).resolve().parent.parent
+    exp_path = base / 'data_store' / 'EMG-only data'
+    exp = ExperimentRepository(exp_path).load()
+
+    exp.experiment_parameters()
+    exp.plotter.plot_reflexCurves(channel_indices=[0, 1])
+    exp.plotter.plot_mmax(channel_indices=[0, 1])
+    exp.plotter.plot_maxH(channel_indices=[0, 1])
 
 if __name__ == "__main__":
     import sys
@@ -97,4 +139,6 @@ if __name__ == "__main__":
 
     # test_csv_importer(overwrite_annot=True)
     # test_domain_loading()
-    test_session_object()
+    # test_session_object()
+    # test_dataset_object()
+    # test_experiment_object()
