@@ -13,7 +13,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
 from monstim_signals import EMGExperiment
-from monstim_signals.io.csv_to_pickle import GUIExptImportingThread
+from monstim_signals.io.csv_importer import GUIExptImportingThread
 from monstim_signals.core.utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
 
