@@ -157,7 +157,8 @@ def import_experiment(
             overwrite_meta=overwrite,
             overwrite_annot=overwrite,
         )
-        processed += 1
+        with lock:
+            processed += 1
         progress_callback(int((processed / total_files) * 100))
 
     for ds_name, sess_map in dataset_maps.items():
