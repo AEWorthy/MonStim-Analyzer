@@ -91,6 +91,21 @@ class BasePlotter:
             # plt.subplots_adjust(**self.emg_object.subplot_adjust_args)
             plt.show()
 
+    def _set_y_axis_limits(self, ax, values, fallback=1.0):
+        """Set a reasonable y-axis limit based on ``values``."""
+        import numpy as np
+
+        if len(values) == 0:
+            y_max = fallback
+        else:
+            try:
+                y_max = np.nanmax(values)
+            except ValueError:
+                y_max = fallback
+            if np.isnan(y_max) or y_max <= 0:
+                y_max = fallback
+        ax.set_ylim(0, 1.1 * y_max)
+
 class UnableToPlotError(Exception):
     def __init__(self, message):
         self.message = message

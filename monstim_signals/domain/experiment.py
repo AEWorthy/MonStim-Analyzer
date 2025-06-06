@@ -149,9 +149,9 @@ class Experiment:
             avg_vals, _ = amplitude_func(ds)
             for volt, amp in zip(binned, avg_vals):
                 wave_bins[volt].append(amp)
-        avg = [np.mean(wave_bins[v]) for v in self.stimulus_voltages]
+        avg = [float(np.mean(wave_bins[v])) if wave_bins[v] else np.nan for v in self.stimulus_voltages]
         sem = [
-            np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v])) if len(wave_bins[v]) > 0 else None
+            float(np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v]))) if wave_bins[v] else np.nan
             for v in self.stimulus_voltages
         ]
         return avg, sem
@@ -172,8 +172,8 @@ class Experiment:
             h_wave, _ = ds.get_avg_h_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, h_wave):
                 h_wave_bins[volt].append(amp)
-        avg = [np.mean(h_wave_bins[v]) for v in self.stimulus_voltages]
-        std = [np.std(h_wave_bins[v]) for v in self.stimulus_voltages]
+        avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return avg, std
 
     def get_h_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
@@ -186,14 +186,25 @@ class Experiment:
         return amps
 
     def get_avg_m_max(self, method: str, channel_index: int, return_avg_mmax_thresholds: bool = False):
-        m_max, m_thresh = zip(*[
-            ds.get_avg_m_max(method, channel_index, return_avg_mmax_thresholds=True)[:2]
-            for ds in self.datasets if ds.get_avg_m_max(method, channel_index) is not None
-        ])
+        m_max_list = []
+        m_thresh_list = []
+        for ds in self.datasets:
+            mmax, mthresh = ds.get_avg_m_max(
+                method, channel_index, return_avg_mmax_thresholds=True
+            )
+            if mmax is not None:
+                m_max_list.append(mmax)
+                m_thresh_list.append(mthresh)
+
+        if not m_max_list:
+            if return_avg_mmax_thresholds:
+                return None, None
+            return None
+
         if return_avg_mmax_thresholds:
-            return np.mean(m_max), np.mean(m_thresh)
+            return float(np.mean(m_max_list)), float(np.mean(m_thresh_list))
         else:
-            return np.mean(m_max)
+            return float(np.mean(m_max_list))
 
     def reset_all_caches(self):
         for ds in self.datasets:

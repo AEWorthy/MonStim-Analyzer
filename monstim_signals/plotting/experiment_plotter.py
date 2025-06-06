@@ -165,28 +165,50 @@ class EMGExperimentPlotter(BasePlotter):
             animal_ids = []
             for dataset in self.emg_object.emg_datasets:
                 try:
-                    avg_m_max, avg_mmax_low_stim = dataset.get_avg_m_max(method=method, channel_index=channel_index, return_avg_mmax_thresholds=True)
-                    avg_m_max_amplitudes_raw.append(avg_m_max)
-                    avg_m_max_thresholds_raw.append(avg_mmax_low_stim)
-                    animal_ids.append(dataset.animal_id)
-                except IndexError:
-                    avg_m_max_amplitudes_raw.append(None)
-                    avg_m_max_thresholds_raw.append(None)
-                    animal_ids.append(dataset.animal_id)
+                    avg_m_max, avg_mmax_low_stim = dataset.get_avg_m_max(
+                        method=method,
+                        channel_index=channel_index,
+                        return_avg_mmax_thresholds=True,
+                    )
+                except Exception:
+                    avg_m_max = None
+                    avg_mmax_low_stim = None
+                avg_m_max_amplitudes_raw.append(avg_m_max)
+                avg_m_max_thresholds_raw.append(avg_mmax_low_stim)
+                animal_ids.append(dataset.animal_id)
 
             # Drop None values from the list
             avg_m_max_amplitudes = [x for x in avg_m_max_amplitudes_raw if x is not None]
             avg_m_max_thresholds = [x for x in avg_m_max_thresholds_raw if x is not None]
                 
             # Append M-wave amplitudes to superlist for y-axis adjustment.
-            all_m_max_amplitudes.extend(avg_m_max_amplitudes)        
+            all_m_max_amplitudes.extend(avg_m_max_amplitudes)
 
             # Plot the M-wave amplitudes for each session
             m_x = 1
+            mean_amp = np.mean(avg_m_max_amplitudes) if avg_m_max_amplitudes else np.nan
+            std_amp = np.std(avg_m_max_amplitudes) if avg_m_max_amplitudes else np.nan
+            mean_thresh = np.mean(avg_m_max_thresholds) if avg_m_max_thresholds else np.nan
+
             if num_channels == 1:
                 ax.plot(m_x, [avg_m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(avg_m_max_amplitudes)}\nAvg. M-max: {np.mean(avg_m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(avg_m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(avg_m_max_amplitudes)), ha='left', va='center', color='black')
-                ax.errorbar(m_x, np.mean(avg_m_max_amplitudes), yerr=np.std(avg_m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                ax.annotate(
+                    f'n={len(avg_m_max_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nAvg. Stim.: above {mean_thresh:.2f} mV',
+                    xy=(m_x + 0.2, mean_amp),
+                    ha='left',
+                    va='center',
+                    color='black',
+                )
+                if avg_m_max_amplitudes:
+                    ax.errorbar(
+                        m_x,
+                        mean_amp,
+                        yerr=std_amp,
+                        color='black',
+                        marker='+',
+                        markersize=10,
+                        capsize=10,
+                    )
                 
                 ax.set_xticklabels(['M-response'])
                 ax.set_title(f'{channel_names[0]}')                    
@@ -194,8 +216,23 @@ class EMGExperimentPlotter(BasePlotter):
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
                 axes[channel_index].plot(m_x, [avg_m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(avg_m_max_amplitudes)}\nAvg. M-max: {np.mean(avg_m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(avg_m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(avg_m_max_amplitudes)), ha='left', va='center', color='black')
-                axes[channel_index].errorbar(m_x, np.mean(avg_m_max_amplitudes), yerr=np.std(avg_m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                axes[channel_index].annotate(
+                    f'n={len(avg_m_max_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nAvg. Stim.: above {mean_thresh:.2f} mV',
+                    xy=(m_x + 0.2, mean_amp),
+                    ha='left',
+                    va='center',
+                    color='black',
+                )
+                if avg_m_max_amplitudes:
+                    axes[channel_index].errorbar(
+                        m_x,
+                        mean_amp,
+                        yerr=std_amp,
+                        color='black',
+                        marker='+',
+                        markersize=10,
+                        capsize=10,
+                    )
                 
                 axes[channel_index].set_xticks([m_x])
                 axes[channel_index].set_xticklabels(['M-response'])
@@ -311,12 +348,18 @@ class EMGExperimentPlotter(BasePlotter):
             h_x = 2.5
             if num_channels == 1:
                 ax.plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
-                ax.errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
-                
+                mean_m = np.mean(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                std_m = np.std(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, mean_m), ha='center', color=self.emg_object.m_color)
+                if m_wave_amplitudes:
+                    ax.errorbar(m_x, mean_m, yerr=std_m, color='black', marker='+', markersize=10, capsize=10)
+
                 ax.plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
-                ax.errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                mean_h = np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
+                std_h = np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
+                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, mean_h), ha='center', color=self.emg_object.h_color)
+                if h_response_amplitudes:
+                    ax.errorbar(h_x, mean_h, yerr=std_h, color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(['M-response', 'H-reflex'])
@@ -324,12 +367,18 @@ class EMGExperimentPlotter(BasePlotter):
                 ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
             else:
                 axes[channel_index].plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
-                axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                mean_m = np.mean(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                std_m = np.std(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, mean_m), ha='center', color=self.emg_object.m_color)
+                if m_wave_amplitudes:
+                    axes[channel_index].errorbar(m_x, mean_m, yerr=std_m, color='black', marker='+', markersize=10, capsize=10)
 
                 axes[channel_index].plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
-                axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                mean_h = np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
+                std_h = np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
+                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, mean_h), ha='center', color=self.emg_object.h_color)
+                if h_response_amplitudes:
+                    axes[channel_index].errorbar(h_x, mean_h, yerr=std_h, color='black', marker='+', markersize=10, capsize=10)
                 
                 axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
                 axes[channel_index].set_xticks([m_x, h_x])
