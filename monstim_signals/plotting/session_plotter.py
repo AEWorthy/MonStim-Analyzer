@@ -320,15 +320,16 @@ class SessionPlotter(BasePlotter):
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
         fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes='large')
         legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
-        emg_recordings = self.get_emg_recordings(data_type, original=True)
+        emg_recordings = self.get_emg_recordings(data_type)
 
         if fixed_y_axis:
             max_y = [] # list to store maximum values for each channel
             min_y = [] # list to store minimum values for each channel
             for recording in emg_recordings:
-                for channel_data in recording['channel_data']:
-                    max_y.append(max(channel_data[window_start_sample:window_end_sample]))
-                    min_y.append(min(channel_data[window_start_sample:window_end_sample]))
+                # recording.T returns channel data in the expected order (channels as rows, time points as columns).
+                for channel_data in recording.T:
+                    max_y.append(np.max(channel_data[window_start_sample:window_end_sample]))
+                    min_y.append(np.min(channel_data[window_start_sample:window_end_sample]))
             y_max = max(max_y)
             y_min = min(min_y)
             y_range = y_max - y_min
@@ -339,20 +340,21 @@ class SessionPlotter(BasePlotter):
             raise ValueError(f"Invalid recording index. Must be between 0 and {len(emg_recordings) - 1}")
 
         recording = emg_recordings[recording_index]
+        stimulus_v = self.emg_object.stimulus_voltages[recording_index]
 
-        for channel_index, channel_data in enumerate(recording['channel_data']):
+        for channel_index, channel_data in enumerate(recording.T):
             if channel_index not in channel_indices:
                 continue
 
             current_ax = ax if num_channels == 1 else axes[channel_index]
-            
-            self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
+
+            self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, stimulus_v, channel_index)
             self.plot_latency_windows(current_ax, all_flags, channel_index)
 
             # Collect raw data with hierarchical index structure
             num_points = len(time_axis)
             raw_data_dict['channel_index'].extend([channel_index] * num_points)
-            raw_data_dict['stimulus_V'].extend([recording['stimulus_v']] * num_points)
+            raw_data_dict['stimulus_V'].extend([stimulus_v] * num_points)
             raw_data_dict['time_point'].extend(time_axis)
 
             # Add each individual EMG value for the current channel
@@ -362,9 +364,9 @@ class SessionPlotter(BasePlotter):
                 current_ax.set_ylim(y_min, y_max)
 
         if num_channels == 1:
-            sup_title = f'EMG for Channel 0 (Recording {recording_index}, Stim. = {recording["stimulus_v"]}V)'
+            sup_title = f'EMG for Channel 0 (Recording {recording_index}, Stim. = {stimulus_v}V)'
         else:
-            sup_title = f'EMG for All Channels (Recording {recording_index}, Stim. = {recording["stimulus_v"]}V)'
+            sup_title = f'EMG for All Channels (Recording {recording_index}, Stim. = {stimulus_v}V)'
         x_title = 'Time (ms)'
         y_title = 'EMG (mV)'
 
@@ -410,18 +412,29 @@ class SessionPlotter(BasePlotter):
             raise UnableToPlotError(f"No latency window named '{latency_window_oi_name}' found in the session.")
 
         # Plot the EMG arrays for each channel, only for the first 10ms
-        for recording in emg_recordings:
-            for channel_index, channel_data in enumerate(recording['channel_data']):
+        for rec_idx, recording in enumerate(emg_recordings):
+            stimulus_v = self.emg_object.stimulus_voltages[rec_idx]
+            for channel_index, channel_data in enumerate(recording.T):
                 if channel_index not in channel_indices:
                     continue
                 current_ax = ax if num_channels == 1 else axes[channel_index]
-                latency_window_oi_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
-                                                                             latency_window_oi.start_times[channel_index] + self.emg_object.stim_start, 
-                                                                             latency_window_oi.end_times[channel_index] + self.emg_object.stim_start, 
-                                                                             self.emg_object.scan_rate,  
-                                                                             method=method)
+                latency_window_oi_amplitude = Transform_EMG.calculate_emg_amplitude(
+                    channel_data,
+                    latency_window_oi.start_times[channel_index] + self.emg_object.stim_start,
+                    latency_window_oi.end_times[channel_index] + self.emg_object.stim_start,
+                    self.emg_object.scan_rate,
+                    method=method,
+                )
                 if latency_window_oi_amplitude > emg_threshold_v:  # Check EMG amplitude within H-reflex window
-                    self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, recording['stimulus_v'], channel_index)
+                    self.plot_channel_data(
+                        current_ax,
+                        time_axis,
+                        channel_data,
+                        window_start_sample,
+                        window_end_sample,
+                        stimulus_v,
+                        channel_index,
+                    )
                     if plot_latency_windows:
                         self.plot_latency_windows(current_ax, all_flags=False, channel_index=channel_index)
                     if plot_legend:
@@ -488,9 +501,9 @@ class SessionPlotter(BasePlotter):
             stimulus_voltages = []
 
             # Append the M-wave and H-response amplitudes for each recording into the superlist.
-            for recording in emg_recordings:
-                channel_data = recording['channel_data'][channel_index]
-                stimulus_v = recording['stimulus_v']
+            for rec_idx, recording in enumerate(emg_recordings):
+                channel_data = recording[:, channel_index]
+                stimulus_v = self.emg_object.stimulus_voltages[rec_idx]
                              
                 try:
                     m_wave_amplitude = Transform_EMG.calculate_emg_amplitude(channel_data, 
