@@ -340,33 +340,75 @@ class DatasetPlotter(BasePlotter):
             session_ids = []
             for session in self.emg_object.sessions:
                 try:
-                    m_max, mmax_low_stim, _ = session.get_m_max(method=method, channel_index=channel_index, return_mmax_stim_range=True)
-                    m_max_amplitudes.append(m_max)
-                    m_max_thresholds.append(mmax_low_stim)
-                    session_ids.append(session.id)
-                except IndexError:
-                    m_max_amplitudes.append(np.nan)
-                    m_max_thresholds.append(np.nan)
-                    session_ids.append(session.id)
+                    m_max, mmax_low_stim, _ = session.get_m_max(
+                        method=method,
+                        channel_index=channel_index,
+                        return_mmax_stim_range=True,
+                    )
+                except (ValueError, AttributeError):  # Replace with specific exceptions raised by get_m_max
+                    m_max = np.nan
+                    mmax_low_stim = np.nan
+                m_max_amplitudes.append(m_max)
+                m_max_thresholds.append(mmax_low_stim)
+                session_ids.append(session.id)
                 
             # Append M-wave amplitudes to superlist for y-axis adjustment.
-            all_m_max_amplitudes.extend(m_max_amplitudes)            
+            all_m_max_amplitudes.extend(
+                [amp for amp in m_max_amplitudes if not np.isnan(amp)]
+            )
 
             # Plot the M-wave amplitudes for each session
             m_x = 1
+            valid_amplitudes = [amp for amp in m_max_amplitudes if not np.isnan(amp)]
+            valid_thresholds = [thr for thr in m_max_thresholds if not np.isnan(thr)]
+
+            mean_amp = np.mean(valid_amplitudes) if valid_amplitudes else np.nan
+            std_amp = np.std(valid_amplitudes) if valid_amplitudes else np.nan
+            mean_thresh = np.mean(valid_thresholds) if valid_thresholds else np.nan
+
             if num_channels == 1:
-                ax.plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nStdev. M-Max: {np.std(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
-                ax.errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                ax.plot(m_x, [valid_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                ax.annotate(
+                    f'n={len(valid_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nStdev. M-Max: {std_amp:.2f}mV\nAvg. Stim.: above {mean_thresh:.2f} mV',
+                    xy=(m_x + 0.2, mean_amp),
+                    ha='left',
+                    va='center',
+                    color='black',
+                )
+                if valid_amplitudes:
+                    ax.errorbar(
+                        m_x,
+                        mean_amp,
+                        yerr=std_amp,
+                        color='black',
+                        marker='+',
+                        markersize=10,
+                        capsize=10,
+                    )
                 
                 ax.set_xticklabels(['M-response'])
                 ax.set_title(f'{channel_names[0]}')                    
                 ax.set_xlim(m_x-1, m_x+1.5)  # Center data points
                 self._set_y_axis_limits(ax, all_m_max_amplitudes)
             else:
-                axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nStdev. M-Max: {np.std(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
-                axes[channel_index].errorbar(m_x, np.mean(m_max_amplitudes), yerr=np.std(m_max_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                axes[channel_index].plot(m_x, [valid_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
+                axes[channel_index].annotate(
+                    f'n={len(valid_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nStdev. M-Max: {std_amp:.2f}mV\nAvg. Stim.: above {mean_thresh:.2f} mV',
+                    xy=(m_x + 0.2, mean_amp),
+                    ha='left',
+                    va='center',
+                    color='black',
+                )
+                if valid_amplitudes:
+                    axes[channel_index].errorbar(
+                        m_x,
+                        mean_amp,
+                        yerr=std_amp,
+                        color='black',
+                        marker='+',
+                        markersize=10,
+                        capsize=10,
+                    )
                 
                 axes[channel_index].set_xticks([m_x])
                 axes[channel_index].set_xticklabels(['M-response'])
