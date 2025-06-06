@@ -118,10 +118,10 @@ def deep_equal(val1, val2):
 
 def load_config(config_file=None):
         """
-        Loads the config.yaml file into a YAML object that can be used to reference hard-coded configurable constants.
+        Loads the config.yml file into a YAML object that can be used to reference hard-coded configurable constants.
 
         Args:
-            config_file (str): location of the 'config.yaml' file.
+            config_file (str): location of the 'config.yml' file.
         """
         if config_file is None:
             defualt_config_file = get_config_path()
