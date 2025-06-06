@@ -326,6 +326,7 @@ class SessionPlotter(BasePlotter):
             max_y = [] # list to store maximum values for each channel
             min_y = [] # list to store minimum values for each channel
             for recording in emg_recordings:
+                # recording.T returns channel data in the expected order (channels as rows, time points as columns).
                 for channel_data in recording.T:
                     max_y.append(np.max(channel_data[window_start_sample:window_end_sample]))
                     min_y.append(np.min(channel_data[window_start_sample:window_end_sample]))
