@@ -8,6 +8,7 @@ import numpy as np
 import traceback
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock as lock
 
 from monstim_signals.io.csv_parser import parse
 from monstim_signals.core.data_models import RecordingAnnot
@@ -175,7 +176,7 @@ def import_experiment(
                     try:
                         f.result()
                     except Exception:
-                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
+                        logging.error(f"Error processing CSV: {f.csv_path} in dataset {f.ds_name}, session {f.sess_name}")
                         logging.error(traceback.format_exc())
         else:
             for sess_name, paths in sess_map.items():
@@ -185,7 +186,7 @@ def import_experiment(
     logging.info('Processing complete.')
 
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal  # noqa: E402
 
 
 class GUIExptImportingThread(QThread):
