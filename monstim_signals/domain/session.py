@@ -41,6 +41,16 @@ class Session:
         self.plotter = SessionPlotter(self)
         self.update_latency_window_parameters()
 
+    @property
+    def is_completed(self) -> bool:
+        return getattr(self.annot, "is_completed", False)
+
+    @is_completed.setter
+    def is_completed(self, value: bool) -> None:
+        self.annot.is_completed = bool(value)
+        if self.repo is not None:
+            self.repo.save(self)
+
     def _load_config_settings(self):
         _config = load_config()
         self.default_m_start : List[float] = _config['m_start']

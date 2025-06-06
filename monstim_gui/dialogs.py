@@ -1,7 +1,6 @@
 import logging
 import os
 import yaml
-from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
                              QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget, QFormLayout, QGroupBox, QScrollArea,
@@ -21,10 +20,10 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from monstim_signals.core.utils import get_source_path, CustomLoader
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.session import Session
+from monstim_signals.domain.experiment import Experiment
 from monstim_gui.splash import SPLASH_INFO
-
-if TYPE_CHECKING:
-    from monstim_signals import SignalData
 
 
 class WebEnginePage(QWebEnginePage):
@@ -55,12 +54,12 @@ class ChangeChannelNamesDialog(QDialog):
         return {old: input.text() for old, input in self.channel_inputs.items()}
 
 class ReflexSettingsDialog(QDialog):
-    def __init__(self, emg_data: 'SignalData', parent=None):
+    def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)
-        self.emg_data = emg_data
+        self.data = data
 
         self.setModal(True)
-        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.emg_data.formatted_name}")
+        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.data.formatted_name}")
 
         self.init_ui()
 
@@ -80,22 +79,22 @@ class ReflexSettingsDialog(QDialog):
         self.global_starts_layout = QHBoxLayout()
         
         self.global_durations_layout.addWidget(QLabel("m_duration:"))
-        self.global_m_duration_entry = QLineEdit(str(self.emg_data.m_duration[0]))
+        self.global_m_duration_entry = QLineEdit(str(self.data.m_duration[0]))
         self.global_m_duration_entry.installEventFilter(self)
         self.global_durations_layout.addWidget(self.global_m_duration_entry)
 
         self.global_durations_layout.addWidget(QLabel("h_duration:"))
-        self.global_h_duration_entry = QLineEdit(str(self.emg_data.h_duration[0]))
+        self.global_h_duration_entry = QLineEdit(str(self.data.h_duration[0]))
         self.global_h_duration_entry.installEventFilter(self)
         self.global_durations_layout.addWidget(self.global_h_duration_entry)
 
         self.global_starts_layout.addWidget(QLabel("m_start:"))
-        self.global_m_start_entry = QLineEdit(str(self.emg_data.m_start[0]))
+        self.global_m_start_entry = QLineEdit(str(self.data.m_start[0]))
         self.global_m_start_entry.installEventFilter(self)
         self.global_starts_layout.addWidget(self.global_m_start_entry)
 
         self.global_starts_layout.addWidget(QLabel("h_start:"))
-        self.global_h_start_entry = QLineEdit(str(self.emg_data.h_start[0]))
+        self.global_h_start_entry = QLineEdit(str(self.data.h_start[0]))
         self.global_h_start_entry.installEventFilter(self)
         self.global_starts_layout.addWidget(self.global_h_start_entry)
 
@@ -108,13 +107,13 @@ class ReflexSettingsDialog(QDialog):
         self.entries: list[tuple[QLineEdit, QLineEdit]] = []
         self.labels: list[QLabel] = []
         self.sub_labels: list[QLabel] = []
-        for i in range(len(self.emg_data.m_start)):
+        for i in range(len(self.data.m_start)):
             channel_label = QLabel(f"Channel {i}:")
             m_start_label = QLabel("m_start:")
-            m_start_entry = QLineEdit(str(self.emg_data.m_start[i]))
+            m_start_entry = QLineEdit(str(self.data.m_start[i]))
             m_start_entry.installEventFilter(self)
             h_start_label = QLabel("h_start:")
-            h_start_entry = QLineEdit(str(self.emg_data.h_start[i]))
+            h_start_entry = QLineEdit(str(self.data.h_start[i]))
             h_start_entry.installEventFilter(self)
             
             channel_layout = QHBoxLayout()
@@ -175,8 +174,8 @@ class ReflexSettingsDialog(QDialog):
 
     def save_settings(self):
         try:
-            m_duration = [float(self.global_m_duration_entry.text()) for _ in range(len(self.emg_data.m_start))]
-            h_duration = [float(self.global_h_duration_entry.text()) for _ in range(len(self.emg_data.m_start))]
+            m_duration = [float(self.global_m_duration_entry.text()) for _ in range(len(self.data.m_start))]
+            h_duration = [float(self.global_h_duration_entry.text()) for _ in range(len(self.data.m_start))]
         except ValueError:
             QMessageBox.warning(self, "Invalid Input", "Invalid input for durations. Please enter valid numbers.")
             return
@@ -184,8 +183,8 @@ class ReflexSettingsDialog(QDialog):
         if self.toggle_button.isChecked():
             # Global start times
             try:
-                m_start = [float(self.global_m_start_entry.text()) for _ in range(len(self.emg_data.m_start))]
-                h_start = [float(self.global_h_start_entry.text()) for _ in range(len(self.emg_data.m_start))]
+                m_start = [float(self.global_m_start_entry.text()) for _ in range(len(self.data.m_start))]
+                h_start = [float(self.global_h_start_entry.text()) for _ in range(len(self.data.m_start))]
             except ValueError:
                 QMessageBox.warning(self, "Invalid Input", "Invalid input for global start times. Please enter valid numbers.")
                 return
@@ -202,14 +201,16 @@ class ReflexSettingsDialog(QDialog):
                     return
 
         try:
-            self.emg_data.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+            self.data.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error saving settings: {str(e)}")
-            logging.error(f"Error saving reflex settings: {str(e)}\n\tdataset: {self.dataset}\n\tm_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}")
+            logging.error(
+                f"Error saving reflex settings: {str(e)}\n\tdata: {self.data}\n\tm_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}"
+            )
             return
 
-        self.emg_data.update_reflex_parameters()
-        self.emg_data.reset_cached_properties(recalculate=False)
+        self.data.update_reflex_parameters()
+        self.data.reset_all_caches()
 
         self.accept()
 
@@ -633,13 +634,13 @@ class PlotWindowDialog(QDialog):
         event.accept()
 
 class InvertChannelPolarityDialog(QDialog):
-    def __init__(self, emg_data : 'SignalData', parent=None):
+    def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowTitle("Invert Channel Polarity")
-        
-        self.emg_data = emg_data
-        self.channel_names = emg_data.channel_names
+
+        self.data = data
+        self.channel_names = data.channel_names
 
         self.selected_channels = []
         
@@ -650,7 +651,7 @@ class InvertChannelPolarityDialog(QDialog):
 
         # Add checkbox header
         header_layout = QVBoxLayout()
-        header_layout.addWidget(QLabel(f"Invert selected channel polarities for\n'{self.emg_data.formatted_name}'"))
+        header_layout.addWidget(QLabel(f"Invert selected channel polarities for\n'{self.data.formatted_name}'"))
         header_layout.addWidget(QLabel("\nSelect channels to invert:"))
         layout.addLayout(header_layout)
 
@@ -677,13 +678,13 @@ class InvertChannelPolarityDialog(QDialog):
         return [i for i, checkbox in enumerate(self.checkboxes) if checkbox.isChecked()]
 
 class SelectChannelsDialog(QDialog):
-    def __init__(self, emg_data : 'SignalData', parent=None):
+    def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)
         self.setModal(True)
         self.setWindowTitle("Select Channels")
-        
-        self.emg_data = emg_data
-        self.channel_names = emg_data.channel_names
+
+        self.data = data
+        self.channel_names = data.channel_names
 
         self.selected_channels = []
         
@@ -694,7 +695,7 @@ class SelectChannelsDialog(QDialog):
 
         # Add checkbox header
         header_layout = QVBoxLayout()
-        header_layout.addWidget(QLabel(f"Select channels for\n'{self.emg_data.formatted_name}'"))
+        header_layout.addWidget(QLabel(f"Select channels for\n'{self.data.formatted_name}'"))
         header_layout.addWidget(QLabel("\nSelect channels:"))
         layout.addLayout(header_layout)
 
@@ -704,7 +705,8 @@ class SelectChannelsDialog(QDialog):
             checkbox = QCheckBox(name, self)
 
             # Check the checkbox if the channel is already selected
-            if self.emg_data.channel_names.index(name) not in self.emg_data.excluded_channels:
+            excluded = getattr(self.data, 'excluded_channels', [])
+            if self.data.channel_names.index(name) not in excluded:
                 checkbox.setChecked(True)
 
             self.checkboxes.append(checkbox)

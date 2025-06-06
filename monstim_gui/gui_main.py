@@ -7,12 +7,16 @@ import traceback
 import multiprocessing
 
 import markdown
+from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
                              QDialog, QProgressDialog, QHBoxLayout, QStatusBar, QInputDialog)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
-from monstim_signals import EMGExperiment
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.session import Session
+from monstim_signals.io.repositories import ExperimentRepository
 from monstim_signals.io.csv_importer import GUIExptImportingThread
 from monstim_signals.core.utils import (format_report, get_output_path, get_data_path, get_output_bin_path, 
                            get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
@@ -38,10 +42,10 @@ class EMGAnalysisGUI(QMainWindow):
     
         # Initialize variables
         self.expts_dict = {}
-        self.expts_dict_keys = [] # Type: List[str]
-        self.current_experiment = None # Type: EMGExperiment
-        self.current_dataset = None # Type: EMGDataset
-        self.current_session = None # Type: EMGSession
+        self.expts_dict_keys = []  # type: list[str]
+        self.current_experiment: Experiment | None = None
+        self.current_dataset: Dataset | None = None
+        self.current_session: Session | None = None
         self.channel_names = []
         self.plot_type_dict = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
                                "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
@@ -151,8 +155,12 @@ class EMGAnalysisGUI(QMainWindow):
         if os.path.exists(self.output_path):
             try:
                 QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                self.expts_dict = EMGExperiment.unpackPickleOutput(self.output_path)
-                self.expts_dict_keys = list(self.expts_dict.keys())
+                self.expts_dict = {
+                    name: os.path.join(self.output_path, name)
+                    for name in os.listdir(self.output_path)
+                    if os.path.isdir(os.path.join(self.output_path, name))
+                }
+                self.expts_dict_keys = sorted(self.expts_dict.keys())
                 logging.debug("Existing experiments unpacked successfully.")
             except Exception as e:
                 QApplication.restoreOverrideCursor()
@@ -376,19 +384,11 @@ class EMGAnalysisGUI(QMainWindow):
         # warning message box
         logging.debug("Deleting experiment.")
         if self.current_experiment:
-            delete = QMessageBox.warning(self, "Delete Experiment", f"Are you sure you want to delete the experiment '{self.current_experiment.expt_id}'?\n\nWARNING: This action cannot be undone.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            delete = QMessageBox.warning(self, "Delete Experiment", f"Are you sure you want to delete the experiment '{self.current_experiment.id}'?\n\nWARNING: This action cannot be undone.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if delete == QMessageBox.StandardButton.Yes:
                 # delete bin file in output folder
-                bin_file = self.current_experiment.save_path
-                if os.path.exists(bin_file):
-                    os.remove(bin_file)
-                    logging.debug(f"Deleted bin file: {bin_file}.")
-                else:
-                    logging.warning(f"Bin file not found: {bin_file}. Could not delete current experiment.")
-                
-                # delete experiment folder in data folder
-                shutil.rmtree(os.path.join(self.output_path, self.current_experiment.expt_id))
-                logging.debug(f"Deleted experiment folder: {os.path.join(self.output_path, self.current_experiment.expt_id)}.")
+                shutil.rmtree(os.path.join(self.output_path, self.current_experiment.id))
+                logging.debug(f"Deleted experiment folder: {os.path.join(self.output_path, self.current_experiment.id)}.")
 
                 self.current_experiment = None
                 self.current_dataset = None
@@ -399,8 +399,13 @@ class EMGAnalysisGUI(QMainWindow):
     def reload_current_session(self):
         logging.debug("Reloading current session.")
         if self.current_dataset and self.current_session:
-            self.current_dataset.reload_session(self.current_session.session_id)
-            self.current_dataset.apply_preferences()
+            if self.current_session.repo is not None:
+                if self.current_session.repo.session_js.exists():
+                    self.current_session.repo.session_js.unlink()
+                new_sess = self.current_session.repo.load()
+                idx = self.current_dataset._all_sessions.index(self.current_session)
+                self.current_dataset._all_sessions[idx] = new_sess
+                self.current_session = new_sess
             self.has_unsaved_changes = True
             self.plot_widget.on_data_selection_changed() # Alert plot widget to update plot options, etc.
 
@@ -412,7 +417,16 @@ class EMGAnalysisGUI(QMainWindow):
     def reload_current_dataset(self):
         logging.debug("Reloading current dataset.")
         if self.current_dataset:
-            self.current_dataset.reload_dataset_sessions()
+            if self.current_dataset.repo is not None:
+                if self.current_dataset.repo.dataset_js.exists():
+                    self.current_dataset.repo.dataset_js.unlink()
+                for sess in self.current_dataset._all_sessions:
+                    if sess.repo and sess.repo.session_js.exists():
+                        sess.repo.session_js.unlink()
+                new_ds = self.current_dataset.repo.load()
+                idx = self.current_experiment._all_datasets.index(self.current_dataset)
+                self.current_experiment._all_datasets[idx] = new_ds
+                self.current_dataset = new_ds
             self.data_selection_widget.update_session_combo()
             self.has_unsaved_changes = True
             self.plot_widget.on_data_selection_changed() # Reset plot options
@@ -423,18 +437,22 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
-        logging.debug(f"Reloading current experiment: {self.current_experiment.expt_id}.")
-        current_exepriment_combo_index = self.data_selection_widget.experiment_combo.currentIndex() 
+        logging.debug(f"Reloading current experiment: {self.current_experiment.id}.")
+        current_exepriment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
         if self.current_experiment:
-            # delete bin file in output folder
-            bin_file = self.current_experiment.save_path
-            if os.path.exists(bin_file):
-                os.remove(bin_file)
-                logging.debug(f"Deleted bin file: {bin_file}.")
+            if self.current_experiment.repo is not None:
+                if self.current_experiment.repo.expt_js.exists():
+                    self.current_experiment.repo.expt_js.unlink()
+                for ds in self.current_experiment._all_datasets:
+                    if ds.repo and ds.repo.dataset_js.exists():
+                        ds.repo.dataset_js.unlink()
+                    for sess in ds._all_sessions:
+                        if sess.repo and sess.repo.session_js.exists():
+                            sess.repo.session_js.unlink()
+                new_expt = self.current_experiment.repo.load()
+                self.current_experiment = new_expt
             else:
-                logging.warning(f"Bin file not found: {bin_file}. Could not delete current experiment.")
-            
-            self.current_experiment = None
+                self.current_experiment = None
             self.current_dataset = None
             self.current_session = None
             
@@ -608,17 +626,17 @@ class EMGAnalysisGUI(QMainWindow):
     def load_experiment(self, index):
         if index >= 0:
             experiment_name = self.expts_dict_keys[index]
-            save_path = os.path.join(get_output_bin_path(),(f"{experiment_name}{BIN_EXTENSION}"))
+            exp_path = os.path.join(self.output_path, experiment_name)
             logging.debug(f"Loading experiment: '{experiment_name}'.")
             try:
                 QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                # Load existing experiment if available
-                if os.path.exists(save_path):
-                    self.current_experiment = EMGExperiment.load_experiment(save_path) # Type: EMGExperiment
-                    logging.debug(f"Experiment '{experiment_name}' loaded successfully from bin.")
+                if os.path.exists(exp_path):
+                    repo = ExperimentRepository(Path(exp_path))
+                    self.current_experiment = repo.load()
+                    logging.debug(f"Experiment '{experiment_name}' loaded successfully.")
                 else:
-                    self.current_experiment = EMGExperiment(experiment_name, expts_dict=self.expts_dict, temp=False) # Type: EMGExperiment
-                    logging.debug(f"Experiment '{experiment_name}' created to bin and loaded successfully.")
+                    QMessageBox.warning(self, "Warning", f"Experiment folder '{exp_path}' not found.")
+                    return
 
                 # Update current expt/dataset/session
                 self.data_selection_widget.update_dataset_combo()
@@ -633,13 +651,12 @@ class EMGAnalysisGUI(QMainWindow):
 
     def load_dataset(self, index):
         if index >= 0:
-            # date, animal_id, condition = EMGDataset.getDatasetInfo(dataset_name)  
-            logging.debug(f"Loading dataset [{index}] from experiment '{self.current_experiment.expt_id}'.")
+            logging.debug(f"Loading dataset [{index}] from experiment '{self.current_experiment.id}'.")
 
             if self.current_experiment:
-                self.current_dataset = self.current_experiment.get_dataset(index) # Type: EMGDataset
+                self.current_dataset = self.current_experiment.datasets[index]
             else:
-                logging.error("No current experiment to load dataset from.")     
+                logging.error("No current experiment to load dataset from.")
 
             # Update current dataset/session and channel names
             self.channel_names = self.current_dataset.channel_names
@@ -648,8 +665,8 @@ class EMGAnalysisGUI(QMainWindow):
 
     def load_session(self, index):
         if self.current_dataset and index >= 0:
-            logging.debug(f"Loading session [{index}] from dataset '{self.current_dataset.dataset_id}'.")
-            self.current_session = self.current_dataset.get_session(index) # Type: EMGSession
+            logging.debug(f"Loading session [{index}] from dataset '{self.current_dataset.id}'.")
+            self.current_session = self.current_dataset.sessions[index]
             if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
                 self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
             self.plot_widget.on_data_selection_changed() # Reset plot options

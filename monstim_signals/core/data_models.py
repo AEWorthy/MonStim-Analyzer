@@ -168,6 +168,7 @@ class SessionAnnot:
     latency_windows      : List[LatencyWindow] = field(default_factory=list)
     channels             : List[SignalChannel] = field(default_factory=list)
     m_max_values         : List[float] = field(default_factory=list)
+    is_completed         : bool = False
     version              : str = "0.0.0"
 
     @staticmethod
@@ -180,6 +181,7 @@ class SessionAnnot:
             latency_windows=[],
             channels=[SignalChannel.create_empty() for _ in range(num_channels)],
             m_max_values=[],
+            is_completed=False,
             version=DATA_VERSION
         )
     
@@ -230,9 +232,10 @@ class DatasetAnnot:
       - Custom channel_names (if user renamed channels)
     """
     date: str |None = None  # Date of dataset collection: e.g., "240829" for 29 Aug 2024
-    animal_id: str = None # e.g., "C328.1"
-    condition: str = None # e.g., "post-dec mcurve_long-"
+    animal_id: str = None  # e.g., "C328.1"
+    condition: str = None  # e.g., "post-dec mcurve_long-"
     excluded_sessions: List[str] = field(default_factory=list)
+    is_completed: bool = False
     version: str = "0.0.0"
 
     @staticmethod
@@ -242,6 +245,7 @@ class DatasetAnnot:
         """
         return DatasetAnnot(
             excluded_sessions=[],
+            is_completed=False,
             version=DATA_VERSION
         )
     
@@ -263,6 +267,7 @@ class DatasetAnnot:
             animal_id=animal_id,
             condition=condition,
             excluded_sessions=[],
+            is_completed=False,
             version=DATA_VERSION
         )
     @classmethod
@@ -287,12 +292,13 @@ class DatasetAnnot:
 class ExperimentAnnot:
     """Annotation information for an :class:`Experiment`."""
     excluded_datasets: List[str] = field(default_factory=list)
+    is_completed: bool = False
     version: str = DATA_VERSION
 
     @staticmethod
     def create_empty() -> 'ExperimentAnnot':
         """Return a blank annotation object."""
-        return ExperimentAnnot(excluded_datasets=[], version=DATA_VERSION)
+        return ExperimentAnnot(excluded_datasets=[], is_completed=False, version=DATA_VERSION)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> 'ExperimentAnnot':

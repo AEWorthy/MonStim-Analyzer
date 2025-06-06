@@ -38,6 +38,16 @@ class Dataset:
         self.update_latency_window_parameters()
         logging.info(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
 
+    @property
+    def is_completed(self) -> bool:
+        return getattr(self.annot, "is_completed", False)
+
+    @is_completed.setter
+    def is_completed(self, value: bool) -> None:
+        self.annot.is_completed = bool(value)
+        if self.repo is not None:
+            self.repo.save(self)
+
     def _load_config_settings(self) -> None:
         _config = load_config()
         self.bin_size = _config["bin_size"]

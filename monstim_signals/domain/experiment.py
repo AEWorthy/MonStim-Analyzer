@@ -27,6 +27,16 @@ class Experiment:
             self.stim_start = self.datasets[0].stim_start
         self.update_latency_window_parameters()
 
+    @property
+    def is_completed(self) -> bool:
+        return getattr(self.annot, "is_completed", False)
+
+    @is_completed.setter
+    def is_completed(self, value: bool) -> None:
+        self.annot.is_completed = bool(value)
+        if self.repo is not None:
+            self.repo.save(self)
+
     def __check_dataset_consistency(self) -> None:
         if not self.datasets:
             return

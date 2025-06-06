@@ -106,12 +106,13 @@ class RemoveSessionCommand(Command):
 
     def execute(self):
         self.removed_session = self.gui.current_session
-        self.gui.current_dataset.remove_session(self.gui.current_session.session_id)
+        self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
+        self.gui.current_dataset._all_sessions.pop(self.idx)
         self.gui.current_session = None
         self.gui.data_selection_widget.update_session_combo()
         
     def undo(self):
-        self.gui.current_dataset.add_session(self.removed_session)
+        self.gui.current_dataset._all_sessions.insert(self.idx, self.removed_session)
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
 
@@ -123,12 +124,13 @@ class RemoveDatasetCommand(Command):
     
     def execute(self):
         self.removed_dataset = self.gui.current_dataset
-        self.gui.current_experiment.remove_dataset(self.gui.current_dataset.dataset_id)
+        self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
+        self.gui.current_experiment._all_datasets.pop(self.idx)
         self.gui.current_dataset = None
         self.gui.data_selection_widget.update_dataset_combo()
 
     def undo(self):
-        self.gui.current_experiment.add_dataset(self.removed_dataset)
+        self.gui.current_experiment._all_datasets.insert(self.idx, self.removed_dataset)
         self.gui.current_dataset = self.removed_dataset
         self.gui.data_selection_widget.update_dataset_combo()
         
