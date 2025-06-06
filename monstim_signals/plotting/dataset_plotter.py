@@ -9,14 +9,13 @@ if TYPE_CHECKING:
     from monstim_signals.domain.dataset import Dataset
 
 class DatasetPlotter(BasePlotter):
-    """
-    A class for EMG data from an EMGDataset object.
+    """Plot EMG data aggregated across multiple sessions.
 
     Args:
-        dataset (EMGDataset): The EMG dataset object to be imported.
+        dataset (Dataset): The dataset object containing the sessions.
 
     Attributes:
-        dataset (EMGDataset): The imported EMG dataset object.
+        dataset (Dataset): The imported dataset object.
 
     Methods:
         plot_reflex_curves: Plots the average M-response and H-reflex curves for each channel.
@@ -33,7 +32,7 @@ class DatasetPlotter(BasePlotter):
     
     def help(self):
         help_text = """
-        EMGDatasetPlotter class for plotting EMG data from an EMGDataset object.
+        DatasetPlotter class for plotting EMG data from a Dataset object.
         ========================================================================
         Methods:
         1. plot_reflex_curves: Plots the average M-response and H-reflex curves for each channel.
@@ -362,8 +361,11 @@ class DatasetPlotter(BasePlotter):
                 
                 ax.set_xticklabels(['M-response'])
                 ax.set_title(f'{channel_names[0]}')                    
-                ax.set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
-                ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
+                ax.set_xlim(m_x-1, m_x+1.5)  # Center data points
+                y_max = np.nanmax(all_m_max_amplitudes)
+                if np.isnan(y_max):
+                    y_max = 1.0
+                ax.set_ylim(0, 1.1 * y_max)
             else:
                 axes[channel_index].plot(m_x, [m_max_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
                 axes[channel_index].annotate(f'n={len(m_max_amplitudes)}\nAvg. M-max: {np.mean(m_max_amplitudes):.2f}mV\nStdev. M-Max: {np.std(m_max_amplitudes):.2f}mV\nAvg. Stim.: above {np.mean(m_max_thresholds):.2f} mV', xy=(m_x + 0.2, np.mean(m_max_amplitudes)), ha='left', va='center', color='black')
@@ -372,8 +374,11 @@ class DatasetPlotter(BasePlotter):
                 axes[channel_index].set_xticks([m_x])
                 axes[channel_index].set_xticklabels(['M-response'])
                 axes[channel_index].set_title(f'{channel_names[channel_index]}')
-                axes[channel_index].set_xlim(m_x-1, m_x+1.5) # Set x-axis limits for each subplot to better center data points.
-                axes[channel_index].set_ylim(0, 1.1 * max(all_m_max_amplitudes))
+                axes[channel_index].set_xlim(m_x-1, m_x+1.5)  # Center data points
+                y_max = np.nanmax(all_m_max_amplitudes)
+                if np.isnan(y_max):
+                    y_max = 1.0
+                axes[channel_index].set_ylim(0, 1.1 * y_max)
 
             # Append data to raw data dictionary
             datapoints = len(m_max_amplitudes)

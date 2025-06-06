@@ -377,23 +377,35 @@ class Session:
             return get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
     
     def get_m_wave_amplitudes(self, method, channel_index):
-        m_wave_amplitudes = [calculate_emg_amplitude(recording['channel_data'][channel_index], 
-                                                                    (self.m_start[channel_index] + self.stim_start),
-                                                                    (self.m_start[channel_index] + self.stim_start + self.m_duration[channel_index]), 
-                                                                    self.scan_rate, 
-                                                                    method=method) 
-                                                                    for recording in self.recordings_filtered]
-        np.array(m_wave_amplitudes)
+        """Return a list of M-wave amplitudes for each recording."""
+        window_start = self.m_start[channel_index] + self.stim_start
+        window_end = window_start + self.m_duration[channel_index]
+        m_wave_amplitudes = [
+            calculate_emg_amplitude(
+                recording[:, channel_index],
+                window_start,
+                window_end,
+                self.scan_rate,
+                method=method,
+            )
+            for recording in self.recordings_filtered
+        ]
         return m_wave_amplitudes
     
     def get_h_wave_amplitudes(self, method, channel_index):
-        h_wave_amplitudes = [calculate_emg_amplitude(recording['channel_data'][channel_index], 
-                                                                   (self.h_start[channel_index] + self.stim_start),
-                                                                   (self.h_start[channel_index] + self.stim_start + self.h_duration[channel_index]), 
-                                                                   self.scan_rate, 
-                                                                   method=method) 
-                                                                   for recording in self.recordings_filtered]
-        np.array(h_wave_amplitudes)
+        """Return a list of H-reflex amplitudes for each recording."""
+        window_start = self.h_start[channel_index] + self.stim_start
+        window_end = window_start + self.h_duration[channel_index]
+        h_wave_amplitudes = [
+            calculate_emg_amplitude(
+                recording[:, channel_index],
+                window_start,
+                window_end,
+                self.scan_rate,
+                method=method,
+            )
+            for recording in self.recordings_filtered
+        ]
         return h_wave_amplitudes
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
