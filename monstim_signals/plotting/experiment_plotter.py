@@ -268,7 +268,7 @@ class EMGExperimentPlotter(BasePlotter):
         raw_data_df.set_index(['channel_index'], inplace=True)
         return raw_data_df
 
-    def plot_maxH(self, channel_indices : List[int] = None, method=None, relative_to_mmax=False, manual_mmax=None, bin_margin=0, canvas=None):
+    def plot_maxH(self, channel_indices : List[int] = None, method=None, relative_to_mmax=False, manual_mmax=None, max_stim_value=None, bin_margin=0, canvas=None):
         """
         Plots the M-wave and H-response amplitudes at the stimulation voltage where the average H-reflex is maximal.
 
@@ -277,6 +277,9 @@ class EMGExperimentPlotter(BasePlotter):
             method (str): Method for calculating the amplitude. Options are 'rms', 'avg_rectified', or 'peak_to_trough'. Default is 'rms'.
             relative_to_mmax (bool): Flag indicating whether to make the M-wave amplitudes relative to the maximum M-wave amplitude. Default is False.
             manual_mmax (float): Manual value for the maximum M-wave amplitude. Default is None.
+            max_stim_value (float, optional): Maximum stimulus voltage to include when
+                calculating the peak H-reflex. Stimulus values above this
+                threshold are ignored.
 
         Returns:
             None
@@ -306,6 +309,12 @@ class EMGExperimentPlotter(BasePlotter):
             # Get average H-wave amplitudes
             h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
             stimulus_voltages = self.emg_object.stimulus_voltages
+
+            # Filter out stimulus voltages greater than max_stim_value if specified
+            if max_stim_value is not None:
+                filtered_indices = [i for i, v in enumerate(stimulus_voltages) if v <= max_stim_value]
+                stimulus_voltages = [stimulus_voltages[i] for i in filtered_indices]
+                h_response_means = [h_response_means[i] for i in filtered_indices]
 
             # Find the voltage with the maximum average H-reflex amplitude
             max_h_reflex_amplitude = max(h_response_means)
