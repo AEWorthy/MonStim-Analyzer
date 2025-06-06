@@ -14,11 +14,13 @@ class EMGExperimentPlotter(BasePlotter):
         from monstim_signals.domain.experiment import Experiment
         if not isinstance(experiment, Experiment):
             raise TypeError("The provided object is not an instance of the Experiment class.")
-        self.emg_object : 'Experiment' = experiment # The EMGExperiment object to be imported.
+        # Store the experiment to plot.  BasePlotter uses ``emg_object`` as the
+        # generic data container attribute.
+        self.emg_object: 'Experiment' = experiment
         super().__init__(self.emg_object)
         self.set_plot_defaults()
 
-    # EMGExperiment plotting functions
+    # Experiment plotting functions
     def plot_reflexCurves(self, channel_indices : List[int] = None, method=None, plot_legend=True, relative_to_mmax=False, manual_mmax=None, canvas=None):
         """
         Plots the M-response and H-reflex curves for each channel.
