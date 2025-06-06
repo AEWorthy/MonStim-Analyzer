@@ -1,10 +1,14 @@
 import json
 import h5py
+import os
 from pathlib import Path
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Callable
 import logging
 import numpy as np
+import traceback
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from monstim_signals.io.csv_parser import parse
 from monstim_signals.core.data_models import RecordingAnnot
@@ -105,4 +109,134 @@ def csv_to_store(csv_path : Path, output_fp : Path, overwrite_h5: bool = False, 
             logging.warning(f"Annotation file {annot_path} already exists. Overwriting it.")
         with annot_path.open('w') as f:
             annot = RecordingAnnot.create_empty()
-            json.dump(asdict(annot), annot_path.open('w'), indent=2)
+            json.dump(asdict(annot), f, indent=2)
+
+
+def get_dataset_session_dict(dataset_path: Path) -> dict[str, list[Path]]:
+    """Return a mapping of session IDs to CSV file paths for one dataset."""
+    csv_paths = [p for p in dataset_path.iterdir() if p.suffix.lower() == '.csv']
+    mapping: dict[str, list[Path]] = {}
+    for csv_path in csv_paths:
+        session_id, _ = parse_session_rec(csv_path)
+        if session_id:
+            mapping.setdefault(session_id, []).append(csv_path)
+    return mapping
+
+
+def import_experiment(
+    expt_path: Path,
+    output_path: Path,
+    progress_callback: Callable[[int], None] = lambda v: None,
+    is_canceled: Callable[[], bool] = lambda: False,
+    overwrite: bool = True,
+    max_workers: int | None = None,
+) -> None:
+    """Convert all CSV files under *expt_path* into the store at *output_path*."""
+    datasets = [d for d in expt_path.iterdir() if d.is_dir()]
+    all_csv = []
+    dataset_maps = {}
+    for ds_dir in datasets:
+        mapping = get_dataset_session_dict(ds_dir)
+        dataset_maps[ds_dir.name] = mapping
+        for files in mapping.values():
+            all_csv.extend(files)
+
+    total_files = len(all_csv)
+    processed = 0
+
+    def process_csv(csv_path: Path, ds_name: str, sess_name: str):
+        nonlocal processed
+        if is_canceled():
+            return
+        out_dir = output_path / ds_name / sess_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_fp = out_dir / csv_path.stem
+        csv_to_store(
+            csv_path,
+            out_fp,
+            overwrite_h5=overwrite,
+            overwrite_meta=overwrite,
+            overwrite_annot=overwrite,
+        )
+        processed += 1
+        progress_callback(int((processed / total_files) * 100))
+
+    for ds_name, sess_map in dataset_maps.items():
+        if max_workers and max_workers > 1:
+            with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                futures = [
+                    ex.submit(process_csv, csv_path, ds_name, sess_name)
+                    for sess_name, paths in sess_map.items()
+                    for csv_path in paths
+                ]
+                for f in as_completed(futures):
+                    if is_canceled():
+                        return
+                    try:
+                        f.result()
+                    except Exception:
+                        logging.error('Error processing CSV')
+                        logging.error(traceback.format_exc())
+        else:
+            for sess_name, paths in sess_map.items():
+                for csv_path in paths:
+                    process_csv(csv_path, ds_name, sess_name)
+
+    logging.info('Processing complete.')
+
+
+from PyQt6.QtCore import QThread, pyqtSignal
+
+
+class GUIExptImportingThread(QThread):
+    """Threaded wrapper to import an experiment from the GUI."""
+
+    progress = pyqtSignal(int)
+    finished = pyqtSignal()
+    error = pyqtSignal(Exception)
+    canceled = pyqtSignal()
+
+    def __init__(self, expt_name: str, expt_path: str, output_dir_path: str, max_workers: int | None = None, overwrite: bool = True) -> None:
+        super().__init__()
+        self.expt_path = Path(expt_path)
+        self.output_path = Path(output_dir_path) / expt_name
+        self.output_path.mkdir(parents=True, exist_ok=True)
+        self.max_workers = max_workers
+        self.overwrite = overwrite
+        self._is_canceled = False
+        self._is_finished = False
+
+    def run(self) -> None:
+        try:
+            import_experiment(
+                self.expt_path,
+                self.output_path,
+                self.report_progress,
+                self.is_canceled,
+                overwrite=self.overwrite,
+                max_workers=self.max_workers,
+            )
+            if not self._is_canceled:
+                self.finished.emit()
+                self._is_finished = True
+        except Exception as e:
+            if not self._is_canceled:
+                self.error.emit(e)
+                logging.error(f'Error in GUIExptImportingThread: {e}')
+                logging.error(traceback.format_exc())
+
+    def report_progress(self, value: int) -> None:
+        if not self._is_canceled:
+            self.progress.emit(value)
+        logging.info(f'CSV conversion progress: {value}%')
+
+    def cancel(self) -> None:
+        if not self._is_canceled and not self._is_finished:
+            self._is_canceled = True
+            self.canceled.emit()
+
+    def is_canceled(self) -> bool:
+        return self._is_canceled
+
+    def is_finished(self) -> bool:
+        return self._is_finished

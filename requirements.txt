@@ -25,7 +25,7 @@ et-xmlfile @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/et_xm
 executing @ file:///opt/conda/conda-bld/executing_1646925071911/work
 fastjsonschema @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/python-fastjsonschema_1699475134300/work
 fonttools @ file:///C:/b/abs_f47gnfqnx0/croot/fonttools_1713551644747/work
-h5py @ file:///C:/b/abs_9cz_vyf1xj/croot/h5py_1737051135810/work
+h5py
 idna @ file:///C:/b/abs_aad84bnnw5/croot/idna_1714398896795/work
 ipykernel @ file:///C:/b/abs_c2u94kxcy6/croot/ipykernel_1705933907920/work
 ipython==8.12.3
