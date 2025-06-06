@@ -34,7 +34,7 @@ def format_report(report: List[str]) -> str:
             formatted_report += line + '\n'
     return formatted_report
 
-def get_base_path() -> Path:
+def get_base_path() -> str:
     """Return the root path of the project installation."""
     if getattr(sys, 'frozen', False):
         if sys.platform == 'darwin':
