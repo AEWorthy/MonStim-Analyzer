@@ -149,9 +149,9 @@ class Experiment:
             avg_vals, _ = amplitude_func(ds)
             for volt, amp in zip(binned, avg_vals):
                 wave_bins[volt].append(amp)
-        avg = [np.mean(wave_bins[v]) for v in self.stimulus_voltages]
+        avg = [float(np.mean(wave_bins[v])) if wave_bins[v] else np.nan for v in self.stimulus_voltages]
         sem = [
-            np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v])) if len(wave_bins[v]) > 0 else None
+            float(np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v]))) if wave_bins[v] else np.nan
             for v in self.stimulus_voltages
         ]
         return avg, sem
@@ -172,8 +172,8 @@ class Experiment:
             h_wave, _ = ds.get_avg_h_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, h_wave):
                 h_wave_bins[volt].append(amp)
-        avg = [np.mean(h_wave_bins[v]) for v in self.stimulus_voltages]
-        std = [np.std(h_wave_bins[v]) for v in self.stimulus_voltages]
+        avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return avg, std
 
     def get_h_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:

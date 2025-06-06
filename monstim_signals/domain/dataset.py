@@ -193,7 +193,9 @@ class Dataset:
                 )
                 m_max_amplitudes.append(m_max)
                 m_max_thresholds.append(mmax_low_stim)
+                
             except ValueError as e:
+
                 logging.warning(
                     f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}"
                 )
@@ -216,8 +218,8 @@ class Dataset:
             m_wave = session.get_m_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, m_wave):
                 m_wave_bins[volt].append(amp)
-        avg = [np.mean(m_wave_bins[v]) for v in self.stimulus_voltages]
-        sem = [np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v])) for v in self.stimulus_voltages]
+        avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        sem = [float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return avg, sem
 
     def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
@@ -237,8 +239,8 @@ class Dataset:
             h_wave = session.get_h_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, h_wave):
                 h_wave_bins[volt].append(amp)
-        avg = [np.mean(h_wave_bins[v]) for v in self.stimulus_voltages]
-        std = [np.std(h_wave_bins[v]) for v in self.stimulus_voltages]
+        avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return avg, std
 
     def get_h_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:

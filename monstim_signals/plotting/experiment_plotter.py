@@ -170,6 +170,7 @@ class EMGExperimentPlotter(BasePlotter):
                         channel_index=channel_index,
                         return_avg_mmax_thresholds=True,
                     )
+
                 except ValueError:
                     avg_m_max = None
                     avg_mmax_low_stim = None
@@ -351,12 +352,18 @@ class EMGExperimentPlotter(BasePlotter):
             h_x = 2.5
             if num_channels == 1:
                 ax.plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
-                ax.errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
-                
+                mean_m = np.mean(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                std_m = np.std(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                ax.annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, mean_m), ha='center', color=self.emg_object.m_color)
+                if m_wave_amplitudes:
+                    ax.errorbar(m_x, mean_m, yerr=std_m, color='black', marker='+', markersize=10, capsize=10)
+
                 ax.plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
-                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
-                ax.errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                mean_h = np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
+                std_h = np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
+                ax.annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, mean_h), ha='center', color=self.emg_object.h_color)
+                if h_response_amplitudes:
+                    ax.errorbar(h_x, mean_h, yerr=std_h, color='black', marker='+', markersize=10, capsize=10)
                 
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(['M-response', 'H-reflex'])
@@ -364,12 +371,18 @@ class EMGExperimentPlotter(BasePlotter):
                 ax.set_xlim(m_x-1, h_x+1) # Set x-axis limits for each subplot to better center data points.
             else:
                 axes[channel_index].plot(m_x, [m_wave_amplitudes], color=self.emg_object.m_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, np.mean(m_wave_amplitudes)), ha='center', color=self.emg_object.m_color)
-                axes[channel_index].errorbar(m_x, np.mean(m_wave_amplitudes), yerr=np.std(m_wave_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                mean_m = np.mean(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                std_m = np.std(m_wave_amplitudes) if m_wave_amplitudes else np.nan
+                axes[channel_index].annotate(f'n={len(m_wave_amplitudes)}', xy=(m_x + 0.4, mean_m), ha='center', color=self.emg_object.m_color)
+                if m_wave_amplitudes:
+                    axes[channel_index].errorbar(m_x, mean_m, yerr=std_m, color='black', marker='+', markersize=10, capsize=10)
 
                 axes[channel_index].plot(h_x, [h_response_amplitudes], color=self.emg_object.h_color, marker='o', markersize=5)
-                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, np.mean(h_response_amplitudes)), ha='center', color=self.emg_object.h_color)
-                axes[channel_index].errorbar(h_x, np.mean(h_response_amplitudes), yerr=np.std(h_response_amplitudes), color='black', marker='+', markersize=10, capsize=10)
+                mean_h = np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
+                std_h = np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
+                axes[channel_index].annotate(f'n={len(h_response_amplitudes)}', xy=(h_x + 0.4, mean_h), ha='center', color=self.emg_object.h_color)
+                if h_response_amplitudes:
+                    axes[channel_index].errorbar(h_x, mean_h, yerr=std_h, color='black', marker='+', markersize=10, capsize=10)
                 
                 axes[channel_index].set_title(f'{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)')
                 axes[channel_index].set_xticks([m_x, h_x])
