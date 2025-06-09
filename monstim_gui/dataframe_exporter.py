@@ -3,7 +3,7 @@ import pandas as pd
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QTableView, QPushButton, QHBoxLayout, QFileDialog, QScrollArea
 from PyQt6.QtCore import Qt, QAbstractTableModel
 
-from monstim_utils import get_base_path
+from monstim_signals.core.utils import get_base_path
 
 class PandasModel(QAbstractTableModel):
     def __init__(self, data):
@@ -72,7 +72,7 @@ class DataFrameDialog(QDialog):
         layout.addLayout(button_layout)
 
     def save_as(self):
-        file_name, _ = QFileDialog.getSaveFileName(self, "Export DataFrame", get_base_path(), "CSV Files (*.csv);;All Files (*)")
+        file_name, _ = QFileDialog.getSaveFileName(self, "Export DataFrame", str(get_base_path()), "CSV Files (*.csv);;All Files (*)")
         if file_name:
             self.df.to_csv(file_name, index=True)
 

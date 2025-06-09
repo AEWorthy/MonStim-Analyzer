@@ -103,7 +103,7 @@ class PlotWidget(QGroupBox):
         self.layout.addWidget(self.plot_button)
 
         self.get_data_button = QPushButton("Plot/Extact Raw Data")
-        self.get_data_button.clicked.connect(self.parent.get_raw_data)
+        self.get_data_button.clicked.connect(self.parent._get_raw_data)
         self.layout.addWidget(self.get_data_button)
     
     def import_canvas(self):
