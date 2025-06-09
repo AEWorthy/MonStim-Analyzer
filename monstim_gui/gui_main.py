@@ -729,17 +729,24 @@ class EMGAnalysisGUI(QMainWindow):
         elif self.plot_widget.experiment_radio.isChecked():
             level = 'experiment'
             level_object = self.current_experiment
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a level to plot data from (session, dataset, or experiment).")
+            logging.warning("No level selected for plotting data.")
+            return
         
-        logging.info(f"Plot Created. level: {level} type: {plot_type}, options: {plot_options}, return_raw_data: {return_raw_data}.")
+        if level_object is None:
+            QMessageBox.warning(self, "Warning", f"No {level} data exists to plot. Please try importing experiment data first.")
+            logging.warning(f"No {level} data exists to plot. Please try importing experiment data first.")
+            return
+
         # Plot the data      
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            if level_object:
-                raw_data = level_object.plot(
-                    plot_type=plot_type,
-                    **plot_options,
-                    canvas = self.plot_widget.canvas
-                )
+            raw_data = level_object.plot(
+                plot_type=plot_type,
+                **plot_options,
+                canvas = self.plot_widget.canvas)
+                
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
             logging.error(f"An error occurred while plotting: {e}")
@@ -749,6 +756,7 @@ class EMGAnalysisGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
+        logging.info(f"Plot Created. level: {level} type: {plot_type}, options: {plot_options}, return_raw_data: {return_raw_data}.")
         self.plot_pane.layout.update()  # Refresh the layout of the plot pane
 
         if return_raw_data:
@@ -756,7 +764,7 @@ class EMGAnalysisGUI(QMainWindow):
         else:
             return
 
-    def get_raw_data(self):
+    def _get_raw_data(self):
         raw_data = self.plot_data(return_raw_data=True)
         if raw_data is not None:
             dialog = DataFrameDialog(raw_data, self)

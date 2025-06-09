@@ -21,7 +21,7 @@
         2
       ],
       "linestyle": ":",
-      "window_version": "1.7.2"
+      "window_version": "2.0.0"
     },
     {
       "name": "H-reflex",
@@ -43,7 +43,7 @@
         1.5
       ],
       "linestyle": ":",
-      "window_version": "1.7.2"
+      "window_version": "2.0.0"
     }
   ],
   "channels": [
@@ -62,5 +62,5 @@
   ],
   "m_max_values": [],
   "is_completed": false,
-  "version": "1.7.2"
+  "version": "2.0.0"
 }

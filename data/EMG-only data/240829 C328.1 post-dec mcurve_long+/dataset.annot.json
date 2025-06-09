@@ -4,5 +4,5 @@
   "condition": "post-dec mcurve_long+",
   "excluded_sessions": [],
   "is_completed": false,
-  "version": "1.7.2"
+  "version": "2.0.0"
 }

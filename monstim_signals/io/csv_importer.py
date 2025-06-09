@@ -165,18 +165,19 @@ def import_experiment(
     for ds_name, sess_map in dataset_maps.items():
         if max_workers and max_workers > 1:
             with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                futures = [
-                    ex.submit(process_csv, csv_path, ds_name, sess_name)
+                future_to_args = {
+                    ex.submit(process_csv, csv_path, ds_name, sess_name): (csv_path, ds_name, sess_name)
                     for sess_name, paths in sess_map.items()
                     for csv_path in paths
-                ]
-                for f in as_completed(futures):
+                }
+                for f in as_completed(future_to_args):
                     if is_canceled():
                         return
                     try:
                         f.result()
                     except Exception:
-                        logging.error(f"Error processing CSV: {f.csv_path} in dataset {f.ds_name}, session {f.sess_name}")
+                        csv_path, ds_name, sess_name = future_to_args[f]
+                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
                         logging.error(traceback.format_exc())
         else:
             for sess_name, paths in sess_map.items():
