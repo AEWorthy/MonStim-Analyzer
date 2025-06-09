@@ -37,7 +37,7 @@ class CircleDelegate(QStyledItemDelegate):
         """Draw the item text and a completion circle."""
         # Reserve space on the right for the status circle
         option_no_circle = QStyleOptionViewItem(option)
-        option_no_circle.rect = option.rect.adjusted(0, 0, -20, 0)
+        option_no_circle.rect = option.rect.adjusted(0, 0, -self.CIRCLE_PADDING, 0)
 
         super().paint(painter, option_no_circle, index)
 
