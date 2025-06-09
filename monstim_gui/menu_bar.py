@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class MenuBar(QMenuBar):
     def __init__(self, parent : 'EMGAnalysisGUI'):
         super().__init__(parent)
-        self.parent = parent # type: EMGAnalysisGUI
+        self.parent = parent  # type: EMGAnalysisGUI
         self.create_file_menu()
         self.create_edit_menu()
         self.create_help_menu()
