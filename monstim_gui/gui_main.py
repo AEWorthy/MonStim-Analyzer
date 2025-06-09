@@ -618,7 +618,7 @@ class EMGAnalysisGUI(QMainWindow):
     # Data selection widget functions - will be called whenever their index changes.
     def save_experiment(self):
         if self.current_experiment:
-            self.current_experiment.save_experiment()
+            self.current_experiment.save()
             self.status_bar.showMessage("Experiment saved successfully.", 5000)
             logging.debug("Experiment saved successfully.")
             self.has_unsaved_changes = False

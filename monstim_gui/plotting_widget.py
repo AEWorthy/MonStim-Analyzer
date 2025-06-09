@@ -1,7 +1,8 @@
 from typing import TYPE_CHECKING
 import logging
-from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup,
-                             QComboBox, QLabel, QHBoxLayout, QPushButton, QSizePolicy)
+from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup, QFormLayout,
+                             QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QWidget)
+from PyQt6.QtCore import Qt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -20,10 +21,66 @@ class PlotWidget(QGroupBox):
         self.current_option_widget: 'BasePlotOptions' = None
         self.parent = parent # Type: EMGAnalysisGUI
         self.layout = QVBoxLayout() # Type: QVBoxLayout
-        self.create_view_selection()
-        self.create_plot_type_selection()
+        self.layout.setContentsMargins(8, 8, 8, 8)
+        self.layout.setSpacing(6)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(4)
+
+        # Data Selection
+        level_widget = QWidget()
+        level_h = QHBoxLayout(level_widget)
+        level_h.setContentsMargins(0, 0, 0, 0)
+        self.view_group     = QButtonGroup(self)
+        self.session_radio  = QRadioButton("Session")
+        self.dataset_radio  = QRadioButton("Dataset")
+        self.experiment_radio = QRadioButton("Experiment")
+        for rb in (self.session_radio, self.dataset_radio, self.experiment_radio):
+            self.view_group.addButton(rb)
+            level_h.addWidget(rb)
+        self.session_radio.setChecked(True)
+        self.view = "session"
+        self.session_radio.toggled.connect(self.on_view_changed)
+        self.dataset_radio.toggled.connect(self.on_view_changed)
+        form.addRow("Select Data Level to Plot:", level_widget)
+
+        # Plot Type Selection Box
+        self.plot_type_combo = QComboBox()
+        form.addRow("Plot Type:", self.plot_type_combo)
+        self.plot_type_combo.currentTextChanged.connect(self.on_plot_type_changed)
+
+        self.layout.addLayout(form)
+
+        # Dynamic Options Box
+        self.options_box = QGroupBox("Options")
+        self.options_box.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.MinimumExpanding
+        )
+        self.options_layout = QVBoxLayout(self.options_box)
+        self.options_layout.setContentsMargins(6, 6, 6, 6)
+        self.options_layout.setSpacing(6)
+        self.layout.addWidget(self.options_box)
+
+        # Create the buttons for plotting and extracting data
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        self.plot_button     = QPushButton("Plot")
+        self.get_data_button = QPushButton("Plot & Extract Data")
+        for btn in (self.plot_button, self.get_data_button):
+            btn.setSizePolicy(QSizePolicy.Policy.Preferred,
+                              QSizePolicy.Policy.Fixed)
+            btn_row.addWidget(btn)
+        self.plot_button.clicked.connect(self.parent.plot_data)
+        self.get_data_button.clicked.connect(self.parent._get_raw_data)
+        self.layout.addLayout(btn_row)
+
+
+        # self.create_view_selection()
         self.create_additional_options()
-        self.create_plot_button()
         self.import_canvas()
         self.setLayout(self.layout)
 
@@ -64,47 +121,13 @@ class PlotWidget(QGroupBox):
         self.update_plot_types()
         self.update_plot_options()
 
-    def create_view_selection(self):
-        self.layout.addWidget(QLabel("Select Data Level to Plot:"))
-        view_layout = QHBoxLayout()
-        self.view_group = QButtonGroup(self)
-        self.session_radio = QRadioButton("Session")
-        self.dataset_radio = QRadioButton("Dataset")
-        self.experiment_radio = QRadioButton("Experiment")
-        self.view_group.addButton(self.session_radio)
-        self.view_group.addButton(self.dataset_radio)
-        self.view_group.addButton(self.experiment_radio)
-        self.session_radio.setChecked(True)
-        view_layout.addWidget(self.session_radio)
-        view_layout.addWidget(self.dataset_radio)
-        view_layout.addWidget(self.experiment_radio)
-        self.layout.addLayout(view_layout)
-
-        self.view = "session"
-        self.session_radio.toggled.connect(self.on_view_changed)
-        self.dataset_radio.toggled.connect(self.on_view_changed)
-
-    def create_plot_type_selection(self):
-        plot_type_layout = QHBoxLayout()
-        self.plot_type_label = QLabel("Select Plot Type:")
-        self.plot_type_combo = QComboBox()
-        self.plot_type_combo.currentTextChanged.connect(self.on_plot_type_changed)
-        plot_type_layout.addWidget(self.plot_type_label)
-        plot_type_layout.addWidget(self.plot_type_combo)
-        self.layout.addLayout(plot_type_layout)
-
     def create_additional_options(self):
         self.additional_options_layout = QVBoxLayout()
         self.layout.addLayout(self.additional_options_layout)
 
     def create_plot_button(self):
-        self.plot_button = QPushButton("Plot")
         self.plot_button.clicked.connect(self.parent.plot_data)
-        self.layout.addWidget(self.plot_button)
-
-        self.get_data_button = QPushButton("Plot/Extact Raw Data")
         self.get_data_button.clicked.connect(self.parent._get_raw_data)
-        self.layout.addWidget(self.get_data_button)
     
     def import_canvas(self):
         self.canvas = self.parent.plot_pane.canvas
@@ -152,15 +175,14 @@ class PlotWidget(QGroupBox):
 
     def update_plot_options(self):
         if self.current_option_widget:
-            self.additional_options_layout.removeWidget(self.current_option_widget)
-            self.current_option_widget.deleteLater()
-            self.current_option_widget = None
+            self.options_layout.removeWidget(self.current_option_widget)
+            self.current_option_widget.deleteLater()     
 
         plot_type = self.plot_type_combo.currentText()
 
         if plot_type in self.plot_options[self.view]:
             self.current_option_widget = self.plot_options[self.view][plot_type](self)
-            self.additional_options_layout.addWidget(self.current_option_widget)
+            self.options_layout.addWidget(self.current_option_widget)
 
             if plot_type in self.last_options[self.view]:
                 logging.debug(f"Using last options for {self.view} - {plot_type}: {self.last_options[self.view][plot_type]}")
@@ -168,7 +190,7 @@ class PlotWidget(QGroupBox):
             else:
                 logging.debug(f"No last options found for {self.view} - {plot_type}. Using default options.")
         
-        self.additional_options_layout.update()
+        self.options_layout.update()
         
         if plot_type == "Single EMG Recordings":
             self.current_option_widget.recording_cycler.reset_max_recordings()
