@@ -77,7 +77,11 @@ class DataSelectionWidget(QGroupBox):
         for combo in (self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-            combo.setTextElideMode(Qt.TextElideMode.Right)
+            # Qt <6.5 lacks QComboBox.setTextElideMode; fallback to the view
+            try:
+                combo.setTextElideMode(Qt.TextElideMode.ElideRight)
+            except AttributeError:
+                combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
 
     def setup_context_menus(self):
         for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
