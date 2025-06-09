@@ -22,7 +22,10 @@ class ReportsWidget(QGroupBox):
             ("Dataset Info. Report",    self.parent.show_dataset_report),
             ("Experiment Info. Report", self.parent.show_experiment_report),
             ("M-max Report (RMS)",      self.parent.show_mmax_report),
-            # ← append more here whenever needed
+            # Add new buttons here as tuples in the format:
+            # ("Button Label", callback_function).
+            # Ensure the callback_function is a method of the parent class
+            # (EMGAnalysisGUI) and is properly defined.
         ]
 
         # Number of columns in the grid layout
