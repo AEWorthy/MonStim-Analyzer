@@ -24,6 +24,9 @@ class Dataset:
         self._all_sessions : List[Session] = sessions
         self.annot         : DatasetAnnot = annot
         self.repo          : DatasetRepository = repo
+        self.parent_experiment : 'Experiment | None' = None
+        for sess in self._all_sessions:
+            sess.parent_dataset = self
 
         self._load_config_settings()
 
@@ -308,6 +311,12 @@ class Dataset:
                 self.repo.save(self)
         else:
             logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
+
+        if not self.sessions:
+            # If no sessions remain, clear list and exclude dataset from parent experiment
+            self.annot.excluded_sessions.clear()
+            if self.parent_experiment is not None:
+                self.parent_experiment.exclude_dataset(self.id)
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""

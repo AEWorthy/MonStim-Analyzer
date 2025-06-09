@@ -15,6 +15,8 @@ class Experiment:
                  annot: ExperimentAnnot | None = None, repo: Any = None):
         self.id = expt_id
         self._all_datasets: List[Dataset] = datasets
+        for ds in self._all_datasets:
+            ds.parent_experiment = self
         self.annot: ExperimentAnnot = annot or ExperimentAnnot.create_empty()
         self.repo = repo
 
@@ -149,6 +151,9 @@ class Experiment:
                 self.repo.save(self)
         else:
             logging.warning(f"Dataset {dataset_id} already excluded in experiment {self.id}.")
+
+        if not self.datasets:
+            self.annot.excluded_datasets.clear()
 
     def restore_dataset(self, dataset_id: str) -> None:
         """Restore a previously excluded dataset by its ID."""
