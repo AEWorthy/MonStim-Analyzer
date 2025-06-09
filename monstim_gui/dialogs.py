@@ -40,6 +40,9 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib import colors as mcolors
 
+# Small set of pleasant colors for latency windows
+COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())
+
 from monstim_signals.core.utils import get_source_path, CustomLoader
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
@@ -789,8 +792,6 @@ class WindowStartDialog(QDialog):
 class LatencyWindowsDialog(QDialog):
     """Dialog for editing multiple latency windows."""
 
-    COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())
-
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)
         self.data = data
@@ -846,8 +847,8 @@ class LatencyWindowsDialog(QDialog):
         dur_spin.setSingleStep(0.05)
         dur_spin.setValue(window.durations[0])
         color_combo = QComboBox()
-        color_combo.addItems(self.COLOR_OPTIONS)
-        if window.color in self.COLOR_OPTIONS:
+        color_combo.addItems(COLOR_OPTIONS)
+        if window.color in COLOR_OPTIONS:
             color_combo.setCurrentText(window.color)
         remove_btn = QPushButton("Remove")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
