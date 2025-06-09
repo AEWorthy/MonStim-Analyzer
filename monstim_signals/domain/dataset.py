@@ -10,9 +10,8 @@ from monstim_signals.core.utils import load_config
 from monstim_signals.transform import calculate_emg_amplitude
 
 if TYPE_CHECKING:
-    
-    
     from monstim_signals.io.repositories import DatasetRepository
+    from monstim_signals.domain.experiment import Experiment
 
 class Dataset:
     """

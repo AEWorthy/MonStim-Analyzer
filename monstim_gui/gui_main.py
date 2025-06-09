@@ -72,6 +72,12 @@ class EMGAnalysisGUI(QMainWindow):
         self.plot_widget.initialize_plot_widget()
 
         self.command_invoker = CommandInvoker(self)
+        try:
+            self.load_experiment(0)
+        except Exception as e:
+            logging.error(f"Error loading initial experiment: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred while loading the initial experiment: {e}")
+            logging.error(traceback.format_exc())
     
     def init_ui(self):
         # Central widget and main layout
@@ -499,12 +505,15 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
+        #TODO: Fix this function to properly reload the current experiment.
         logging.debug(f"Reloading current experiment: {self.current_experiment.id}.")
         current_exepriment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
         if self.current_experiment:
             if self.current_experiment.repo is not None:
                 if self.current_experiment.repo.expt_js.exists():
                     self.current_experiment.repo.expt_js.unlink()
+                else:
+                    logging.warning(f"Experiment JS file does not exist: {self.current_experiment.repo.expt_js}. Cannot unlink.")
                 for ds in self.current_experiment._all_datasets:
                     if ds.repo and ds.repo.dataset_js.exists():
                         ds.repo.dataset_js.unlink()
@@ -515,6 +524,7 @@ class EMGAnalysisGUI(QMainWindow):
                 self.current_experiment = new_expt
             else:
                 self.current_experiment = None
+                logging.warning("No repository found for the current experiment. Cannot reload.")
             self.current_dataset = None
             self.current_session = None
             

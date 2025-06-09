@@ -1,5 +1,5 @@
 # monstim_signals/domain/experiment.py
-from typing import List, Any
+from typing import List, Any, TYPE_CHECKING
 import logging
 import numpy as np
 
@@ -7,6 +7,9 @@ from monstim_signals.domain.dataset import Dataset
 from monstim_signals.plotting.experiment_plotter import ExperimentPlotter
 from monstim_signals.core.data_models import ExperimentAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
+
+if TYPE_CHECKING:
+    from monstim_signals.io.repositories import DatasetRepository
 
 class Experiment:
     """A collection of :class:`Dataset` objects."""
@@ -18,7 +21,7 @@ class Experiment:
         for ds in self._all_datasets:
             ds.parent_experiment = self
         self.annot: ExperimentAnnot = annot or ExperimentAnnot.create_empty()
-        self.repo = repo
+        self.repo : DatasetRepository = repo
 
         self._load_config_settings()
         self.plotter = ExperimentPlotter(self)
@@ -86,18 +89,27 @@ class Experiment:
 
     @property
     def num_channels(self) -> int:
+        if not self.datasets:
+            return 0
         return min(ds.num_channels for ds in self.datasets)
 
     @property
     def channel_names(self) -> List[str]:
+        if not self.datasets:
+            return []
         return max((ds.channel_names for ds in self.datasets), key=len)
 
     @property
     def latency_windows(self) -> List[LatencyWindow]:
+        if not self.datasets:
+            return []
         return max((ds.latency_windows for ds in self.datasets), key=len)
 
     @property
     def stimulus_voltages(self) -> np.ndarray:
+        if not self.datasets:
+            return np.array([])
+        # Collect all unique stimulus voltages across datasets, rounded to the bin size
         binned_voltages = set()
         for ds in self.datasets:
             volts = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
@@ -154,6 +166,7 @@ class Experiment:
 
         if not self.datasets:
             self.annot.excluded_datasets.clear()
+            logging.warning(f"All datasets excluded from experiment {self.id}. Resetting exclusion list.")
 
     def restore_dataset(self, dataset_id: str) -> None:
         """Restore a previously excluded dataset by its ID."""
