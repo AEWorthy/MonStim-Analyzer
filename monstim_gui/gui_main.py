@@ -72,12 +72,7 @@ class EMGAnalysisGUI(QMainWindow):
         self.plot_widget.initialize_plot_widget()
 
         self.command_invoker = CommandInvoker(self)
-        try:
-            self.load_experiment(0)
-        except Exception as e:
-            logging.error(f"Error loading initial experiment: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred while loading the initial experiment: {e}")
-            logging.error(traceback.format_exc())
+
     
     def init_ui(self):
         # Central widget and main layout
