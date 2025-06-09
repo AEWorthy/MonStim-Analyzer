@@ -42,6 +42,7 @@ from matplotlib import colors as mcolors
 
 from monstim_signals.core.utils import get_source_path, CustomLoader
 from monstim_signals.core.data_models import LatencyWindow
+from monstim_signals.core.data_models import LatencyWindow
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
 from monstim_signals.domain.experiment import Experiment

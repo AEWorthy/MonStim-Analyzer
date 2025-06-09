@@ -22,8 +22,18 @@ from monstim_signals.core.utils import (format_report, get_output_path, get_data
                            get_source_path, get_docs_path, get_config_path, BIN_EXTENSION)
 
 from monstim_gui.splash import SPLASH_INFO
-from monstim_gui.dialogs import (ChangeChannelNamesDialog, ReflexSettingsDialog, CopyableReportDialog, SelectChannelsDialog,
-                                 LatexHelpWindow, AboutDialog, HelpWindow, PreferencesDialog, InvertChannelPolarityDialog,
+from monstim_gui.dialogs import (
+    ChangeChannelNamesDialog,
+    ReflexSettingsDialog,
+    CopyableReportDialog,
+    SelectChannelsDialog,
+    LatexHelpWindow,
+    AboutDialog,
+    HelpWindow,
+    PreferencesDialog,
+    InvertChannelPolarityDialog,
+    LatencyWindowsDialog,
+)
                                  LatencyWindowsDialog)
 from monstim_gui.menu_bar import MenuBar
 from monstim_gui.data_selection_widget import DataSelectionWidget
