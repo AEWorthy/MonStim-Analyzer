@@ -93,11 +93,8 @@ class Dataset:
         return len(self.sessions)
 
     @property
-    def excluded_sessions(self) -> List[Session]:
-        """
-        Returns a list of sessions that are excluded from the dataset.
-        This is useful for filtering out sessions that do not meet certain criteria.
-        """
+    def excluded_sessions(self) -> set[str]:
+        """IDs of sessions excluded from this dataset."""
         return set(self.annot.excluded_sessions)
 
     @property

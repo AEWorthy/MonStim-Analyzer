@@ -97,8 +97,9 @@ class RestoreRecordingCommand(Command):
             self.gui.current_session.exclude_recording(self.recording_index)
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
-#TODO: Change to exclude rather than remove
-class RemoveSessionCommand(Command):
+class ExcludeSessionCommand(Command):
+    """Exclude the currently selected session."""
+
     def __init__(self, gui):
         self.command_name = "Exclude Session"
         self.gui : 'EMGAnalysisGUI' = gui
@@ -118,8 +119,11 @@ class RemoveSessionCommand(Command):
         self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
-# TODO: Change to exclude rather than remove
-class RemoveDatasetCommand(Command):
+
+
+class ExcludeDatasetCommand(Command):
+    """Exclude the currently selected dataset."""
+
     def __init__(self, gui):
         self.command_name = "Exclude Dataset"
         self.gui : 'EMGAnalysisGUI' = gui
@@ -138,6 +142,54 @@ class RemoveDatasetCommand(Command):
     def undo(self):
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.removed_dataset
+        self.gui.data_selection_widget.update_dataset_combo()
+
+
+class RestoreSessionCommand(Command):
+    """Restore an excluded session by ID."""
+
+    def __init__(self, gui, session_id: str):
+        self.command_name = "Restore Session"
+        self.gui: 'EMGAnalysisGUI' = gui
+        self.session_id = session_id
+        self.session_obj = None
+
+    def execute(self):
+        self.session_obj = next(
+            (s for s in self.gui.current_dataset._all_sessions if s.id == self.session_id),
+            None
+        )
+        self.gui.current_dataset.restore_session(self.session_id)
+        self.gui.current_session = self.session_obj
+        self.gui.data_selection_widget.update_session_combo()
+
+    def undo(self):
+        self.gui.current_dataset.exclude_session(self.session_id)
+        self.gui.current_session = None
+        self.gui.data_selection_widget.update_session_combo()
+
+
+class RestoreDatasetCommand(Command):
+    """Restore an excluded dataset by ID."""
+
+    def __init__(self, gui, dataset_id: str):
+        self.command_name = "Restore Dataset"
+        self.gui: 'EMGAnalysisGUI' = gui
+        self.dataset_id = dataset_id
+        self.dataset_obj = None
+
+    def execute(self):
+        self.dataset_obj = next(
+            (ds for ds in self.gui.current_experiment._all_datasets if ds.id == self.dataset_id),
+            None
+        )
+        self.gui.current_experiment.restore_dataset(self.dataset_id)
+        self.gui.current_dataset = self.dataset_obj
+        self.gui.data_selection_widget.update_dataset_combo()
+
+    def undo(self):
+        self.gui.current_experiment.exclude_dataset(self.dataset_id)
+        self.gui.current_dataset = None
         self.gui.data_selection_widget.update_dataset_combo()
         
 class InvertChannelPolarityCommand(Command):
