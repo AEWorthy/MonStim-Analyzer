@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
-from PyQt6.QtWidgets import QGroupBox, QPushButton, QGridLayout
+from PyQt6.QtWidgets import QGroupBox, QPushButton, QGridLayout, QSizePolicy
+from PyQt6.QtCore import Qt
 
 if TYPE_CHECKING:
     from gui_main import EMGAnalysisGUI
@@ -8,20 +9,45 @@ class ReportsWidget(QGroupBox):
     def __init__(self, parent : 'EMGAnalysisGUI'):
         super().__init__("Reports", parent)
         self.parent = parent # type: EMGAnalysisGUI
-        self.layout = QGridLayout(self)
+        self.layout = QGridLayout()
+        self.layout.setContentsMargins(8, 8, 8, 8)
+        self.layout.setHorizontalSpacing(12)
+        self.layout.setVerticalSpacing(8)
+        self.setLayout(self.layout)
         self.create_report_buttons()
 
     def create_report_buttons(self):
         buttons = [
-            ("Session Info. Report", self.parent.show_session_report),
-            ("Dataset Info. Report", self.parent.show_dataset_report),
+            ("Session Info. Report",    self.parent.show_session_report),
+            ("Dataset Info. Report",    self.parent.show_dataset_report),
             ("Experiment Info. Report", self.parent.show_experiment_report),
-            ("M-max Report (RMS)", self.parent.show_mmax_report),
+            ("M-max Report (RMS)",      self.parent.show_mmax_report),
+            # ← append more here whenever needed
         ]
 
-        for i, (text, callback) in enumerate(buttons):
-            button = QPushButton(text)
-            button.clicked.connect(callback)
-            row = i // 3
-            col = i % 3
-            self.layout.addWidget(button, row, col)
+        # Number of columns in the grid layout
+        N_COLS = 2
+
+        # 1) add each button
+        for idx, (text, callback) in enumerate(buttons):
+            btn = QPushButton(text)
+            btn.clicked.connect(callback)
+
+            # 1) make it expand to fill whatever cell size you're given
+            btn.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Preferred
+            )
+
+            row = idx // N_COLS
+            col = idx %  N_COLS
+            self.layout.addWidget(btn, row, col)
+
+        # 2) make *every* column stretch equally
+        for c in range(N_COLS):
+            self.layout.setColumnStretch(c, 1)
+
+        # 3) pin the whole grid at the top and center horizontally
+        self.layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
+        )

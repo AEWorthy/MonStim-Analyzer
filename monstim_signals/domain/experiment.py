@@ -235,6 +235,16 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────
+    def save(self) -> None:
+        """
+        Save the experiment to the repository.
+        This is a placeholder for any save logic needed.
+        """
+        if self.repo is not None:
+            self.repo.save(self)
+        else:
+            raise NotImplementedError("No repository defined for saving the experiment.")
+    
     def close(self) -> None:
         """
         Close all datasets in the experiment.

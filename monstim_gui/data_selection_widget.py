@@ -2,9 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (
     QGroupBox,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
+    QFormLayout,
     QComboBox,
     QMenu,
     QStyledItemDelegate,
@@ -32,6 +30,7 @@ class CircleDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.completed_color = QColor(0, 255, 0)  # Green
         self.uncompleted_color = QColor(255, 0, 0)  # Red
+        self.CIRCLE_PADDING = 20  # Space reserved for the circle on the right side
         
     def paint(self, painter: QPainter, option, index):
         """Draw the item text and a completion circle."""
@@ -58,18 +57,30 @@ class CircleDelegate(QStyledItemDelegate):
         painter.restore()
 
 class DataSelectionWidget(QGroupBox):
-    def __init__(self, parent : 'EMGAnalysisGUI'):
+    def __init__(self, parent: 'EMGAnalysisGUI'):
         super().__init__("Data Selection", parent)
-        self.parent = parent # type: EMGAnalysisGUI
+        self.parent = parent
         self.circle_delegate = CircleDelegate(self)
         
-        self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(5)
-        self.layout.setContentsMargins(5, 5, 5, 5)
-        self.create_experiment_selection()
-        self.create_dataset_selection()
-        self.create_session_selection()
-        self.setLayout(self.layout)
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setHorizontalSpacing(6)      # tighten the space between label & field
+        form.setVerticalSpacing(4)        # vertical spacing between rows
+        form.setContentsMargins(8, 8, 8, 8)  # outer margins of the groupbox
+        
+        self.experiment_combo = QComboBox()
+        self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
+        self.dataset_combo = QComboBox()
+        self.dataset_combo.currentIndexChanged.connect(self.parent.load_dataset)
+        self.session_combo = QComboBox()
+        self.session_combo.currentIndexChanged.connect(self.parent.load_session)
+
+        form.addRow("Select Experiment:", self.experiment_combo)
+        form.addRow("Select Dataset:",    self.dataset_combo)
+        form.addRow("Select Session:",    self.session_combo)
+
+        self.setLayout(form)
         self.setup_context_menus()
         self.update_all_completion_statuses()
         
@@ -77,11 +88,7 @@ class DataSelectionWidget(QGroupBox):
         for combo in (self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-            # Qt <6.5 lacks QComboBox.setTextElideMode; fallback to the view
-            try:
-                combo.setTextElideMode(Qt.TextElideMode.ElideRight)
-            except AttributeError:
-                combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
+            combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
 
     def setup_context_menus(self):
         for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
@@ -137,39 +144,10 @@ class DataSelectionWidget(QGroupBox):
         for level in ('dataset', 'session'):
             self.update_completion_status(level)
 
-    def create_experiment_selection(self):
-        experiment_layout = QHBoxLayout()
-        self.experiment_label = QLabel("Select Experiment:")
-        self.experiment_combo = QComboBox()
-        self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
-        experiment_layout.addWidget(self.experiment_label)
-        experiment_layout.addWidget(self.experiment_combo)
-        self.layout.addLayout(experiment_layout)
-
     def on_experiment_combo_changed(self, index):
         if self.parent.has_unsaved_changes:
             self.parent.save_experiment()
         self.parent.load_experiment(index)
-
-    def create_dataset_selection(self):
-        dataset_layout = QHBoxLayout()
-        self.dataset_label = QLabel("Select Dataset:")
-        self.dataset_combo = QComboBox()
-        self.dataset_combo.currentIndexChanged.connect(self.parent.load_dataset)
-
-        dataset_layout.addWidget(self.dataset_label)
-        dataset_layout.addWidget(self.dataset_combo)
-        self.layout.addLayout(dataset_layout)
-
-    def create_session_selection(self):
-        session_layout = QHBoxLayout()
-        self.session_label = QLabel("Select Session:")
-        self.session_combo = QComboBox()
-        self.session_combo.currentIndexChanged.connect(self.parent.load_session)
-        
-        session_layout.addWidget(self.session_label)
-        session_layout.addWidget(self.session_combo)
-        self.layout.addLayout(session_layout)
     
     def update_experiment_combo(self):
         self.experiment_combo.clear()
