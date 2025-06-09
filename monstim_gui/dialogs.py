@@ -2,9 +2,28 @@ import logging
 import os
 import yaml
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGridLayout, QLabel, QLineEdit, QDialogButtonBox, QMessageBox, QHBoxLayout,
-                             QTextEdit, QPushButton, QApplication, QTextBrowser, QWidget, QFormLayout, QGroupBox, QScrollArea,
-                             QSizePolicy, QCheckBox)
+from PyQt6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QDialogButtonBox,
+    QMessageBox,
+    QHBoxLayout,
+    QTextEdit,
+    QPushButton,
+    QApplication,
+    QTextBrowser,
+    QWidget,
+    QFormLayout,
+    QGroupBox,
+    QScrollArea,
+    QSizePolicy,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+)
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
 from PyQt6.QtCore import Qt, QUrl, pyqtSlot, QEvent, QTimer
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -18,11 +37,13 @@ from mdx_math import MathExtension
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib import colors as mcolors
 
 from monstim_signals.core.utils import get_source_path, CustomLoader
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
 from monstim_signals.domain.experiment import Experiment
+from monstim_gui.commands import SetLatencyWindowsCommand
 from monstim_gui.splash import SPLASH_INFO
 
 
@@ -731,79 +752,107 @@ class SelectChannelsDialog(QDialog):
 class LatencyWindowsDialog(QDialog):
     """Dialog for editing multiple latency windows."""
 
+    COLOR_OPTIONS = sorted(mcolors.CSS4_COLORS.keys())
+
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)
         self.data = data
+        self.gui = parent  # EMGAnalysisGUI
         self.setModal(True)
         self.setWindowTitle("Manage Latency Windows")
-        self.window_entries = []  # type: list[tuple[QLineEdit, QLineEdit, QLineEdit, QLineEdit]]
+        self.window_entries = []  # type: list[tuple[QGroupBox, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]]
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
 
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll_widget = QWidget()
+        self.scroll_layout = QVBoxLayout(self.scroll_widget)
+        self.scroll.setWidget(self.scroll_widget)
+        layout.addWidget(self.scroll)
+
         for window in self.data.latency_windows:
-            group = QGroupBox(window.name)
-            form = QFormLayout()
-            name_edit = QLineEdit(window.name)
-            start_edit = QLineEdit(
-                ", ".join(str(v) for v in window.start_times)
-            )
-            dur_edit = QLineEdit(
-                ", ".join(str(v) for v in window.durations)
-            )
-            color_edit = QLineEdit(window.color)
-            form.addRow("Name", name_edit)
-            form.addRow("Start Times", start_edit)
-            form.addRow("Durations", dur_edit)
-            form.addRow("Color", color_edit)
-            group.setLayout(form)
-            layout.addWidget(group)
-            self.window_entries.append((name_edit, start_edit, dur_edit, color_edit))
+            self._add_window_group(window)
+
+        add_button = QPushButton("Add Window")
+        add_button.clicked.connect(lambda: self._add_window_group())
+        layout.addWidget(add_button)
 
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
-    def _parse_list(self, text: str, count: int) -> List[float]:
-        parts = [p.strip() for p in text.split(',') if p.strip()]
-        if len(parts) == 1:
-            return [float(parts[0])] * count
-        return [float(p) for p in parts]
+    def _add_window_group(self, window: LatencyWindow | None = None):
+        if window is None:
+            window = LatencyWindow(
+                name=f"Window {len(self.window_entries)+1}",
+                start_times=[0.0],
+                durations=[1.0],
+                color="black",
+                linestyle=":"
+            )
+        group = QGroupBox(window.name)
+        form = QFormLayout()
+        name_edit = QLineEdit(window.name)
+        start_spin = QDoubleSpinBox()
+        start_spin.setDecimals(2)
+        start_spin.setRange(-1000.0, 1000.0)
+        start_spin.setValue(window.start_times[0])
+        dur_spin = QDoubleSpinBox()
+        dur_spin.setDecimals(2)
+        dur_spin.setRange(0.0, 1000.0)
+        dur_spin.setValue(window.durations[0])
+        color_combo = QComboBox()
+        color_combo.addItems(self.COLOR_OPTIONS)
+        if window.color in self.COLOR_OPTIONS:
+            color_combo.setCurrentText(window.color)
+        remove_btn = QPushButton("Remove")
+        remove_btn.clicked.connect(lambda: self._remove_window_group(group))
+        form.addRow("Name", name_edit)
+        form.addRow("Start", start_spin)
+        form.addRow("Duration", dur_spin)
+        form.addRow("Color", color_combo)
+        form.addRow(remove_btn)
+        group.setLayout(form)
+        self.scroll_layout.addWidget(group)
+        self.window_entries.append((group, name_edit, start_spin, dur_spin, color_combo))
+
+    def _remove_window_group(self, group: QGroupBox):
+        for i, (grp, *_ ) in enumerate(self.window_entries):
+            if grp is group:
+                self.window_entries.pop(i)
+                break
+        group.setParent(None)
 
     def save_windows(self):
         new_windows = []
         num_channels = len(self.data.channel_names)
-        for name_edit, start_edit, dur_edit, color_edit in self.window_entries:
+        for group, name_edit, start_spin, dur_spin, color_combo in self.window_entries:
             name = name_edit.text().strip() or "Window"
-            try:
-                starts = self._parse_list(start_edit.text(), num_channels)
-                durs = self._parse_list(dur_edit.text(), num_channels)
-            except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Start times and durations must be numbers separated by commas.")
-                return
-            color = color_edit.text().strip() or "black"
+            start_default = start_spin.value()
+            dur_default = dur_spin.value()
+            color = color_combo.currentText()
             new_windows.append(
                 LatencyWindow(
                     name=name,
-                    start_times=starts,
-                    durations=durs,
+                    start_times=[start_default] * num_channels,
+                    durations=[dur_default] * num_channels,
                     color=color,
                     linestyle=self.data.latency_windows[0].linestyle if self.data.latency_windows else ':'
                 )
             )
 
-        if isinstance(self.data, Dataset):
-            for session in self.data.sessions:
-                session.annot.latency_windows = [w for w in new_windows]
-                session.update_latency_window_parameters()
-                if session.repo is not None:
-                    session.repo.save(session)
+        if isinstance(self.data, Experiment):
+            level = 'experiment'
+        elif isinstance(self.data, Dataset):
+            level = 'dataset'
         else:
-            self.data.annot.latency_windows = new_windows
-            self.data.update_latency_window_parameters()
-            if getattr(self.data, 'repo', None) is not None:
-                self.data.repo.save(self.data)
+            level = 'session'
+
+        command = SetLatencyWindowsCommand(self.gui, level, new_windows)
+        self.gui.command_invoker.execute(command)
         self.accept()
         
