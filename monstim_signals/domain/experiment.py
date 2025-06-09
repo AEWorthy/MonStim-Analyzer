@@ -164,6 +164,7 @@ class Experiment:
         else:
             logging.warning(f"Dataset {dataset_id} already excluded in experiment {self.id}.")
 
+        # Reset the exclusion list if all datasets are excluded
         if not self.datasets:
             self.annot.excluded_datasets.clear()
             logging.warning(f"All datasets excluded from experiment {self.id}. Resetting exclusion list.")
