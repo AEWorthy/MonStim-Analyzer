@@ -7,7 +7,7 @@ from monstim_signals.core.utils import DATA_VERSION
 # -----------------------------------------------------------------------
 # Basic data models for MonStim Signals
 # -----------------------------------------------------------------------
-@dataclass
+@dataclass # TODO: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
 class LatencyWindow:
     name: str
     color: str
@@ -26,21 +26,6 @@ class LatencyWindow:
             return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
         else:
             return Line2D([0], [0], color=self.color, linestyle='-', label=self.name)
-
-    @staticmethod
-    def create_default_windows(num_channels: int) -> List['LatencyWindow']:
-        """Create default M-wave and H-reflex latency windows."""
-        from monstim_signals.core.utils import load_config
-        cfg = load_config()
-        m_start = cfg['m_start'][:num_channels]
-        m_duration = [cfg['m_duration']] * num_channels
-        h_start = cfg['h_start'][:num_channels]
-        h_duration = [cfg['h_duration']] * num_channels
-        style = cfg['latency_window_style']
-        return [
-            LatencyWindow('M-wave', cfg['m_color'], m_start, m_duration, linestyle=style),
-            LatencyWindow('H-reflex', cfg['h_color'], h_start, h_duration, linestyle=style),
-        ]
 
 @dataclass
 class StimCluster:

@@ -1,6 +1,5 @@
 from PyQt6.QtWidgets import QMenuBar, QMessageBox
 from PyQt6.QtGui import QKeySequence, QFont
-from monstim_signals.core.utils import load_config
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -9,16 +8,7 @@ if TYPE_CHECKING:
 class MenuBar(QMenuBar):
     def __init__(self, parent : 'EMGAnalysisGUI'):
         super().__init__(parent)
-        self.parent = parent # type: EMGAnalysisGUI
-        config = load_config()
-        font_size = config.get('menu_font_size', 10)
-        font_family = config.get('menu_font_family', 'Sans')
-        bg_color = config.get('menu_background_color', '#ffffff')
-        text_color = config.get('menu_text_color', '#000000')
-        self.setStyleSheet(
-            f"QMenuBar {{background-color: {bg_color}; color: {text_color}; font-size: {font_size}px; font-family: {font_family};}}"
-            "QMenuBar::item:selected {background: #dddddd;}"
-        )
+        self.parent = parent  # type: EMGAnalysisGUI
         self.create_file_menu()
         self.create_edit_menu()
         self.create_help_menu()

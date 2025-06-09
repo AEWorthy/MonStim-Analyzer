@@ -304,8 +304,6 @@ class PreferencesDialog(QDialog):
             "M-max Calculation Settings": ["m_max_args"],
             "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size",
                                       "m_color", "h_color", "latency_window_style", "subplot_adjust_args"],
-            "Menu Style Settings": ["menu_font_size", "menu_font_family", "menu_background_color",
-                                    "menu_text_color"],
             "Dataset Parsing Parameters": ["preferred_date_format"],
         }
 
