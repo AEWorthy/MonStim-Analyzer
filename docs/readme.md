@@ -65,7 +65,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
         - Use "Undo"/"Redo" to undo/redo the removal/addition of sessions.
         - Alternatively use the "Edit" > "Reload Current Dataset" button to restore all sessions to the dataset. This will preserve any changes you made to the dataset such as channel names or reflex time windows.
     - Use "Edit" > "Change Channel Names" to modify channel labels.
-    - Use "Edit" > "Update Reflex Time Windows" to adjust latency window parameters (For now just M-wave and H-reflex windows).
+    - Use "Edit" > "Manage Latency Windows" to create, remove, or edit latency windows for EMG measurements. Each window can have channel specific start times while the duration stays the same. Changes can be undone with the Undo action.
     - Use "Edit" > "Invert Channel Polarity" to select any desired channels in the currently selected dataset for which you would like to invert the polarity. This will be applied to all sessions in the dataset for each of the selected channels.
     - To view/exclude individual recordings, use the Single Session plot type called "Single EMG Recordings". Cycle through the individual recordings and exclude/include any that you desire. Use "Edit" > "Reload Current Session" to reset all changes.
     - For advanced users, set user preferences in "File" > "Preferences".

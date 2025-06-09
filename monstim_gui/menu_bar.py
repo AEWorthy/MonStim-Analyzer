@@ -74,8 +74,8 @@ class MenuBar(QMenuBar):
         session_menu = edit_menu.addMenu("Session")
 
         # Experiment level actions
-        update_window_action = experiment_menu.addAction("Update Reflex Time Windows")
-        update_window_action.triggered.connect(lambda: self.parent.update_reflex_time_windows('experiment'))
+        update_window_action = experiment_menu.addAction("Manage Latency Windows")
+        update_window_action.triggered.connect(lambda: self.parent.manage_latency_windows('experiment'))
         invert_polarity_action = experiment_menu.addAction("Invert Channel Polarity")
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('experiment'))
         change_names_action = experiment_menu.addAction("Change Channel Names")
@@ -87,8 +87,8 @@ class MenuBar(QMenuBar):
         remove_experiment_action.triggered.connect(self.parent.delete_experiment)
 
         # Dataset level actions
-        update_window_action = dataset_menu.addAction("Update Reflex Time Windows")
-        update_window_action.triggered.connect(lambda: self.parent.update_reflex_time_windows('dataset'))
+        update_window_action = dataset_menu.addAction("Manage Latency Windows")
+        update_window_action.triggered.connect(lambda: self.parent.manage_latency_windows('dataset'))
         invert_polarity_action = dataset_menu.addAction("Invert Channel Polarity")
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('dataset'))
         change_names_action = dataset_menu.addAction("Change Channel Names")
@@ -100,8 +100,8 @@ class MenuBar(QMenuBar):
         remove_dataset_action.triggered.connect(self.parent.remove_dataset)
 
         # Session level actions
-        update_window_action = session_menu.addAction("Update Reflex Time Windows")
-        update_window_action.triggered.connect(lambda: self.parent.update_reflex_time_windows('session'))
+        update_window_action = session_menu.addAction("Manage Latency Windows")
+        update_window_action.triggered.connect(lambda: self.parent.manage_latency_windows('session'))
         invert_polarity_action = session_menu.addAction("Invert Channel Polarity")
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity('session'))
         change_names_action = session_menu.addAction("Change Channel Names")
