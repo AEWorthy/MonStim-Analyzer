@@ -57,3 +57,12 @@ h_duration: 1.5 # (in ms). default is 1.0.
 
 h_threshold: 0.5 # (in mV). default is 0.5.
 
+
+# Menu Style Parameters
+menu_font_size: 12
+menu_font_family: 'Segoe UI'
+menu_background_color: '#f0f0f0'
+menu_text_color: '#000000'
+
+# Dataset Parsing Parameters
+preferred_date_format: 'YYMMDD'

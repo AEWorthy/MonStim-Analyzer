@@ -500,9 +500,9 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
-        #TODO: Fix this function to properly reload the current experiment.
+        """Reload the current experiment from disk."""
         logging.debug(f"Reloading current experiment: {self.current_experiment.id}.")
-        current_exepriment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
+        current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
         if self.current_experiment:
             if self.current_experiment.repo is not None:
                 if self.current_experiment.repo.expt_js.exists():
@@ -522,12 +522,14 @@ class EMGAnalysisGUI(QMainWindow):
                 logging.warning("No repository found for the current experiment. Cannot reload.")
             self.current_dataset = None
             self.current_session = None
-            
-            self.refresh_existing_experiments()
-            self.data_selection_widget.experiment_combo.setCurrentIndex(current_exepriment_combo_index)
 
+            self.refresh_existing_experiments()
+            self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
+
+            self.current_experiment.apply_preferences(reset_properties=False)
+            self.has_unsaved_changes = True
             self.plot_widget.on_data_selection_changed()
-            
+
             logging.debug("Experiment reloaded successfully.")
             self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
 
