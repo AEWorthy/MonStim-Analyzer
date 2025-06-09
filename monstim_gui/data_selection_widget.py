@@ -96,29 +96,56 @@ class DataSelectionWidget(QGroupBox):
 
         # Connect signals
         self.dataset_combo.customContextMenuRequested.connect(
-            lambda pos: self.show_completion_menu(pos, 'dataset'))
+            lambda pos: self.show_context_menu(pos, 'dataset'))
         self.session_combo.customContextMenuRequested.connect(
-            lambda pos: self.show_completion_menu(pos, 'session'))
+            lambda pos: self.show_context_menu(pos, 'session'))
 
-    def show_completion_menu(self, pos, level):
+    def show_context_menu(self, pos, level):
         current_obj = {
             'dataset': self.parent.current_dataset,
-            'session': self.parent.current_session
+            'session': self.parent.current_session,
         }.get(level)
 
-        if not current_obj:
-            return
-        
         menu = QMenu(self)
-        action_text = "Mark as Incomplete" if getattr(current_obj, 'is_completed', False) else "Mark as Complete"
-        toggle_action = menu.addAction(action_text)
-        
-        if menu.exec(self.sender().mapToGlobal(pos)) == toggle_action:
-            # Toggle completion
+
+        if current_obj:
+            action_text = (
+                "Mark as Incomplete" if getattr(current_obj, 'is_completed', False)
+                else "Mark as Complete"
+            )
+            toggle_action = menu.addAction(action_text)
+            exclude_action = menu.addAction(f"Exclude {level.capitalize()}")
+        else:
+            toggle_action = exclude_action = None
+
+        excluded_ids = []
+        if level == 'dataset' and self.parent.current_experiment:
+            excluded_ids = list(self.parent.current_experiment.excluded_datasets)
+        elif level == 'session' and self.parent.current_dataset:
+            excluded_ids = list(self.parent.current_dataset.excluded_sessions)
+
+        restore_menu = None
+        if excluded_ids:
+            restore_menu = menu.addMenu(f"Restore {level.capitalize()}")
+            for item_id in excluded_ids:
+                restore_menu.addAction(item_id)
+
+        selected = menu.exec(self.sender().mapToGlobal(pos))
+
+        if selected == toggle_action and current_obj:
             current_obj.is_completed = not getattr(current_obj, 'is_completed', False)
             self.parent.has_unsaved_changes = True
-            # Update visual state
             self.update_completion_status(level)
+        elif selected == exclude_action and current_obj:
+            if level == 'dataset':
+                self.parent.exclude_dataset()
+            else:
+                self.parent.exclude_session()
+        elif restore_menu and selected in restore_menu.actions():
+            if level == 'dataset':
+                self.parent.restore_dataset(selected.text())
+            else:
+                self.parent.restore_session(selected.text())
 
     def update_completion_status(self, level):
         """Update visual completion status for specified level"""

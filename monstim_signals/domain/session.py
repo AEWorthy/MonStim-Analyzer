@@ -34,6 +34,7 @@ class Session:
         self._all_recordings  : List[Recording]  = recordings
         self.annot : SessionAnnot                = annot
         self.repo  : SessionRepository           = repo
+        self.parent_dataset : 'Dataset | None'   = None
 
         self._load_config_settings()
         self._load_session_parameters()
@@ -491,6 +492,10 @@ class Session:
                 self.repo.save(self)
         else:
             logging.warning(f"Recording {recording_id} is not excluded from session {self.id}. No action taken.")
+
+    def restore_recording(self, recording_id: str):
+        """Alias for :meth:`include_recording` for GUI commands."""
+        self.include_recording(recording_id)
     
     def exclude_recording(self, recording_id: str):
         """
@@ -512,6 +517,12 @@ class Session:
                 self.repo.save(self)
         else:
             logging.warning(f"Recording {recording_id} is already excluded in session {self.id}.")
+
+        if not self.recordings:
+            # If no recordings remain, mark the session and inform parent dataset
+            self.exclude_session()
+            if self.parent_dataset is not None:
+                self.parent_dataset.exclude_session(self.id)
 
     def restore_session(self):
         """

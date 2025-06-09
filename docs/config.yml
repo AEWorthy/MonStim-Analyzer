@@ -57,3 +57,4 @@ h_duration: 1.5 # (in ms). default is 1.0.
 
 h_threshold: 0.5 # (in mV). default is 0.5.
 
+preferred_date_format: 'YYMMDD'

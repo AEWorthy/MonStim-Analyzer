@@ -28,8 +28,16 @@ from monstim_gui.menu_bar import MenuBar
 from monstim_gui.data_selection_widget import DataSelectionWidget
 from monstim_gui.reports_widget import ReportsWidget
 from monstim_gui.plotting_widget import PlotWidget, PlotPane
-from monstim_gui.commands import (RemoveSessionCommand, CommandInvoker, ExcludeRecordingCommand, 
-                       RestoreRecordingCommand, InvertChannelPolarityCommand, RemoveDatasetCommand)
+from monstim_gui.commands import (
+    ExcludeSessionCommand,
+    ExcludeDatasetCommand,
+    RestoreSessionCommand,
+    RestoreDatasetCommand,
+    CommandInvoker,
+    ExcludeRecordingCommand,
+    RestoreRecordingCommand,
+    InvertChannelPolarityCommand,
+)
 from monstim_gui.dataframe_exporter import DataFrameDialog
 
 class EMGAnalysisGUI(QMainWindow):
@@ -64,6 +72,7 @@ class EMGAnalysisGUI(QMainWindow):
         self.plot_widget.initialize_plot_widget()
 
         self.command_invoker = CommandInvoker(self)
+
     
     def init_ui(self):
         # Central widget and main layout
@@ -134,21 +143,75 @@ class EMGAnalysisGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def remove_session(self):
+    def exclude_session(self):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            command = RemoveSessionCommand(self)
+            command = ExcludeSessionCommand(self)
             self.command_invoker.execute(command)
         finally:
             QApplication.restoreOverrideCursor()
 
-    def remove_dataset(self):
+    def exclude_dataset(self):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            command = RemoveDatasetCommand(self)
+            command = ExcludeDatasetCommand(self)
             self.command_invoker.execute(command)
         finally:
             QApplication.restoreOverrideCursor()
+
+    def restore_session(self, session_id: str):
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            command = RestoreSessionCommand(self, session_id)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def restore_dataset(self, dataset_id: str):
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            command = RestoreDatasetCommand(self, dataset_id)
+            self.command_invoker.execute(command)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def prompt_restore_session(self):
+        if not self.current_dataset:
+            QMessageBox.warning(self, "Warning", "Please select a dataset first.")
+            return
+        excluded = list(self.current_dataset.excluded_sessions)
+        if not excluded:
+            QMessageBox.information(self, "Info", "No excluded sessions to restore.")
+            return
+        session_id, ok = QInputDialog.getItem(
+            self,
+            "Restore Session",
+            "Select session to restore:",
+            excluded,
+            0,
+            False,
+        )
+        if ok and session_id:
+            self.restore_session(session_id)
+
+    def prompt_restore_dataset(self):
+        if not self.current_experiment:
+            QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+            return
+        excluded = list(self.current_experiment.excluded_datasets)
+        if not excluded:
+            QMessageBox.information(self, "Info", "No excluded datasets to restore.")
+            return
+        dataset_id, ok = QInputDialog.getItem(
+            self,
+            "Restore Dataset",
+            "Select dataset to restore:",
+            excluded,
+            0,
+            False,
+        )
+        if ok and dataset_id:
+            self.restore_dataset(dataset_id)
 
     def unpack_existing_experiments(self):
         logging.debug("Unpacking existing experiments.")
@@ -437,12 +500,15 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
+        """Reload the current experiment from disk."""
         logging.debug(f"Reloading current experiment: {self.current_experiment.id}.")
-        current_exepriment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
+        current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
         if self.current_experiment:
             if self.current_experiment.repo is not None:
                 if self.current_experiment.repo.expt_js.exists():
                     self.current_experiment.repo.expt_js.unlink()
+                else:
+                    logging.warning(f"Experiment JS file does not exist: {self.current_experiment.repo.expt_js}. Cannot unlink.")
                 for ds in self.current_experiment._all_datasets:
                     if ds.repo and ds.repo.dataset_js.exists():
                         ds.repo.dataset_js.unlink()
@@ -453,14 +519,17 @@ class EMGAnalysisGUI(QMainWindow):
                 self.current_experiment = new_expt
             else:
                 self.current_experiment = None
+                logging.warning("No repository found for the current experiment. Cannot reload.")
             self.current_dataset = None
             self.current_session = None
-            
-            self.refresh_existing_experiments()
-            self.data_selection_widget.experiment_combo.setCurrentIndex(current_exepriment_combo_index)
 
+            self.refresh_existing_experiments()
+            self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
+
+            self.current_experiment.apply_preferences(reset_properties=False)
+            self.has_unsaved_changes = True
             self.plot_widget.on_data_selection_changed()
-            
+
             logging.debug("Experiment reloaded successfully.")
             self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
 

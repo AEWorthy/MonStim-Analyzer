@@ -10,9 +10,8 @@ from monstim_signals.core.utils import load_config
 from monstim_signals.transform import calculate_emg_amplitude
 
 if TYPE_CHECKING:
-    
-    
     from monstim_signals.io.repositories import DatasetRepository
+    from monstim_signals.domain.experiment import Experiment
 
 class Dataset:
     """
@@ -24,6 +23,9 @@ class Dataset:
         self._all_sessions : List[Session] = sessions
         self.annot         : DatasetAnnot = annot
         self.repo          : DatasetRepository = repo
+        self.parent_experiment : 'Experiment | None' = None
+        for sess in self._all_sessions:
+            sess.parent_dataset = self
 
         self._load_config_settings()
 
@@ -93,11 +95,8 @@ class Dataset:
         return len(self.sessions)
 
     @property
-    def excluded_sessions(self) -> List[Session]:
-        """
-        Returns a list of sessions that are excluded from the dataset.
-        This is useful for filtering out sessions that do not meet certain criteria.
-        """
+    def excluded_sessions(self) -> set[str]:
+        """IDs of sessions excluded from this dataset."""
         return set(self.annot.excluded_sessions)
 
     @property
@@ -298,6 +297,35 @@ class Dataset:
             session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         self.update_latency_window_parameters()
         logging.info(f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}.")
+
+    def exclude_session(self, session_id: str) -> None:
+        """Exclude a session from this dataset by its ID."""
+        if session_id not in [s.id for s in self._all_sessions]:
+            logging.warning(f"Session {session_id} not found in dataset {self.id}.")
+            return
+        if session_id not in self.annot.excluded_sessions:
+            self.annot.excluded_sessions.append(session_id)
+            self.reset_all_caches()
+            if self.repo is not None:
+                self.repo.save(self)
+        else:
+            logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
+
+        if not self.sessions:
+            # If no sessions remain, clear list and exclude dataset from parent experiment
+            self.annot.excluded_sessions.clear()
+            if self.parent_experiment is not None:
+                self.parent_experiment.exclude_dataset(self.id)
+
+    def restore_session(self, session_id: str) -> None:
+        """Restore a previously excluded session by its ID."""
+        if session_id in self.annot.excluded_sessions:
+            self.annot.excluded_sessions.remove(session_id)
+            self.reset_all_caches()
+            if self.repo is not None:
+                self.repo.save(self)
+        else:
+            logging.warning(f"Session {session_id} is not excluded from dataset {self.id}.")
     
     def rename_channels(self, new_names: dict[str, str]) -> None:
         """
