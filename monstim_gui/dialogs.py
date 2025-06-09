@@ -726,4 +726,84 @@ class SelectChannelsDialog(QDialog):
     def get_selected_channel_indexes(self):
         # Return the indexes of the channels where checkboxes are checked
         return [i for i, checkbox in enumerate(self.checkboxes) if checkbox.isChecked()]
+
+
+class LatencyWindowsDialog(QDialog):
+    """Dialog for editing multiple latency windows."""
+
+    def __init__(self, data: Experiment | Dataset | Session, parent=None):
+        super().__init__(parent)
+        self.data = data
+        self.setModal(True)
+        self.setWindowTitle("Manage Latency Windows")
+        self.window_entries = []  # type: list[tuple[QLineEdit, QLineEdit, QLineEdit, QLineEdit]]
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+
+        for window in self.data.latency_windows:
+            group = QGroupBox(window.name)
+            form = QFormLayout()
+            name_edit = QLineEdit(window.name)
+            start_edit = QLineEdit(
+                ", ".join(str(v) for v in window.start_times)
+            )
+            dur_edit = QLineEdit(
+                ", ".join(str(v) for v in window.durations)
+            )
+            color_edit = QLineEdit(window.color)
+            form.addRow("Name", name_edit)
+            form.addRow("Start Times", start_edit)
+            form.addRow("Durations", dur_edit)
+            form.addRow("Color", color_edit)
+            group.setLayout(form)
+            layout.addWidget(group)
+            self.window_entries.append((name_edit, start_edit, dur_edit, color_edit))
+
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        button_box.accepted.connect(self.save_windows)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def _parse_list(self, text: str, count: int) -> List[float]:
+        parts = [p.strip() for p in text.split(',') if p.strip()]
+        if len(parts) == 1:
+            return [float(parts[0])] * count
+        return [float(p) for p in parts]
+
+    def save_windows(self):
+        new_windows = []
+        num_channels = len(self.data.channel_names)
+        for name_edit, start_edit, dur_edit, color_edit in self.window_entries:
+            name = name_edit.text().strip() or "Window"
+            try:
+                starts = self._parse_list(start_edit.text(), num_channels)
+                durs = self._parse_list(dur_edit.text(), num_channels)
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input", "Start times and durations must be numbers separated by commas.")
+                return
+            color = color_edit.text().strip() or "black"
+            new_windows.append(
+                LatencyWindow(
+                    name=name,
+                    start_times=starts,
+                    durations=durs,
+                    color=color,
+                    linestyle=self.data.latency_windows[0].linestyle if self.data.latency_windows else ':'
+                )
+            )
+
+        if isinstance(self.data, Dataset):
+            for session in self.data.sessions:
+                session.annot.latency_windows = [w for w in new_windows]
+                session.update_latency_window_parameters()
+                if session.repo is not None:
+                    session.repo.save(session)
+        else:
+            self.data.annot.latency_windows = new_windows
+            self.data.update_latency_window_parameters()
+            if getattr(self.data, 'repo', None) is not None:
+                self.data.repo.save(self.data)
+        self.accept()
         

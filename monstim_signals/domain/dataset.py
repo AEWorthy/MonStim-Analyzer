@@ -116,6 +116,36 @@ class Dataset:
     def latency_windows(self) -> List[LatencyWindow]:
         return self.sessions[0].latency_windows
 
+    # ------------------------------------------------------------------
+    # Latency window helper methods
+    # ------------------------------------------------------------------
+    def add_latency_window(self, name: str, start_times: List[float],
+                           durations: List[float], color: str | None = None,
+                           linestyle: str | None = None) -> None:
+        for session in self.sessions:
+            session.add_latency_window(name, start_times, durations,
+                                       color=color, linestyle=linestyle)
+        self.update_latency_window_parameters()
+
+    def remove_latency_window(self, name: str) -> None:
+        for session in self.sessions:
+            session.remove_latency_window(name)
+        self.update_latency_window_parameters()
+
+    def get_latency_window(self, name: str) -> LatencyWindow | None:
+        return self.sessions[0].get_latency_window(name)
+
+    def get_latency_window_amplitudes(
+        self, window_name: str, method: str, channel_index: int
+    ) -> dict[str, List[float]]:
+        """Return per-session amplitudes within ``window_name``."""
+        result: dict[str, List[float]] = {}
+        for session in self.sessions:
+            result[session.id] = session.get_latency_window_amplitudes(
+                window_name, method, channel_index
+            )
+        return result
+
     @property
     def stimulus_voltages(self) -> np.ndarray:
         """Return sorted unique stimulus voltages binned by `bin_size`."""
@@ -137,11 +167,16 @@ class Dataset:
         self.update_latency_window_parameters()
     
     def update_latency_window_parameters(self):
+        self.m_start = [0.0] * self.num_channels
+        self.m_duration = [0.0] * self.num_channels
+        self.h_start = [0.0] * self.num_channels
+        self.h_duration = [0.0] * self.num_channels
         for window in self.latency_windows:
-            if window.name == "M-wave":
+            lname = window.name.lower()
+            if lname in {"m-wave", "m_wave", "m wave", "mwave"}:
                 self.m_start = window.start_times
                 self.m_duration = window.durations
-            elif window.name == "H-reflex":
+            elif lname in {"h-reflex", "h_reflex", "h reflex", "hreflex"}:
                 self.h_start = window.start_times
                 self.h_duration = window.durations
         for session in self.sessions:
@@ -287,17 +322,20 @@ class Dataset:
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
-        for window in self.latency_windows:
-            if window.name == "M-wave":
-                window.start_times = m_start
-                window.durations = m_duration
-            elif window.name == "H-reflex":
-                window.start_times = h_start
-                window.durations = h_duration
+        m_window = self.get_latency_window("M-wave")
+        if m_window:
+            m_window.start_times = m_start
+            m_window.durations = m_duration
+        h_window = self.get_latency_window("H-reflex")
+        if h_window:
+            h_window.start_times = h_start
+            h_window.durations = h_duration
         for session in self.sessions:
             session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         self.update_latency_window_parameters()
-        logging.info(f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}.")
+        logging.info(
+            f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}."
+        )
     
     # ──────────────────────────────────────────────────────────────────
     # Utility methods

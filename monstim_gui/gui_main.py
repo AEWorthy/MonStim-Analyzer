@@ -203,7 +203,7 @@ class EMGAnalysisGUI(QMainWindow):
                     try:
                         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                         self.has_unsaved_changes = True
-                        self.status_bar.showMessage("Window settings updated successfully.", 5000)  # Show message for 5 seconds
+                        self.status_bar.showMessage("Window settings updated successfully.", 5000)
                         logging.debug("Window settings updated successfully.")
                     finally:
                         QApplication.restoreOverrideCursor()
@@ -211,6 +211,33 @@ class EMGAnalysisGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please select a session first.")
         finally:
             QApplication.restoreOverrideCursor()
+
+    def manage_latency_windows(self, level: str):
+        logging.debug("Managing latency windows.")
+        match level:
+            case 'experiment':
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+                    return
+                emg_data = self.current_experiment
+            case 'dataset':
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                emg_data = self.current_dataset
+            case 'session':
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                emg_data = self.current_session
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for managing latency windows.")
+                return
+
+        dialog = LatencyWindowsDialog(emg_data, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.has_unsaved_changes = True
+            self.status_bar.showMessage("Latency windows updated successfully.", 5000)
 
     def invert_channel_polarity(self, level : str):
         logging.debug("Inverting channel polarity.")
