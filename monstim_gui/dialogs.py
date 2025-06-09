@@ -306,8 +306,8 @@ class PreferencesDialog(QDialog):
         # Map sections to high-level tab categories
         tabs = {
             "Plot Settings": ["Basic Plotting Parameters", "'Suspected H-reflex' Plot Settings", "Plot Style Settings"],
-            "Reflex Settings": ["Default Reflex Window Settings", "M-max Calculation Settings"],
-            "General": ["EMG Filter Settings", "Dataset Parsing Parameters"],
+            "Latency Window Settings": ["Default Reflex Window Settings", "M-max Calculation Settings"],
+            "Misc.": ["EMG Filter Settings", "Dataset Parsing Parameters"],
         }
 
         tab_widget = QTabWidget()
