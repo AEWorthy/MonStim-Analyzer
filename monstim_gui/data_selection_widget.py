@@ -1,6 +1,15 @@
 import logging
 from typing import TYPE_CHECKING
-from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QMenu, QStyledItemDelegate
+from PyQt6.QtWidgets import (
+    QGroupBox,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QComboBox,
+    QMenu,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QColor, QPainter
 
@@ -25,16 +34,21 @@ class CircleDelegate(QStyledItemDelegate):
         self.uncompleted_color = QColor(255, 0, 0)  # Red
         
     def paint(self, painter: QPainter, option, index):
-        super().paint(painter, option, index)
-        
+        """Draw the item text and a completion circle."""
+        # Reserve space on the right for the status circle
+        option_no_circle = QStyleOptionViewItem(option)
+        option_no_circle.rect = option.rect.adjusted(0, 0, -self.CIRCLE_PADDING, 0)
+
+        super().paint(painter, option_no_circle, index)
+
         # Get completion status from item data
         is_completed = index.data(Qt.ItemDataRole.UserRole)
-        
-        # Draw circle
-        circle_rect = QRect(option.rect.right() - 20, 
-                          option.rect.center().y() - 6,
-                          12, 12)
-        
+
+        # Draw circle indicating completion
+        circle_rect = QRect(option.rect.right() - 18,
+                            option.rect.center().y() - 6,
+                            12, 12)
+
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         color = self.completed_color if is_completed else self.uncompleted_color
@@ -51,6 +65,7 @@ class DataSelectionWidget(QGroupBox):
         
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(5)
+        self.layout.setContentsMargins(5, 5, 5, 5)
         self.create_experiment_selection()
         self.create_dataset_selection()
         self.create_session_selection()
@@ -61,6 +76,12 @@ class DataSelectionWidget(QGroupBox):
         # Apply delegate to all combos
         for combo in (self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            # Qt <6.5 lacks QComboBox.setTextElideMode; fallback to the view
+            try:
+                combo.setTextElideMode(Qt.TextElideMode.ElideRight)
+            except AttributeError:
+                combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
 
     def setup_context_menus(self):
         for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
