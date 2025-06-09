@@ -49,7 +49,7 @@
   "channels": [
     {
       "invert": false,
-      "name": "Ch0",
+      "name": "LG",
       "unit": "V",
       "type_override": null
     },

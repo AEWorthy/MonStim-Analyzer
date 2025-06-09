@@ -221,6 +221,10 @@ class Experiment:
             ds.reset_all_caches()
         self.update_latency_window_parameters()
 
+    # ──────────────────────────────────────────────────────────────────
+    # 1) Update annotation parameters
+    # ──────────────────────────────────────────────────────────────────
+
     def update_latency_window_parameters(self):
         for window in self.latency_windows:
             if window.name == "M-wave":
@@ -232,6 +236,15 @@ class Experiment:
         for ds in self.datasets:
             ds.update_latency_window_parameters()
     
+    def rename_channels(self, new_names: dict[str, str]) -> None:
+        """
+        Rename channels in all datasets based on a mapping provided in new_names.
+        :param new_names: A dictionary mapping old channel names to new names.
+        """
+        for ds in self.datasets:
+            ds.rename_channels(new_names)
+        logging.info(f"Channels renamed in experiment '{self.id}' according to provided mapping.")
+
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────

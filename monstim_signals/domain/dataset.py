@@ -299,6 +299,17 @@ class Dataset:
         self.update_latency_window_parameters()
         logging.info(f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}.")
     
+    def rename_channels(self, new_names: dict[str, str]) -> None:
+        """
+        Renames channels in the dataset based on the provided mapping.
+
+        Args:
+            new_names (dict): A dictionary mapping old channel names to new channel names.
+        """
+        for session in self.sessions:
+            session.rename_channels(new_names)
+        logging.info(f"Renamed channels in dataset {self.id} according to mapping: {new_names}.")
+
     # ──────────────────────────────────────────────────────────────────
     # Utility methods
     # ──────────────────────────────────────────────────────────────────

@@ -433,12 +433,18 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
-    def rename_channel(self, new_names : dict[str]):
-        for i, new_name in new_names.items():
-            if 0 <= i < len(self.annot.channels):
-                self.annot.channels[i].name = new_name
+    def rename_channels(self, new_names : dict[str, str]):
+        for old_name, new_name in new_names.items():
+            if old_name in self.channel_names:
+                i = self.channel_names.index(old_name)
+                if 0 <= i < self.num_channels:
+                    # Update the channel name in the annotation
+                    self.annot.channels[i].name = new_name
+                    logging.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
+                else:
+                    logging.warning(f"Channel index {i} out of range for renaming.")
             else:
-                logging.warning(f"Channel index {i} out of range for renaming.")
+                logging.warning(f"Channel '{old_name}' not found in session {self.id}. No action taken.")
         # Optionally update cached names and save
         self.channel_names = [ch.name for ch in self.annot.channels]
         if self.repo is not None:
