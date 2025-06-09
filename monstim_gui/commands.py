@@ -100,37 +100,43 @@ class RestoreRecordingCommand(Command):
 #TODO: Change to exclude rather than remove
 class RemoveSessionCommand(Command):
     def __init__(self, gui):
-        self.command_name = "Remove Session"
+        self.command_name = "Exclude Session"
         self.gui : 'EMGAnalysisGUI' = gui
         self.removed_session = None
+        self.session_id = None
+        self.idx = None
 
     def execute(self):
         self.removed_session = self.gui.current_session
+        self.session_id = self.gui.current_session.id
         self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
-        self.gui.current_dataset._all_sessions.pop(self.idx)
+        self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
         self.gui.data_selection_widget.update_session_combo()
-        
+
     def undo(self):
-        self.gui.current_dataset._all_sessions.insert(self.idx, self.removed_session)
+        self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.removed_session
         self.gui.data_selection_widget.update_session_combo()
 # TODO: Change to exclude rather than remove
 class RemoveDatasetCommand(Command):
     def __init__(self, gui):
-        self.command_name = "Remove Dataset"
+        self.command_name = "Exclude Dataset"
         self.gui : 'EMGAnalysisGUI' = gui
         self.removed_dataset = None
-    
+        self.dataset_id = None
+        self.idx = None
+
     def execute(self):
         self.removed_dataset = self.gui.current_dataset
+        self.dataset_id = self.gui.current_dataset.id
         self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
-        self.gui.current_experiment._all_datasets.pop(self.idx)
+        self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
         self.gui.data_selection_widget.update_dataset_combo()
 
     def undo(self):
-        self.gui.current_experiment._all_datasets.insert(self.idx, self.removed_dataset)
+        self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.removed_dataset
         self.gui.data_selection_widget.update_dataset_combo()
         

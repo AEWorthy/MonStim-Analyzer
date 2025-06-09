@@ -137,6 +137,29 @@ class Experiment:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
         self.reset_all_caches()
 
+    def exclude_dataset(self, dataset_id: str) -> None:
+        """Exclude a dataset from this experiment by its ID."""
+        if dataset_id not in [ds.id for ds in self._all_datasets]:
+            logging.warning(f"Dataset {dataset_id} not found in experiment {self.id}.")
+            return
+        if dataset_id not in self.annot.excluded_datasets:
+            self.annot.excluded_datasets.append(dataset_id)
+            self.reset_all_caches()
+            if self.repo is not None:
+                self.repo.save(self)
+        else:
+            logging.warning(f"Dataset {dataset_id} already excluded in experiment {self.id}.")
+
+    def restore_dataset(self, dataset_id: str) -> None:
+        """Restore a previously excluded dataset by its ID."""
+        if dataset_id in self.annot.excluded_datasets:
+            self.annot.excluded_datasets.remove(dataset_id)
+            self.reset_all_caches()
+            if self.repo is not None:
+                self.repo.save(self)
+        else:
+            logging.warning(f"Dataset {dataset_id} is not excluded from experiment {self.id}.")
+
     def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
         """Average M-wave amplitudes for each stimulus bin across datasets."""
         m_wave_bins = {v: [] for v in self.stimulus_voltages}

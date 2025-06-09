@@ -298,6 +298,29 @@ class Dataset:
             session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         self.update_latency_window_parameters()
         logging.info(f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}.")
+
+    def exclude_session(self, session_id: str) -> None:
+        """Exclude a session from this dataset by its ID."""
+        if session_id not in [s.id for s in self._all_sessions]:
+            logging.warning(f"Session {session_id} not found in dataset {self.id}.")
+            return
+        if session_id not in self.annot.excluded_sessions:
+            self.annot.excluded_sessions.append(session_id)
+            self.reset_all_caches()
+            if self.repo is not None:
+                self.repo.save(self)
+        else:
+            logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
+
+    def restore_session(self, session_id: str) -> None:
+        """Restore a previously excluded session by its ID."""
+        if session_id in self.annot.excluded_sessions:
+            self.annot.excluded_sessions.remove(session_id)
+            self.reset_all_caches()
+            if self.repo is not None:
+                self.repo.save(self)
+        else:
+            logging.warning(f"Session {session_id} is not excluded from dataset {self.id}.")
     
     # ──────────────────────────────────────────────────────────────────
     # Utility methods
