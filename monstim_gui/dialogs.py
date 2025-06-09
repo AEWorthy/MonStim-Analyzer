@@ -1,6 +1,7 @@
 import logging
 import os
 import yaml
+import copy
 
 from PyQt6.QtWidgets import (
     QDialog,
@@ -724,28 +725,66 @@ class SelectChannelsDialog(QDialog):
         # Add checkboxes for each channel in the dataset
         self.checkboxes = []
         for name in self.channel_names:
-            checkbox = QCheckBox(name, self)
+class WindowStartDialog(QDialog):
+    """Dialog for editing per-channel latency window start times."""
 
-            # Check the checkbox if the channel is already selected
-            excluded = getattr(self.data, 'excluded_channels', [])
-            if self.data.channel_names.index(name) not in excluded:
-                checkbox.setChecked(True)
+    def __init__(self, window: LatencyWindow, channel_names: list[str], parent=None):
+        super().__init__(parent)
+        self.window = window
+        self.channel_names = channel_names
+        self.setModal(True)
+        self.setWindowTitle(f"Edit Start Times - {window.name}")
+        self.spin_boxes: list[QDoubleSpinBox] = []
+        self._init_ui()
 
-            self.checkboxes.append(checkbox)
-            layout.addWidget(checkbox)
-        
-        # Add button box (OK and Cancel buttons)
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        for name, start in zip(self.channel_names, self.window.start_times):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(name))
+            spin = QDoubleSpinBox()
+            spin.setDecimals(2)
+            spin.setRange(-1000.0, 1000.0)
+            spin.setSingleStep(0.05)
+            spin.setValue(start)
+            row.addWidget(spin)
+            self.spin_boxes.append(spin)
+            layout.addLayout(row)
+
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
-        layout.addWidget(button_box)
-
-        # Connect signals
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
-        
-        # Final layout setup
-        self.setLayout(layout)
+        layout.addWidget(button_box)
 
-    def get_selected_channel_indexes(self):
+    def get_start_times(self) -> list[float]:
+        return [sb.value() for sb in self.spin_boxes]
+
+
+    COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())
+
+        self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]]
+        num_channels = len(self.data.channel_names)
+                start_times=[0.0] * num_channels,
+                durations=[1.0] * num_channels,
+        start_spin.setSingleStep(0.05)
+        dur_spin.setSingleStep(0.05)
+        edit_btn = QPushButton("Edit Starts...")
+        edit_btn.clicked.connect(lambda: self._edit_window_starts(window, start_spin))
+        form.addRow("Start (Ch 0)", start_spin)
+        form.addRow(remove_btn, edit_btn)
+        self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+    def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
+        dialog = WindowStartDialog(window, self.data.channel_names, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            window.start_times = dialog.get_start_times()
+            start_spin.setValue(window.start_times[0])
+
+        for group, window, name_edit, start_spin, dur_spin, color_combo in self.window_entries:
+            window.name = name_edit.text().strip() or "Window"
+            window.start_times[0] = start_spin.value()
+            window.durations = [dur_spin.value()] * num_channels
+            window.color = color_combo.currentText()
+            new_windows.append(copy.deepcopy(window))
         # Return the indexes of the channels where checkboxes are checked
         return [i for i, checkbox in enumerate(self.checkboxes) if checkbox.isChecked()]
 
