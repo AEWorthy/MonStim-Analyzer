@@ -157,3 +157,55 @@ class InvertChannelPolarityCommand(Command):
     def undo(self):
         for channel_index in self.channel_indexes_to_invert:
             self.level.invert_channel_polarity(channel_index)
+
+class SetLatencyWindowsCommand(Command):
+    def __init__(self, gui, level: str, new_windows: list):
+        self.command_name = "Set Latency Windows"
+        self.gui = gui
+        import copy
+        match level:
+            case 'experiment':
+                self.level = self.gui.current_experiment
+                self.sessions = [s for ds in self.level.datasets for s in ds.sessions]
+            case 'dataset':
+                self.level = self.gui.current_dataset
+                self.sessions = list(self.level.sessions)
+            case 'session':
+                self.level = self.gui.current_session
+                self.sessions = [self.level]
+            case _:
+                raise ValueError(f"Invalid level: {level}")
+        self.new_windows = [copy.deepcopy(w) for w in new_windows]
+        self.old_windows = {s.id: copy.deepcopy(s.annot.latency_windows) for s in self.sessions}
+
+    def _apply(self, windows):
+        import copy
+        for s in self.sessions:
+            s.annot.latency_windows = [copy.deepcopy(w) for w in windows]
+            s.update_latency_window_parameters()
+            if s.repo is not None:
+                s.repo.save(s)
+        if hasattr(self.level, 'update_latency_window_parameters'):
+            if isinstance(self.level, list):
+                for obj in self.level:
+                    obj.update_latency_window_parameters()
+            else:
+                self.level.update_latency_window_parameters()
+
+    def execute(self):
+        self._apply(self.new_windows)
+
+    def undo(self):
+        for s in self.sessions:
+            windows = self.old_windows[s.id]
+            s.annot.latency_windows = windows
+            s.update_latency_window_parameters()
+            if s.repo is not None:
+                s.repo.save(s)
+        if hasattr(self.level, 'update_latency_window_parameters'):
+            if isinstance(self.level, list):
+                for obj in self.level:
+                    obj.update_latency_window_parameters()
+            else:
+                self.level.update_latency_window_parameters()
+
