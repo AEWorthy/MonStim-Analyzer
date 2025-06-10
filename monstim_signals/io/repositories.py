@@ -32,6 +32,16 @@ class RecordingRepository:
         self.meta_js = stem.with_suffix(".meta.json")
         self.annot_js= stem.with_suffix(".annot.json")
 
+    def update_path(self, new_stem: Path) -> None:
+        """
+        Update the repository to point to a new stem.
+        This is useful if the recording files move.
+        """
+        self.stem    = new_stem
+        self.raw_h5  = new_stem.with_suffix(".raw.h5")
+        self.meta_js = new_stem.with_suffix(".meta.json")
+        self.annot_js= new_stem.with_suffix(".annot.json")
+
     def load(self) -> 'Recording':
         # 1) Load meta JSON (immutable, record‐time facts)
         meta_dict = json.loads(self.meta_js.read_text())
@@ -98,6 +108,14 @@ class SessionRepository:
         self.folder = folder
         self.session_id = folder.name  # e.g. "AA00"
         self.session_js = folder / "session.annot.json"
+
+    def update_path(self, new_folder: Path) -> None:
+        """
+        Update the repository to point to a new folder.
+        This is useful if the session root folder changes.
+        """
+        self.folder = new_folder
+        self.session_js = new_folder / "session.annot.json"
 
     def load(self) -> 'Session':
         # 1) Discover all recordings in this folder
@@ -167,6 +185,14 @@ class DatasetRepository:
         self.dataset_id = folder.name  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
         self.dataset_js = folder / "dataset.annot.json"
 
+    def update_path(self, new_folder: Path) -> None:
+        """
+        Update the repository to point to a new folder.
+        This is useful if the dataset root folder changes.
+        """
+        self.folder = new_folder
+        self.dataset_js = new_folder / "dataset.annot.json"
+
     def load(self) -> 'Dataset':
         # 1) Each subfolder of `folder` is a session
         session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
@@ -213,6 +239,14 @@ class ExperimentRepository:
         """
         self.folder = folder
         self.expt_js = folder / "experiment.annot.json"
+
+    def update_path(self, new_folder: Path) -> None:
+        """
+        Update the repository to point to a new folder.
+        This is useful if the experiment root folder changes.
+        """
+        self.folder = new_folder
+        self.expt_js = new_folder / "experiment.annot.json"
 
     def load(self) -> 'Experiment':
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]

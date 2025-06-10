@@ -445,28 +445,32 @@ class EMGAnalysisGUI(QMainWindow):
     def rename_experiment(self):
         logging.debug("Renaming experiment.")
         if self.current_experiment:
-            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:", text=self.current_experiment.formatted_name)
+            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:", text=self.current_experiment.id)
 
             if ok and new_name:
                 try:
                     QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                    # Rename bin file in output folder
-                    bin_file = self.current_experiment.save_path
-                    new_bin_file = os.path.join(get_output_bin_path(), f"{new_name}{BIN_EXTENSION}")
-                    if os.path.exists(bin_file):
-                        os.rename(bin_file, new_bin_file)
-                        logging.debug(f"Renamed bin file: {bin_file} -> {new_bin_file}.")
-                    else:
-                        logging.warning(f"Bin file not found: {bin_file}. Could not rename current experiment.")
+                    # Rename experiment directory
+                    self.current_experiment.close()  # Close the current experiment to avoid file access issues
+                    old_expt_path = os.path.join(self.output_path, self.current_experiment.id)
+                    new_expt_path = os.path.join(self.output_path, new_name)
 
-                    # Rename experiment folder in data folder
-                    old_folder = os.path.join(self.output_path, self.current_experiment.formatted_name)
-                    new_folder = os.path.join(self.output_path, new_name)
-                    if os.path.exists(old_folder):
-                        os.rename(old_folder, new_folder)
-                        logging.debug(f"Renamed experiment folder: {old_folder} -> {new_folder}.")
-                    else:
-                        logging.warning(f"Experiment folder not found: {old_folder}. Could not rename current experiment.")
+                    # Validate that the new name is a valid directory name for the current OS
+                    if not new_name or any(c in r'<>:"/\|?*' for c in new_name):
+                        raise ValueError("Experiment name contains invalid characters for a directory name.")
+                    if old_expt_path == new_expt_path:
+                        QMessageBox.warning(self, "Warning", "The new experiment name is the same as the current one. No changes made.")
+                        logging.debug("No changes made to experiment name as it is the same as the current one.")
+                        return
+                    if os.path.exists(new_expt_path):
+                        raise FileExistsError(f"An experiment with the name '{new_name}' already exists.")
+                    
+                    shutil.move(old_expt_path, new_expt_path)
+
+                except ValueError as ve:
+                    QMessageBox.critical(self, "Error", f"Invalid experiment name: {ve}")
+                    logging.error(f"Invalid experiment name: {ve}")
+                    return
                 except FileExistsError:
                     QMessageBox.critical(self, "Error", f"An experiment with the name '{new_name}' already exists. Please choose a different name.")
                     logging.warning(f"An experiment with the name '{new_name}' already exists. Could not rename current experiment.")
@@ -474,9 +478,7 @@ class EMGAnalysisGUI(QMainWindow):
                 finally:
                     QApplication.restoreOverrideCursor()
                 
-                # Update experiment name in the experiment object
-                self.current_experiment.rename_experiment(new_name)
-                self.has_unsaved_changes = True
+                # Re-discover the existing experiments
                 self.refresh_existing_experiments()
                 self.status_bar.showMessage("Experiment renamed successfully.", 5000)
 

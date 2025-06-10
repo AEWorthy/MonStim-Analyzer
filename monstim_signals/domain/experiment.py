@@ -9,7 +9,7 @@ from monstim_signals.core.data_models import ExperimentAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
 
 if TYPE_CHECKING:
-    from monstim_signals.io.repositories import DatasetRepository
+    from monstim_signals.io.repositories import ExperimentRepository
 
 class Experiment:
     """A collection of :class:`Dataset` objects."""
@@ -21,7 +21,7 @@ class Experiment:
         for ds in self._all_datasets:
             ds.parent_experiment = self
         self.annot: ExperimentAnnot = annot or ExperimentAnnot.create_empty()
-        self.repo : DatasetRepository = repo
+        self.repo : ExperimentRepository = repo
 
         self._load_config_settings()
         self.plotter = ExperimentPlotter(self)
@@ -137,11 +137,7 @@ class Experiment:
         for ds in self.datasets:
             for sess in ds.sessions:
                 sess.invert_channel_polarity(channel_index)
-
-    def rename_experiment(self, new_name: str) -> None:
-        self.id = new_name.replace(' ', '_')
-        logging.info(f"Experiment renamed to '{new_name}'.")
-
+        
     def add_dataset(self, dataset: Dataset) -> None:
         if dataset.id not in [ds.id for ds in self._all_datasets]:
             self._all_datasets.append(dataset)
@@ -290,6 +286,7 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────
+    
     def save(self) -> None:
         """
         Save the experiment to the repository.
@@ -306,10 +303,7 @@ class Experiment:
         This is a placeholder for any cleanup logic needed.
         """
         for ds in self.datasets:
-            if hasattr(ds, 'close_all'):
-                ds.close()
-            else:
-                raise NotImplementedError(f"Dataset {ds.id} does not have a close_all method.")
+            ds.close()
 
     def experiment_parameters(self):
         report = [f" Experiment Parameters for Experiment '{self.id}':",
