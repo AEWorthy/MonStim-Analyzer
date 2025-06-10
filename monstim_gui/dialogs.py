@@ -50,6 +50,7 @@ from monstim_gui.splash import SPLASH_INFO
 
 # Small set of pleasant colors for latency windows
 COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())
+TAB_COLOR_NAMES = [c.replace("tab:", "") for c in COLOR_OPTIONS]
 
 
 class WebEnginePage(QWebEnginePage):
@@ -352,7 +353,13 @@ class PreferencesDialog(QDialog):
                     form_layout.addRow(key, field)
                     self.fields[key] = field
                 else:
-                    field = QLineEdit(str(value))
+                    text = str(value)
+                    if key in ("m_color", "h_color"):
+                        text = text.replace("tab:", "")
+                        field = QLineEdit(text)
+                        field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
+                    else:
+                        field = QLineEdit(text)
                     form_layout.addRow(key, field)
                     self.fields[key] = field
 
@@ -391,12 +398,30 @@ class PreferencesDialog(QDialog):
     def parse_value(self, value, key):
         # List of keys that should be treated as lists
         list_keys = ['default_channel_names', 'm_start', 'h_start']
-        
+        color_keys = ['m_color', 'h_color']
+
         if key in list_keys:
             # Split by comma and strip whitespace
             return [self.convert_to_number(item.strip()) for item in value.split(',')]
-        
+
+        if key in color_keys:
+            return self.parse_color(value)
+
         return self.convert_to_number(value)
+
+    def parse_color(self, value: str) -> str:
+        color = value.strip().lower()
+        if color.startswith('tab:'):
+            color = color[4:]
+        if color not in TAB_COLOR_NAMES:
+            QMessageBox.warning(
+                self,
+                'Invalid Color',
+                f"'{value}' is not a valid color. Using 'blue'.\n"
+                f"Valid options: {', '.join(TAB_COLOR_NAMES)}",
+            )
+            color = 'blue'
+        return f'tab:{color}'
 
     def convert_to_number(self, value):
         try:
