@@ -166,9 +166,62 @@ class Session:
     def latency_windows(self) -> List[LatencyWindow]:
         """
         Return the list of latency windows defined in the session annotations.
-        This includes M-wave and H-reflex windows.
         """
         return self.annot.latency_windows
+
+    # ------------------------------------------------------------------
+    # Latency window helper methods
+    # ------------------------------------------------------------------
+    def add_latency_window(self, name: str, start_times: List[float],
+                           durations: List[float], color: str | None = None,
+                           linestyle: str | None = None) -> None:
+        """Add a new :class:`LatencyWindow` to the session."""
+        window = LatencyWindow(
+            name=name,
+            start_times=start_times,
+            durations=durations,
+            color=color or self.m_color,
+            linestyle=linestyle or self.latency_window_style,
+        )
+        self.annot.latency_windows.append(window)
+        self.update_latency_window_parameters()
+        if self.repo is not None:
+            self.repo.save(self)
+
+    def remove_latency_window(self, name: str) -> None:
+        """Remove a latency window by name."""
+        self.annot.latency_windows = [
+            w for w in self.annot.latency_windows if w.name != name
+        ]
+        self.update_latency_window_parameters()
+        if self.repo is not None:
+            self.repo.save(self)
+
+    def get_latency_window(self, name: str) -> LatencyWindow | None:
+        for w in self.latency_windows:
+            if w.name == name:
+                return w
+        return None
+
+    def get_latency_window_amplitudes(
+        self, window_name: str, method: str, channel_index: int
+    ) -> List[float]:
+        """Return EMG amplitudes within ``window_name`` for each recording."""
+        window = self.get_latency_window(window_name)
+        if window is None:
+            raise ValueError(f"No latency window named '{window_name}' found.")
+        window_start = window.start_times[channel_index] + self.stim_start
+        window_end = window_start + window.durations[channel_index]
+        return [
+            calculate_emg_amplitude(
+                rec[:, channel_index],
+                window_start,
+                window_end,
+                self.scan_rate,
+                method=method,
+            )
+            for rec in self.recordings_filtered
+        ]
     @property
     def excluded_recordings(self):
         return set(self.annot.excluded_recordings)
@@ -303,14 +356,20 @@ class Session:
         
     def update_latency_window_parameters(self):
         '''
-        Update the M-wave and H-reflex start times and durations from the latency windows.
-        This is called after loading the session or when latency windows are modified.
+        Update cached M/H-response parameters from latency windows.
+        This remains for backwards compatibility. If no M-wave or H-reflex
+        windows exist, the corresponding attributes will be set to empty lists.
         '''
+        self.m_start = [0.0] * self.num_channels
+        self.m_duration = [0.0] * self.num_channels
+        self.h_start = [0.0] * self.num_channels
+        self.h_duration = [0.0] * self.num_channels
         for window in self.latency_windows:
-            if window.name == "M-wave":
+            lname = window.name.lower()
+            if lname in {"m-wave", "m_wave", "m wave", "mwave"}:
                 self.m_start = window.start_times
                 self.m_duration = window.durations
-            elif window.name == "H-reflex":
+            elif lname in {"h-reflex", "h_reflex", "h reflex", "hreflex"}:
                 self.h_start = window.start_times
                 self.h_duration = window.durations
 
@@ -463,13 +522,14 @@ class Session:
         self.reset_cached_reflex_properties()
 
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
-        for window in self.latency_windows:
-            if window.name == "M-wave":
-                window.start_times = m_start
-                window.durations = m_duration
-            elif window.name == "H-reflex":
-                window.start_times = h_start
-                window.durations = h_duration
+        m_window = self.get_latency_window("M-wave")
+        if m_window:
+            m_window.start_times = m_start
+            m_window.durations = m_duration
+        h_window = self.get_latency_window("H-reflex")
+        if h_window:
+            h_window.start_times = h_start
+            h_window.durations = h_duration
         self.update_latency_window_parameters()
         if self.repo is not None:
             self.repo.save(self)
