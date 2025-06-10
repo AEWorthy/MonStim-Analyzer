@@ -761,7 +761,7 @@ class EMGAnalysisGUI(QMainWindow):
             QMessageBox.information(self, "Saved", f"Error report saved to:\n{file_path}")
             logging.info(f"Saved error report to {file_path}")
         except Exception as e:
-            logging.error("Failed to save error report", exc_info=e)
+            logging.exception("Failed to save error report")
             QMessageBox.critical(self, "Error", f"Could not save error report:\n{e}")
         finally:
             QApplication.restoreOverrideCursor()
