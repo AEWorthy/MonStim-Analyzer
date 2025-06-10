@@ -163,10 +163,19 @@ The `Entire Dtaset` view offers the following plot types:
    - Function: `plot_maxH()`
    - Description: Plots the M-wave and H-response amplitudes at the stimulation voltage range where the average H-reflex is maximal.
    - Options:
-     - Choose reflex amplitude calculation method
-     - Plot relative to M-max
+    - Choose reflex amplitude calculation method
+    - Plot relative to M-max
 
 
+## Log Files
+Application errors are written to a log file named `app.log` in your user
+application data directory. On Windows this is usually:
+```
+%APPDATA%\WorthyLab\MonStimAnalyzer\logs
+```
+Use **Help > Open Log Folder** to quickly open this location. You can also
+generate a zip archive of these logs using **Help > Save Error Report** when
+requesting support.
 
 # Support
 For additional help or feature requests, or to report issues and bugs, please contact aeworthy@emory.edu.

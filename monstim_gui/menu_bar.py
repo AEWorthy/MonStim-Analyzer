@@ -134,6 +134,14 @@ class MenuBar(QMenuBar):
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
         processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog('emg_processing'))
 
+        help_menu.addSeparator()
+
+        open_logs_action = help_menu.addAction("Open Log Folder")
+        open_logs_action.triggered.connect(self.parent.open_log_directory)
+
+        save_report_action = help_menu.addAction("Save Error Report")
+        save_report_action.triggered.connect(self.parent.save_error_report)
+
     # Edit menu functions
     def confirm_reload_session(self):
         reply = QMessageBox.warning(self, 'Confirm Reload', 

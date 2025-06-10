@@ -20,14 +20,12 @@ CONSOLE_DEBUG_MODE = False # Only relevant if not frozen
 def make_default_log_dir() -> str:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
-        #TODO: Add a way for users to find this directory in the app. Add a button to open it.
-        #TODO: Add this directory to the documentation.
         base = os.getenv("APPDATA", r"C:\Users\%USERNAME%\AppData\Roaming")
     log_dir = os.path.join(base, "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
-def setup_logging(debug: bool, log_dir: str | None = None) -> None:
+def setup_logging(debug: bool, log_dir: str | None = None) -> str:
     target_dir = log_dir or make_default_log_dir()
     if not os.access(target_dir, os.W_OK):
         raise RuntimeError(f"Cannot write to log directory: {target_dir}")
@@ -64,7 +62,8 @@ def setup_logging(debug: bool, log_dir: str | None = None) -> None:
     logging.captureWarnings(True)  # Capture any Python warnings and log them too.
     logging.getLogger("PyQt6").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    root.info(f"Logging to {log_path} (debug={debug})")    
+    root.info(f"Logging to {log_path} (debug={debug})")
+    return target_dir
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -100,11 +99,12 @@ def main(is_frozen : bool) -> int:
 if __name__ == '__main__':
     args = parse_arguments()
     if IS_FROZEN:
-        setup_logging(debug=args.debug, log_dir=args.log_dir)
+        log_dir = setup_logging(debug=args.debug, log_dir=args.log_dir)
         logging.info("Logger initialized. Running via frozen executable.")
     else:
-        setup_logging(debug=True)
+        log_dir = setup_logging(debug=True)
         logging.info("Logger initialized. Running via IDE.")
+    os.environ["MONSTIM_LOG_DIR"] = log_dir
     sys.excepthook = exception_hook
     
     # Import the GUI module, matplotlib, and initialize multiprocessing after setting up logging.
