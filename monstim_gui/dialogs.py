@@ -50,6 +50,7 @@ from monstim_gui.splash import SPLASH_INFO
 
 # Small set of pleasant colors for latency windows
 COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())
+TAB_COLOR_NAMES = [c.replace("tab:", "") for c in COLOR_OPTIONS]
 
 
 class WebEnginePage(QWebEnginePage):
@@ -352,7 +353,13 @@ class PreferencesDialog(QDialog):
                     form_layout.addRow(key, field)
                     self.fields[key] = field
                 else:
-                    field = QLineEdit(str(value))
+                    text = str(value)
+                    if key in ("m_color", "h_color"):
+                        text = text.replace("tab:", "")
+                        field = QLineEdit(text)
+                        field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
+                    else:
+                        field = QLineEdit(text)
                     form_layout.addRow(key, field)
                     self.fields[key] = field
 
@@ -391,12 +398,30 @@ class PreferencesDialog(QDialog):
     def parse_value(self, value, key):
         # List of keys that should be treated as lists
         list_keys = ['default_channel_names', 'm_start', 'h_start']
-        
+        color_keys = ['m_color', 'h_color']
+
         if key in list_keys:
             # Split by comma and strip whitespace
             return [self.convert_to_number(item.strip()) for item in value.split(',')]
-        
+
+        if key in color_keys:
+            return self.parse_color(value)
+
         return self.convert_to_number(value)
+
+    def parse_color(self, value: str) -> str:
+        color = value.strip().lower()
+        if color.startswith('tab:'):
+            color = color[4:]
+        if color not in TAB_COLOR_NAMES:
+            QMessageBox.warning(
+                self,
+                'Invalid Color',
+                f"'{value}' is not a valid color. Using 'blue'.\n"
+                f"Valid options: {', '.join(TAB_COLOR_NAMES)}",
+            )
+            color = 'blue'
+        return f'tab:{color}'
 
     def convert_to_number(self, value):
         try:
@@ -757,10 +782,12 @@ class SelectChannelsDialog(QDialog):
 class WindowStartDialog(QDialog):
     """Dialog for editing per-channel latency window start times."""
 
-    def __init__(self, window: LatencyWindow, channel_names: list[str], parent=None):
+    def __init__(self, window: LatencyWindow, channel_names: list[str], gui, start_spin: QDoubleSpinBox, parent=None):
         super().__init__(parent)
         self.window = window
         self.channel_names = channel_names
+        self.gui = gui  # EMGAnalysisGUI
+        self.start_spin = start_spin
         self.setModal(True)
         self.setWindowTitle(f"Edit Start Times - {window.name}")
         self.spin_boxes: list[QDoubleSpinBox] = []
@@ -780,13 +807,29 @@ class WindowStartDialog(QDialog):
             self.spin_boxes.append(spin)
             layout.addLayout(row)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
-        button_box.accepted.connect(self.accept)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Apply,
+            self,
+        )
+        button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
         layout.addWidget(button_box)
+
+    def _on_accept(self):
+        self.apply_changes()
+        self.accept()
 
     def get_start_times(self) -> list[float]:
         return [sb.value() for sb in self.spin_boxes]
+
+    def apply_changes(self):
+        self.window.start_times = self.get_start_times()
+        self.start_spin.setValue(self.window.start_times[0])
+        if self.gui:
+            self.gui.plot_data()
 
 
 class LatencyWindowsDialog(QDialog):
@@ -847,9 +890,11 @@ class LatencyWindowsDialog(QDialog):
         dur_spin.setSingleStep(0.05)
         dur_spin.setValue(window.durations[0])
         color_combo = QComboBox()
-        color_combo.addItems(COLOR_OPTIONS)
+        for color in COLOR_OPTIONS:
+            display = color.replace("tab:", "")
+            color_combo.addItem(display, userData=color)
         if window.color in COLOR_OPTIONS:
-            color_combo.setCurrentText(window.color)
+            color_combo.setCurrentIndex(COLOR_OPTIONS.index(window.color))
         remove_btn = QPushButton("Remove")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
         edit_btn = QPushButton("Edit Starts...")
@@ -871,7 +916,7 @@ class LatencyWindowsDialog(QDialog):
         group.setParent(None)
 
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
-        dialog = WindowStartDialog(window, self.data.channel_names, self)
+        dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             window.start_times = dialog.get_start_times()
             start_spin.setValue(window.start_times[0])
@@ -883,7 +928,7 @@ class LatencyWindowsDialog(QDialog):
             window.name = name_edit.text().strip() or "Window"
             window.start_times[0] = start_spin.value()
             window.durations = [dur_spin.value()] * num_channels
-            window.color = color_combo.currentText()
+            window.color = color_combo.currentData()
             new_windows.append(copy.deepcopy(window))
 
         if isinstance(self.data, Experiment):
