@@ -168,3 +168,5 @@ cython_debug/
 #.idea/
 .DS_Store
 docs/config-user.yml
+/.EXAMPLE_DATA
+/.OLD_DATA
