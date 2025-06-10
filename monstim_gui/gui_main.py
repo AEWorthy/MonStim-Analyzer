@@ -467,6 +467,17 @@ class EMGAnalysisGUI(QMainWindow):
                     
                     shutil.move(old_expt_path, new_expt_path)
 
+                    # Update experiment id and repository paths
+                    self.current_experiment.id = new_name
+                    if self.current_experiment.repo is not None:
+                        self.current_experiment.repo.update_path(Path(new_expt_path))
+                    for ds in self.current_experiment._all_datasets:
+                        if ds.repo is not None:
+                            ds.repo.update_path(Path(new_expt_path) / ds.id)
+                        for sess in ds._all_sessions:
+                            if sess.repo is not None:
+                                sess.repo.update_path(Path(new_expt_path) / ds.id / sess.id)
+
                 except ValueError as ve:
                     QMessageBox.critical(self, "Error", f"Invalid experiment name: {ve}")
                     logging.error(f"Invalid experiment name: {ve}")
@@ -478,8 +489,8 @@ class EMGAnalysisGUI(QMainWindow):
                 finally:
                     QApplication.restoreOverrideCursor()
                 
-                # Re-discover the existing experiments
-                self.refresh_existing_experiments()
+                # Re-discover the existing experiments and reselect the renamed experiment
+                self.refresh_existing_experiments(select_expt_id=new_name)
                 self.status_bar.showMessage("Experiment renamed successfully.", 5000)
 
     def delete_experiment(self):
@@ -572,13 +583,17 @@ class EMGAnalysisGUI(QMainWindow):
             logging.debug("Experiment reloaded successfully.")
             self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
 
-    def refresh_existing_experiments(self):
+    def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
+        """Reload the experiment list and optionally select a specific experiment."""
         logging.debug("Refreshing existing experiments.")
-        current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
+        if select_expt_id is None:
+            index = self.data_selection_widget.experiment_combo.currentIndex()
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
-        self.plot_widget.on_data_selection_changed() # Reset plot options
-        self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
+        self.plot_widget.on_data_selection_changed()  # Reset plot options
+        if select_expt_id is not None:
+            index = self.expts_dict_keys.index(select_expt_id) if select_expt_id in self.expts_dict_keys else 0
+        self.data_selection_widget.experiment_combo.setCurrentIndex(index)
         logging.debug("Existing experiments refreshed successfully.")
 
     def show_preferences_window(self):
