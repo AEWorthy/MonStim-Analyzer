@@ -220,7 +220,6 @@ class SetLatencyWindowsCommand(Command):
     def __init__(self, gui, level: str, new_windows: list):
         self.command_name = "Set Latency Windows"
         self.gui = gui
-        import copy
         match level:
             case 'experiment':
                 self.level = self.gui.current_experiment
