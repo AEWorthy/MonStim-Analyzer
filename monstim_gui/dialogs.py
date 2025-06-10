@@ -757,10 +757,12 @@ class SelectChannelsDialog(QDialog):
 class WindowStartDialog(QDialog):
     """Dialog for editing per-channel latency window start times."""
 
-    def __init__(self, window: LatencyWindow, channel_names: list[str], parent=None):
+    def __init__(self, window: LatencyWindow, channel_names: list[str], gui, start_spin: QDoubleSpinBox, parent=None):
         super().__init__(parent)
         self.window = window
         self.channel_names = channel_names
+        self.gui = gui  # EMGAnalysisGUI
+        self.start_spin = start_spin
         self.setModal(True)
         self.setWindowTitle(f"Edit Start Times - {window.name}")
         self.spin_boxes: list[QDoubleSpinBox] = []
@@ -780,13 +782,29 @@ class WindowStartDialog(QDialog):
             self.spin_boxes.append(spin)
             layout.addLayout(row)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
-        button_box.accepted.connect(self.accept)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Apply,
+            self,
+        )
+        button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
         layout.addWidget(button_box)
+
+    def _on_accept(self):
+        self.apply_changes()
+        self.accept()
 
     def get_start_times(self) -> list[float]:
         return [sb.value() for sb in self.spin_boxes]
+
+    def apply_changes(self):
+        self.window.start_times = self.get_start_times()
+        self.start_spin.setValue(self.window.start_times[0])
+        if self.gui:
+            self.gui.plot_data()
 
 
 class LatencyWindowsDialog(QDialog):
@@ -871,7 +889,7 @@ class LatencyWindowsDialog(QDialog):
         group.setParent(None)
 
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
-        dialog = WindowStartDialog(window, self.data.channel_names, self)
+        dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             window.start_times = dialog.get_start_times()
             start_spin.setValue(window.start_times[0])
