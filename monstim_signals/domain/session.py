@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from monstim_signals.io.repositories import SessionRepository
     from monstim_signals.core.data_models import SessionAnnot
     from monstim_signals.domain.recording import Recording
+    from monstim_signals.domain.dataset import Dataset
 
 # ──────────────────────────────────────────────────────────────────
 class Session:
