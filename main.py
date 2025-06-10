@@ -20,6 +20,8 @@ CONSOLE_DEBUG_MODE = False # Only relevant if not frozen
 def make_default_log_dir() -> str:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
+        #TODO: Add a way for users to find this directory in the app. Add a button to open it.
+        #TODO: Add this directory to the documentation.
         base = os.getenv("APPDATA", r"C:\Users\%USERNAME%\AppData\Roaming")
     log_dir = os.path.join(base, "logs")
     os.makedirs(log_dir, exist_ok=True)
