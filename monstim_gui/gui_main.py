@@ -990,6 +990,7 @@ class EMGAnalysisGUI(QMainWindow):
 
     def show_save_confirmation_dialog(self):
         """Show dialog asking user if they want to save before closing"""
+        # TODO: Fix unsaved changes tracker -- shouldn't be needed anymore for most changes.
         if not self.current_experiment or not self.has_unsaved_changes:
             return True
             
