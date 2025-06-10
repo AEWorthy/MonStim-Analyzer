@@ -1,8 +1,8 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout, QFormLayout, QGroupBox
 from PyQt6.QtGui import QIntValidator
-from .custom_gui_elements import FloatLineEdit
-from .plotting_cycler import RecordingCyclerWidget
+from monstim_gui.custom_gui_elements import FloatLineEdit
+from monstim_gui.plotting.plotting_cycler import RecordingCyclerWidget
 from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:

@@ -37,7 +37,7 @@ from monstim_gui.dialogs import (
 from monstim_gui.menu_bar import MenuBar
 from monstim_gui.data_selection_widget import DataSelectionWidget
 from monstim_gui.reports_widget import ReportsWidget
-from monstim_gui.plotting_widget import PlotWidget, PlotPane
+from monstim_gui.plotting.plotting_widget import PlotWidget, PlotPane
 from monstim_gui.commands import (
     ExcludeSessionCommand,
     ExcludeDatasetCommand,
