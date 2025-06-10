@@ -1,6 +1,13 @@
 import logging
 from typing import TYPE_CHECKING
-from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QMenu, QStyledItemDelegate
+from PyQt6.QtWidgets import (
+    QGroupBox,
+    QFormLayout,
+    QComboBox,
+    QMenu,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QColor, QPainter
 
@@ -23,18 +30,24 @@ class CircleDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.completed_color = QColor(0, 255, 0)  # Green
         self.uncompleted_color = QColor(255, 0, 0)  # Red
+        self.CIRCLE_PADDING = 20  # Space reserved for the circle on the right side
         
     def paint(self, painter: QPainter, option, index):
-        super().paint(painter, option, index)
-        
+        """Draw the item text and a completion circle."""
+        # Reserve space on the right for the status circle
+        option_no_circle = QStyleOptionViewItem(option)
+        option_no_circle.rect = option.rect.adjusted(0, 0, -self.CIRCLE_PADDING, 0)
+
+        super().paint(painter, option_no_circle, index)
+
         # Get completion status from item data
         is_completed = index.data(Qt.ItemDataRole.UserRole)
-        
-        # Draw circle
-        circle_rect = QRect(option.rect.right() - 20, 
-                          option.rect.center().y() - 6,
-                          12, 12)
-        
+
+        # Draw circle indicating completion
+        circle_rect = QRect(option.rect.right() - 18,
+                            option.rect.center().y() - 6,
+                            12, 12)
+
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         color = self.completed_color if is_completed else self.uncompleted_color
@@ -44,23 +57,38 @@ class CircleDelegate(QStyledItemDelegate):
         painter.restore()
 
 class DataSelectionWidget(QGroupBox):
-    def __init__(self, parent : 'EMGAnalysisGUI'):
+    def __init__(self, parent: 'EMGAnalysisGUI'):
         super().__init__("Data Selection", parent)
-        self.parent = parent # type: EMGAnalysisGUI
+        self.parent = parent
         self.circle_delegate = CircleDelegate(self)
         
-        self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(5)
-        self.create_experiment_selection()
-        self.create_dataset_selection()
-        self.create_session_selection()
-        self.setLayout(self.layout)
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setHorizontalSpacing(6)      # tighten the space between label & field
+        form.setVerticalSpacing(4)        # vertical spacing between rows
+        form.setContentsMargins(8, 8, 8, 8)  # outer margins of the groupbox
+        
+        self.experiment_combo = QComboBox()
+        self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
+        self.dataset_combo = QComboBox()
+        self.dataset_combo.currentIndexChanged.connect(self.parent.load_dataset)
+        self.session_combo = QComboBox()
+        self.session_combo.currentIndexChanged.connect(self.parent.load_session)
+
+        form.addRow("Select Experiment:", self.experiment_combo)
+        form.addRow("Select Dataset:",    self.dataset_combo)
+        form.addRow("Select Session:",    self.session_combo)
+
+        self.setLayout(form)
         self.setup_context_menus()
         self.update_all_completion_statuses()
         
         # Apply delegate to all combos
         for combo in (self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
 
     def setup_context_menus(self):
         for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
@@ -68,29 +96,56 @@ class DataSelectionWidget(QGroupBox):
 
         # Connect signals
         self.dataset_combo.customContextMenuRequested.connect(
-            lambda pos: self.show_completion_menu(pos, 'dataset'))
+            lambda pos: self.show_context_menu(pos, 'dataset'))
         self.session_combo.customContextMenuRequested.connect(
-            lambda pos: self.show_completion_menu(pos, 'session'))
+            lambda pos: self.show_context_menu(pos, 'session'))
 
-    def show_completion_menu(self, pos, level):
+    def show_context_menu(self, pos, level):
         current_obj = {
             'dataset': self.parent.current_dataset,
-            'session': self.parent.current_session
+            'session': self.parent.current_session,
         }.get(level)
 
-        if not current_obj:
-            return
-        
         menu = QMenu(self)
-        action_text = "Mark as Incomplete" if getattr(current_obj, 'is_completed', False) else "Mark as Complete"
-        toggle_action = menu.addAction(action_text)
-        
-        if menu.exec(self.sender().mapToGlobal(pos)) == toggle_action:
-            # Toggle completion
+
+        if current_obj:
+            action_text = (
+                "Mark as Incomplete" if getattr(current_obj, 'is_completed', False)
+                else "Mark as Complete"
+            )
+            toggle_action = menu.addAction(action_text)
+            exclude_action = menu.addAction(f"Exclude {level.capitalize()}")
+        else:
+            toggle_action = exclude_action = None
+
+        excluded_ids = []
+        if level == 'dataset' and self.parent.current_experiment:
+            excluded_ids = list(self.parent.current_experiment.excluded_datasets)
+        elif level == 'session' and self.parent.current_dataset:
+            excluded_ids = list(self.parent.current_dataset.excluded_sessions)
+
+        restore_menu = None
+        if excluded_ids:
+            restore_menu = menu.addMenu(f"Restore {level.capitalize()}")
+            for item_id in excluded_ids:
+                restore_menu.addAction(item_id)
+
+        selected = menu.exec(self.sender().mapToGlobal(pos))
+
+        if selected == toggle_action and current_obj:
             current_obj.is_completed = not getattr(current_obj, 'is_completed', False)
             self.parent.has_unsaved_changes = True
-            # Update visual state
             self.update_completion_status(level)
+        elif selected == exclude_action and current_obj:
+            if level == 'dataset':
+                self.parent.exclude_dataset()
+            else:
+                self.parent.exclude_session()
+        elif restore_menu and selected in restore_menu.actions():
+            if level == 'dataset':
+                self.parent.restore_dataset(selected.text())
+            else:
+                self.parent.restore_session(selected.text())
 
     def update_completion_status(self, level):
         """Update visual completion status for specified level"""
@@ -116,39 +171,10 @@ class DataSelectionWidget(QGroupBox):
         for level in ('dataset', 'session'):
             self.update_completion_status(level)
 
-    def create_experiment_selection(self):
-        experiment_layout = QHBoxLayout()
-        self.experiment_label = QLabel("Select Experiment:")
-        self.experiment_combo = QComboBox()
-        self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
-        experiment_layout.addWidget(self.experiment_label)
-        experiment_layout.addWidget(self.experiment_combo)
-        self.layout.addLayout(experiment_layout)
-
     def on_experiment_combo_changed(self, index):
         if self.parent.has_unsaved_changes:
             self.parent.save_experiment()
         self.parent.load_experiment(index)
-
-    def create_dataset_selection(self):
-        dataset_layout = QHBoxLayout()
-        self.dataset_label = QLabel("Select Dataset:")
-        self.dataset_combo = QComboBox()
-        self.dataset_combo.currentIndexChanged.connect(self.parent.load_dataset)
-
-        dataset_layout.addWidget(self.dataset_label)
-        dataset_layout.addWidget(self.dataset_combo)
-        self.layout.addLayout(dataset_layout)
-
-    def create_session_selection(self):
-        session_layout = QHBoxLayout()
-        self.session_label = QLabel("Select Session:")
-        self.session_combo = QComboBox()
-        self.session_combo.currentIndexChanged.connect(self.parent.load_session)
-        
-        session_layout.addWidget(self.session_label)
-        session_layout.addWidget(self.session_combo)
-        self.layout.addLayout(session_layout)
     
     def update_experiment_combo(self):
         self.experiment_combo.clear()

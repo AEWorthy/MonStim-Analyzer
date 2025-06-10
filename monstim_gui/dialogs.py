@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QScrollArea,
     QSizePolicy,
-    QCheckBox,
+    QCheckBox, QTabWidget,
     QComboBox,
     QDoubleSpinBox,
 )
@@ -313,15 +313,11 @@ class PreferencesDialog(QDialog):
         return d
 
     def init_ui(self):
+
         layout = QVBoxLayout()
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-
         self.fields = {}
-        
+
         # Define sections and their corresponding keys
         sections = {
             "Basic Plotting Parameters": ["bin_size", "time_window", "default_method", "default_channel_names"],
@@ -329,45 +325,63 @@ class PreferencesDialog(QDialog):
             "Default Reflex Window Settings": ["m_start", "m_duration", "h_start", "h_duration"],
             "'Suspected H-reflex' Plot Settings": ["h_threshold"],
             "M-max Calculation Settings": ["m_max_args"],
-            "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size", 
+            "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size",
                                       "m_color", "h_color", "latency_window_style", "subplot_adjust_args"],
+            "Dataset Parsing Parameters": ["preferred_date_format"],
         }
 
-        for section, keys in sections.items():
-            group_box = QGroupBox(section)
-            form_layout = QFormLayout()
+        # Map sections to high-level tab categories
+        tabs = {
+            "Plot Settings": ["Basic Plotting Parameters", "'Suspected H-reflex' Plot Settings", "Plot Style Settings"],
+            "Latency Window Settings": ["Default Reflex Window Settings", "M-max Calculation Settings"],
+            "Misc.": ["EMG Filter Settings", "Dataset Parsing Parameters"],
+        }
 
-            for key in keys:
-                value = self.config.get(key)
-                if isinstance(value, dict):
-                    sub_group = QGroupBox(key)
-                    sub_form = QFormLayout()
-                    for sub_key, sub_value in value.items():
-                        field = QLineEdit(str(sub_value))
-                        sub_form.addRow(sub_key, field)
-                        self.fields[f"{key}.{sub_key}"] = field
-                    sub_group.setLayout(sub_form)
-                    form_layout.addRow(sub_group)
-                elif isinstance(value, list):
-                    field = QLineEdit(', '.join(map(str, value)))
-                    form_layout.addRow(key, field)
-                    self.fields[key] = field
-                else:
-                    text = str(value)
+        tab_widget = QTabWidget()
+
+        for tab_name, section_names in tabs.items():
+            tab_scroll = QScrollArea()
+            tab_scroll.setWidgetResizable(True)
+            tab_content = QWidget()
+            tab_layout = QVBoxLayout(tab_content)
+
+            for section in section_names:
+                group_box = QGroupBox(section)
+                form_layout = QFormLayout()
+
+                for key in sections[section]:
+                    value = self.config.get(key)
+                    if isinstance(value, dict):
+                        sub_group = QGroupBox(key)
+                        sub_form = QFormLayout()
+                        for sub_key, sub_value in value.items():
+                            field = QLineEdit(str(sub_value))
+                            sub_form.addRow(sub_key, field)
+                            self.fields[f"{key}.{sub_key}"] = field
+                        sub_group.setLayout(sub_form)
+                        form_layout.addRow(sub_group)
+                    elif isinstance(value, list):
+                        field = QLineEdit(', '.join(map(str, value)))
+                        form_layout.addRow(key, field)
+                        self.fields[key] = field
+                    else:
+                        text = str(value)
                     if key in ("m_color", "h_color"):
                         text = text.replace("tab:", "")
                         field = QLineEdit(text)
                         field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
                     else:
                         field = QLineEdit(text)
-                    form_layout.addRow(key, field)
-                    self.fields[key] = field
+                        form_layout.addRow(key, field)
+                        self.fields[key] = field
 
-            group_box.setLayout(form_layout)
-            scroll_layout.addWidget(group_box)
+                group_box.setLayout(form_layout)
+                tab_layout.addWidget(group_box)
 
-        scroll.setWidget(scroll_content)
-        layout.addWidget(scroll)
+            tab_scroll.setWidget(tab_content)
+            tab_widget.addTab(tab_scroll, tab_name)
+
+        layout.addWidget(tab_widget)
 
         save_button = QPushButton("Save")
         save_button.clicked.connect(self.save_config)

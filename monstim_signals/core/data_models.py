@@ -256,9 +256,11 @@ class DatasetAnnot:
         This is useful for initializing an annotation object for a new dataset.
         """
         from monstim_signals.io.string_parser import parse_dataset_name
+        from monstim_signals.core.utils import load_config
+        cfg = load_config()
+        preferred_format = cfg.get('preferred_date_format', 'YYMMDD')
         try:
-            # TODO make date formatting configurable
-            date, animal_id, condition = parse_dataset_name(dataset_name, preferred_date_format='YYMMDD') 
+            date, animal_id, condition = parse_dataset_name(dataset_name, preferred_date_format=preferred_format)
         except ValueError:
             date = animal_id = condition = None
         

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class MenuBar(QMenuBar):
     def __init__(self, parent : 'EMGAnalysisGUI'):
         super().__init__(parent)
-        self.parent = parent # type: EMGAnalysisGUI
+        self.parent = parent  # type: EMGAnalysisGUI
         self.create_file_menu()
         self.create_edit_menu()
         self.create_help_menu()
@@ -96,8 +96,10 @@ class MenuBar(QMenuBar):
         dataset_menu.addSeparator()
         reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
-        remove_dataset_action = dataset_menu.addAction("Remove Current Dataset")
-        remove_dataset_action.triggered.connect(self.parent.remove_dataset)
+        exclude_dataset_action = dataset_menu.addAction("Exclude Current Dataset")
+        exclude_dataset_action.triggered.connect(self.parent.exclude_dataset)
+        restore_dataset_action = dataset_menu.addAction("Restore Excluded Dataset")
+        restore_dataset_action.triggered.connect(self.parent.prompt_restore_dataset)
 
         # Session level actions
         update_window_action = session_menu.addAction("Manage Latency Windows")
@@ -109,8 +111,10 @@ class MenuBar(QMenuBar):
         session_menu.addSeparator()
         reload_session_action = session_menu.addAction("Reload Current Session")
         reload_session_action.triggered.connect(self.confirm_reload_session)
-        remove_session_action = session_menu.addAction("Remove Current Session")
-        remove_session_action.triggered.connect(self.parent.remove_session)
+        exclude_session_action = session_menu.addAction("Exclude Current Session")
+        exclude_session_action.triggered.connect(self.parent.exclude_session)
+        restore_session_action = session_menu.addAction("Restore Excluded Session")
+        restore_session_action.triggered.connect(self.parent.prompt_restore_session)
           
     def create_help_menu(self):
         # Help menu
