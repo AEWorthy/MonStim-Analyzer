@@ -865,9 +865,11 @@ class LatencyWindowsDialog(QDialog):
         dur_spin.setSingleStep(0.05)
         dur_spin.setValue(window.durations[0])
         color_combo = QComboBox()
-        color_combo.addItems(COLOR_OPTIONS)
+        for color in COLOR_OPTIONS:
+            display = color.replace("tab:", "")
+            color_combo.addItem(display, userData=color)
         if window.color in COLOR_OPTIONS:
-            color_combo.setCurrentText(window.color)
+            color_combo.setCurrentIndex(COLOR_OPTIONS.index(window.color))
         remove_btn = QPushButton("Remove")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
         edit_btn = QPushButton("Edit Starts...")
@@ -901,7 +903,7 @@ class LatencyWindowsDialog(QDialog):
             window.name = name_edit.text().strip() or "Window"
             window.start_times[0] = start_spin.value()
             window.durations = [dur_spin.value()] * num_channels
-            window.color = color_combo.currentText()
+            window.color = color_combo.currentData()
             new_windows.append(copy.deepcopy(window))
 
         if isinstance(self.data, Experiment):
