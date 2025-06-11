@@ -78,14 +78,13 @@ class MonstimGUI(QMainWindow):
         self.init_ui()
 
         # Load existing pickled experiments if available
-        self.unpack_existing_experiments()
+        self.data_manager.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
 
         self.plot_widget.initialize_plot_widget()
 
         self.command_invoker = CommandInvoker(self)
 
-    
     def init_ui(self):
         widgets = setup_main_layout(self)
         self.menu_bar : 'MenuBar' = widgets["menu_bar"]
@@ -201,9 +200,6 @@ class MonstimGUI(QMainWindow):
         )
         if ok and dataset_id:
             self.restore_dataset(dataset_id)
-
-    def unpack_existing_experiments(self):
-        self.data_manager.unpack_existing_experiments()
     
     # Menu bar functions
     def manage_latency_windows(self, level: str):
@@ -273,7 +269,6 @@ class MonstimGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please load a dataset first.")
         finally:
             QApplication.restoreOverrideCursor()
-
 
     def change_channel_names(self, level : str):
         logging.debug("Changing channel names.")
@@ -355,7 +350,7 @@ class MonstimGUI(QMainWindow):
                 self.help_window = HelpWindow(html_content, title)
         self.help_window.show()
 
-
+    # Close event handling
     def show_save_confirmation_dialog(self):
         """Show dialog asking user if they want to save before closing"""
         # Shouldn't be needed anymore for most changes, but keeping it in case it's needed for future changes.
@@ -379,7 +374,7 @@ class MonstimGUI(QMainWindow):
         elif reply == QMessageBox.StandardButton.Cancel:
             return False
         return True
-
+    
     def closeEvent(self, event):
         """Handle application closing"""
         if self.show_save_confirmation_dialog():
