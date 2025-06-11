@@ -1,6 +1,200 @@
 from .base import *
 
 
+class LatencyWindowPresetEditor(QWidget):
+    """Widget to create and edit latency window presets."""
+
+    def __init__(self, presets: dict[str, list[dict]] | None = None, parent=None):
+        super().__init__(parent)
+        self.presets: list[list[LatencyWindow]] = []
+        self.preset_combo = QComboBox()
+        self.preset_combo.setEditable(True)
+        self.window_entries: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]] = []
+        self._init_data(presets or {})
+        self._init_ui()
+
+    def _init_data(self, presets: dict[str, list[dict]]) -> None:
+        for name, windows in presets.items():
+            self.preset_combo.addItem(name)
+            win_objs = []
+            for win in windows:
+                win_objs.append(
+                    LatencyWindow(
+                        name=win.get("name", "Window"),
+                        start_times=[float(win.get("start", 0.0))],
+                        durations=[float(win.get("duration", 1.0))],
+                        color=win.get("color", "black"),
+                        linestyle=win.get("linestyle", ":"),
+                    )
+                )
+            self.presets.append(win_objs)
+        if self.preset_combo.count() == 0:
+            self.preset_combo.addItem("default")
+            self.presets.append([])
+
+    # ------------------------------------------------------------------
+    # UI setup
+    # ------------------------------------------------------------------
+    def _init_ui(self) -> None:
+        layout = QVBoxLayout(self)
+
+        control_row = QHBoxLayout()
+        control_row.addWidget(QLabel("Preset:"))
+        control_row.addWidget(self.preset_combo)
+        add_btn = QPushButton("Add")
+        remove_btn = QPushButton("Remove")
+        control_row.addWidget(add_btn)
+        control_row.addWidget(remove_btn)
+        layout.addLayout(control_row)
+
+        self.preset_combo.currentIndexChanged.connect(self.load_preset)
+        add_btn.clicked.connect(self.add_preset)
+        remove_btn.clicked.connect(self.remove_preset)
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll_widget = QWidget()
+        self.scroll_layout = QVBoxLayout(self.scroll_widget)
+        self.scroll.setWidget(self.scroll_widget)
+        layout.addWidget(self.scroll)
+
+        add_window_btn = QPushButton("Add Window")
+        add_window_btn.clicked.connect(self.add_window_group)
+        layout.addWidget(add_window_btn)
+
+        if self.preset_combo.count() > 0:
+            self.load_preset(0)
+
+    # ------------------------------------------------------------------
+    # Preset operations
+    # ------------------------------------------------------------------
+    def add_preset(self) -> None:
+        name = self._unique_name("Preset")
+        self.preset_combo.addItem(name)
+        self.presets.append([])
+        self.preset_combo.setCurrentIndex(self.preset_combo.count() - 1)
+
+    def remove_preset(self) -> None:
+        if self.preset_combo.count() == 0:
+            return
+        idx = self.preset_combo.currentIndex()
+        self.preset_combo.removeItem(idx)
+        self.presets.pop(idx)
+        if self.preset_combo.count() == 0:
+            self.add_preset()
+        else:
+            self.preset_combo.setCurrentIndex(0)
+
+    def load_preset(self, index: int) -> None:
+        self._save_current_preset()
+        if index < 0 or index >= len(self.presets):
+            return
+        self._clear_windows()
+        for win in self.presets[index]:
+            self.add_window_group(copy.deepcopy(win))
+        self.adjustSize()
+        self.updateGeometry()
+
+    def _save_current_preset(self) -> None:
+        index = self.preset_combo.currentIndex()
+        if index < 0 or index >= len(self.presets):
+            return
+        windows: list[LatencyWindow] = []
+        for _, window, name_edit, start_spin, dur_spin, color_combo in self.window_entries:
+            window.name = name_edit.text().strip() or "Window"
+            window.start_times = [start_spin.value()]
+            window.durations = [dur_spin.value()]
+            window.color = color_combo.currentData()
+            windows.append(copy.deepcopy(window))
+        self.presets[index] = windows
+
+    def _unique_name(self, base: str) -> str:
+        existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
+        idx = 1
+        name = f"{base} {idx}"
+        while name in existing:
+            idx += 1
+            name = f"{base} {idx}"
+        return name
+
+    # ------------------------------------------------------------------
+    # Window operations
+    # ------------------------------------------------------------------
+    def _clear_windows(self) -> None:
+        for grp, *_ in self.window_entries:
+            grp.setParent(None)
+        self.window_entries.clear()
+
+    def add_window_group(self, window: LatencyWindow | None = None) -> None:
+        if window is None:
+            window = LatencyWindow(
+                name=f"Window {len(self.window_entries)+1}",
+                start_times=[0.0],
+                durations=[1.0],
+                color="black",
+                linestyle=":"
+            )
+        group = QGroupBox(window.name)
+        form = QFormLayout()
+        name_edit = QLineEdit(window.name)
+        start_spin = QDoubleSpinBox()
+        start_spin.setDecimals(2)
+        start_spin.setRange(-1000.0, 1000.0)
+        start_spin.setSingleStep(0.05)
+        start_spin.setValue(window.start_times[0])
+        dur_spin = QDoubleSpinBox()
+        dur_spin.setDecimals(2)
+        dur_spin.setRange(0.0, 1000.0)
+        dur_spin.setSingleStep(0.05)
+        dur_spin.setValue(window.durations[0])
+        color_combo = QComboBox()
+        for color in COLOR_OPTIONS:
+            display = color.replace("tab:", "")
+            color_combo.addItem(display, userData=color)
+        if window.color in COLOR_OPTIONS:
+            color_combo.setCurrentIndex(COLOR_OPTIONS.index(window.color))
+        remove_btn = QPushButton("Remove")
+        remove_btn.clicked.connect(lambda: self._remove_window_group(group))
+        form.addRow("Name", name_edit)
+        form.addRow("Start", start_spin)
+        form.addRow("Duration", dur_spin)
+        form.addRow("Color", color_combo)
+        form.addRow(remove_btn)
+        group.setLayout(form)
+        self.scroll_layout.addWidget(group)
+        self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+
+    def _remove_window_group(self, group: QGroupBox) -> None:
+        for i, (grp, *_ ) in enumerate(self.window_entries):
+            if grp is group:
+                self.window_entries.pop(i)
+                break
+        group.setParent(None)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def get_presets(self) -> dict[str, list[dict]]:
+        self._save_current_preset()
+        result: dict[str, list[dict]] = {}
+        for idx in range(self.preset_combo.count()):
+            name = self.preset_combo.itemText(idx)
+            windows = []
+            for win in self.presets[idx]:
+                windows.append(
+                    {
+                        "name": win.name,
+                        "start": float(win.start_times[0]),
+                        "duration": float(win.durations[0]),
+                        "color": win.color,
+                        "linestyle": win.linestyle,
+                    }
+                )
+            result[name] = windows
+        return result
+
+
+
 class PreferencesDialog(QDialog):
     def __init__(self, default_config_file, parent=None):
         super().__init__()
@@ -49,7 +243,6 @@ class PreferencesDialog(QDialog):
         sections = {
             "Basic Plotting Parameters": ["bin_size", "time_window", "default_method", "default_channel_names"],
             "EMG Filter Settings": ["butter_filter_args"],
-            "Default Reflex Window Settings": ["m_start", "m_duration", "h_start", "h_duration"],
             "'Suspected H-reflex' Plot Settings": ["h_threshold"],
             "M-max Calculation Settings": ["m_max_args"],
             "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size",
@@ -61,8 +254,8 @@ class PreferencesDialog(QDialog):
         # Map sections to high-level tab categories
         tabs = {
             "Plot Settings": ["Basic Plotting Parameters", "'Suspected H-reflex' Plot Settings", "Plot Style Settings"],
-            "Latency Window Settings": ["Default Reflex Window Settings", "M-max Calculation Settings", "Latency Window Presets"],
-            "Misc.": ["EMG Filter Settings", "Dataset Parsing Parameters"],
+            "Latency Window Settings": ["Latency Window Presets"],
+            "Misc.": ["EMG Filter Settings", "Dataset Parsing Parameters", "M-max Calculation Settings"],
         }
 
         tab_widget = QTabWidget()
@@ -80,10 +273,8 @@ class PreferencesDialog(QDialog):
                 for key in sections[section]:
                     value = self.config.get(key)
                     if key == "latency_window_presets":
-                        text = yaml.safe_dump(value)
-                        field = QTextEdit(text)
-                        field.setMinimumHeight(100)
-                        form_layout.addRow(key, field)
+                        field = LatencyWindowPresetEditor(value)
+                        form_layout.addRow(field)
                         self.fields[key] = field
                     elif isinstance(value, dict):
                         sub_group = QGroupBox(key)
@@ -136,11 +327,14 @@ class PreferencesDialog(QDialog):
         new_config = copy.deepcopy(self.config)
 
         for key, field in self.fields.items():
-            if isinstance(field, QTextEdit):
+            if isinstance(field, LatencyWindowPresetEditor):
+                value = field.get_presets()
+            elif isinstance(field, QTextEdit):
                 raw = field.toPlainText()
+                value = self.parse_value(raw, key)
             else:
                 raw = field.text()
-            value = self.parse_value(raw, key)
+                value = self.parse_value(raw, key)
             if '.' in key:
                 main_key, sub_key = key.split('.')
                 if main_key not in new_config or not isinstance(new_config.get(main_key), dict):
@@ -162,17 +356,6 @@ class PreferencesDialog(QDialog):
         # List of keys that should be treated as lists
         list_keys = ['default_channel_names', 'm_start', 'h_start']
         color_keys = ['m_color', 'h_color']
-
-        if key == 'latency_window_presets':
-            try:
-                return yaml.safe_load(value) or {}
-            except yaml.YAMLError as e:
-                QMessageBox.warning(
-                    self,
-                    'Invalid Presets',
-                    f'Could not parse latency window presets: {e}'
-                )
-                return {}
 
         if key in list_keys:
             # Split by comma and strip whitespace

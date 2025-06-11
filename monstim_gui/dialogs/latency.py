@@ -174,6 +174,11 @@ class LatencyWindowsDialog(QDialog):
             )
             self._add_window_group(window)
 
+        # Expand to fit new content
+        self.scroll_widget.adjustSize()
+        self.adjustSize()
+        self.updateGeometry()
+
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
         dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
