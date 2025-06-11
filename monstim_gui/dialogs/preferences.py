@@ -41,6 +41,10 @@ class LatencyWindowPresetEditor(QWidget):
 
         control_row = QHBoxLayout()
         control_row.addWidget(QLabel("Preset:"))
+        # Ensure preset names are fully visible
+        self.preset_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToContents
+        )
         control_row.addWidget(self.preset_combo)
         add_btn = QPushButton("Add")
         remove_btn = QPushButton("Remove")
@@ -56,11 +60,15 @@ class LatencyWindowPresetEditor(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll_widget = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
+        # Align entries to the top so empty space doesn't appear above them
+        self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.scroll_widget)
         layout.addWidget(self.scroll)
 
         add_window_btn = QPushButton("Add Window")
-        add_window_btn.clicked.connect(self.add_window_group)
+        # QAbstractButton.clicked passes a boolean that we don't use. Wrap the
+        # call in a lambda so ``add_window_group`` receives no arguments.
+        add_window_btn.clicked.connect(lambda: self.add_window_group())
         layout.addWidget(add_window_btn)
 
         if self.preset_combo.count() > 0:
@@ -126,7 +134,7 @@ class LatencyWindowPresetEditor(QWidget):
             grp.setParent(None)
         self.window_entries.clear()
 
-    def add_window_group(self, window: LatencyWindow | None = None) -> None:
+    def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
             window = LatencyWindow(
                 name=f"Window {len(self.window_entries)+1}",
