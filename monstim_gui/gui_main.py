@@ -20,17 +20,8 @@ from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
 from monstim_signals.io.repositories import ExperimentRepository
 from monstim_signals.io.csv_importer import GUIExptImportingThread
-from monstim_signals.core.utils import (
-    format_report,
-    get_output_path,
-    get_data_path,
-    get_output_bin_path,
-    get_source_path,
-    get_docs_path,
-    get_config_path,
-    BIN_EXTENSION,
-    get_log_dir,
-)
+from monstim_signals.core.utils import (format_report, get_output_path, get_data_path, 
+                           get_source_path, get_docs_path, get_config_path)
 
 from monstim_gui.splash import SPLASH_INFO
 from monstim_gui.dialogs import (
@@ -380,20 +371,12 @@ class EMGAnalysisGUI(QMainWindow):
                     # Delete existing experiment folder in the data output folder.
                     shutil.rmtree(os.path.join(self.output_path, expt_name))
                     logging.info(f"Deleted existing experiment '{expt_name}' in 'data' folder.")
-
-                    # Delete existing bin file in the output folder.
-                    logging.info(f"Checking for bin file: {os.path.join(get_output_bin_path(),(f'{expt_name}{BIN_EXTENSION}'))}.")
-                    bin_file = os.path.join(get_output_bin_path(),(f"{expt_name}{BIN_EXTENSION}"))
-                    if os.path.exists(bin_file):
-                        os.remove(bin_file)
-                        logging.info(f"Deleted bin file: {bin_file}.")
-                    else:
-                        logging.warning(f"Bin file not found: {bin_file}. Could not delete existing experiment if it exists.")  
+ 
                 else: # Cancel importing the experiment.
                     logging.info(f"User chose not to overwrite existing experiment '{expt_name}' in the output folder.")
                     QMessageBox.warning(self, "Canceled", "The importation of your data was canceled.")
                     return
-                
+
             # Validate the dataset dir names and confirm that each dataset dir contains at least one .csv file.
             try:
                 dataset_dirs_without_csv = []
@@ -478,6 +461,17 @@ class EMGAnalysisGUI(QMainWindow):
                     
                     shutil.move(old_expt_path, new_expt_path)
 
+                    # Update experiment id and repository paths
+                    self.current_experiment.id = new_name
+                    if self.current_experiment.repo is not None:
+                        self.current_experiment.repo.update_path(Path(new_expt_path))
+                    for ds in self.current_experiment._all_datasets:
+                        if ds.repo is not None:
+                            ds.repo.update_path(Path(new_expt_path) / ds.id)
+                        for sess in ds._all_sessions:
+                            if sess.repo is not None:
+                                sess.repo.update_path(Path(new_expt_path) / ds.id / sess.id)
+
                 except ValueError as ve:
                     QMessageBox.critical(self, "Error", f"Invalid experiment name: {ve}")
                     logging.error(f"Invalid experiment name: {ve}")
@@ -489,8 +483,8 @@ class EMGAnalysisGUI(QMainWindow):
                 finally:
                     QApplication.restoreOverrideCursor()
                 
-                # Re-discover the existing experiments
-                self.refresh_existing_experiments()
+                # Re-discover the existing experiments and reselect the renamed experiment
+                self.refresh_existing_experiments(select_expt_id=new_name)
                 self.status_bar.showMessage("Experiment renamed successfully.", 5000)
 
     def delete_experiment(self):
@@ -499,13 +493,21 @@ class EMGAnalysisGUI(QMainWindow):
         if self.current_experiment:
             delete = QMessageBox.warning(self, "Delete Experiment", f"Are you sure you want to delete the experiment '{self.current_experiment.id}'?\n\nWARNING: This action cannot be undone.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if delete == QMessageBox.StandardButton.Yes:
+                current_expt_id = self.current_experiment.id
+                self.current_experiment.close()  # Close the current experiment to avoid file access issues
+                # TODO: This isn't actually closing the file: got the following error:
+                # PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 
+                # #'C:\\Users\\aewor\\Documents\\GitHub\\MonStim_Analysis\\data\\EMG-only data\\240829 C328.1 post-dec mcurve_long+
+                # #\\RX24\\RX24-0000.raw.h5'
+                
                 # delete bin file in output folder
-                shutil.rmtree(os.path.join(self.output_path, self.current_experiment.id))
-                logging.debug(f"Deleted experiment folder: {os.path.join(self.output_path, self.current_experiment.id)}.")
+                shutil.rmtree(os.path.join(self.output_path, current_expt_id))
+                logging.debug(f"Deleted experiment folder: {os.path.join(self.output_path, current_expt_id)}.")
 
                 self.current_experiment = None
                 self.current_dataset = None
                 self.current_session = None
+                self.data_selection_widget.update_experiment_combo()
                 self.refresh_existing_experiments()
                 self.status_bar.showMessage("Experiment deleted successfully.", 5000)
 
@@ -583,13 +585,17 @@ class EMGAnalysisGUI(QMainWindow):
             logging.debug("Experiment reloaded successfully.")
             self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
 
-    def refresh_existing_experiments(self):
+    def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
+        """Reload the experiment list and optionally select a specific experiment."""
         logging.debug("Refreshing existing experiments.")
-        current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
+        if select_expt_id is None:
+            index = self.data_selection_widget.experiment_combo.currentIndex()
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
-        self.plot_widget.on_data_selection_changed() # Reset plot options
-        self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
+        self.plot_widget.on_data_selection_changed()  # Reset plot options
+        if select_expt_id is not None:
+            index = self.expts_dict_keys.index(select_expt_id) if select_expt_id in self.expts_dict_keys else 0
+        self.data_selection_widget.experiment_combo.setCurrentIndex(index)
         logging.debug("Existing experiments refreshed successfully.")
 
     def show_preferences_window(self):
@@ -784,9 +790,13 @@ class EMGAnalysisGUI(QMainWindow):
             try:
                 QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 if os.path.exists(exp_path):
-                    repo = ExperimentRepository(Path(exp_path))
-                    self.current_experiment = repo.load()
-                    logging.debug(f"Experiment '{experiment_name}' loaded successfully.")
+                    try:
+                        repo = ExperimentRepository(Path(exp_path))
+                        self.current_experiment = repo.load()
+                        logging.debug(f"Experiment '{experiment_name}' loaded successfully.")
+                    except FileNotFoundError as e:
+                        QMessageBox.critical(self, "Error", f"Experiment file not found or corrupted: {e}")
+                        logging.error(f"Experiment file not found or corrupted: {e}")
                 else:
                     QMessageBox.warning(self, "Warning", f"Experiment folder '{exp_path}' not found.")
                     return
