@@ -1,4 +1,5 @@
 from .base import *
+from monstim_signals.core.utils import load_config
 
 
 class WindowStartDialog(QDialog):
@@ -68,6 +69,22 @@ class LatencyWindowsDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout(self)
 
+        cfg = load_config()
+        self.presets = cfg.get("latency_window_presets", {})
+
+        if self.presets:
+            preset_row = QHBoxLayout()
+            preset_label = QLabel("Preset:")
+            self.preset_combo = QComboBox()
+            for name in self.presets.keys():
+                self.preset_combo.addItem(name)
+            apply_btn = QPushButton("Apply")
+            apply_btn.clicked.connect(self._apply_preset)
+            preset_row.addWidget(preset_label)
+            preset_row.addWidget(self.preset_combo)
+            preset_row.addWidget(apply_btn)
+            layout.addLayout(preset_row)
+
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll_widget = QWidget()
@@ -135,6 +152,27 @@ class LatencyWindowsDialog(QDialog):
                 self.window_entries.pop(i)
                 break
         group.setParent(None)
+
+    def _apply_preset(self):
+        name = self.preset_combo.currentText()
+        if name not in self.presets:
+            return
+
+        # Clear existing entries
+        for group, *_ in self.window_entries:
+            group.setParent(None)
+        self.window_entries.clear()
+
+        num_channels = len(self.data.channel_names)
+        for win in self.presets[name]:
+            window = LatencyWindow(
+                name=win.get("name", "Window"),
+                start_times=[float(win.get("start", 0.0))] * num_channels,
+                durations=[float(win.get("duration", 1.0))] * num_channels,
+                color=win.get("color", "black"),
+                linestyle=win.get("linestyle", ":"),
+            )
+            self._add_window_group(window)
 
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
         dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)

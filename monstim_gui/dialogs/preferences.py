@@ -55,12 +55,13 @@ class PreferencesDialog(QDialog):
             "Plot Style Settings": ["title_font_size", "axis_label_font_size", "tick_font_size",
                                       "m_color", "h_color", "latency_window_style", "subplot_adjust_args"],
             "Dataset Parsing Parameters": ["preferred_date_format"],
+            "Latency Window Presets": ["latency_window_presets"],
         }
 
         # Map sections to high-level tab categories
         tabs = {
             "Plot Settings": ["Basic Plotting Parameters", "'Suspected H-reflex' Plot Settings", "Plot Style Settings"],
-            "Latency Window Settings": ["Default Reflex Window Settings", "M-max Calculation Settings"],
+            "Latency Window Settings": ["Default Reflex Window Settings", "M-max Calculation Settings", "Latency Window Presets"],
             "Misc.": ["EMG Filter Settings", "Dataset Parsing Parameters"],
         }
 
@@ -78,7 +79,13 @@ class PreferencesDialog(QDialog):
 
                 for key in sections[section]:
                     value = self.config.get(key)
-                    if isinstance(value, dict):
+                    if key == "latency_window_presets":
+                        text = yaml.safe_dump(value)
+                        field = QTextEdit(text)
+                        field.setMinimumHeight(100)
+                        form_layout.addRow(key, field)
+                        self.fields[key] = field
+                    elif isinstance(value, dict):
                         sub_group = QGroupBox(key)
                         sub_form = QFormLayout()
                         for sub_key, sub_value in value.items():
@@ -129,7 +136,11 @@ class PreferencesDialog(QDialog):
         new_config = copy.deepcopy(self.config)
 
         for key, field in self.fields.items():
-            value = self.parse_value(field.text(), key)
+            if isinstance(field, QTextEdit):
+                raw = field.toPlainText()
+            else:
+                raw = field.text()
+            value = self.parse_value(raw, key)
             if '.' in key:
                 main_key, sub_key = key.split('.')
                 if main_key not in new_config or not isinstance(new_config.get(main_key), dict):
@@ -151,6 +162,17 @@ class PreferencesDialog(QDialog):
         # List of keys that should be treated as lists
         list_keys = ['default_channel_names', 'm_start', 'h_start']
         color_keys = ['m_color', 'h_color']
+
+        if key == 'latency_window_presets':
+            try:
+                return yaml.safe_load(value) or {}
+            except yaml.YAMLError as e:
+                QMessageBox.warning(
+                    self,
+                    'Invalid Presets',
+                    f'Could not parse latency window presets: {e}'
+                )
+                return {}
 
         if key in list_keys:
             # Split by comma and strip whitespace

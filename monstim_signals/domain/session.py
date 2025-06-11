@@ -120,27 +120,7 @@ class Session:
                               else "SIGNAL"
                               for i in range(self.num_channels)]
 
-        # Initialize the latency windows for each channel
-        if not self.annot.latency_windows:
-            m_window = LatencyWindow(
-                name="M-wave",
-                start_times=self.default_m_start,
-                durations=self.default_m_duration,
-                color=self.m_color,
-                linestyle=self.latency_window_style
-            )
-            h_window = LatencyWindow(
-                name="H-reflex",
-                start_times=self.default_h_start,
-                durations=self.default_h_duration,
-                color=self.h_color,
-                linestyle=self.latency_window_style
-            )
-            self.annot.latency_windows = [m_window, h_window]
-            
-            # Save changes
-            if self.repo is not None:
-                self.repo.save(self)
+        # Preserve existing latency windows; do not create defaults automatically
 
     def apply_config(self, reset_caches: bool = True) -> None:
         """
@@ -185,6 +165,31 @@ class Session:
             linestyle=linestyle or self.latency_window_style,
         )
         self.annot.latency_windows.append(window)
+        self.update_latency_window_parameters()
+        if self.repo is not None:
+            self.repo.save(self)
+
+    def apply_latency_window_preset(self, preset_name: str) -> None:
+        """Replace latency windows using a preset defined in the config file."""
+        from monstim_signals.core.utils import load_config
+
+        presets = load_config().get("latency_window_presets", {})
+        if preset_name not in presets:
+            logging.warning(f"Preset '{preset_name}' not found in config.")
+            return
+
+        self.annot.latency_windows = []
+        num_channels = self.num_channels
+        for win in presets[preset_name]:
+            window = LatencyWindow(
+                name=win.get("name", "Window"),
+                start_times=[float(win.get("start", 0.0))] * num_channels,
+                durations=[float(win.get("duration", 1.0))] * num_channels,
+                color=win.get("color", self.m_color),
+                linestyle=win.get("linestyle", self.latency_window_style),
+            )
+            self.annot.latency_windows.append(window)
+
         self.update_latency_window_parameters()
         if self.repo is not None:
             self.repo.save(self)

@@ -148,6 +148,15 @@ class Dataset:
             session.remove_latency_window(name)
         self.update_latency_window_parameters()
 
+    def apply_latency_window_preset(self, preset_name: str) -> None:
+        """Apply a latency window preset to all sessions in the dataset."""
+        if not self.sessions:
+            logging.warning(f"No sessions available to apply preset '{preset_name}' in dataset {self.id}.")
+            return
+        for session in self.sessions:
+            session.apply_latency_window_preset(preset_name)
+        self.update_latency_window_parameters()
+
     def get_latency_window(self, name: str) -> LatencyWindow | None:
         if not self.sessions:
             return None
