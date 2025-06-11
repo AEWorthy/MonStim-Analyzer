@@ -135,8 +135,8 @@ class Experiment:
 
     def invert_channel_polarity(self, channel_index: int) -> None:
         for ds in self.datasets:
-            for sess in ds.sessions:
-                sess.invert_channel_polarity(channel_index)
+            ds.invert_channel_polarity(channel_index)
+        logging.info(f"Channel {channel_index} polarity inverted for all datasets in experiment '{self.id}'.")
         
     def add_dataset(self, dataset: Dataset) -> None:
         if dataset.id not in [ds.id for ds in self._all_datasets]:

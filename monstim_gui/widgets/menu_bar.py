@@ -3,12 +3,12 @@ from PyQt6.QtGui import QKeySequence, QFont
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class MenuBar(QMenuBar):
-    def __init__(self, parent : 'EMGAnalysisGUI'):
+    def __init__(self, parent : 'MonstimGUI'):
         super().__init__(parent)
-        self.parent = parent  # type: EMGAnalysisGUI
+        self.parent = parent  # type: MonstimGUI
         self.create_file_menu()
         self.create_edit_menu()
         self.create_help_menu()
@@ -18,32 +18,32 @@ class MenuBar(QMenuBar):
         file_menu = self.addMenu("File")
         
         import_action = file_menu.addAction("Import an Experiment")
-        import_action.triggered.connect(self.parent.import_expt_data)
+        import_action.triggered.connect(self.parent.data_manager.import_expt_data)
 
         rename_experiment_action = file_menu.addAction("Rename Current Experiment")
-        rename_experiment_action.triggered.connect(self.parent.rename_experiment)
+        rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
 
         delete_experiment_action = file_menu.addAction("Delete Current Experiment")
-        delete_experiment_action.triggered.connect(self.parent.delete_experiment)
+        delete_experiment_action.triggered.connect(self.parent.data_manager.delete_experiment)
 
         file_menu.addSeparator()
 
         # refresh existing datasets button
         refresh_datasets_action = file_menu.addAction("Refresh Experiments List")
-        refresh_datasets_action.triggered.connect(self.parent.refresh_existing_experiments)
+        refresh_datasets_action.triggered.connect(self.parent.data_manager.refresh_existing_experiments)
         refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
 
         file_menu.addSeparator()
 
         # Preferences button
         preferences_action = file_menu.addAction("Preferences")
-        preferences_action.triggered.connect(self.parent.show_preferences_window)
+        preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
 
         file_menu.addSeparator()
 
         # Save button
         save_action = file_menu.addAction("Save Current Experiment")
-        save_action.triggered.connect(self.parent.save_experiment)
+        save_action.triggered.connect(self.parent.data_manager.save_experiment)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
 
         # Save As button
@@ -84,7 +84,7 @@ class MenuBar(QMenuBar):
         reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
         remove_experiment_action = experiment_menu.addAction("Remove Current Experiment")
-        remove_experiment_action.triggered.connect(self.parent.delete_experiment)
+        remove_experiment_action.triggered.connect(self.parent.data_manager.delete_experiment)
 
         # Dataset level actions
         update_window_action = dataset_menu.addAction("Manage Latency Windows")
@@ -137,10 +137,10 @@ class MenuBar(QMenuBar):
         help_menu.addSeparator()
 
         open_logs_action = help_menu.addAction("Open Log Folder")
-        open_logs_action.triggered.connect(self.parent.open_log_directory)
+        open_logs_action.triggered.connect(self.parent.data_manager.open_log_directory)
 
         save_report_action = help_menu.addAction("Save Error Report")
-        save_report_action.triggered.connect(self.parent.save_error_report)
+        save_report_action.triggered.connect(self.parent.data_manager.save_error_report)
 
     # Edit menu functions
     def confirm_reload_session(self):
@@ -149,7 +149,7 @@ class MenuBar(QMenuBar):
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            self.parent.reload_current_session()
+            self.parent.data_manager.reload_current_session()
     
     def confirm_reload_dataset(self):
         reply = QMessageBox.warning(self, 'Confirm Reload', 
@@ -157,7 +157,7 @@ class MenuBar(QMenuBar):
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            self.parent.reload_current_dataset()
+            self.parent.data_manager.reload_current_dataset()
     
     def confirm_reload_experiment(self):
         reply = QMessageBox.warning(self, 'Confirm Reload', 
@@ -165,7 +165,7 @@ class MenuBar(QMenuBar):
                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                 QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            self.parent.reload_current_experiment()
+            self.parent.data_manager.reload_current_experiment()
     
     # Update functions
     def update_undo_redo_labels(self):

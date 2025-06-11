@@ -1,12 +1,12 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout, QFormLayout, QGroupBox
 from PyQt6.QtGui import QIntValidator
-from monstim_gui.custom_gui_elements import FloatLineEdit
-from monstim_gui.plotting.plotting_cycler import RecordingCyclerWidget
+from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
+from monstim_gui.widgets.plotting.plotting_cycler import RecordingCyclerWidget
 from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from monstim_gui import EMGAnalysisGUI
+    from monstim_gui import MonstimGUI
     from .plotting_widget import PlotWidget
 
 # Things to do:
@@ -24,18 +24,18 @@ class BasePlotOptions(QWidget):
 
     def create_options(self):
         # To be implemented by subclasses
-        pass
+        raise NotImplementedError("Subclasses must implement create_options()")
 
     def get_options(self):
         # To be implemented by subclasses
-        pass
+        raise NotImplementedError("Subclasses must implement get_options()")
 
     def set_options(self, options):
         # To be implemented by subclasses
-        pass
+        raise NotImplementedError("Subclasses must implement set_options()")
 
 class ChannelSelectorWidget(QGroupBox):
-    def __init__(self, gui_main: 'EMGAnalysisGUI', parent=None):
+    def __init__(self, gui_main: 'MonstimGUI', parent=None):
         super().__init__("Channels", parent)
         # figure out how many channels we should allow
         view = gui_main.plot_widget.view

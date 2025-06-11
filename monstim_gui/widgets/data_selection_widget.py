@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QColor, QPainter
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class CircleDelegate(QStyledItemDelegate):
     """
@@ -57,9 +57,9 @@ class CircleDelegate(QStyledItemDelegate):
         painter.restore()
 
 class DataSelectionWidget(QGroupBox):
-    def __init__(self, parent: 'EMGAnalysisGUI'):
+    def __init__(self, parent: 'MonstimGUI'):
         super().__init__("Data Selection", parent)
-        self.parent = parent
+        self.parent : 'MonstimGUI' = parent
         self.circle_delegate = CircleDelegate(self)
         
         form = QFormLayout()
@@ -72,9 +72,13 @@ class DataSelectionWidget(QGroupBox):
         self.experiment_combo = QComboBox()
         self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
         self.dataset_combo = QComboBox()
-        self.dataset_combo.currentIndexChanged.connect(self.parent.load_dataset)
+        self.dataset_combo.currentIndexChanged.connect(
+            self.parent.data_manager.load_dataset
+        )
         self.session_combo = QComboBox()
-        self.session_combo.currentIndexChanged.connect(self.parent.load_session)
+        self.session_combo.currentIndexChanged.connect(
+            self.parent.data_manager.load_session
+        )
 
         form.addRow("Select Experiment:", self.experiment_combo)
         form.addRow("Select Dataset:",    self.dataset_combo)
@@ -173,8 +177,8 @@ class DataSelectionWidget(QGroupBox):
 
     def on_experiment_combo_changed(self, index):
         if self.parent.has_unsaved_changes:
-            self.parent.save_experiment()
-        self.parent.load_experiment(index)
+            self.parent.data_manager.save_experiment()
+        self.parent.data_manager.load_experiment(index)
     
     def update_experiment_combo(self):
         self.experiment_combo.clear()

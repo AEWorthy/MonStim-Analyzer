@@ -114,11 +114,11 @@ def get_log_dir() -> str:
 
 def get_main_window():
     """Return the active :class:`EMGAnalysisGUI` instance if one exists."""
-    from monstim_gui.gui_main import EMGAnalysisGUI
+    from monstim_gui.gui_main import MonstimGUI
 
     active_window = QApplication.activeWindow()
 
-    if isinstance(active_window, EMGAnalysisGUI):
+    if isinstance(active_window, MonstimGUI):
         return active_window
     if active_window.__class__.__name__ == 'EMGAnalysisGUI':
         return active_window

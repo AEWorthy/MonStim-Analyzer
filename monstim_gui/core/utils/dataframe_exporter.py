@@ -41,7 +41,6 @@ class PandasModel(QAbstractTableModel):
                     return f"{name}:{val}" if name else str(val)
         return None
 
-
 class DataFrameDialog(QDialog):
     def __init__(self, df: pd.DataFrame, parent=None):
         super().__init__(parent)

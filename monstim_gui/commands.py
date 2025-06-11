@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class Command(abc.ABC):
     command_name : str = None
@@ -19,8 +19,8 @@ class Command(abc.ABC):
         pass
 
 class CommandInvoker:
-    def __init__(self, parent : 'EMGAnalysisGUI'):
-        self.parent = parent # type: EMGAnalysisGUI
+    def __init__(self, parent : 'MonstimGUI'):
+        self.parent = parent # type: MonstimGUI
         self.history = deque() # type: deque[Command]
         self.redo_stack = deque() # type: deque[Command]
 
@@ -66,7 +66,7 @@ class CommandInvoker:
 class ExcludeRecordingCommand(Command):
     def __init__(self, gui, recording_index):
         self.command_name = "Exclude Recording"
-        self.gui : 'EMGAnalysisGUI' = gui
+        self.gui : 'MonstimGUI' = gui
         self.recording_index = recording_index
     
     def execute(self):
@@ -86,7 +86,7 @@ class ExcludeRecordingCommand(Command):
 class RestoreRecordingCommand(Command):
     def __init__(self, gui, original_recording_index):
         self.command_name = "Restore Recording"
-        self.gui : 'EMGAnalysisGUI' = gui
+        self.gui : 'MonstimGUI' = gui
         self.recording_index = original_recording_index
 
     def execute(self):
@@ -108,7 +108,7 @@ class ExcludeSessionCommand(Command):
 
     def __init__(self, gui):
         self.command_name = "Exclude Session"
-        self.gui : 'EMGAnalysisGUI' = gui
+        self.gui : 'MonstimGUI' = gui
         self.removed_session = None
         self.session_id = None
         self.idx = None
@@ -131,7 +131,7 @@ class ExcludeDatasetCommand(Command):
 
     def __init__(self, gui):
         self.command_name = "Exclude Dataset"
-        self.gui : 'EMGAnalysisGUI' = gui
+        self.gui : 'MonstimGUI' = gui
         self.removed_dataset = None
         self.dataset_id = None
         self.idx = None
@@ -154,7 +154,7 @@ class RestoreSessionCommand(Command):
 
     def __init__(self, gui, session_id: str):
         self.command_name = "Restore Session"
-        self.gui: 'EMGAnalysisGUI' = gui
+        self.gui: 'MonstimGUI' = gui
         self.session_id = session_id
         self.session_obj = None
 
@@ -177,7 +177,7 @@ class RestoreDatasetCommand(Command):
 
     def __init__(self, gui, dataset_id: str):
         self.command_name = "Restore Dataset"
-        self.gui: 'EMGAnalysisGUI' = gui
+        self.gui: 'MonstimGUI' = gui
         self.dataset_id = dataset_id
         self.dataset_obj = None
 
@@ -198,7 +198,7 @@ class RestoreDatasetCommand(Command):
 class InvertChannelPolarityCommand(Command):
     def __init__(self, gui, level : str, channel_indexes_to_invert : list[int]):
         self.command_name = "Invert Channel Polarity"
-        self.gui : 'EMGAnalysisGUI' = gui # type: EMGAnalysisGUI
+        self.gui : 'MonstimGUI' = gui # type: EMGAnalysisGUI
         self.channel_indexes_to_invert = channel_indexes_to_invert
         
         match level:

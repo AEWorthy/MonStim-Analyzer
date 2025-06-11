@@ -7,7 +7,10 @@ from monstim_signals.core.utils import DATA_VERSION
 # -----------------------------------------------------------------------
 # Basic data models for MonStim Signals
 # -----------------------------------------------------------------------
-@dataclass # TODO: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
+@dataclass 
+# TODO: Add a method to create dataset latency window objects for each session in the dataset. Make the default windows be the m-wave and h-reflex windows.
+# TODO: Make the default windows be flexible user config settings (maybe a few sets of defaults to choose from based off the experiment types I'll work with).
+# TODO: Make the default be editable in the latency windows tab of the preferences dialog. Make it similar editor to the LatencyWindowManager, but with a few preset options.
 class LatencyWindow:
     name: str
     color: str

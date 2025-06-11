@@ -3,12 +3,12 @@ from PyQt6.QtWidgets import QGroupBox, QPushButton, QGridLayout, QSizePolicy
 from PyQt6.QtCore import Qt
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class ReportsWidget(QGroupBox):
-    def __init__(self, parent : 'EMGAnalysisGUI'):
+    def __init__(self, parent : 'MonstimGUI'):
         super().__init__("Reports", parent)
-        self.parent = parent # type: EMGAnalysisGUI
+        self.parent = parent # type: MonstimGUI
         self.layout = QGridLayout()
         self.layout.setContentsMargins(8, 8, 8, 8)
         self.layout.setHorizontalSpacing(12)
@@ -18,10 +18,10 @@ class ReportsWidget(QGroupBox):
 
     def create_report_buttons(self):
         buttons = [
-            ("Session Info. Report",    self.parent.show_session_report),
-            ("Dataset Info. Report",    self.parent.show_dataset_report),
-            ("Experiment Info. Report", self.parent.show_experiment_report),
-            ("M-max Report (RMS)",      self.parent.show_mmax_report),
+            ("Session Info. Report",    self.parent.report_manager.show_session_report),
+            ("Dataset Info. Report",    self.parent.report_manager.show_dataset_report),
+            ("Experiment Info. Report", self.parent.report_manager.show_experiment_report),
+            ("M-max Report (RMS)",      self.parent.report_manager.show_mmax_report),
             # Add new buttons here as tuples in the format:
             # ("Button Label", callback_function).
             # Ensure the callback_function is a method of the parent class

@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QGridLayout, QPushButton, QSpinBox, QLabel, QGroupBo
 from PyQt6.QtGui import QValidator
 from monstim_signals.core.utils import get_main_window
 if TYPE_CHECKING:
-    from monstim_gui import EMGAnalysisGUI  # noqa: F401
+    from monstim_gui import MonstimGUI  # noqa: F401
 
 class CustomSpinBox(QSpinBox):
     # Custom SpinBox that wraps around when reaching the maximum or minimum value
@@ -56,7 +56,7 @@ class CustomSpinBox(QSpinBox):
 class RecordingCyclerWidget(QGroupBox):
     def __init__(self, parent):
         super().__init__("Cycle Through Recordings", parent)
-        self.main_gui = get_main_window() # type: EMGAnalysisGUI
+        self.main_gui = get_main_window() # type: MonstimGUI
         self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
         
         
@@ -124,7 +124,7 @@ class RecordingCyclerWidget(QGroupBox):
             self.exclude_button.setText("Include")
         else:
             self.exclude_button.setText("Exclude")
-        self.main_gui.plot_data()
+        self.main_gui.plot_controller.plot_data()
 
     def get_current_recording(self):
         return self.recording_spinbox.value()
