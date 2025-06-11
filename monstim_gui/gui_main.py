@@ -5,13 +5,15 @@ import shutil
 import logging
 import traceback
 import multiprocessing
+from zipfile import ZipFile, ZIP_DEFLATED
+import glob
 
 import markdown
 from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
                              QDialog, QProgressDialog, QHBoxLayout, QStatusBar, QInputDialog)
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon, QDesktopServices
+from PyQt6.QtCore import Qt, QUrl
 
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.dataset import Dataset
@@ -736,7 +738,41 @@ class EMGAnalysisGUI(QMainWindow):
                 self.help_window = LatexHelpWindow(html_content, title)
             else:
                 self.help_window = HelpWindow(html_content, title)
-            self.help_window.show()
+        self.help_window.show()
+
+    def open_log_directory(self):
+        """Open the folder containing application log files."""
+        log_dir = get_log_dir()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(log_dir))
+        self.status_bar.showMessage(f"Opened log folder: {log_dir}", 5000)
+        logging.info(f"Opened log folder: {log_dir}")
+
+    def save_error_report(self):
+        """Save a zipped archive of log files for troubleshooting."""
+        log_dir = get_log_dir()
+        default_name = os.path.join(os.path.expanduser("~"), "monstim_logs.zip")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Error Report",
+            default_name,
+            "Zip Files (*.zip)"
+        )
+        if not file_path:
+            return
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            with ZipFile(file_path, "w", ZIP_DEFLATED) as zf:
+                for f in glob.glob(os.path.join(log_dir, "*") ):
+                    if os.path.isfile(f):
+                        zf.write(f, arcname=os.path.basename(f))
+            self.status_bar.showMessage("Error report saved.", 5000)
+            QMessageBox.information(self, "Saved", f"Error report saved to:\n{file_path}")
+            logging.info(f"Saved error report to {file_path}")
+        except Exception as e:
+            logging.exception("Failed to save error report")
+            QMessageBox.critical(self, "Error", f"Could not save error report:\n{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     # Data selection widget functions - will be called whenever their index changes.
     def save_experiment(self):
@@ -1009,6 +1045,7 @@ class EMGAnalysisGUI(QMainWindow):
 
     def show_save_confirmation_dialog(self):
         """Show dialog asking user if they want to save before closing"""
+        # TODO: Fix unsaved changes tracker -- shouldn't be needed anymore for most changes.
         if not self.current_experiment or not self.has_unsaved_changes:
             return True
             

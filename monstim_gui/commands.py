@@ -1,5 +1,6 @@
 import abc
 from collections import deque
+import copy
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QMessageBox
 

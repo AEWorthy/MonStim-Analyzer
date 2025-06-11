@@ -4,6 +4,7 @@ import sys
 from typing import List
 import yaml
 from pathlib import Path
+from PyQt6.QtCore import QStandardPaths
 
 try:
     from PyQt6.QtWidgets import QApplication
@@ -97,6 +98,19 @@ def get_data_path() -> str:
     else:
         data_path = os.path.join(get_base_path(), DIST_PATH)
     return data_path
+
+def get_log_dir() -> str:
+    """Return the directory where application log files are stored."""
+    env_path = os.environ.get("MONSTIM_LOG_DIR")
+    if env_path and os.path.isdir(env_path):
+        return env_path
+
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+    if not base:
+        base = os.getenv("APPDATA", r"C:\\Users\\%USERNAME%\\AppData\\Roaming")
+    log_dir = os.path.join(base, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
 
 def get_main_window():
     """Return the active :class:`EMGAnalysisGUI` instance if one exists."""
