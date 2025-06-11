@@ -193,8 +193,6 @@ class LatencyWindowPresetEditor(QWidget):
             result[name] = windows
         return result
 
-
-
 class PreferencesDialog(QDialog):
     def __init__(self, default_config_file, parent=None):
         super().__init__()
