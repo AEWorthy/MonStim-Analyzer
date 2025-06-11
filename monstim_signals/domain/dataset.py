@@ -214,7 +214,6 @@ class Dataset:
 
         self._load_config_settings()
         self.plotter = DatasetPlotter(self)
-        self.latency_windows = self.sessions[0].latency_windows if self.sessions else []
         
         if reset_caches:
             self.reset_all_caches()

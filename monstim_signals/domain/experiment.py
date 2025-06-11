@@ -274,7 +274,6 @@ class Experiment:
 
         self._load_config_settings()
         self.plotter = ExperimentPlotter(self)
-        self.latency_windows = self.datasets[0].latency_windows if self.datasets else []
 
         if reset_caches:
             self.reset_all_caches()
