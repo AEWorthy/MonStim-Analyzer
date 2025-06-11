@@ -124,7 +124,7 @@ class RecordingCyclerWidget(QGroupBox):
             self.exclude_button.setText("Include")
         else:
             self.exclude_button.setText("Exclude")
-        self.main_gui.plot_data()
+        self.main_gui.plot_controller.plot_data()
 
     def get_current_recording(self):
         return self.recording_spinbox.value()

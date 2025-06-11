@@ -51,7 +51,7 @@ class WindowStartDialog(QDialog):
         self.window.start_times = self.get_start_times()
         self.start_spin.setValue(self.window.start_times[0])
         if self.gui:
-            self.gui.plot_data()
+            self.gui.plot_controller.plot_data()
 
 class LatencyWindowsDialog(QDialog):
     """Dialog for editing multiple latency windows."""

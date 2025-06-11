@@ -10,8 +10,19 @@ import glob
 
 import markdown
 from pathlib import Path
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog, QMessageBox, 
-                             QDialog, QProgressDialog, QHBoxLayout, QStatusBar, QInputDialog)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QFileDialog,
+    QMessageBox,
+    QDialog,
+    QProgressDialog,
+    QHBoxLayout,
+    QStatusBar,
+    QInputDialog,
+)
 from PyQt6.QtGui import QIcon, QDesktopServices
 from PyQt6.QtCore import Qt, QUrl
 
@@ -49,6 +60,10 @@ from monstim_gui.commands import (
     InvertChannelPolarityCommand,
 )
 from monstim_gui.dataframe_exporter import DataFrameDialog
+from monstim_gui.gui_layout import setup_main_layout
+from monstim_gui.data_manager import DataManager
+from monstim_gui.report_manager import ReportManager
+from monstim_gui.plot_controller import PlotController
 
 class EMGAnalysisGUI(QMainWindow):
     def __init__(self):
@@ -75,6 +90,11 @@ class EMGAnalysisGUI(QMainWindow):
 
         self.init_ui()
 
+        # Helper managers
+        self.data_manager = DataManager(self)
+        self.report_manager = ReportManager(self)
+        self.plot_controller = PlotController(self)
+
         # Load existing pickled experiments if available
         self.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
@@ -85,42 +105,17 @@ class EMGAnalysisGUI(QMainWindow):
 
     
     def init_ui(self):
-        # Central widget and main layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setSpacing(10)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        widgets = setup_main_layout(self)
+        self.menu_bar = widgets["menu_bar"]
+        self.data_selection_widget = widgets["data_selection_widget"]
+        self.reports_widget = widgets["reports_widget"]
+        self.plot_pane = widgets["plot_pane"]
+        self.plot_widget = widgets["plot_widget"]
+        self.status_bar = widgets["status_bar"]
 
-        # Create widgets
-        self.menu_bar = MenuBar(self)
-        self.data_selection_widget = DataSelectionWidget(self)
-        self.reports_widget = ReportsWidget(self)
-        self.plot_pane = PlotPane(self)
-        self.plot_widget = PlotWidget(self)
-        
-        # Left panel widget to hold existing widgets
-        left_panel = QWidget()
-        left_panel_layout = QVBoxLayout(left_panel)
-        left_panel_layout.setSpacing(10)
-        left_panel_layout.setContentsMargins(0, 0, 0, 0)
-        left_panel_layout.addWidget(self.data_selection_widget)
-        left_panel_layout.addWidget(self.reports_widget)
-        left_panel_layout.addWidget(self.plot_widget)
-        left_panel_layout.addStretch(1)  # Pushes the plot button to the bottom
-
-        # Add left panel and plot widget to the main layout
-        main_layout.addWidget(left_panel)
-        main_layout.addWidget(self.plot_pane)
-
-        self.setMenuBar(self.menu_bar)
-
-        # Add status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-
-        # Add a temporary message to visualize the status bar
-        self.status_bar.showMessage(f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000)
+        self.status_bar.showMessage(
+            f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000
+        )
    
     # Command functions
     def undo(self):
@@ -224,24 +219,7 @@ class EMGAnalysisGUI(QMainWindow):
             self.restore_dataset(dataset_id)
 
     def unpack_existing_experiments(self):
-        logging.debug("Unpacking existing experiments.")
-        if os.path.exists(self.output_path):
-            try:
-                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                self.expts_dict = {
-                    name: os.path.join(self.output_path, name)
-                    for name in os.listdir(self.output_path)
-                    if os.path.isdir(os.path.join(self.output_path, name))
-                }
-                self.expts_dict_keys = sorted(self.expts_dict.keys())
-                logging.debug("Existing experiments unpacked successfully.")
-            except Exception as e:
-                QApplication.restoreOverrideCursor()
-                QMessageBox.critical(self, "Error", f"An error occurred while unpacking existing experiments: {e}")
-                logging.error(f"An error occurred while unpacking existing experiments: {e}")
-                logging.error(traceback.format_exc())
-            finally:
-                QApplication.restoreOverrideCursor()
+        self.data_manager.unpack_existing_experiments()
     
     # Menu bar functions
     def manage_latency_windows(self, level: str):
@@ -312,257 +290,6 @@ class EMGAnalysisGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def import_expt_data(self):
-        logging.info("Importing new experiment data from CSV files.")
-        expt_path = QFileDialog.getExistingDirectory(self, "Select Experiment Directory", get_data_path())
-        expt_name = os.path.splitext(os.path.basename(expt_path))[0]
-
-        if expt_path and expt_name:
-            # Ensure that the experiment directory does not already exist. If so, prompt the user to confirm overwriting.
-            if os.path.exists(os.path.join(self.output_path, expt_name)):
-                overwrite = QMessageBox.question(self, "Warning", "This experiment already exists in your 'data' folder. Do you want to continue the importation process and overwrite the existing data?\n\nNote: This will also reset and changes you made to the datasets in this experiment (e.g., channel names, latency time windows, etc.)", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if overwrite == QMessageBox.StandardButton.Yes: # Overwrite existing experiment.
-                    logging.info(f"Overwriting existing experiment '{expt_name}' in the output folder.")                
-
-                    # Delete existing experiment folder in the data output folder.
-                    shutil.rmtree(os.path.join(self.output_path, expt_name))
-                    logging.info(f"Deleted existing experiment '{expt_name}' in 'data' folder.")
- 
-                else: # Cancel importing the experiment.
-                    logging.info(f"User chose not to overwrite existing experiment '{expt_name}' in the output folder.")
-                    QMessageBox.warning(self, "Canceled", "The importation of your data was canceled.")
-                    return
-
-            # Validate the dataset dir names and confirm that each dataset dir contains at least one .csv file.
-            try:
-                dataset_dirs_without_csv = []
-                for dataset_dir in os.listdir(expt_path):
-                    dataset_path = os.path.join(expt_path, dataset_dir)
-                    if os.path.isdir(dataset_path):
-                        self.validate_dataset_name(dataset_path)
-
-                        # Check if the dataset directory contains any .csv files.
-                        csv_files = [f for f in os.listdir(dataset_path) if f.endswith('.csv')]
-                        if not csv_files:
-                            dataset_dirs_without_csv.append(dataset_dir)
-                
-                if dataset_dirs_without_csv:
-                    raise FileNotFoundError(f"The following dataset directories do not contain any .csv files: {dataset_dirs_without_csv}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"An error occurred while validating your experiment: {e}.\n\nImportation was canceled.")
-                logging.error(f"An error occurred while validating dataset names: {e}. Importation was canceled.")
-                logging.error(traceback.format_exc())
-                return
-
-            # Create a progress dialog to show the importing progress.
-            progress_dialog = QProgressDialog("Processing...", "Cancel", 0, 100, self)
-            progress_dialog.setWindowTitle("Importing Data")
-            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-            progress_dialog.setAutoClose(False)
-            progress_dialog.setAutoReset(False)
-            progress_dialog.show()
-
-            # Initialize the importing thread.
-            max_workers = max(1, multiprocessing.cpu_count() - 1)
-            self.thread : GUIExptImportingThread = GUIExptImportingThread(expt_name, expt_path, self.output_path, max_workers=max_workers)
-            self.thread.progress.connect(progress_dialog.setValue)
-            
-            # Finished signal.
-            self.thread.finished.connect(progress_dialog.close)
-            self.thread.finished.connect(self.refresh_existing_experiments)
-            self.thread.finished.connect(lambda: self.data_selection_widget.experiment_combo.setCurrentIndex(0))
-            self.thread.finished.connect(lambda: self.status_bar.showMessage("Data processed and imported successfully.", 5000))  # Show message for 5 seconds
-            self.thread.finished.connect(lambda: logging.info("Data processed and imported successfully."))
-
-            # Error signal.
-            self.thread.error.connect(lambda e: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
-            self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
-            self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
-
-            # Canceled signal.
-            self.thread.canceled.connect(progress_dialog.close)
-            self.thread.canceled.connect(lambda: self.status_bar.showMessage("Data processing canceled.", 5000))  # Show message for 5 seconds
-            self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
-            self.thread.canceled.connect(self.refresh_existing_experiments)
-            
-            # Start the thread.
-            self.thread.start()
-            progress_dialog.canceled.connect(self.thread.cancel)
-        else: # No directory selected.
-            QMessageBox.warning(self, "Warning", "You must select a CSV directory.")
-            logging.warning("No CSV directory selected. Import canceled.")
-    
-    def rename_experiment(self):
-        logging.debug("Renaming experiment.")
-        if self.current_experiment:
-            new_name, ok = QInputDialog.getText(self, "Rename Experiment", "Enter new experiment name:", text=self.current_experiment.id)
-
-            if ok and new_name:
-                try:
-                    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                    # Rename experiment directory
-                    self.current_experiment.close()  # Close the current experiment to avoid file access issues
-                    old_expt_path = os.path.join(self.output_path, self.current_experiment.id)
-                    new_expt_path = os.path.join(self.output_path, new_name)
-
-                    # Validate that the new name is a valid directory name for the current OS
-                    if not new_name or any(c in r'<>:"/\|?*' for c in new_name):
-                        raise ValueError("Experiment name contains invalid characters for a directory name.")
-                    if old_expt_path == new_expt_path:
-                        QMessageBox.warning(self, "Warning", "The new experiment name is the same as the current one. No changes made.")
-                        logging.debug("No changes made to experiment name as it is the same as the current one.")
-                        return
-                    if os.path.exists(new_expt_path):
-                        raise FileExistsError(f"An experiment with the name '{new_name}' already exists.")
-                    
-                    shutil.move(old_expt_path, new_expt_path)
-
-                    # Update experiment id and repository paths
-                    self.current_experiment.id = new_name
-                    if self.current_experiment.repo is not None:
-                        self.current_experiment.repo.update_path(Path(new_expt_path))
-                    for ds in self.current_experiment._all_datasets:
-                        if ds.repo is not None:
-                            ds.repo.update_path(Path(new_expt_path) / ds.id)
-                        for sess in ds._all_sessions:
-                            if sess.repo is not None:
-                                sess.repo.update_path(Path(new_expt_path) / ds.id / sess.id)
-
-                except ValueError as ve:
-                    QMessageBox.critical(self, "Error", f"Invalid experiment name: {ve}")
-                    logging.error(f"Invalid experiment name: {ve}")
-                    return
-                except FileExistsError:
-                    QMessageBox.critical(self, "Error", f"An experiment with the name '{new_name}' already exists. Please choose a different name.")
-                    logging.warning(f"An experiment with the name '{new_name}' already exists. Could not rename current experiment.")
-                    return
-                finally:
-                    QApplication.restoreOverrideCursor()
-                
-                # Re-discover the existing experiments and reselect the renamed experiment
-                self.refresh_existing_experiments(select_expt_id=new_name)
-                self.status_bar.showMessage("Experiment renamed successfully.", 5000)
-
-    def delete_experiment(self):
-        # warning message box
-        logging.debug("Deleting experiment.")
-        if self.current_experiment:
-            delete = QMessageBox.warning(self, "Delete Experiment", f"Are you sure you want to delete the experiment '{self.current_experiment.id}'?\n\nWARNING: This action cannot be undone.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if delete == QMessageBox.StandardButton.Yes:
-                current_expt_id = self.current_experiment.id
-                self.current_experiment.close()  # Close the current experiment to avoid file access issues
-                # TODO: This isn't actually closing the file: got the following error:
-                # PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 
-                # #'C:\\Users\\aewor\\Documents\\GitHub\\MonStim_Analysis\\data\\EMG-only data\\240829 C328.1 post-dec mcurve_long+
-                # #\\RX24\\RX24-0000.raw.h5'
-                
-                # delete bin file in output folder
-                shutil.rmtree(os.path.join(self.output_path, current_expt_id))
-                logging.debug(f"Deleted experiment folder: {os.path.join(self.output_path, current_expt_id)}.")
-
-                self.current_experiment = None
-                self.current_dataset = None
-                self.current_session = None
-                self.data_selection_widget.update_experiment_combo()
-                self.refresh_existing_experiments()
-                self.status_bar.showMessage("Experiment deleted successfully.", 5000)
-
-    def reload_current_session(self):
-        logging.debug("Reloading current session.")
-        if self.current_dataset and self.current_session:
-            if self.current_session.repo is not None:
-                if self.current_session.repo.session_js.exists():
-                    self.current_session.repo.session_js.unlink()
-                new_sess = self.current_session.repo.load()
-                idx = self.current_dataset._all_sessions.index(self.current_session)
-                self.current_dataset._all_sessions[idx] = new_sess
-                self.current_session = new_sess
-            self.plot_widget.on_data_selection_changed() # Alert plot widget to update plot options, etc.
-
-            self.status_bar.showMessage("Session reloaded successfully.", 5000)  # Show message for 5 seconds
-            logging.debug("Session reloaded successfully.")
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a session first.")
-
-    def reload_current_dataset(self):
-        logging.debug("Reloading current dataset.")
-        if self.current_dataset:
-            if self.current_dataset.repo is not None:
-                if self.current_dataset.repo.dataset_js.exists():
-                    self.current_dataset.repo.dataset_js.unlink()
-                for sess in self.current_dataset._all_sessions:
-                    if sess.repo and sess.repo.session_js.exists():
-                        sess.repo.session_js.unlink()
-                new_ds = self.current_dataset.repo.load()
-                idx = self.current_experiment._all_datasets.index(self.current_dataset)
-                self.current_experiment._all_datasets[idx] = new_ds
-                self.current_dataset = new_ds
-            self.data_selection_widget.update_session_combo()
-            self.plot_widget.on_data_selection_changed() # Reset plot options
-
-            self.status_bar.showMessage("Dataset reloaded successfully.", 5000)  # Show message for 5 seconds
-            logging.debug("Dataset reloaded successfully.")
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a dataset first.")
-
-    def reload_current_experiment(self):
-        """Reload the current experiment from disk."""
-        logging.debug(f"Reloading current experiment: {self.current_experiment.id}.")
-        current_experiment_combo_index = self.data_selection_widget.experiment_combo.currentIndex()
-        if self.current_experiment:
-            if self.current_experiment.repo is not None:
-                if self.current_experiment.repo.expt_js.exists():
-                    self.current_experiment.repo.expt_js.unlink()
-                else:
-                    logging.warning(f"Experiment JS file does not exist: {self.current_experiment.repo.expt_js}. Cannot unlink.")
-                for ds in self.current_experiment._all_datasets:
-                    if ds.repo and ds.repo.dataset_js.exists():
-                        ds.repo.dataset_js.unlink()
-                    for sess in ds._all_sessions:
-                        if sess.repo and sess.repo.session_js.exists():
-                            sess.repo.session_js.unlink()
-                new_expt = self.current_experiment.repo.load()
-                self.current_experiment = new_expt
-            else:
-                self.current_experiment = None
-                logging.warning("No repository found for the current experiment. Cannot reload.")
-            self.current_dataset = None
-            self.current_session = None
-
-            self.refresh_existing_experiments()
-            self.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
-
-            self.current_experiment.reset_all_caches()
-            self.plot_widget.on_data_selection_changed()
-
-            logging.debug("Experiment reloaded successfully.")
-            self.status_bar.showMessage("Experiment reloaded successfully.", 5000)  # Show message for 5 seconds
-
-    def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
-        """Reload the experiment list and optionally select a specific experiment."""
-        logging.debug("Refreshing existing experiments.")
-        if select_expt_id is None:
-            index = self.data_selection_widget.experiment_combo.currentIndex()
-        self.unpack_existing_experiments()
-        self.data_selection_widget.update_experiment_combo()
-        self.plot_widget.on_data_selection_changed()  # Reset plot options
-        if select_expt_id is not None:
-            index = self.expts_dict_keys.index(select_expt_id) if select_expt_id in self.expts_dict_keys else 0
-        self.data_selection_widget.experiment_combo.setCurrentIndex(index)
-        logging.debug("Existing experiments refreshed successfully.")
-
-    def show_preferences_window(self):
-        logging.debug("Showing preferences window.")
-        window = PreferencesDialog(self.config_file, parent=self)
-        if window.exec() == QDialog.DialogCode.Accepted:
-            # Apply preferences to data
-            if self.current_experiment:
-                self.current_experiment.apply_config(reset_caches=True)
-            self.status_bar.showMessage("Preferences applied successfully.", 5000)  # Show message for 5 seconds
-            logging.debug("Preferences applied successfully.")
-        else:
-            QMessageBox.warning(self, "Warning", "No changes made to preferences.")
-            logging.debug("No changes made to preferences.")
 
     def change_channel_names(self, level : str):
         logging.debug("Changing channel names.")
@@ -644,308 +371,6 @@ class EMGAnalysisGUI(QMainWindow):
                 self.help_window = HelpWindow(html_content, title)
         self.help_window.show()
 
-    def open_log_directory(self):
-        """Open the folder containing application log files."""
-        log_dir = get_log_dir()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(log_dir))
-        self.status_bar.showMessage(f"Opened log folder: {log_dir}", 5000)
-        logging.info(f"Opened log folder: {log_dir}")
-
-    def save_error_report(self):
-        """Save a zipped archive of log files for troubleshooting."""
-        log_dir = get_log_dir()
-        default_name = os.path.join(os.path.expanduser("~"), "monstim_logs.zip")
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Error Report",
-            default_name,
-            "Zip Files (*.zip)"
-        )
-        if not file_path:
-            return
-        try:
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            with ZipFile(file_path, "w", ZIP_DEFLATED) as zf:
-                for f in glob.glob(os.path.join(log_dir, "*") ):
-                    if os.path.isfile(f):
-                        zf.write(f, arcname=os.path.basename(f))
-            self.status_bar.showMessage("Error report saved.", 5000)
-            QMessageBox.information(self, "Saved", f"Error report saved to:\n{file_path}")
-            logging.info(f"Saved error report to {file_path}")
-        except Exception as e:
-            logging.exception("Failed to save error report")
-            QMessageBox.critical(self, "Error", f"Could not save error report:\n{e}")
-        finally:
-            QApplication.restoreOverrideCursor()
-
-    # Data selection widget functions - will be called whenever their index changes.
-    def save_experiment(self):
-        if self.current_experiment:
-            self.current_experiment.save()
-            self.status_bar.showMessage("Experiment saved successfully.", 5000)
-            logging.debug("Experiment saved successfully.")
-            self.has_unsaved_changes = False
-
-    def load_experiment(self, index):
-        if index >= 0:
-            experiment_name = self.expts_dict_keys[index]
-            exp_path = os.path.join(self.output_path, experiment_name)
-            logging.debug(f"Loading experiment: '{experiment_name}'.")
-            try:
-                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-                if os.path.exists(exp_path):
-                    try:
-                        repo = ExperimentRepository(Path(exp_path))
-                        self.current_experiment = repo.load()
-                        logging.debug(f"Experiment '{experiment_name}' loaded successfully.")
-                    except FileNotFoundError as e:
-                        QMessageBox.critical(self, "Error", f"Experiment file not found or corrupted: {e}")
-                        logging.error(f"Experiment file not found or corrupted: {e}")
-                else:
-                    QMessageBox.warning(self, "Warning", f"Experiment folder '{exp_path}' not found.")
-                    return
-
-                # Update current expt/dataset/session
-                self.data_selection_widget.update_dataset_combo()
-                self.plot_widget.on_data_selection_changed() # Reset plot options
-                self.status_bar.showMessage(f"Experiment '{experiment_name}' loaded successfully.", 5000)  # Show message for 5 seconds
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"An error occurred while loading experiment '{experiment_name}': {e}")
-                logging.error(f"An error occurred while loading experiment: {e}")
-                logging.error(traceback.format_exc())
-            finally:
-                QApplication.restoreOverrideCursor()
-
-    def load_dataset(self, index):
-        if index >= 0:
-            logging.debug(f"Loading dataset [{index}] from experiment '{self.current_experiment.id}'.")
-
-            if self.current_experiment:
-                self.current_dataset = self.current_experiment.datasets[index]
-            else:
-                logging.error("No current experiment to load dataset from.")
-
-            # Update current dataset/session and channel names
-            self.channel_names = self.current_dataset.channel_names
-            self.data_selection_widget.update_session_combo()
-            self.plot_widget.on_data_selection_changed() # Reset plot options
-
-    def load_session(self, index):
-        if self.current_dataset and index >= 0:
-            logging.debug(f"Loading session [{index}] from dataset '{self.current_dataset.id}'.")
-            self.current_session = self.current_dataset.sessions[index]
-            if hasattr(self.plot_widget.current_option_widget, 'recording_cycler'):
-                self.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
-            self.plot_widget.on_data_selection_changed() # Reset plot options
-
-    # Reports functions.
-    def show_session_report(self):
-        logging.debug("Showing session parameters report.")
-        if self.current_session:
-            report = self.current_session.session_parameters()
-            report = format_report(report)
-            dialog = CopyableReportDialog("Session Report", report, self)
-            dialog.exec()
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a session first.")
-
-    def show_dataset_report(self):
-        logging.debug("Showing dataset parameters report.")
-        if self.current_dataset:
-            report = self.current_dataset.dataset_parameters()
-            report = format_report(report)
-            dialog = CopyableReportDialog("Dataset Report", report, self)
-            dialog.exec()
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a dataset first.")
-
-    def show_experiment_report(self):
-        logging.debug("Showing experiment parameters report.")
-        if self.current_experiment:
-            report = self.current_experiment.experiment_parameters()
-            report = format_report(report)
-            dialog = CopyableReportDialog("Experiment Report", report, self)
-            dialog.exec()
-        else:
-            QMessageBox.warning(self, "Warning", "Please select an experiment first.")
-
-    def show_mmax_report(self):
-            logging.debug("Showing M-max report.")
-            if self.current_session:
-                report = self.current_session.m_max_report()
-                report = format_report(report)
-                dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self)
-                dialog.exec()
-            else:
-                QMessageBox.warning(self, "Warning", "Please select a session first.")
-
-    # Plotting functions
-    def plot_data(self, return_raw_data : bool = False):
-        self.plot_widget.canvas.show()
-        plot_type_raw = self.plot_widget.plot_type_combo.currentText()
-        plot_type = self.plot_type_dict.get(plot_type_raw)
-        plot_options = self.plot_widget.get_plot_options()
-        raw_data = None # Type: pd.DataFrame
-
-        if self.plot_widget.session_radio.isChecked():
-            level = 'session'
-            level_object = self.current_session
-        elif self.plot_widget.dataset_radio.isChecked():
-            level = 'dataset'
-            level_object = self.current_dataset
-        elif self.plot_widget.experiment_radio.isChecked():
-            level = 'experiment'
-            level_object = self.current_experiment
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a level to plot data from (session, dataset, or experiment).")
-            logging.warning("No level selected for plotting data.")
-            return
-        
-        if level_object is None:
-            QMessageBox.warning(self, "Warning", f"No {level} data exists to plot. Please try importing experiment data first.")
-            logging.warning(f"No {level} data exists to plot. Please try importing experiment data first.")
-            return
-
-        # Plot the data      
-        try:
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            raw_data = level_object.plot(
-                plot_type=plot_type,
-                **plot_options,
-                canvas = self.plot_widget.canvas)
-                
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An error occurred: {e}")
-            logging.error(f"An error occurred while plotting: {e}")
-            logging.error(f"Plot type: {plot_type}, options: {plot_options}")
-            logging.error(f"Current session: {self.current_session}, current dataset: {self.current_dataset}")
-            logging.error(traceback.format_exc())
-        finally:
-            QApplication.restoreOverrideCursor()
-
-        logging.info(f"Plot Created. level: {level} type: {plot_type}, options: {plot_options}, return_raw_data: {return_raw_data}.")
-        self.plot_pane.layout.update()  # Refresh the layout of the plot pane
-
-        if return_raw_data:
-            return raw_data
-        else:
-            return
-
-    def _get_raw_data(self):
-        raw_data = self.plot_data(return_raw_data=True)
-        if raw_data is not None:
-            dialog = DataFrameDialog(raw_data, self)
-            dialog.exec()
-        else:
-            QMessageBox.warning(self, "Warning", "No data to display.")
-
-    @staticmethod
-    def validate_dataset_name(dataset_path):
-        # strip the dataset name from the provided path
-        original_dataset_name = os.path.basename(dataset_path)
-        # get the path before the dataset name for later reconstruction
-        dataset_basepath = os.path.dirname(dataset_path)
-
-        def get_new_dataset_name(dataset_name, validity_check_dict):
-            if 'PyQt6' in sys.modules: # Check if PyQt6 is imported. If not, use input() instead of QDialog.
-                from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout
-                # check if there is an app running
-                app = QApplication.instance()
-                if app is None:
-                    app = QApplication(sys.argv)
-
-                dialog = QDialog()
-                dialog.setWindowTitle('Rename Dataset')
-                dialog.setModal(True)
-                dialog.resize(500, 200)
-                layout = QVBoxLayout()
-
-                # Add labels based on the validity check dictionary.
-                main_text = QLabel(f'The dataset name "{dataset_name}" is not valid. Dataset folder names should be formatted like "[YYMMDD] [Animal ID] [Experimental Condition]". Please confirm the following fields, and that they are separated by single spaces:')
-                main_text.setWordWrap(True)
-                layout.addWidget(main_text)
-                if not validity_check_dict['Date']:
-                    layout.addWidget(QLabel('- Date (YYYYMMDD)'))
-                if not validity_check_dict['Animal ID']:
-                    layout.addWidget(QLabel('- Animal ID (e.g., XX000.0)'))
-                if not validity_check_dict['Condition']:
-                    layout.addWidget(QLabel('- Experimental Condition (Any string. Spaces allowed.)'))
-                        
-                # Add a line edit and button to the layout
-                layout.addWidget(QLabel('\nRename your dataset:'))
-                line_edit = QLineEdit(dataset_name)
-                layout.addWidget(line_edit)
-
-                # Rename button
-                button = QPushButton('Rename')
-                button.clicked.connect(dialog.accept)
-                layout.addWidget(button)
-
-                dialog.setLayout(layout)
-                result = dialog.exec()
-
-                if result == QDialog.DialogCode.Accepted:
-                    dataset_name = line_edit.text()
-                    return dataset_name
-                else:
-                    raise ValueError('User canceled dataset renaming.')
-            else:
-                print(f'The dataset name "{dataset_name}" is not valid. Please confirm the following fields:')
-                if not validity_check_dict['Date']:
-                    print('\t- Date (YYYYMMDD)')
-                if not validity_check_dict['Animal ID']:
-                    print('\t- Animal ID (e.g., XX000.0)')
-                if not validity_check_dict['Condition']:
-                    print('\t- Experimental Condition (Any string. Spaces allowed.)')
-                dataset_name = input('Rename your dataset: > ')
-                if not dataset_name:
-                    raise ValueError('User canceled dataset renaming.')
-                return dataset_name
-
-        def check_name(dataset_name, name_changed = None):
-            date_valid, animal_id_valid, condition_valid = False, False, False
-            if not name_changed:
-                name_changed = False
-            
-            try: # check if the dataset name is in the correct format
-                pattern = r'^(\d+)\s([a-zA-Z0-9.]+)\s(.+)$'
-                match = re.match(pattern, dataset_name)
-                if match:
-                    date_string = match.group(1)
-                    animal_id = match.group(2)
-                    condition = match.group(3)
-                else:
-                    raise AttributeError
-            except AttributeError:
-                new_dataset_name = get_new_dataset_name(dataset_name, validity_check_dict = {'Date': date_valid, 'Animal ID': animal_id_valid, 'Condition': condition_valid})
-                return check_name(new_dataset_name, name_changed=True)
-            
-            # 1) confirm date field is valid
-            if len(date_string) == 6 or len(date_string) == 8:
-                date_valid = True
-            # 2) confirm animal id is valid
-            if len(animal_id) > 0:
-                animal_id_valid = True
-            # 3) confirm condition is valid
-            if len(condition) > 0:
-                condition_valid = True
-
-            if date_valid and animal_id_valid and condition_valid:
-                return dataset_name, name_changed
-            else:
-                new_dataset_name = get_new_dataset_name(dataset_name, validity_check_dict = {'Date': date_valid, 'Animal ID': animal_id_valid, 'Condition': condition_valid})
-                return check_name(new_dataset_name, name_changed=True)
-            
-            
-
-        validated_dataset_name, name_changed = check_name(original_dataset_name)
-        if name_changed: # if the name was changed, rename the dataset folder
-            logging.info(f'Dataset name changed from "{original_dataset_name}" to "{validated_dataset_name}".')
-            validated_dataset_path = os.path.join(dataset_basepath, validated_dataset_name)
-            os.rename(dataset_path, validated_dataset_path)
-            logging.info(f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".')
-        else: # if the name was not changed, return the original, now-validated dataset path.
-            validated_dataset_path = dataset_path
 
     def show_save_confirmation_dialog(self):
         """Show dialog asking user if they want to save before closing"""
@@ -964,7 +389,7 @@ class EMGAnalysisGUI(QMainWindow):
     )
         
         if reply == QMessageBox.StandardButton.Save:
-            saved = self.save_experiment()
+            saved = self.data_manager.save_experiment()
             if saved:
                 QApplication.quit() # Close the application after saving.
         elif reply == QMessageBox.StandardButton.Cancel:

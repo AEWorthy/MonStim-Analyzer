@@ -74,8 +74,8 @@ class PlotWidget(QGroupBox):
             btn.setSizePolicy(QSizePolicy.Policy.Preferred,
                               QSizePolicy.Policy.Fixed)
             btn_row.addWidget(btn)
-        self.plot_button.clicked.connect(self.parent.plot_data)
-        self.get_data_button.clicked.connect(self.parent._get_raw_data)
+        self.plot_button.clicked.connect(self.parent.plot_controller.plot_data)
+        self.get_data_button.clicked.connect(self.parent.plot_controller.get_raw_data)
         self.layout.addLayout(btn_row)
 
 
@@ -126,8 +126,8 @@ class PlotWidget(QGroupBox):
         self.layout.addLayout(self.additional_options_layout)
 
     def create_plot_button(self):
-        self.plot_button.clicked.connect(self.parent.plot_data)
-        self.get_data_button.clicked.connect(self.parent._get_raw_data)
+        self.plot_button.clicked.connect(self.parent.plot_controller.plot_data)
+        self.get_data_button.clicked.connect(self.parent.plot_controller.get_raw_data)
     
     def import_canvas(self):
         self.canvas = self.parent.plot_pane.canvas
