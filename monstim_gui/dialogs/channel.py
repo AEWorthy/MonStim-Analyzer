@@ -22,7 +22,6 @@ class ChangeChannelNamesDialog(QDialog):
     def get_new_names(self):
         return {old: input.text() for old, input in self.channel_inputs.items()}
 
-
 class InvertChannelPolarityDialog(QDialog):
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)

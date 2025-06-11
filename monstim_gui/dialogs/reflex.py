@@ -1,5 +1,9 @@
 from .base import *
 
+'''LEGACY DIALOG: This dialog is used to update the reflex window settings for an Experiment, Dataset, or Session.
+It allows users to set global or per-channel start times and durations for the reflex windows.
+This dialog is no longer used in the main application, but is kept for reference and potential future use.
+It is recommended to use the new ReflexWindowSettingsDialog in 'latency.py' instead, which provides a more flexible interface.'''
 
 class ReflexSettingsDialog(QDialog):
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
@@ -157,7 +161,7 @@ class ReflexSettingsDialog(QDialog):
             )
             return
 
-        self.data.update_reflex_parameters()
+        self.data.update_latency_window_parameters()
         self.data.reset_all_caches()
 
         self.accept()

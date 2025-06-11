@@ -169,6 +169,11 @@ class Experiment:
         """Restore a previously excluded dataset by its ID."""
         if dataset_id in self.annot.excluded_datasets:
             self.annot.excluded_datasets.remove(dataset_id)
+            for ds in self._all_datasets:
+                if ds.id == dataset_id:
+                    for sess in ds._all_sessions:
+                        # Restore all sessions of the dataset
+                        sess.restore_session()
             self.reset_all_caches()
             if self.repo is not None:
                 self.repo.save(self)
@@ -259,10 +264,27 @@ class Experiment:
             ds.reset_all_caches()
         self.update_latency_window_parameters()
 
+    def apply_config(self, reset_caches: bool = True) -> None:
+        """
+        Apply user preferences to the experiment.
+        This is a placeholder for any logic needed to apply preferences.
+        """
+        for ds in self._all_datasets:
+            ds.apply_config()
+
+        self._load_config_settings()
+        self.plotter = ExperimentPlotter(self)
+        self.latency_windows = self.datasets[0].latency_windows if self.datasets else []
+
+        if reset_caches:
+            self.reset_all_caches()
+        if self.repo is not None:
+            self.repo.save(self)
+        logging.info(f"Preferences successfully applied to experiment '{self.id}'.")
+
     # ──────────────────────────────────────────────────────────────────
     # 1) Update annotation parameters
     # ──────────────────────────────────────────────────────────────────
-
     def update_latency_window_parameters(self):
         for window in self.latency_windows:
             if window.name == "M-wave":
@@ -286,7 +308,6 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────
-    
     def save(self) -> None:
         """
         Save the experiment to the repository.
@@ -305,6 +326,9 @@ class Experiment:
         for ds in self.datasets:
             ds.close()
 
+    # ──────────────────────────────────────────────────────────────────
+    # 3) Object representation and reports
+    # ──────────────────────────────────────────────────────────────────
     def experiment_parameters(self):
         report = [f" Experiment Parameters for Experiment '{self.id}':",
                   "===============================",
@@ -312,10 +336,6 @@ class Experiment:
         for line in report:
             logging.info(line)
         return report
-    
-    # ──────────────────────────────────────────────────────────────────
-    # 3) Object representation
-    # ──────────────────────────────────────────────────────────────────
     def __repr__(self) -> str:
         return f"Experiment(expt_id={self.id}, num_datasets={self.num_datasets})"
     def __str__(self) -> str:

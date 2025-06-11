@@ -53,7 +53,6 @@ class WindowStartDialog(QDialog):
         if self.gui:
             self.gui.plot_data()
 
-
 class LatencyWindowsDialog(QDialog):
     """Dialog for editing multiple latency windows."""
 

@@ -142,7 +142,7 @@ class Session:
             if self.repo is not None:
                 self.repo.save(self)
 
-    def _apply_config(self, reset_caches: bool = True):
+    def apply_config(self, reset_caches: bool = True) -> None:
         """
         Apply the loaded configuration settings to the session.
         This is called after loading the session or when preferences are changed.
@@ -367,10 +367,13 @@ class Session:
         self.h_duration = [0.0] * self.num_channels
         for window in self.latency_windows:
             lname = window.name.lower()
-            if lname in {"m-wave", "m_wave", "m wave", "mwave"}:
+            if lname in {"m-wave", "m_wave", "m wave", "mwave", 
+                         "m-response", "m_response", "m response"}:
                 self.m_start = window.start_times
                 self.m_duration = window.durations
-            elif lname in {"h-reflex", "h_reflex", "h reflex", "hreflex"}:
+            elif lname in {"h-wave", "h_wave", "h wave", "hwave", 
+                           "h-reflex", "h_reflex", "h reflex", 
+                           "hresponse", "h_response", "h response"}:
                 self.h_start = window.start_times
                 self.h_duration = window.durations
 
@@ -601,6 +604,9 @@ class Session:
         This is a user action that modifies the session's exclude flags.
         """
         self.annot.excluded_recordings = [rec.id for rec in self._all_recordings]
+        if self.recordings == []:
+            # If no recordings remain, mark the session as excluded
+            self.parent_dataset.exclude_session(self.id)
         self.reset_all_caches()
         if self.repo is not None:
             self.repo.save(self)

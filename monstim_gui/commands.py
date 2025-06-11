@@ -72,12 +72,14 @@ class ExcludeRecordingCommand(Command):
     def execute(self):
         try:
             self.gui.current_session.exclude_recording(self.recording_index)
+            self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
     
     def undo(self):
         try:
             self.gui.current_session.restore_recording(self.recording_index)
+            self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
@@ -90,14 +92,17 @@ class RestoreRecordingCommand(Command):
     def execute(self):
         try:
             self.gui.current_session.restore_recording(self.recording_index)
+            self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
     def undo(self):
         try:
             self.gui.current_session.exclude_recording(self.recording_index)
+            self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
+
 class ExcludeSessionCommand(Command):
     """Exclude the currently selected session."""
 
@@ -114,13 +119,12 @@ class ExcludeSessionCommand(Command):
         self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
-        self.gui.data_selection_widget.update_session_combo()
+        self.gui.data_selection_widget.update_all_data_combos()
 
     def undo(self):
         self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.removed_session
-        self.gui.data_selection_widget.update_session_combo()
-
+        self.gui.data_selection_widget.update_all_data_combos()
 
 class ExcludeDatasetCommand(Command):
     """Exclude the currently selected dataset."""
@@ -138,13 +142,12 @@ class ExcludeDatasetCommand(Command):
         self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
-        self.gui.data_selection_widget.update_dataset_combo()
+        self.gui.data_selection_widget.update_all_data_combos()
 
     def undo(self):
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.removed_dataset
-        self.gui.data_selection_widget.update_dataset_combo()
-
+        self.gui.data_selection_widget.update_all_data_combos()
 
 class RestoreSessionCommand(Command):
     """Restore an excluded session by ID."""
@@ -162,13 +165,12 @@ class RestoreSessionCommand(Command):
         )
         self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.session_obj
-        self.gui.data_selection_widget.update_session_combo()
+        self.gui.data_selection_widget.update_all_data_combos()
 
     def undo(self):
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
-        self.gui.data_selection_widget.update_session_combo()
-
+        self.gui.data_selection_widget.update_all_data_combos()
 
 class RestoreDatasetCommand(Command):
     """Restore an excluded dataset by ID."""
@@ -186,12 +188,12 @@ class RestoreDatasetCommand(Command):
         )
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.dataset_obj
-        self.gui.data_selection_widget.update_dataset_combo()
+        self.gui.data_selection_widget.update_all_data_combos()
 
     def undo(self):
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
-        self.gui.data_selection_widget.update_dataset_combo()
+        self.gui.data_selection_widget.update_all_data_combos()
         
 class InvertChannelPolarityCommand(Command):
     def __init__(self, gui, level : str, channel_indexes_to_invert : list[int]):

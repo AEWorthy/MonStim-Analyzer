@@ -32,10 +32,15 @@ class Dataset:
         self.plotter = DatasetPlotter(self)
 
         # Ensure all sessions share the same recording parameters
-        self.__check_session_consistency()
+        try:
+            self.__check_session_consistency()
 
-        self.scan_rate: int = self.sessions[0].scan_rate
-        self.stim_start: float = self.sessions[0].stim_start
+            self.scan_rate: int = self.sessions[0].scan_rate
+            self.stim_start: float = self.sessions[0].stim_start
+        except IndexError:
+            logging.warning(f"Dataset {self.id} has no sessions to check for consistency. Skipping consistency check. Setting scan_rate and stim_start to zeroes.")
+            self.scan_rate = 0
+            self.stim_start = 0.0
 
         self.update_latency_window_parameters()
         logging.info(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
@@ -105,14 +110,20 @@ class Dataset:
 
     @property
     def num_channels(self) -> int:
+        if not self.sessions:
+            return 0
         return min(session.num_channels for session in self.sessions)
 
     @property
     def channel_names(self) -> List[str]:
+        if not self.sessions:
+            return []
         return max((session.channel_names for session in self.sessions), key=len)
 
     @property
     def latency_windows(self) -> List[LatencyWindow]:
+        if not self.sessions:
+            return []
         return self.sessions[0].latency_windows
 
     # ------------------------------------------------------------------
@@ -121,23 +132,33 @@ class Dataset:
     def add_latency_window(self, name: str, start_times: List[float],
                            durations: List[float], color: str | None = None,
                            linestyle: str | None = None) -> None:
+        if not self.sessions:
+            logging.warning(f"No sessions available to add latency window '{name}' in dataset {self.id}.")
+            return
         for session in self.sessions:
             session.add_latency_window(name, start_times, durations,
                                        color=color, linestyle=linestyle)
         self.update_latency_window_parameters()
 
     def remove_latency_window(self, name: str) -> None:
+        if not self.sessions:
+            logging.warning(f"No sessions available to remove latency window '{name}' in dataset {self.id}.")
+            return
         for session in self.sessions:
             session.remove_latency_window(name)
         self.update_latency_window_parameters()
 
     def get_latency_window(self, name: str) -> LatencyWindow | None:
+        if not self.sessions:
+            return None
         return self.sessions[0].get_latency_window(name)
 
     def get_latency_window_amplitudes(
-        self, window_name: str, method: str, channel_index: int
-    ) -> dict[str, List[float]]:
+        self, window_name: str, method: str, channel_index: int) -> dict[str, List[float]]:
         """Return per-session amplitudes within ``window_name``."""
+        if not self.sessions:
+            return {}
+
         result: dict[str, List[float]] = {}
         for session in self.sessions:
             result[session.id] = session.get_latency_window_amplitudes(
@@ -148,6 +169,8 @@ class Dataset:
     @property
     def stimulus_voltages(self) -> np.ndarray:
         """Return sorted unique stimulus voltages binned by `bin_size`."""
+        if not self.sessions:
+            return np.array([])
         binned_voltages = set()
         for session in self.sessions:
             vols = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
@@ -180,6 +203,24 @@ class Dataset:
                 self.h_duration = window.durations
         for session in self.sessions:
             session.update_latency_window_parameters()
+
+    def apply_config(self, reset_caches: bool = True) -> None:
+        """
+        Applies user preferences to the dataset.
+        This method is a placeholder for any future preferences that might be added.
+        """
+        for session in self._all_sessions:
+            session.apply_config()
+
+        self._load_config_settings()
+        self.plotter = DatasetPlotter(self)
+        self.latency_windows = self.sessions[0].latency_windows if self.sessions else []
+        
+        if reset_caches:
+            self.reset_all_caches()
+        if self.repo is not None:
+            self.repo.save(self)
+
     # ──────────────────────────────────────────────────────────────────
     # 1) Useful properties for GUI & analysis code
     # ──────────────────────────────────────────────────────────────────
@@ -347,11 +388,13 @@ class Dataset:
         else:
             logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
 
-        if not self.sessions:
+        if self.sessions == []:
+            logging.info(f"All sessions in dataset {self.id} have been excluded.")
             # If no sessions remain, clear list and exclude dataset from parent experiment
-            self.annot.excluded_sessions.clear()
             if self.parent_experiment is not None:
                 self.parent_experiment.exclude_dataset(self.id)
+            self.annot.excluded_sessions.clear()
+            logging.info(f"Dataset {self.id} has no remaining sessions and is now excluded from the parent experiment.")
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""
