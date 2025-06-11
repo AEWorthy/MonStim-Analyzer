@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import os
 import re
+import sys
 import shutil
 import traceback
 from pathlib import Path
@@ -29,7 +30,7 @@ from monstim_signals.core.utils import (
     get_config_path,
 )
 
-from .dialogs import PreferencesDialog
+from ..dialogs import PreferencesDialog
 
 
 class DataManager:

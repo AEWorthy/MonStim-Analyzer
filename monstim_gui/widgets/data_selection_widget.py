@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QColor, QPainter
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class CircleDelegate(QStyledItemDelegate):
     """
@@ -57,9 +57,9 @@ class CircleDelegate(QStyledItemDelegate):
         painter.restore()
 
 class DataSelectionWidget(QGroupBox):
-    def __init__(self, parent: 'EMGAnalysisGUI'):
+    def __init__(self, parent: 'MonstimGUI'):
         super().__init__("Data Selection", parent)
-        self.parent = parent
+        self.parent : 'MonstimGUI' = parent
         self.circle_delegate = CircleDelegate(self)
         
         form = QFormLayout()

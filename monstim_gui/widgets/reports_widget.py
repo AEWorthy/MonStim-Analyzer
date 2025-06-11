@@ -3,12 +3,12 @@ from PyQt6.QtWidgets import QGroupBox, QPushButton, QGridLayout, QSizePolicy
 from PyQt6.QtCore import Qt
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class ReportsWidget(QGroupBox):
-    def __init__(self, parent : 'EMGAnalysisGUI'):
+    def __init__(self, parent : 'MonstimGUI'):
         super().__init__("Reports", parent)
-        self.parent = parent # type: EMGAnalysisGUI
+        self.parent = parent # type: MonstimGUI
         self.layout = QGridLayout()
         self.layout.setContentsMargins(8, 8, 8, 8)
         self.layout.setHorizontalSpacing(12)

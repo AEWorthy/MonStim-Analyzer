@@ -1,21 +1,24 @@
 import logging
 import traceback
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from monstim_gui import MonstimGUI
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt
 
-from .dataframe_exporter import DataFrameDialog
+from ..core.utils.dataframe_exporter import DataFrameDialog
 
 
 class PlotController:
     """Handle plotting and returning raw data."""
 
-    def __init__(self, gui):
-        self.gui = gui
+    def __init__(self, gui : 'MonstimGUI'):
+        self.gui : 'MonstimGUI' = gui
 
     def plot_data(self, return_raw_data: bool = False):
         self.gui.plot_widget.canvas.show()
         plot_type_raw = self.gui.plot_widget.plot_type_combo.currentText()
-        plot_type = self.gui.plot_type_dict.get(plot_type_raw)
+        plot_type = self.gui.PLOT_TYPE_DICT.get(plot_type_raw)
         plot_options = self.gui.plot_widget.get_plot_options()
         raw_data = None
 

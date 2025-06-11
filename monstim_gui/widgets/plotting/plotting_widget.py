@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 import logging
+import copy
 from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup, QFormLayout,
                              QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QWidget)
 from PyQt6.QtCore import Qt
@@ -11,16 +12,17 @@ from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOp
                            MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
 
 if TYPE_CHECKING:
-    from monstim_gui import EMGAnalysisGUI
+    from monstim_gui import MonstimGUI
     from .plot_options import BasePlotOptions
+    from matplotlib import Figure, FigureCanvas
 
 # Plotting Widget
 class PlotWidget(QGroupBox):
-    def __init__(self, parent: 'EMGAnalysisGUI'):
+    def __init__(self, parent: 'MonstimGUI'):
         super().__init__("Plotting", parent)
         self.current_option_widget: 'BasePlotOptions' = None
-        self.parent = parent # Type: EMGAnalysisGUI
-        self.layout = QVBoxLayout() # Type: QVBoxLayout
+        self.parent : 'MonstimGUI' = parent
+        self.layout : 'QVBoxLayout' = QVBoxLayout()
         self.layout.setContentsMargins(8, 8, 8, 8)
         self.layout.setSpacing(6)
 
@@ -81,7 +83,7 @@ class PlotWidget(QGroupBox):
 
         # self.create_view_selection()
         self.create_additional_options()
-        self.import_canvas()
+        # self.import_canvas()
         self.setLayout(self.layout)
 
     def initialize_plot_widget(self):
@@ -130,8 +132,8 @@ class PlotWidget(QGroupBox):
         self.get_data_button.clicked.connect(self.parent.plot_controller.get_raw_data)
     
     def import_canvas(self):
-        self.canvas = self.parent.plot_pane.canvas
-        self.figure = self.parent.plot_pane.figure        
+        self.canvas : 'FigureCanvas' = self.parent.plot_pane.canvas
+        self.figure : 'Figure' = self.parent.plot_pane.figure        
 
     def on_view_changed(self):
         match self.view_group.checkedButton():
@@ -151,11 +153,11 @@ class PlotWidget(QGroupBox):
         self.update_plot_options()
 
     def on_plot_type_changed(self):
+        self.save_current_options()
         plot_type = self.plot_type_combo.currentText()
         if plot_type == self.last_plot_type[self.view]:
             logging.debug(f"Plot type {plot_type} is already selected. No change needed. self.last_plot_type[self.view]: {self.last_plot_type[self.view]}")
             return
-        self.save_current_options()
         self.last_plot_type[self.view] = plot_type
         self.update_plot_options()
 
@@ -171,7 +173,6 @@ class PlotWidget(QGroupBox):
         self.plot_type_combo.addItems(self.plot_options[self.view].keys())
         self.plot_type_combo.setCurrentText(self.last_plot_type[self.view])
         self.plot_type_combo.blockSignals(False)
-        self.on_plot_type_changed()
 
     def update_plot_options(self):
         if self.current_option_widget:
@@ -185,21 +186,21 @@ class PlotWidget(QGroupBox):
             self.options_layout.addWidget(self.current_option_widget)
 
             if plot_type in self.last_options[self.view]:
-                logging.debug(f"Using last options for {self.view} - {plot_type}: {self.last_options[self.view][plot_type]}")
-                self.current_option_widget.set_options(self.last_options[self.view][plot_type])
+                options = copy.deepcopy(self.last_options[self.view][plot_type])
+                logging.debug(f"Using last options for {self.view} - {plot_type}: {options}")
+                self.current_option_widget.set_options(options)
             else:
                 logging.debug(f"No last options found for {self.view} - {plot_type}. Using default options.")
         
         self.options_layout.update()
-        
         if plot_type == "Single EMG Recordings":
             self.current_option_widget.recording_cycler.reset_max_recordings()
 
     def save_current_options(self):
        if self.current_option_widget:
-            current_plot_type = self.last_plot_type[self.view]
+            current_plot_type = self.plot_type_combo.currentText()
             current_options = self.current_option_widget.get_options()
-            self.last_options[self.view][current_plot_type] = current_options
+            self.last_options[self.view][current_plot_type] = copy.deepcopy(current_options)
             logging.debug(f"Saved options for {self.view} - {current_plot_type}: {current_options}")
 
     def get_plot_options(self):
@@ -209,7 +210,7 @@ class PlotWidget(QGroupBox):
 
 
 class PlotPane(QGroupBox):
-    def __init__(self, parent: 'EMGAnalysisGUI'):
+    def __init__(self, parent: 'MonstimGUI'):
         super().__init__("Plot Pane", parent)
         self.parent = parent
         self.layout = QVBoxLayout()

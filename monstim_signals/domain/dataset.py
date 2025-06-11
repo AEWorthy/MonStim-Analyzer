@@ -360,6 +360,18 @@ class Dataset:
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
+    def invert_channel_polarity(self, channel_index: int) -> None:
+        """
+        Inverts the polarity of a specific channel across all sessions in the dataset.
+
+        Args:
+            channel_index (int): The index of the channel to invert.
+        """
+        for session in self.sessions:
+            session.invert_channel_polarity(channel_index)
+        self.reset_all_caches()
+        logging.info(f"Inverted polarity of channel {channel_index} in dataset {self.id}.")
+
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         m_window = self.get_latency_window("M-wave")
         if m_window:

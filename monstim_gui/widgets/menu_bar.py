@@ -3,12 +3,12 @@ from PyQt6.QtGui import QKeySequence, QFont
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from gui_main import EMGAnalysisGUI
+    from gui_main import MonstimGUI
 
 class MenuBar(QMenuBar):
-    def __init__(self, parent : 'EMGAnalysisGUI'):
+    def __init__(self, parent : 'MonstimGUI'):
         super().__init__(parent)
-        self.parent = parent  # type: EMGAnalysisGUI
+        self.parent = parent  # type: MonstimGUI
         self.create_file_menu()
         self.create_edit_menu()
         self.create_help_menu()

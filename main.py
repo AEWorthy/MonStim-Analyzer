@@ -79,11 +79,11 @@ def main(is_frozen : bool) -> int:
     try:
         app = QApplication(sys.argv)
         if is_frozen: # Display splash screen if running as a frozen executable.
-            from monstim_gui.splash import SplashScreen
+            from monstim_gui.core.splash import SplashScreen
             splash = SplashScreen()
             splash.show()
             QTimer.singleShot(3000, splash.close)
-        gui = EMGAnalysisGUI()
+        gui = MonstimGUI()
         gui.show()
         logging.info("Application started successfully.")
         return app.exec()
@@ -108,7 +108,7 @@ if __name__ == '__main__':
     sys.excepthook = exception_hook
     
     # Import the GUI module, matplotlib, and initialize multiprocessing after setting up logging.
-    from monstim_gui import EMGAnalysisGUI
+    from monstim_gui import MonstimGUI
     import matplotlib
     matplotlib.use('QtAgg')
     multiprocessing.freeze_support()

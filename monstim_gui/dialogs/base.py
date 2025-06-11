@@ -46,7 +46,7 @@ from monstim_signals.domain.session import Session
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.core.data_models import LatencyWindow
 from monstim_gui.commands import SetLatencyWindowsCommand
-from monstim_gui.splash import SPLASH_INFO
+from monstim_gui.core.splash import SPLASH_INFO
 
 # Small set of pleasant colors for latency windows
 COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())

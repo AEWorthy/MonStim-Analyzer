@@ -5,8 +5,12 @@ from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
 from .plotting.plotting_widget import PlotWidget, PlotPane
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from gui_main import MonstimGUI
 
-def setup_main_layout(parent):
+
+def setup_main_layout(parent: 'MonstimGUI') -> dict:
     """Create and apply the main window layout.
 
     Parameters

@@ -1,54 +1,36 @@
 import sys
 import os
-import re
-import shutil
 import logging
-import traceback
-import multiprocessing
-from zipfile import ZipFile, ZIP_DEFLATED
-import glob
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from monstim_gui.widgets.gui_layout import MenuBar, DataSelectionWidget, ReportsWidget, PlotPane, PlotWidget
+    from PyQt6.QtWidgets import QStatusBar
 
 import markdown
-from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QFileDialog,
     QMessageBox,
     QDialog,
-    QProgressDialog,
-    QHBoxLayout,
-    QStatusBar,
     QInputDialog,
 )
-from PyQt6.QtGui import QIcon, QDesktopServices
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import Qt
 
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
-from monstim_signals.io.repositories import ExperimentRepository
-from monstim_signals.io.csv_importer import GUIExptImportingThread
-from monstim_signals.core.utils import (format_report, get_output_path, get_data_path, 
-                           get_source_path, get_docs_path, get_config_path, get_log_dir)
+from monstim_signals.core.utils import (get_output_path, get_source_path, get_docs_path, get_config_path)
 
-from monstim_gui.splash import SPLASH_INFO
+from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.dialogs import (
     ChangeChannelNamesDialog,
-    CopyableReportDialog,
     LatexHelpWindow,
     AboutDialog,
     HelpWindow,
-    PreferencesDialog,
     InvertChannelPolarityDialog,
     LatencyWindowsDialog,
 )
-from monstim_gui.menu_bar import MenuBar
-from monstim_gui.data_selection_widget import DataSelectionWidget
-from monstim_gui.reports_widget import ReportsWidget
-from monstim_gui.plotting.plotting_widget import PlotWidget, PlotPane
 from monstim_gui.commands import (
     ExcludeSessionCommand,
     ExcludeDatasetCommand,
@@ -59,13 +41,12 @@ from monstim_gui.commands import (
     RestoreRecordingCommand,
     InvertChannelPolarityCommand,
 )
-from monstim_gui.dataframe_exporter import DataFrameDialog
-from monstim_gui.gui_layout import setup_main_layout
-from monstim_gui.data_manager import DataManager
-from monstim_gui.report_manager import ReportManager
-from monstim_gui.plot_controller import PlotController
+from monstim_gui.widgets.gui_layout import setup_main_layout
+from monstim_gui.managers.data_manager import DataManager
+from monstim_gui.managers.report_manager import ReportManager
+from monstim_gui.managers.plot_controller import PlotController
 
-class EMGAnalysisGUI(QMainWindow):
+class MonstimGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.has_unsaved_changes = False
@@ -80,7 +61,7 @@ class EMGAnalysisGUI(QMainWindow):
         self.current_dataset: Dataset | None = None
         self.current_session: Session | None = None
         self.channel_names = []
-        self.plot_type_dict = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
+        self.PLOT_TYPE_DICT = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
                                "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
                                "Single EMG Recordings": "singleEMG"}
         
@@ -88,12 +69,13 @@ class EMGAnalysisGUI(QMainWindow):
         self.output_path = get_output_path()
         self.config_file = get_config_path()
 
-        self.init_ui()
 
         # Helper managers
         self.data_manager = DataManager(self)
         self.report_manager = ReportManager(self)
         self.plot_controller = PlotController(self)
+
+        self.init_ui()
 
         # Load existing pickled experiments if available
         self.unpack_existing_experiments()
@@ -106,12 +88,14 @@ class EMGAnalysisGUI(QMainWindow):
     
     def init_ui(self):
         widgets = setup_main_layout(self)
-        self.menu_bar = widgets["menu_bar"]
-        self.data_selection_widget = widgets["data_selection_widget"]
-        self.reports_widget = widgets["reports_widget"]
-        self.plot_pane = widgets["plot_pane"]
-        self.plot_widget = widgets["plot_widget"]
-        self.status_bar = widgets["status_bar"]
+        self.menu_bar : 'MenuBar' = widgets["menu_bar"]
+        self.data_selection_widget : 'DataSelectionWidget' = widgets["data_selection_widget"]
+        self.reports_widget : 'ReportsWidget' = widgets["reports_widget"]
+        self.plot_pane : 'PlotPane' = widgets["plot_pane"]
+        self.plot_widget : 'PlotWidget' = widgets["plot_widget"]
+        self.status_bar : 'QStatusBar' = widgets["status_bar"]
+
+        self.plot_widget.import_canvas()
 
         self.status_bar.showMessage(
             f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000
@@ -405,6 +389,6 @@ class EMGAnalysisGUI(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    gui = EMGAnalysisGUI()
+    gui = MonstimGUI()
     gui.show()
     sys.exit(app.exec())
