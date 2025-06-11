@@ -32,12 +32,16 @@ from monstim_signals.core.utils import (
 
 from ..dialogs import PreferencesDialog
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from monstim_gui import MonstimGUI
+
 
 class DataManager:
     """Handle loading and saving of experiment data."""
 
     def __init__(self, gui):
-        self.gui = gui
+        self.gui : 'MonstimGUI' = gui
 
     # ------------------------------------------------------------------
     # experiment discovery
