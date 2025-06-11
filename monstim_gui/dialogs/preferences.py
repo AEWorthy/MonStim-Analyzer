@@ -93,12 +93,12 @@ class PreferencesDialog(QDialog):
                         self.fields[key] = field
                     else:
                         text = str(value)
-                    if key in ("m_color", "h_color"):
-                        text = text.replace("tab:", "")
-                        field = QLineEdit(text)
-                        field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
-                    else:
-                        field = QLineEdit(text)
+                        if key in ("m_color", "h_color"):
+                            text = text.replace("tab:", "")
+                            field = QLineEdit(text)
+                            field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
+                        else:
+                            field = QLineEdit(text)
                         form_layout.addRow(key, field)
                         self.fields[key] = field
 
@@ -119,24 +119,32 @@ class PreferencesDialog(QDialog):
         self.resize(400, 600)  # Set a default size
 
     def save_config(self):
-        #TODO: Fix saving function because it does not save the entire config
-        user_config = {}
+        """Save the current preferences to ``config-user.yml``.
+
+        All values from the dialog are merged into the existing configuration
+        so that the written YAML file contains the complete set of options.
+        """
+
+        # Start from the currently loaded configuration
+        new_config = copy.deepcopy(self.config)
 
         for key, field in self.fields.items():
             value = self.parse_value(field.text(), key)
             if '.' in key:
                 main_key, sub_key = key.split('.')
-                if main_key not in user_config or not isinstance(user_config.get(main_key), dict):
-                    user_config[main_key] = {}
-                user_config[main_key][sub_key] = value
+                if main_key not in new_config or not isinstance(new_config.get(main_key), dict):
+                    new_config[main_key] = {}
+                new_config[main_key][sub_key] = value
             else:
-                user_config[key] = value
+                new_config[key] = value
 
-        # Save all values to the user config file
+        self.config = new_config
+
+        # Save the entire configuration to the user config file
         with open(self.user_config_file, 'w') as file:
-            yaml.dump(user_config, file)
+            yaml.safe_dump(self.config, file)
 
-        logging.info(f"Saved user config: {user_config}")
+        logging.info(f"Saved user config: {self.config}")
         self.accept()
 
     def parse_value(self, value, key):
