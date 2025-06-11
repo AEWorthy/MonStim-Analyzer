@@ -1,4 +1,5 @@
 from .base import *
+import copy
 
 
 class LatencyWindowPresetEditor(QWidget):
@@ -268,6 +269,7 @@ class PreferencesDialog(QDialog):
 
             for section in section_names:
                 group_box = QGroupBox(section)
+                group_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
                 form_layout = QFormLayout()
 
                 for key in sections[section]:
@@ -302,6 +304,8 @@ class PreferencesDialog(QDialog):
 
                 group_box.setLayout(form_layout)
                 tab_layout.addWidget(group_box)
+
+            tab_layout.addStretch()
 
             tab_scroll.setWidget(tab_content)
             tab_widget.addTab(tab_scroll, tab_name)
