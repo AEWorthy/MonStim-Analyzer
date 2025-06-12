@@ -34,10 +34,6 @@ class LatencyWindowPresetEditor(QWidget):
             self.preset_combo.addItem("default")
             self.presets.append([])
 
-        self.scroll.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        layout.addWidget(self.scroll, 1)
         if self.window_entries:
             self._save_current_preset()
     # ------------------------------------------------------------------
@@ -63,6 +59,9 @@ class LatencyWindowPresetEditor(QWidget):
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         self.scroll_widget = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         # Align entries to the top so empty space doesn't appear above them
