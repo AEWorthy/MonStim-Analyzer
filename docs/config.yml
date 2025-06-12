@@ -58,3 +58,16 @@ h_duration: 1.5 # (in ms). default is 1.0.
 h_threshold: 0.5 # (in mV). default is 0.5.
 
 preferred_date_format: 'YYMMDD'
+latency_window_presets:
+  default:
+    - name: "M-wave"
+      start: 1.0
+      duration: 2.0
+      color: 'tab:red'
+      linestyle: ':'
+    - name: "H-reflex"
+      start: 3.2
+      duration: 1.5
+      color: 'tab:blue'
+      linestyle: ':'
+

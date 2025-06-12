@@ -93,7 +93,6 @@ class RecordingRepository:
         """
         for raw_h5 in folder.glob("*.raw.h5"):
             stem = raw_h5.with_suffix("")  # drop ".raw.h5" → Path("folder/AA00_0000")
-            logging.info(f"Discovered recording: {stem}")
             yield RecordingRepository(stem=stem)
 
 class SessionRepository:

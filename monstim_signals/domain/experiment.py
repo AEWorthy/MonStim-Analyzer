@@ -147,6 +147,12 @@ class Experiment:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
         self.reset_all_caches()
 
+    def apply_latency_window_preset(self, preset_name: str) -> None:
+        """Apply a latency window preset to every dataset and session."""
+        for ds in self.datasets:
+            ds.apply_latency_window_preset(preset_name)
+        self.update_latency_window_parameters()
+
     def exclude_dataset(self, dataset_id: str) -> None:
         """Exclude a dataset from this experiment by its ID."""
         if dataset_id not in [ds.id for ds in self._all_datasets]:
@@ -294,7 +300,7 @@ class Experiment:
                 self.h_duration = window.durations
         for ds in self.datasets:
             ds.update_latency_window_parameters()
-    
+
     def rename_channels(self, new_names: dict[str, str]) -> None:
         """
         Rename channels in all datasets based on a mapping provided in new_names.
