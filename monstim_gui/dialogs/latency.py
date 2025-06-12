@@ -115,6 +115,7 @@ class LatencyWindowsDialog(QDialog):
                 linestyle=":"
             )
         group = QGroupBox(window.name)
+        group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         form = QFormLayout()
         name_edit = QLineEdit(window.name)
         start_spin = QDoubleSpinBox()
@@ -144,6 +145,7 @@ class LatencyWindowsDialog(QDialog):
         form.addRow(remove_btn, edit_btn)
         group.setLayout(form)
         self.scroll_layout.addWidget(group)
+        self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
 
     def _remove_window_group(self, group: QGroupBox):
@@ -173,6 +175,7 @@ class LatencyWindowsDialog(QDialog):
                 linestyle=win.get("linestyle", ":"),
             )
             self._add_window_group(window)
+            self.scroll_widget.adjustSize()
 
         # Expand to fit new content
         self.scroll_widget.adjustSize()

@@ -144,6 +144,7 @@ class LatencyWindowPresetEditor(QWidget):
                 linestyle=":"
             )
         group = QGroupBox(window.name)
+        group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         form = QFormLayout()
         name_edit = QLineEdit(window.name)
         start_spin = QDoubleSpinBox()
@@ -171,6 +172,7 @@ class LatencyWindowPresetEditor(QWidget):
         form.addRow(remove_btn)
         group.setLayout(form)
         self.scroll_layout.addWidget(group)
+        self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
 
     def _remove_window_group(self, group: QGroupBox) -> None:
