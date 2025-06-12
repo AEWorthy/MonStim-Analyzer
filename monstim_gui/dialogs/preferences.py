@@ -10,6 +10,7 @@ class LatencyWindowPresetEditor(QWidget):
         self.presets: list[list[LatencyWindow]] = []
         self.preset_combo = QComboBox()
         self.preset_combo.setEditable(True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.window_entries: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]] = []
         self._init_data(presets or {})
         self._init_ui()
@@ -42,11 +43,15 @@ class LatencyWindowPresetEditor(QWidget):
 
         control_row = QHBoxLayout()
         control_row.addWidget(QLabel("Preset:"))
-        # Ensure preset names are fully visible
+        # Ensure preset names are fully visible and don't get clipped
         self.preset_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToContents
         )
-        control_row.addWidget(self.preset_combo)
+        self.preset_combo.setMinimumContentsLength(10)
+        self.preset_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        control_row.addWidget(self.preset_combo, 1)
         add_btn = QPushButton("Add")
         remove_btn = QPushButton("Remove")
         control_row.addWidget(add_btn)
@@ -67,7 +72,7 @@ class LatencyWindowPresetEditor(QWidget):
         # Align entries to the top so empty space doesn't appear above them
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll)
+        layout.addWidget(self.scroll, 1)
 
         add_window_btn = QPushButton("Add Window")
         # QAbstractButton.clicked passes a boolean that we don't use. Wrap the
@@ -76,7 +81,7 @@ class LatencyWindowPresetEditor(QWidget):
         layout.addWidget(add_window_btn)
 
         if self.preset_combo.count() > 0:
-            self.load_preset(0)
+            self.load_preset(0, save=False)
 
     # ------------------------------------------------------------------
     # Preset operations
@@ -98,8 +103,9 @@ class LatencyWindowPresetEditor(QWidget):
         else:
             self.preset_combo.setCurrentIndex(0)
 
-    def load_preset(self, index: int) -> None:
-        self._save_current_preset()
+    def load_preset(self, index: int, *, save: bool = True) -> None:
+        if save:
+            self._save_current_preset()
         if index < 0 or index >= len(self.presets):
             return
         self._clear_windows()
