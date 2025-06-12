@@ -11,6 +11,11 @@ class LatencyWindowPresetEditor(QWidget):
         self.preset_combo = QComboBox()
         self.preset_combo.setEditable(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Track which preset is currently displayed so we can save it when the
+        # selection changes. ``QComboBox.currentIndexChanged`` is emitted after
+        # the widget updates its index, so we cannot rely on the combo box to
+        # provide the previous index.
+        self._current_index: int | None = None
         self.window_entries: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]] = []
         self._init_data(presets or {})
         self._init_ui()
@@ -104,7 +109,8 @@ class LatencyWindowPresetEditor(QWidget):
             self.preset_combo.setCurrentIndex(0)
 
     def load_preset(self, index: int, *, save: bool = True) -> None:
-        if save:
+        """Load the preset at ``index`` into the editor."""
+        if save and self._current_index is not None:
             self._save_current_preset()
         if index < 0 or index >= len(self.presets):
             return
@@ -113,9 +119,11 @@ class LatencyWindowPresetEditor(QWidget):
             self.add_window_group(copy.deepcopy(win))
         self.adjustSize()
         self.updateGeometry()
+        self._current_index = index
 
     def _save_current_preset(self) -> None:
-        index = self.preset_combo.currentIndex()
+        """Save the currently displayed preset back to ``self.presets``."""
+        index = self._current_index if self._current_index is not None else -1
         if index < 0 or index >= len(self.presets):
             return
         windows: list[LatencyWindow] = []
