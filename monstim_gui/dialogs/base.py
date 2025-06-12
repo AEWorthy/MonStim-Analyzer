@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
 )
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
-from PyQt6.QtCore import Qt, QUrl, pyqtSlot, QEvent, QTimer
+from PyQt6.QtCore import Qt, QUrl, pyqtSlot, QEvent, QTimer, QSize
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineScript

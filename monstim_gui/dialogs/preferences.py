@@ -10,6 +10,14 @@ class LatencyWindowPresetEditor(QWidget):
         self.presets: list[list[LatencyWindow]] = []
         self.preset_combo = QComboBox()
         self.preset_combo.setEditable(True)
+        # Prevent edited text from creating new items and keep the list in sync
+        self.preset_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Track which preset is currently displayed so we can save it when the
+        # selection changes. ``QComboBox.currentIndexChanged`` is emitted after
+        # the widget updates its index, so we cannot rely on the combo box to
+        # provide the previous index.
+        self._current_index: int | None = None
         self.window_entries: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]] = []
         self._init_data(presets or {})
         self._init_ui()
@@ -42,11 +50,17 @@ class LatencyWindowPresetEditor(QWidget):
 
         control_row = QHBoxLayout()
         control_row.addWidget(QLabel("Preset:"))
-        # Ensure preset names are fully visible
+        # Ensure preset names are fully visible and don't get clipped
         self.preset_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToContents
         )
-        control_row.addWidget(self.preset_combo)
+        # Provide some extra space for descriptive names without forcing the
+        # combo box wider than the dialog.
+        self.preset_combo.setMinimumContentsLength(20)
+        self.preset_combo.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        control_row.addWidget(self.preset_combo, 1)
         add_btn = QPushButton("Add")
         remove_btn = QPushButton("Remove")
         control_row.addWidget(add_btn)
@@ -54,6 +68,7 @@ class LatencyWindowPresetEditor(QWidget):
         layout.addLayout(control_row)
 
         self.preset_combo.currentIndexChanged.connect(self.load_preset)
+        self.preset_combo.lineEdit().editingFinished.connect(self._commit_preset_name)
         add_btn.clicked.connect(self.add_preset)
         remove_btn.clicked.connect(self.remove_preset)
 
@@ -67,7 +82,7 @@ class LatencyWindowPresetEditor(QWidget):
         # Align entries to the top so empty space doesn't appear above them
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll)
+        layout.addWidget(self.scroll, 1)
 
         add_window_btn = QPushButton("Add Window")
         # QAbstractButton.clicked passes a boolean that we don't use. Wrap the
@@ -76,20 +91,34 @@ class LatencyWindowPresetEditor(QWidget):
         layout.addWidget(add_window_btn)
 
         if self.preset_combo.count() > 0:
-            self.load_preset(0)
+            self.load_preset(0, save=False)
+
+    def _update_size(self) -> None:
+        """Resize the editor widget based on its contents."""
+        hint = self.sizeHint()
+        self.resize(hint)
 
     # ------------------------------------------------------------------
     # Preset operations
     # ------------------------------------------------------------------
     def add_preset(self) -> None:
-        name = self._unique_name("Preset")
+        self._commit_preset_name()
+        typed = self.preset_combo.currentText().strip()
+        existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
+        if typed and typed not in existing:
+            name = typed
+        else:
+            name = self._unique_name("Preset")
         self.preset_combo.addItem(name)
         self.presets.append([])
         self.preset_combo.setCurrentIndex(self.preset_combo.count() - 1)
+        self._current_index = self.preset_combo.currentIndex()
 
     def remove_preset(self) -> None:
         if self.preset_combo.count() == 0:
             return
+        self._commit_preset_name()
+        self._save_current_preset()
         idx = self.preset_combo.currentIndex()
         self.preset_combo.removeItem(idx)
         self.presets.pop(idx)
@@ -98,18 +127,21 @@ class LatencyWindowPresetEditor(QWidget):
         else:
             self.preset_combo.setCurrentIndex(0)
 
-    def load_preset(self, index: int) -> None:
-        self._save_current_preset()
+    def load_preset(self, index: int, *, save: bool = True) -> None:
+        """Load the preset at ``index`` into the editor."""
+        if save and self._current_index is not None:
+            self._save_current_preset()
         if index < 0 or index >= len(self.presets):
             return
         self._clear_windows()
         for win in self.presets[index]:
             self.add_window_group(copy.deepcopy(win))
-        self.adjustSize()
-        self.updateGeometry()
+        self._update_size()
+        self._current_index = index
 
     def _save_current_preset(self) -> None:
-        index = self.preset_combo.currentIndex()
+        """Save the currently displayed preset back to ``self.presets``."""
+        index = self._current_index if self._current_index is not None else -1
         if index < 0 or index >= len(self.presets):
             return
         windows: list[LatencyWindow] = []
@@ -130,13 +162,22 @@ class LatencyWindowPresetEditor(QWidget):
             name = f"{base} {idx}"
         return name
 
+    def _commit_preset_name(self) -> None:
+        """Update the current item's text from the line edit."""
+        index = self.preset_combo.currentIndex()
+        if index >= 0:
+            self.preset_combo.setItemText(index, self.preset_combo.currentText())
+
     # ------------------------------------------------------------------
     # Window operations
     # ------------------------------------------------------------------
     def _clear_windows(self) -> None:
         for grp, *_ in self.window_entries:
             grp.setParent(None)
+            grp.deleteLater()
         self.window_entries.clear()
+        self.scroll_widget.adjustSize()
+        self._update_size()
 
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
@@ -178,6 +219,7 @@ class LatencyWindowPresetEditor(QWidget):
         self.scroll_layout.addWidget(group)
         self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+        self._update_size()
 
     def _remove_window_group(self, group: QGroupBox) -> None:
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -185,6 +227,9 @@ class LatencyWindowPresetEditor(QWidget):
                 self.window_entries.pop(i)
                 break
         group.setParent(None)
+        group.deleteLater()
+        self.scroll_widget.adjustSize()
+        self._update_size()
 
     # ------------------------------------------------------------------
     # Public API
@@ -281,7 +326,15 @@ class PreferencesDialog(QDialog):
 
             for section in section_names:
                 group_box = QGroupBox(section)
-                group_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                if section == "Latency Window Presets":
+                    # Allow the presets editor to fill available space
+                    group_box.setSizePolicy(
+                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+                    )
+                else:
+                    group_box.setSizePolicy(
+                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+                    )
                 form_layout = QFormLayout()
 
                 for key in sections[section]:
@@ -315,9 +368,11 @@ class PreferencesDialog(QDialog):
                         self.fields[key] = field
 
                 group_box.setLayout(form_layout)
-                tab_layout.addWidget(group_box)
+                stretch = 1 if section == "Latency Window Presets" else 0
+                tab_layout.addWidget(group_box, stretch)
 
-            tab_layout.addStretch()
+            # Leave some space below the content so that small tabs look nicer
+            tab_layout.addStretch(1)
 
             tab_scroll.setWidget(tab_content)
             tab_widget.addTab(tab_scroll, tab_name)

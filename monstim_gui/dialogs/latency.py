@@ -87,10 +87,13 @@ class LatencyWindowsDialog(QDialog):
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         self.scroll_widget = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll)
+        layout.addWidget(self.scroll, 1)
 
         for window in self.data.latency_windows:
             self._add_window_group(window)
@@ -103,6 +106,16 @@ class LatencyWindowsDialog(QDialog):
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+        # Size the dialog to its contents but keep it within a reasonable height
+        self._update_dialog_size()
+
+    def _update_dialog_size(self) -> None:
+        """Resize the dialog based on its contents."""
+        hint = self.sizeHint()
+        width = max(400, hint.width())
+        height = min(hint.height(), 600)
+        self.resize(width, height)
 
     def _add_window_group(self, window: LatencyWindow | None = None):
         num_channels = len(self.data.channel_names)
@@ -147,6 +160,7 @@ class LatencyWindowsDialog(QDialog):
         self.scroll_layout.addWidget(group)
         self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+        self._update_dialog_size()
 
     def _remove_window_group(self, group: QGroupBox):
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -154,7 +168,10 @@ class LatencyWindowsDialog(QDialog):
                 self.window_entries.pop(i)
                 break
         group.setParent(None)
-
+        group.deleteLater()
+        self.scroll_widget.adjustSize()
+        self._update_dialog_size()
+        
     def _apply_preset(self):
         name = self.preset_combo.currentText()
         if name not in self.presets:
@@ -163,6 +180,7 @@ class LatencyWindowsDialog(QDialog):
         # Clear existing entries
         for group, *_ in self.window_entries:
             group.setParent(None)
+            group.deleteLater()
         self.window_entries.clear()
 
         num_channels = len(self.data.channel_names)
@@ -178,8 +196,7 @@ class LatencyWindowsDialog(QDialog):
 
         # Expand to fit new content
         self.scroll_widget.adjustSize()
-        self.adjustSize()
-        self.updateGeometry()
+        self._update_dialog_size()
 
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
         dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)

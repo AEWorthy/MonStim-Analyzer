@@ -26,29 +26,29 @@ class CommandInvoker:
 
     def execute(self, command : Command):
         command.execute()
-        self.parent.has_unsaved_changes = True
         self.history.append(command)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
+        # Set self.parent._has_unsaved_changes to True if needed
 
     def undo(self):
         if self.history:
             command = self.history.pop()
             command.undo()
-            self.parent.has_unsaved_changes = True
             self.redo_stack.append(command)
+            # Set self.parent._has_unsaved_changes to True if needed
+
+    def redo(self):
+        if self.redo_stack:
+            command = self.redo_stack.pop()
+            command.execute()
+            self.history.append(command)
+            # Set self.parent._has_unsaved_changes to True if needed
     
     def get_undo_command_name(self):
         if self.history:
             return self.history[-1].command_name
         return None
-    
-    def redo(self):
-        if self.redo_stack:
-            command = self.redo_stack.pop()
-            command.execute()
-            self.parent.has_unsaved_changes = True
-            self.history.append(command)
 
     def get_redo_command_name(self):
         if self.redo_stack:
