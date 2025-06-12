@@ -40,7 +40,7 @@ class InvertChannelPolarityDialog(QDialog):
 
         # Add checkbox header
         header_layout = QVBoxLayout()
-        header_layout.addWidget(QLabel(f"Invert selected channel polarities for\n'{self.data.formatted_name}'"))
+        header_layout.addWidget(QLabel(f"Invert selected channel polarities for\n'{self.data.id}'"))
         header_layout.addWidget(QLabel("\nSelect channels to invert:"))
         layout.addLayout(header_layout)
 
