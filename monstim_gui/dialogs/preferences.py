@@ -54,8 +54,9 @@ class LatencyWindowPresetEditor(QWidget):
         self.preset_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToContents
         )
-        # Give the combo box plenty of space for descriptive names
-        self.preset_combo.setMinimumContentsLength(15)
+        # Provide some extra space for descriptive names without forcing the
+        # combo box wider than the dialog.
+        self.preset_combo.setMinimumContentsLength(12)
         self.preset_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -328,7 +329,15 @@ class PreferencesDialog(QDialog):
 
             for section in section_names:
                 group_box = QGroupBox(section)
-                group_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+                if section == "Latency Window Presets":
+                    # Allow the presets editor to fill available space
+                    group_box.setSizePolicy(
+                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+                    )
+                else:
+                    group_box.setSizePolicy(
+                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+                    )
                 form_layout = QFormLayout()
 
                 for key in sections[section]:

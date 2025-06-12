@@ -105,6 +105,9 @@ class LatencyWindowsDialog(QDialog):
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
 
+        # Give the dialog a sensible initial size so it does not collapse
+        self.resize(self.sizeHint().expandedTo(QSize(600, 400)))
+
     def _add_window_group(self, window: LatencyWindow | None = None):
         num_channels = len(self.data.channel_names)
         if window is None:
