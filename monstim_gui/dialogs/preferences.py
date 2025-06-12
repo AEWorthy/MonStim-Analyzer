@@ -29,6 +29,7 @@ class LatencyWindowPresetEditor(QWidget):
                     )
                 )
             self.presets.append(win_objs)
+        
         if self.preset_combo.count() == 0:
             self.preset_combo.addItem("default")
             self.presets.append([])
