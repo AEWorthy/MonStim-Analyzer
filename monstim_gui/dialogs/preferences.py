@@ -10,6 +10,8 @@ class LatencyWindowPresetEditor(QWidget):
         self.presets: list[list[LatencyWindow]] = []
         self.preset_combo = QComboBox()
         self.preset_combo.setEditable(True)
+        # Prevent edited text from creating new items and keep the list in sync
+        self.preset_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         # Track which preset is currently displayed so we can save it when the
         # selection changes. ``QComboBox.currentIndexChanged`` is emitted after
@@ -64,6 +66,7 @@ class LatencyWindowPresetEditor(QWidget):
         layout.addLayout(control_row)
 
         self.preset_combo.currentIndexChanged.connect(self.load_preset)
+        self.preset_combo.lineEdit().editingFinished.connect(self._commit_preset_name)
         add_btn.clicked.connect(self.add_preset)
         remove_btn.clicked.connect(self.remove_preset)
 
@@ -144,12 +147,19 @@ class LatencyWindowPresetEditor(QWidget):
             name = f"{base} {idx}"
         return name
 
+    def _commit_preset_name(self) -> None:
+        """Update the current item's text from the line edit."""
+        index = self.preset_combo.currentIndex()
+        if index >= 0:
+            self.preset_combo.setItemText(index, self.preset_combo.currentText())
+
     # ------------------------------------------------------------------
     # Window operations
     # ------------------------------------------------------------------
     def _clear_windows(self) -> None:
         for grp, *_ in self.window_entries:
             grp.setParent(None)
+            grp.deleteLater()
         self.window_entries.clear()
 
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
@@ -192,6 +202,8 @@ class LatencyWindowPresetEditor(QWidget):
         self.scroll_layout.addWidget(group)
         self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+        self.adjustSize()
+        self.updateGeometry()
 
     def _remove_window_group(self, group: QGroupBox) -> None:
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -199,6 +211,7 @@ class LatencyWindowPresetEditor(QWidget):
                 self.window_entries.pop(i)
                 break
         group.setParent(None)
+        group.deleteLater()
 
     # ------------------------------------------------------------------
     # Public API

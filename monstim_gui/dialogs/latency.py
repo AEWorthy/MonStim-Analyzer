@@ -87,10 +87,11 @@ class LatencyWindowsDialog(QDialog):
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.scroll_widget = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll)
+        layout.addWidget(self.scroll, 1)
 
         for window in self.data.latency_windows:
             self._add_window_group(window)
@@ -147,6 +148,8 @@ class LatencyWindowsDialog(QDialog):
         self.scroll_layout.addWidget(group)
         self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+        self.adjustSize()
+        self.updateGeometry()
 
     def _remove_window_group(self, group: QGroupBox):
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -154,7 +157,8 @@ class LatencyWindowsDialog(QDialog):
                 self.window_entries.pop(i)
                 break
         group.setParent(None)
-
+        group.deleteLater()
+        
     def _apply_preset(self):
         name = self.preset_combo.currentText()
         if name not in self.presets:
@@ -163,6 +167,7 @@ class LatencyWindowsDialog(QDialog):
         # Clear existing entries
         for group, *_ in self.window_entries:
             group.setParent(None)
+            group.deleteLater()
         self.window_entries.clear()
 
         num_channels = len(self.data.channel_names)
