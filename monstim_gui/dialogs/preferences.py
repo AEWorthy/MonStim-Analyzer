@@ -56,7 +56,7 @@ class LatencyWindowPresetEditor(QWidget):
         )
         # Provide some extra space for descriptive names without forcing the
         # combo box wider than the dialog.
-        self.preset_combo.setMinimumContentsLength(12)
+        self.preset_combo.setMinimumContentsLength(20)
         self.preset_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -92,6 +92,11 @@ class LatencyWindowPresetEditor(QWidget):
 
         if self.preset_combo.count() > 0:
             self.load_preset(0, save=False)
+
+    def _update_size(self) -> None:
+        """Resize the editor widget based on its contents."""
+        hint = self.sizeHint()
+        self.resize(hint)
 
     # ------------------------------------------------------------------
     # Preset operations
@@ -131,9 +136,7 @@ class LatencyWindowPresetEditor(QWidget):
         self._clear_windows()
         for win in self.presets[index]:
             self.add_window_group(copy.deepcopy(win))
-        self.adjustSize()
-        self.updateGeometry()
-        self.resize(self.sizeHint())
+        self._update_size()
         self._current_index = index
 
     def _save_current_preset(self) -> None:
@@ -174,9 +177,7 @@ class LatencyWindowPresetEditor(QWidget):
             grp.deleteLater()
         self.window_entries.clear()
         self.scroll_widget.adjustSize()
-        self.adjustSize()
-        self.updateGeometry()
-        self.resize(self.sizeHint())
+        self._update_size()
 
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
@@ -218,9 +219,7 @@ class LatencyWindowPresetEditor(QWidget):
         self.scroll_layout.addWidget(group)
         self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
-        self.adjustSize()
-        self.updateGeometry()
-        self.resize(self.sizeHint())
+        self._update_size()
 
     def _remove_window_group(self, group: QGroupBox) -> None:
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -230,9 +229,7 @@ class LatencyWindowPresetEditor(QWidget):
         group.setParent(None)
         group.deleteLater()
         self.scroll_widget.adjustSize()
-        self.adjustSize()
-        self.updateGeometry()
-        self.resize(self.sizeHint())
+        self._update_size()
 
     # ------------------------------------------------------------------
     # Public API
@@ -371,9 +368,11 @@ class PreferencesDialog(QDialog):
                         self.fields[key] = field
 
                 group_box.setLayout(form_layout)
-                tab_layout.addWidget(group_box)
+                stretch = 1 if section == "Latency Window Presets" else 0
+                tab_layout.addWidget(group_box, stretch)
 
-            tab_layout.addStretch()
+            # Leave some space below the content so that small tabs look nicer
+            tab_layout.addStretch(1)
 
             tab_scroll.setWidget(tab_content)
             tab_widget.addTab(tab_scroll, tab_name)
