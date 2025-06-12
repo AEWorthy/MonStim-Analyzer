@@ -54,7 +54,8 @@ class LatencyWindowPresetEditor(QWidget):
         self.preset_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToContents
         )
-        self.preset_combo.setMinimumContentsLength(10)
+        # Give the combo box plenty of space for descriptive names
+        self.preset_combo.setMinimumContentsLength(15)
         self.preset_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -95,14 +96,23 @@ class LatencyWindowPresetEditor(QWidget):
     # Preset operations
     # ------------------------------------------------------------------
     def add_preset(self) -> None:
-        name = self._unique_name("Preset")
+        self._commit_preset_name()
+        typed = self.preset_combo.currentText().strip()
+        existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
+        if typed and typed not in existing:
+            name = typed
+        else:
+            name = self._unique_name("Preset")
         self.preset_combo.addItem(name)
         self.presets.append([])
         self.preset_combo.setCurrentIndex(self.preset_combo.count() - 1)
+        self._current_index = self.preset_combo.currentIndex()
 
     def remove_preset(self) -> None:
         if self.preset_combo.count() == 0:
             return
+        self._commit_preset_name()
+        self._save_current_preset()
         idx = self.preset_combo.currentIndex()
         self.preset_combo.removeItem(idx)
         self.presets.pop(idx)
@@ -122,6 +132,7 @@ class LatencyWindowPresetEditor(QWidget):
             self.add_window_group(copy.deepcopy(win))
         self.adjustSize()
         self.updateGeometry()
+        self.resize(self.sizeHint())
         self._current_index = index
 
     def _save_current_preset(self) -> None:
@@ -161,6 +172,10 @@ class LatencyWindowPresetEditor(QWidget):
             grp.setParent(None)
             grp.deleteLater()
         self.window_entries.clear()
+        self.scroll_widget.adjustSize()
+        self.adjustSize()
+        self.updateGeometry()
+        self.resize(self.sizeHint())
 
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
@@ -204,6 +219,7 @@ class LatencyWindowPresetEditor(QWidget):
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
         self.adjustSize()
         self.updateGeometry()
+        self.resize(self.sizeHint())
 
     def _remove_window_group(self, group: QGroupBox) -> None:
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -212,6 +228,10 @@ class LatencyWindowPresetEditor(QWidget):
                 break
         group.setParent(None)
         group.deleteLater()
+        self.scroll_widget.adjustSize()
+        self.adjustSize()
+        self.updateGeometry()
+        self.resize(self.sizeHint())
 
     # ------------------------------------------------------------------
     # Public API

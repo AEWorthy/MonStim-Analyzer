@@ -158,6 +158,9 @@ class LatencyWindowsDialog(QDialog):
                 break
         group.setParent(None)
         group.deleteLater()
+        self.scroll_widget.adjustSize()
+        self.adjustSize()
+        self.updateGeometry()
         
     def _apply_preset(self):
         name = self.preset_combo.currentText()
@@ -185,6 +188,7 @@ class LatencyWindowsDialog(QDialog):
         self.scroll_widget.adjustSize()
         self.adjustSize()
         self.updateGeometry()
+        self.resize(self.sizeHint())
 
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
         dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)
