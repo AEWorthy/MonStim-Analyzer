@@ -34,8 +34,12 @@ class LatencyWindowPresetEditor(QWidget):
             self.preset_combo.addItem("default")
             self.presets.append([])
 
-    # ------------------------------------------------------------------
-    # UI setup
+        self.scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        layout.addWidget(self.scroll, 1)
+        if self.window_entries:
+            self._save_current_preset()
     # ------------------------------------------------------------------
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
