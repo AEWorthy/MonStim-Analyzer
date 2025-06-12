@@ -72,14 +72,17 @@ class LatencyWindowPresetEditor(QWidget):
         add_btn.clicked.connect(self.add_preset)
         remove_btn.clicked.connect(self.remove_preset)
 
-        self.scroll = QScrollArea()
+        self.scroll : QScrollArea = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setSizePolicy(
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        self.scroll_widget = QWidget()
+        self.scroll_widget.setMinimumSize(0, 0)
+        self.scroll_widget.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.scroll_widget = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
-        # Align entries to the top so empty space doesn't appear above them
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.scroll_widget)
         layout.addWidget(self.scroll, 1)
@@ -92,11 +95,6 @@ class LatencyWindowPresetEditor(QWidget):
 
         if self.preset_combo.count() > 0:
             self.load_preset(0, save=False)
-
-    def _update_size(self) -> None:
-        """Resize the editor widget based on its contents."""
-        hint = self.sizeHint()
-        self.resize(hint)
 
     # ------------------------------------------------------------------
     # Preset operations
@@ -136,7 +134,6 @@ class LatencyWindowPresetEditor(QWidget):
         self._clear_windows()
         for win in self.presets[index]:
             self.add_window_group(copy.deepcopy(win))
-        self._update_size()
         self._current_index = index
 
     def _save_current_preset(self) -> None:
@@ -176,8 +173,6 @@ class LatencyWindowPresetEditor(QWidget):
             grp.setParent(None)
             grp.deleteLater()
         self.window_entries.clear()
-        self.scroll_widget.adjustSize()
-        self._update_size()
 
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
@@ -217,9 +212,7 @@ class LatencyWindowPresetEditor(QWidget):
         form.addRow(remove_btn)
         group.setLayout(form)
         self.scroll_layout.addWidget(group)
-        self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
-        self._update_size()
 
     def _remove_window_group(self, group: QGroupBox) -> None:
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -228,8 +221,6 @@ class LatencyWindowPresetEditor(QWidget):
                 break
         group.setParent(None)
         group.deleteLater()
-        self.scroll_widget.adjustSize()
-        self._update_size()
 
     # ------------------------------------------------------------------
     # Public API
@@ -317,23 +308,40 @@ class PreferencesDialog(QDialog):
         }
 
         tab_widget = QTabWidget()
+        tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         for tab_name, section_names in tabs.items():
             tab_scroll = QScrollArea()
             tab_scroll.setWidgetResizable(True)
+            tab_scroll.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            )
             tab_content = QWidget()
+            tab_content.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            )
             tab_layout = QVBoxLayout(tab_content)
 
             for section in section_names:
-                group_box = QGroupBox(section)
                 if section == "Latency Window Presets":
-                    # Allow the presets editor to fill available space
-                    group_box.setSizePolicy(
-                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+                    # create a box that WILL expand
+                    group = QGroupBox(section)
+                    group.setSizePolicy(
+                        QSizePolicy.Policy.Preferred,
+                        QSizePolicy.Policy.Expanding
                     )
-                else:
-                    group_box.setSizePolicy(
-                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+                    vbox = QVBoxLayout(group)
+                    editor = LatencyWindowPresetEditor(self.config["latency_window_presets"])
+                    vbox.addWidget(editor, 1)   # stretch=1 → editor fills the box
+                    self.fields["latency_window_presets"] = editor
+
+                    tab_layout.addWidget(group, 1)
+                    continue
+
+                group_box = QGroupBox(section)
+                group_box.setSizePolicy(
+                    QSizePolicy.Policy.Preferred, 
+                    QSizePolicy.Policy.Maximum
                     )
                 form_layout = QFormLayout()
 
@@ -368,24 +376,22 @@ class PreferencesDialog(QDialog):
                         self.fields[key] = field
 
                 group_box.setLayout(form_layout)
-                stretch = 1 if section == "Latency Window Presets" else 0
-                tab_layout.addWidget(group_box, stretch)
+                tab_layout.addWidget(group_box)
 
             # Leave some space below the content so that small tabs look nicer
-            tab_layout.addStretch(1)
-
             tab_scroll.setWidget(tab_content)
             tab_widget.addTab(tab_scroll, tab_name)
 
-        layout.addWidget(tab_widget)
+        layout.addWidget(tab_widget, 1)
 
         save_button = QPushButton("Save")
         save_button.clicked.connect(self.save_config)
-        layout.addWidget(save_button)
+        layout.addWidget(save_button, 0)
 
         self.setLayout(layout)
         self.setWindowTitle("Preferences")
-        self.resize(400, 600)  # Set a default size
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(600)
 
     def save_config(self):
         """Save the current preferences to ``config-user.yml``.

@@ -21,12 +21,14 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QScrollArea,
     QSizePolicy,
-    QCheckBox, QTabWidget,
+    QCheckBox, 
+    QTabWidget,
     QComboBox,
     QDoubleSpinBox,
+    QLayout
 )
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
-from PyQt6.QtCore import Qt, QUrl, pyqtSlot, QEvent, QTimer, QSize
+from PyQt6.QtCore import Qt, QUrl, pyqtSlot, QEvent, QTimer, QSize, QPoint
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineScript

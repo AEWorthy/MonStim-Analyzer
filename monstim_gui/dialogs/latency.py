@@ -1,6 +1,11 @@
 from .base import *
 from monstim_signals.core.utils import load_config
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from gui_main import MonstimGUI
+
 
 class WindowStartDialog(QDialog):
     """Dialog for editing per-channel latency window start times."""
@@ -18,6 +23,8 @@ class WindowStartDialog(QDialog):
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+
         for name, start in zip(self.channel_names, self.window.start_times):
             row = QHBoxLayout()
             row.addWidget(QLabel(name))
@@ -60,15 +67,38 @@ class LatencyWindowsDialog(QDialog):
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
         super().__init__(parent)
         self.data = data
-        self.gui = parent  # EMGAnalysisGUI
+        self.gui : MonstimGUI = parent
         self.setModal(True)
         self.setWindowTitle("Manage Latency Windows")
         self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]]
         self.init_ui()
+        self._reposition_to_left_middle_of_parent()
+
+    def _reposition_to_left_middle_of_parent(self):
+        # ensure it’s sized correctly
+        self.adjustSize()
+
+        # parent should be your main window
+        w = self.parentWidget() or self.window()  
+        # get its top-left in global coords
+        top_left: QPoint = w.mapToGlobal(QPoint(0, 0))
+        pw, ph = w.width(), w.height()
+
+        # compute center of the *left half* of that parent
+        cx = top_left.x() + pw  // 4
+        cy = top_left.y() + ph // 2
+
+        # move this dialog so its center sits there
+        x = cx - (self.width()  // 2)
+        y = cy - (self.height())
+        self.move(x, y)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.setMaximumHeight(800)
+        self.setMinimumWidth(500)
+        
         cfg = load_config()
         self.presets = cfg.get("latency_window_presets", {})
 
@@ -85,13 +115,17 @@ class LatencyWindowsDialog(QDialog):
             preset_row.addWidget(apply_btn)
             layout.addLayout(preset_row)
 
-        self.scroll = QScrollArea()
+        self.scroll : QScrollArea = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
         self.scroll_widget = QWidget()
+        self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
+        self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         self.scroll.setWidget(self.scroll_widget)
         layout.addWidget(self.scroll, 1)
 
@@ -100,22 +134,13 @@ class LatencyWindowsDialog(QDialog):
 
         add_button = QPushButton("Add Window")
         add_button.clicked.connect(lambda: self._add_window_group())
-        layout.addWidget(add_button)
+        layout.addWidget(add_button, 0)
 
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-        # Size the dialog to its contents but keep it within a reasonable height
-        self._update_dialog_size()
-
-    def _update_dialog_size(self) -> None:
-        """Resize the dialog based on its contents."""
-        hint = self.sizeHint()
-        width = max(400, hint.width())
-        height = min(hint.height(), 600)
-        self.resize(width, height)
+        layout.addWidget(button_box, 0)
+        self.adjustSize()
 
     def _add_window_group(self, window: LatencyWindow | None = None):
         num_channels = len(self.data.channel_names)
@@ -158,9 +183,17 @@ class LatencyWindowsDialog(QDialog):
         form.addRow(remove_btn, edit_btn)
         group.setLayout(form)
         self.scroll_layout.addWidget(group)
-        self.scroll_widget.adjustSize()
         self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
-        self._update_dialog_size()
+
+        # 1) Compute one‐group height
+        first_group = self.window_entries[0][0]
+        h = first_group.sizeHint().height()
+
+        # 2) Account for QScrollArea frame & optional horizontal scrollbar:
+        frame = self.scroll.frameWidth() * 2
+        
+        self.scroll.setMinimumHeight(h + frame)
+        self.adjustSize()
 
     def _remove_window_group(self, group: QGroupBox):
         for i, (grp, *_ ) in enumerate(self.window_entries):
@@ -169,8 +202,9 @@ class LatencyWindowsDialog(QDialog):
                 break
         group.setParent(None)
         group.deleteLater()
-        self.scroll_widget.adjustSize()
-        self._update_dialog_size()
+        self.scroll_widget.updateGeometry()
+        self.scroll.updateGeometry()
+        self.adjustSize()
         
     def _apply_preset(self):
         name = self.preset_combo.currentText()
@@ -193,10 +227,6 @@ class LatencyWindowsDialog(QDialog):
                 linestyle=win.get("linestyle", ":"),
             )
             self._add_window_group(window)
-
-        # Expand to fit new content
-        self.scroll_widget.adjustSize()
-        self._update_dialog_size()
 
     def _edit_window_starts(self, window: LatencyWindow, start_spin: QDoubleSpinBox):
         dialog = WindowStartDialog(window, self.data.channel_names, self.gui, start_spin, self)
