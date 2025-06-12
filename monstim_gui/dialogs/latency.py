@@ -175,7 +175,6 @@ class LatencyWindowsDialog(QDialog):
                 linestyle=win.get("linestyle", ":"),
             )
             self._add_window_group(window)
-            self.scroll_widget.adjustSize()
 
         # Expand to fit new content
         self.scroll_widget.adjustSize()
