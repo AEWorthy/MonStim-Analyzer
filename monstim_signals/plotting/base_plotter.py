@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 except ImportError:  # Fallback when Qt bindings are unavailable
