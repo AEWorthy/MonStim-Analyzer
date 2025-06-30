@@ -1,4 +1,5 @@
 from .base import *
+from monstim_gui.io.config_repository import ConfigRepository
 import copy
 
 
@@ -245,42 +246,14 @@ class LatencyWindowPresetEditor(QWidget):
         return result
 
 class PreferencesDialog(QDialog):
-    def __init__(self, default_config_file, parent=None):
+    def __init__(self, default_config_file, parent=None, config_repo=None):
         super().__init__()
         self.setModal(True)
         self.setWindowTitle("Preferences")
-
         self.default_config_file = default_config_file
-        self.user_config_file = self.get_user_config_file()
-        self.config = self.read_config()
+        self.config_repo = config_repo or ConfigRepository(default_config_file)
+        self.config = self.config_repo.read_config()
         self.init_ui()
-
-    def get_user_config_file(self):
-        # Get the directory of the default config file
-        config_dir = os.path.dirname(self.default_config_file)
-        return os.path.join(config_dir, 'config-user.yml')
-    
-    def read_config(self):
-        # First, read the original config
-        with open(self.default_config_file, 'r') as file:
-            config = yaml.safe_load(file)
-        
-        # If user config exists, update the config with user settings
-        if os.path.exists(self.user_config_file):
-            with open(self.user_config_file, 'r') as file:
-                user_config = yaml.load(file, Loader = CustomLoader)
-            if user_config:  # Check if user_config is not None
-                self.update_nested_dict(config, user_config)
-        
-        return config
-
-    def update_nested_dict(self, d, u):
-        for k, v in u.items():
-            if isinstance(v, dict):
-                d[k] = self.update_nested_dict(d.get(k, {}), v)
-            else:
-                d[k] = v
-        return d
 
     def init_ui(self):
 
@@ -395,14 +368,10 @@ class PreferencesDialog(QDialog):
 
     def save_config(self):
         """Save the current preferences to ``config-user.yml``.
-
         All values from the dialog are merged into the existing configuration
         so that the written YAML file contains the complete set of options.
         """
-
-        # Start from the currently loaded configuration
         new_config = copy.deepcopy(self.config)
-
         for key, field in self.fields.items():
             if isinstance(field, LatencyWindowPresetEditor):
                 value = field.get_presets()
@@ -419,13 +388,8 @@ class PreferencesDialog(QDialog):
                 new_config[main_key][sub_key] = value
             else:
                 new_config[key] = value
-
         self.config = new_config
-
-        # Save the entire configuration to the user config file
-        with open(self.user_config_file, 'w') as file:
-            yaml.safe_dump(self.config, file)
-
+        self.config_repo.write_config(self.config)
         logging.info(f"Saved user config: {self.config}")
         self.accept()
 

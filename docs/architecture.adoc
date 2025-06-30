@@ -66,11 +66,15 @@ The MonStim Analyzer is structured around a clean separation of concerns across 
 ' =========================
 
 package "monstim_gui" {
-    class EMGAnalysisGUI {
+    class MonstimGUI {
         - expts_dict
         - current_experiment
         - current_dataset
         - current_session
+        - channel_names
+        - data_manager
+        - report_manager
+        - plot_controller
         - plot_widget
         - data_selection_widget
         - reports_widget
@@ -81,20 +85,25 @@ package "monstim_gui" {
         + redo()
         + exclude_recording()
         + restore_recording()
-        + remove_session()
-        + remove_dataset()
+        + exclude_session()
+        + restore_session()
+        + exclude_dataset()
+        + restore_dataset()
         + select_channels()
         + change_channel_names()
-        + update_reflex_time_windows()
+        + manage_latency_windows()
         + invert_channel_polarity()
-        + import_expt_data()
-        + show_preferences_window()
-        + refresh_existing_experiments()
-        + unpack_existing_experiments()
+        + show_about_screen()
+        + show_help_dialog()
+        + show_save_confirmation_dialog()
+        + closeEvent()
     }
 
+    class DataManager
+    class ReportManager
+    class PlotController
     class CommandInvoker {
-        - parent: EMGAnalysisGUI
+        - parent: MonstimGUI
         - history: deque
         - redo_stack: deque
         + execute(cmd)
@@ -128,16 +137,20 @@ package "monstim_gui" {
     Command <|-- InvertChannelPolarityCommand
     Command <|-- SetLatencyWindowsCommand
 
-    EMGAnalysisGUI --> CommandInvoker
-    EMGAnalysisGUI --> PlotWidget
-    EMGAnalysisGUI --> DataSelectionWidget
-    EMGAnalysisGUI --> ReportsWidget
-    EMGAnalysisGUI --> MenuBar
-    EMGAnalysisGUI --> PlotPane
+    MonstimGUI --> DataManager
+    MonstimGUI --> ReportManager
+    MonstimGUI --> PlotController
+    MonstimGUI --> CommandInvoker
+    MonstimGUI --> PlotWidget
+    MonstimGUI --> DataSelectionWidget
+    MonstimGUI --> ReportsWidget
+    MonstimGUI --> MenuBar
+    MonstimGUI --> PlotPane
 
     CommandInvoker --> Command
     CommandInvoker ..> MenuBar : updates undo/redo labels
 
+    PlotController --> PlotWidget
     PlotWidget --> PlotPane
     PlotWidget --> DataSelectionWidget
 }
@@ -177,24 +190,25 @@ package "monstim_signals.io" {
 ' Integration
 ' =========================
 
-EMGAnalysisGUI --> ExperimentRepository : loads/saves experiments
-EMGAnalysisGUI --> Experiment
-EMGAnalysisGUI --> Dataset
-EMGAnalysisGUI --> Session
-EMGAnalysisGUI --> Recording
+MonstimGUI --> ExperimentRepository : loads/saves experiments
+MonstimGUI --> Experiment
+MonstimGUI --> Dataset
+MonstimGUI --> Session
+MonstimGUI --> Recording
 
+PlotController --> PlotWidget : controls plotting
 PlotWidget --> Session : for plotting data
 
 ' Command pattern integration
-CommandInvoker --> EMGAnalysisGUI
-ExcludeRecordingCommand --> EMGAnalysisGUI
-RestoreRecordingCommand --> EMGAnalysisGUI
-ExcludeSessionCommand --> EMGAnalysisGUI
-RestoreSessionCommand --> EMGAnalysisGUI
-ExcludeDatasetCommand --> EMGAnalysisGUI
-RestoreDatasetCommand --> EMGAnalysisGUI
-InvertChannelPolarityCommand --> EMGAnalysisGUI
-SetLatencyWindowsCommand --> EMGAnalysisGUI
+CommandInvoker --> MonstimGUI
+ExcludeRecordingCommand --> MonstimGUI
+RestoreRecordingCommand --> MonstimGUI
+ExcludeSessionCommand --> MonstimGUI
+RestoreSessionCommand --> MonstimGUI
+ExcludeDatasetCommand --> MonstimGUI
+RestoreDatasetCommand --> MonstimGUI
+InvertChannelPolarityCommand --> MonstimGUI
+SetLatencyWindowsCommand --> MonstimGUI
 @enduml
 ----
 
@@ -222,9 +236,10 @@ This pattern ensures loose coupling and future extensibility, and supports futur
 
 === Modularity
 
-* `monstim_gui` has no direct file I/O logic: all data is accessed through repositories.
+* `monstim_gui` has no direct file I/O logic: all data is accessed through repositories and managers (`DataManager`, `ReportManager`).
 * `monstim_signals` has no PyQt6 dependencies.
-* Plotting is handled by `PlotWidget`, which works through `SessionPlotters` in `Session` domain objects (Same goes for Dataset/Experiment levels of plotting and analysis).
+* Plotting is handled by `PlotController` and `PlotWidget`, which work through `SessionPlotters` in `Session` domain objects (and similar for Dataset/Experiment levels).
+* Widgets are managed via a layout system in `MonstimGUI`, not always as direct attributes.
 
 This design enables testing of data logic independently of the GUI, supports potential CLI modes, and ensures clean layering.
 

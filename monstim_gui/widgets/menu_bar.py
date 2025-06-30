@@ -128,11 +128,11 @@ class MenuBar(QMenuBar):
 
         # Show Help button
         help_action = help_menu.addAction("Show Help")
-        help_action.triggered.connect(lambda: self.parent.show_help_dialog('help'))
+        help_action.triggered.connect(lambda: self.parent.show_help_dialog('readme.md'))
 
         # Show EMG processing info button
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
-        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog('emg_processing'))
+        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog('Transform_EMG.md', latex=True))
 
         help_menu.addSeparator()
 

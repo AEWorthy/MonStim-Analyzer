@@ -30,13 +30,13 @@ class Session:
     A collection of multiple Recordings, each at a different stimulus amplitude,
     all belonging to one “session” (animal & date).
     """
-    def __init__(self, session_id : str, recordings : List[Recording], annot : SessionAnnot, repo : Any = None):
+    def __init__(self, session_id : str, recordings : List['Recording'], annot : 'SessionAnnot', repo : Any = None, config: dict = None):
         self.id : str                            = session_id
-        self._all_recordings  : List[Recording]  = recordings
-        self.annot : SessionAnnot                = annot
-        self.repo  : SessionRepository           = repo
+        self._all_recordings  : List['Recording']  = recordings
+        self.annot : 'SessionAnnot'                = annot
+        self.repo  : 'SessionRepository'           = repo
         self.parent_dataset : 'Dataset | None'   = None
-
+        self._config = config
         self._load_config_settings()
         self._load_session_parameters()
         self._initialize_annotations()
@@ -54,7 +54,7 @@ class Session:
             self.repo.save(self)
 
     def _load_config_settings(self):
-        _config = load_config()
+        _config = self._config if self._config is not None else load_config()
         self.default_m_start : List[float] = _config['m_start']
         self.default_m_duration : List[float] = [_config['m_duration'] for _ in range(len(self.default_m_start))]
         self.default_h_start : List[float] = _config['h_start']
@@ -507,7 +507,7 @@ class Session:
             if old_name in self.channel_names:
                 i = self.channel_names.index(old_name)
                 if 0 <= i < self.num_channels:
-                    # Update the channel name in the annotation
+                    #
                     self.annot.channels[i].name = new_name
                     logging.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
                 else:
@@ -768,4 +768,15 @@ class Session:
         return f"Session: {self.id} with {self.num_recordings} recordings"
     def __len__(self):
         return self.num_recordings
-    
+
+    def set_config(self, config: dict) -> None:
+        """
+        Update the configuration for this session.
+        """
+        self._config = config
+        for rec in self._all_recordings:
+            if hasattr(rec, 'set_config'):
+                rec.set_config(config)
+
+        self.apply_config(reset_caches=True)
+

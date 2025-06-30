@@ -18,12 +18,13 @@ class Dataset:
     A “dataset” = all sessions from one animal replicate.
     E.g. Dataset_1(Animal_A) has sessions AA00, AA01, …
     """
-    def __init__(self, dataset_id: str, sessions: List[Session], annot: DatasetAnnot, repo: Any = None):
+    def __init__(self, dataset_id: str, sessions: List[Session], annot: DatasetAnnot, repo: Any = None, config: dict = None):
         self.id : str = dataset_id
         self._all_sessions : List[Session] = sessions
         self.annot         : DatasetAnnot = annot
         self.repo          : DatasetRepository = repo
         self.parent_experiment : 'Experiment | None' = None
+        self._config = config
         for sess in self._all_sessions:
             sess.parent_dataset = self
 
@@ -56,7 +57,7 @@ class Dataset:
             self.repo.save(self)
 
     def _load_config_settings(self) -> None:
-        _config = load_config()
+        _config = self._config if self._config is not None else load_config()
         self.bin_size = _config["bin_size"]
         self.default_method = _config["default_method"]
         self.m_color = _config["m_color"]
@@ -228,6 +229,17 @@ class Dataset:
             self.reset_all_caches()
         if self.repo is not None:
             self.repo.save(self)
+
+    def set_config(self, config: dict) -> None:
+        """
+        Update the configuration for this dataset and all child sessions.
+        """
+        self._config = config
+        for sess in self._all_sessions:
+            if hasattr(sess, 'set_config'):
+                sess.set_config(config)
+        
+        self.apply_config(reset_caches=True)
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Useful properties for GUI & analysis code

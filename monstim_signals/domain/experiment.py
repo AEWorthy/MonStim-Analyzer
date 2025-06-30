@@ -15,13 +15,14 @@ class Experiment:
     """A collection of :class:`Dataset` objects."""
 
     def __init__(self, expt_id: str, datasets: List[Dataset],
-                 annot: ExperimentAnnot | None = None, repo: Any = None):
+                 annot: ExperimentAnnot | None = None, repo: Any = None, config: dict = None):
         self.id = expt_id
         self._all_datasets: List[Dataset] = datasets
         for ds in self._all_datasets:
             ds.parent_experiment = self
         self.annot: ExperimentAnnot = annot or ExperimentAnnot.create_empty()
-        self.repo : ExperimentRepository = repo
+        self.repo : 'ExperimentRepository' = repo
+        self._config = config
 
         self._load_config_settings()
         self.plotter = ExperimentPlotter(self)
@@ -61,7 +62,7 @@ class Experiment:
             logging.warning(w)
 
     def _load_config_settings(self) -> None:
-        _config = load_config()
+        _config = self._config if self._config is not None else load_config()
         self.bin_size = _config["bin_size"]
         self.default_method = _config["default_method"]
         self.m_color = _config["m_color"]
@@ -286,6 +287,19 @@ class Experiment:
         if self.repo is not None:
             self.repo.save(self)
         logging.info(f"Preferences successfully applied to experiment '{self.id}'.")
+
+    def set_config(self, config: dict) -> None:
+        """
+        Update the configuration for this experiment and all child datasets.
+        """
+        self._config = config
+        for ds in self._all_datasets:
+            if hasattr(ds, 'set_config'):
+                ds.set_config(config)
+            else:
+                logging.warning(f"Dataset {ds.id} does not support set_config method. Skipping.")
+        
+        self.apply_config(reset_caches=True)
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Update annotation parameters

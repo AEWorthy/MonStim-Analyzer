@@ -20,12 +20,14 @@ class Recording:
         meta : RecordingMeta,
         annot: RecordingAnnot,
         raw  : h5py.Dataset | np.ndarray,
-        repo : Any = None
+        repo : Any = None,
+        config: dict = None
     ):
         self.meta   = meta
         self.annot  = annot
         self._raw   = raw
         self.repo   = repo
+        self._config = config or {}
     # ──────────────────────────────────────────────────────────────────
     # 1) Simple properties (GUI & analysis code expects these)
     # ──────────────────────────────────────────────────────────────────
@@ -56,6 +58,14 @@ class Recording:
         only the requested slice.
         """
         return self._raw[t, ch]
+    # ──────────────────────────────────────────────────────────────────
+    # 3) Configuration (future extensibility)
+    # ──────────────────────────────────────────────────────────────────
+    def set_config(self, config: dict) -> None:
+        """
+        Update the configuration for this recording (future extensibility).
+        """
+        self._config = config or {}
     # ──────────────────────────────────────────────────────────────────
     # 4) Clean‐up (close HDF5 file when you’re done)
     # ──────────────────────────────────────────────────────────────────

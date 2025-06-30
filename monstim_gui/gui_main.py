@@ -45,6 +45,8 @@ from monstim_gui.widgets.gui_layout import setup_main_layout
 from monstim_gui.managers.data_manager import DataManager
 from monstim_gui.managers.report_manager import ReportManager
 from monstim_gui.managers.plot_controller import PlotController
+from monstim_gui.io.config_repository import ConfigRepository
+from monstim_gui.io.help_repository import HelpFileRepository
 
 class MonstimGUI(QMainWindow):
     def __init__(self):
@@ -74,6 +76,8 @@ class MonstimGUI(QMainWindow):
         self.data_manager = DataManager(self)
         self.report_manager = ReportManager(self)
         self.plot_controller = PlotController(self)
+        self.config_repo = ConfigRepository(get_config_path())
+        self.help_repo = HelpFileRepository(get_docs_path())
 
         self.init_ui()
 
@@ -327,28 +331,44 @@ class MonstimGUI(QMainWindow):
         dialog.show()
 
     def show_help_dialog(self, topic=None, latex=False):
-        logging.debug(f"Showing help dialog for topic: {topic}.")
-
-        match topic:
-            case 'help':
-                file = 'readme.md'
-                title = 'Help'
-            case 'emg_processing':
-                file = 'Transform_EMG.md'
-                latex = True
-                title = 'EMG Processing and Analysis Info'
-            case _:
-                file = 'readme.md'
-
-        file_path = os.path.join(get_docs_path(), file)
-        with open(file_path, 'r', encoding='utf-8') as file:
-            markdown_content = file.read()
-            html_content = markdown.markdown(markdown_content)
-            if latex:
-                self.help_window = LatexHelpWindow(html_content, title)
-            else:
-                self.help_window = HelpWindow(html_content, title)
+        """Show help dialog using HelpFileRepository."""
+        file = 'readme.md' if topic is None else topic
+        markdown_content = self.help_repo.read_help_file(file)
+        html_content = markdown.markdown(markdown_content)
+        if latex:
+            self.help_window = LatexHelpWindow(html_content, topic)
+        else:
+            self.help_window = HelpWindow(html_content, topic)
         self.help_window.show()
+
+    def update_domain_configs(self, config=None):
+        """Propagate the current config to all loaded domain objects."""
+        if config is None:
+            config = self.config_repo.read_config()
+        if self.current_experiment:
+            self.current_experiment.set_config(config)
+        if self.current_dataset:
+            self.current_dataset.set_config(config)
+        if self.current_session:
+            self.current_session.set_config(config)
+
+    def set_current_experiment(self, experiment : 'Experiment'):
+        """Set the current experiment and ensure config is injected."""
+        config = self.config_repo.read_config()
+        experiment.set_config(config)
+        self.current_experiment = experiment
+
+    def set_current_dataset(self, dataset: 'Dataset'):
+        """Set the current dataset and ensure config is injected."""
+        config = self.config_repo.read_config()
+        dataset.set_config(config)
+        self.current_dataset = dataset
+
+    def set_current_session(self, session: 'Session'):
+        """Set the current session and ensure config is injected."""
+        config = self.config_repo.read_config()
+        session.set_config(config)
+        self.current_session = session
 
     # Close event handling
     def show_save_confirmation_dialog(self):

@@ -1,5 +1,6 @@
 from .base import *
-from monstim_signals.core.utils import load_config
+from monstim_signals.core.utils import get_config_path
+from monstim_gui.io.config_repository import ConfigRepository
 
 from typing import TYPE_CHECKING
 
@@ -64,13 +65,14 @@ class WindowStartDialog(QDialog):
 class LatencyWindowsDialog(QDialog):
     """Dialog for editing multiple latency windows."""
 
-    def __init__(self, data: Experiment | Dataset | Session, parent=None):
+    def __init__(self, data: Experiment | Dataset | Session, parent=None, config_repo=None):
         super().__init__(parent)
         self.data = data
         self.gui : MonstimGUI = parent
         self.setModal(True)
         self.setWindowTitle("Manage Latency Windows")
         self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox]]
+        self.config_repo = config_repo or ConfigRepository(get_config_path())
         self.init_ui()
         self._reposition_to_left_middle_of_parent()
 
@@ -99,7 +101,7 @@ class LatencyWindowsDialog(QDialog):
         self.setMaximumHeight(800)
         self.setMinimumWidth(500)
         
-        cfg = load_config()
+        cfg = self.config_repo.read_config()
         self.presets = cfg.get("latency_window_presets", {})
 
         if self.presets:

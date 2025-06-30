@@ -23,9 +23,7 @@ from PyQt6.QtGui import QDesktopServices
 from monstim_signals.io.repositories import ExperimentRepository
 from monstim_signals.io.csv_importer import GUIExptImportingThread
 from monstim_signals.core.utils import (
-    get_output_path,
     get_data_path,
-    get_docs_path,
     get_log_dir,
     get_config_path,
 )
@@ -271,13 +269,14 @@ class DataManager:
             if self.gui.current_session.repo is not None:
                 if self.gui.current_session.repo.session_js.exists():
                     self.gui.current_session.repo.session_js.unlink()
-                new_sess = self.gui.current_session.repo.load()
+                new_sess = self.gui.current_session.repo.load(config=self.gui.config_repo.read_config())
                 idx = self.gui.current_dataset._all_sessions.index(self.gui.current_session)
                 self.gui.current_dataset._all_sessions[idx] = new_sess
-                self.gui.current_session = new_sess
+                self.gui.set_current_session(new_sess)
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Session reloaded successfully.", 5000)
             logging.debug("Session reloaded successfully.")
+            self.gui.update_domain_configs()
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
 
@@ -290,14 +289,15 @@ class DataManager:
                 for sess in self.gui.current_dataset._all_sessions:
                     if sess.repo and sess.repo.session_js.exists():
                         sess.repo.session_js.unlink()
-                new_ds = self.gui.current_dataset.repo.load()
+                new_ds = self.gui.current_dataset.repo.load(config=self.gui.config_repo.read_config())
                 idx = self.gui.current_experiment._all_datasets.index(self.gui.current_dataset)
                 self.gui.current_experiment._all_datasets[idx] = new_ds
-                self.gui.current_dataset = new_ds
+                self.gui.set_current_dataset(new_ds)
             self.gui.data_selection_widget.update_session_combo()
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Dataset reloaded successfully.", 5000)
             logging.debug("Dataset reloaded successfully.")
+            self.gui.update_domain_configs()
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
@@ -318,22 +318,24 @@ class DataManager:
                     for sess in ds._all_sessions:
                         if sess.repo and sess.repo.session_js.exists():
                             sess.repo.session_js.unlink()
-                new_expt = self.gui.current_experiment.repo.load()
-                self.gui.current_experiment = new_expt
+                new_expt = self.gui.current_experiment.repo.load(config=self.gui.config_repo.read_config())
+                self.gui.set_current_experiment(new_expt)
             else:
-                self.gui.current_experiment = None
+                self.gui.set_current_experiment(None)
                 logging.warning("No repository found for the current experiment. Cannot reload.")
-            self.gui.current_dataset = None
-            self.gui.current_session = None
+            self.gui.set_current_dataset(None)
+            self.gui.set_current_session(None)
 
             self.refresh_existing_experiments()
             self.gui.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
 
-            self.gui.current_experiment.reset_all_caches()
+            if self.gui.current_experiment:
+                self.gui.current_experiment.reset_all_caches()
             self.gui.plot_widget.on_data_selection_changed()
 
             logging.debug("Experiment reloaded successfully.")
             self.gui.status_bar.showMessage("Experiment reloaded successfully.", 5000)
+            self.gui.update_domain_configs()
 
     def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
         logging.debug("Refreshing existing experiments.")
@@ -352,8 +354,7 @@ class DataManager:
         logging.debug("Showing preferences window.")
         window = PreferencesDialog(get_config_path(), parent=self.gui)
         if window.exec() == QDialog.DialogCode.Accepted:
-            if self.gui.current_experiment:
-                self.gui.current_experiment.apply_config(reset_caches=True)
+            self.gui.update_domain_configs()
             self.gui.status_bar.showMessage("Preferences applied successfully.", 5000)
             logging.debug("Preferences applied successfully.")
         else:
@@ -380,7 +381,8 @@ class DataManager:
                 if os.path.exists(exp_path):
                     try:
                         repo = ExperimentRepository(Path(exp_path))
-                        self.gui.current_experiment = repo.load()
+                        expt = repo.load(config=self.gui.config_repo.read_config())
+                        self.gui.set_current_experiment(expt)
                         logging.debug(f"Experiment '{experiment_name}' loaded successfully.")
                     except FileNotFoundError as e:
                         QMessageBox.critical(self.gui, "Error", f"Experiment file not found or corrupted: {e}")

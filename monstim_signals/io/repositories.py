@@ -42,7 +42,7 @@ class RecordingRepository:
         self.meta_js = new_stem.with_suffix(".meta.json")
         self.annot_js= new_stem.with_suffix(".annot.json")
 
-    def load(self) -> 'Recording':
+    def load(self, config=None) -> 'Recording':
         # 1) Load meta JSON (immutable, record‐time facts)
         meta_dict = json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
@@ -52,10 +52,9 @@ class RecordingRepository:
             annot_dict = json.loads(self.annot_js.read_text())
             annot = RecordingAnnot.from_dict(annot_dict)
         else:
-            # If no annot.json, initialize a brand‐new one:
             logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
             annot = RecordingAnnot.create_empty(meta)
-            self.annot_js.write_text(json.dumps(asdict(annot_dict), indent=2))
+            self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
 
         # 3) Open HDF5 file in read‐only mode; pass the dataset itself (lazy)
         h5file = h5py.File(self.raw_h5, "r")
@@ -69,7 +68,8 @@ class RecordingRepository:
             meta=meta,
             annot=annot,
             raw=raw_dataset,
-            repo=self
+            repo=self,
+            config=config
         )
         return recording
 
@@ -116,10 +116,10 @@ class SessionRepository:
         self.folder = new_folder
         self.session_js = new_folder / "session.annot.json"
 
-    def load(self) -> 'Session':
+    def load(self, config=None) -> 'Session':
         # 1) Discover all recordings in this folder
         recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-        recordings = [repo.load() for repo in recording_repos]
+        recordings = [repo.load(config=config) for repo in recording_repos]
 
         # 2) Sort by the primary StimCluster’s stim_v
         recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
@@ -142,7 +142,8 @@ class SessionRepository:
             session_id=self.session_id,
             recordings=recordings,
             annot=session_annot,
-            repo=self
+            repo=self,
+            config=config
         )
         return session
 
@@ -192,12 +193,12 @@ class DatasetRepository:
         self.folder = new_folder
         self.dataset_js = new_folder / "dataset.annot.json"
 
-    def load(self) -> 'Dataset':
+    def load(self, config=None) -> 'Dataset':
         # 1) Each subfolder of `folder` is a session
         session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
 
         # 2) Load each Session
-        sessions = [SessionRepository(sess_folder).load() for sess_folder in session_folders]
+        sessions = [SessionRepository(sess_folder).load(config=config) for sess_folder in session_folders]
 
         # 3) Load or create dataset annotation JSON 
         if self.dataset_js.exists():
@@ -213,7 +214,8 @@ class DatasetRepository:
             dataset_id=self.dataset_id,
             sessions=sessions,
             annot=dataset_annot,
-            repo=self
+            repo=self,
+            config=config
         )
         return dataset
 
@@ -247,9 +249,9 @@ class ExperimentRepository:
         self.folder = new_folder
         self.expt_js = new_folder / "experiment.annot.json"
 
-    def load(self) -> 'Experiment':
+    def load(self, config=None) -> 'Experiment':
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
-        datasets = [DatasetRepository(ds_folder).load() for ds_folder in dataset_folders]
+        datasets = [DatasetRepository(ds_folder).load(config=config) for ds_folder in dataset_folders]
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
         if self.expt_js.exists():
             annot_dict = json.loads(self.expt_js.read_text())
@@ -258,7 +260,7 @@ class ExperimentRepository:
             logging.info(f"Experiment annotation file '{self.expt_js}' not found. Creating a new one.")
             annot = ExperimentAnnot.create_empty()
             self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
-        expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self)
+        expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
         return expt
     
     def save(self, expt: Experiment) -> None:
