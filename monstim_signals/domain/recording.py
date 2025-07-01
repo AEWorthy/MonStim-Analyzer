@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 from typing import Any
 
-from monstim_signals.core.data_models import RecordingMeta, RecordingAnnot
+from monstim_signals.core.data_models import RecordingMeta, RecordingAnnot, StimCluster
 
 class Recording:
     """
@@ -28,6 +28,7 @@ class Recording:
         self._raw   = raw
         self.repo   = repo
         self._config = config or {}
+
     # ──────────────────────────────────────────────────────────────────
     # 1) Simple properties (GUI & analysis code expects these)
     # ──────────────────────────────────────────────────────────────────
@@ -38,11 +39,24 @@ class Recording:
     def num_channels(self) -> int:
         return self.meta.num_channels
     @property
+    def channel_types(self) -> list[str]:
+        """
+        Return the list of channel types for this recording.
+        This is a list of strings, e.g. ["EMG", "Force", "Length", "ElectricalStimulus"].
+        """
+        return self.meta.channel_types
+    @property
     def scan_rate(self) -> int:
         return self.meta.scan_rate
     @property
     def num_samples(self) -> int:
         return self.meta.num_samples
+    @property
+    def stim_clusters(self) -> list[StimCluster]:
+        """
+        Return the list of StimCluster objects for this recording.
+        """
+        return [StimCluster.from_meta(cluster) for cluster in self.meta.stim_clusters]
     @property
     def stim_amplitude(self) -> float:
         # Assume the primary StimCluster’s stim_v is the amplitude for this recording

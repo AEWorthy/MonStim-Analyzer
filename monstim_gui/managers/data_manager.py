@@ -361,6 +361,9 @@ class DataManager:
             self.gui.status_bar.showMessage("Preferences applied successfully.", 5000)
             logging.debug("Preferences applied successfully.")
         else:
+            if hasattr(self.gui, 'refresh_profile_selector'):
+                self.gui.refresh_profile_selector()
+            self.gui.update_domain_configs()
             self.gui.status_bar.showMessage("No changes made to preferences.", 5000)
             logging.debug("No changes made to preferences.")
 

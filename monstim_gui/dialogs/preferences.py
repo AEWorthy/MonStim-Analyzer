@@ -11,7 +11,7 @@ import os
 import logging
 import ast
 
-PROFILE_DIR = os.path.join(os.path.dirname(__file__), '../../docs/config')
+PROFILE_DIR = os.path.join(os.path.dirname(__file__), '../../docs/analysis_profiles')
 PROFILE_DIR = os.path.abspath(PROFILE_DIR)
 
 SIGNAL_OPTIONS = ["EMG", "Force", "Length", "ElectricalStimulus"]
@@ -383,6 +383,7 @@ class PreferencesDialog(QDialog):
         except Exception:
             pass
         return value
+    
     def __init__(self, default_config_file, parent=None, config_repo=None):
         super().__init__()
         self.setModal(True)
@@ -427,7 +428,7 @@ class PreferencesDialog(QDialog):
         layout.addWidget(self.form_container, 1)
 
         save_button = QPushButton("Save")
-        save_button.clicked.connect(self.save_config)
+        save_button.clicked.connect(self.save_preferences)
         layout.addWidget(save_button, 0)
 
         self.setLayout(layout)
@@ -594,21 +595,19 @@ class PreferencesDialog(QDialog):
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0,0,0,0)
         name_label = QLabel(key)
-        # Color field logic
         if key in ("m_color", "h_color"):
-            text = str(value).replace("tab:", "")
+            text = self.display_color(str(value))
             field = QLineEdit(text)
             field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
         else:
             field = QLineEdit(str(value))
         remove_btn = QPushButton("Remove")
         def remove_row():
-            # Remove from layout and delete widget safely
             for i in range(layout.rowCount()):
                 if layout.itemAt(i, QFormLayout.ItemRole.FieldRole) and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is row_widget:
                     layout.removeRow(i)
                     break
-            self.fields.pop(f"analysis_parameters.{key}", None)
+            self.fields[f"analysis_parameters.{key}"] = None
             self.analysis_param_fields.pop(key, None)
             try:
                 row_widget.setParent(None)
@@ -619,7 +618,6 @@ class PreferencesDialog(QDialog):
         row_layout.addWidget(field)
         row_layout.addWidget(remove_btn)
         if before_widget:
-            # Insert before the add button row
             for i in range(layout.rowCount()):
                 if layout.itemAt(i, QFormLayout.ItemRole.FieldRole) and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is before_widget:
                     layout.insertRow(i, row_widget)
@@ -739,9 +737,8 @@ class PreferencesDialog(QDialog):
             self.profile_combo.setCurrentIndex(0)
             self.rebuild_form_for_profile(0)
             
-
     def on_profile_duplicate(self):
-        idx = self.profile_combo.currentIndex()
+        idx = self.profile_combo.currentIndex() -1  # -1 because of global config
         if idx < 0 or idx >= len(self.profiles):
             return
         name, _, data = self.profiles[idx]
@@ -755,47 +752,70 @@ class PreferencesDialog(QDialog):
             if idx >= 0:
                 self.profile_combo.setCurrentIndex(idx)
 
-    def save_config(self):
+    def normalize_color(self, val):
+        """
+        Accepts any color in COLOR_OPTIONS (with or without 'tab:').
+        """
+        color = val.strip().lower()
+        # Accept both 'red' and 'tab:red' if 'tab:red' is in COLOR_OPTIONS
+        if color.startswith("tab:"):
+            color = color[4:]
+        if color in TAB_COLOR_NAMES:
+            return f"tab:{color}"
+        return None
+
+    def display_color(self, val):
+        """
+        Accepts 'tab:red' or 'red', returns 'red' for display.
+        """
+        color = val.strip().lower()
+        if color.startswith("tab:"):
+            color = color[4:]
+        return color
+
+    def save_preferences(self):
         """Save the current configuration (global or profile)."""
         idx = self.profile_combo.currentIndex()
+        color_keys = ["m_color", "h_color"]
+
         if idx > 0:  # Profile mode
             name, path, data = self.profiles[idx-1]
-            # --- Get name and description from fields ---
             name_edit = self.fields.get("profile_name")
             desc_edit = self.fields.get("profile_description")
             profile_name = name_edit.text().strip() if name_edit else name
             profile_desc = desc_edit.toPlainText().strip() if desc_edit else data.get("description", "")
             profile_data = dict(name=profile_name, description=profile_desc)
-            # Signals to plot (checkboxes)
             signals_widget = self.fields.get("signals_to_plot")
             if signals_widget:
                 profile_data["signals_to_plot"] = signals_widget.get_selected()
-            # Analysis parameters
             analysis_params = {}
+            invalid_colors = []
             for key, field in self.fields.items():
                 if key.startswith("analysis_parameters."):
                     param = key.split(".", 1)[1]
                     val = field.text()
-                    # Color field logic
-                    if param in ("m_color", "h_color"):
-                        val = f"tab:{val.strip()}"
-                    # Try to match type from global config if available
+                    if param in color_keys:
+                        norm = self.normalize_color(val)
+                        if not norm:
+                            invalid_colors.append((param, val))
+                        val = norm if norm else val
                     ref_val = self.config.get(param)
-                    # If the reference is a dict, and the value parses as a dict, coerce recursively
                     try:
                         parsed_val = ast.literal_eval(val)
                     except Exception:
                         parsed_val = val
-                    if isinstance(ref_val, dict) and isinstance(parsed_val, dict):
+                    if ref_val is not None:
                         analysis_params[param] = ConfigRepository.coerce_types(parsed_val, ref_val)
                     else:
-                        analysis_params[param] = self.parse_field_value(val, ref_val)
+                        analysis_params[param] = parsed_val
+            if invalid_colors:
+                msg = "\n".join([f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}" for k, v in invalid_colors])
+                QMessageBox.warning(self, "Invalid Color", f"Cannot save: Invalid color(s) selected.\n{msg}")
+                return
             profile_data["analysis_parameters"] = analysis_params
-            # Save to YAML via ProfileManager
             try:
                 self.profile_manager.save_profile(profile_data, filename=path)
                 QMessageBox.information(self, "Profile Saved", f"Profile '{profile_name}' saved successfully.")
-                # Reload profiles and re-select the current profile to refresh UI
                 self.reload_profiles()
                 idx_new = self.profile_combo.findText(profile_name)
                 if idx_new >= 0:
@@ -804,63 +824,54 @@ class PreferencesDialog(QDialog):
                 QMessageBox.critical(self, "Save Error", f"Failed to save profile: {e}")
         else:  # Global config mode
             new_config = copy.deepcopy(self.config)
+            invalid_colors = []
             for key, field in self.fields.items():
                 if isinstance(field, LatencyWindowPresetEditor):
                     value = field.get_presets()
                 elif isinstance(field, QTextEdit):
                     raw = field.toPlainText()
-                    value = self.parse_value(raw, key)
+                    value = raw
                 else:
                     raw = field.text()
-                    value = self.parse_value(raw, key)
+                    value = raw
+                if key in color_keys:
+                    norm = self.normalize_color(raw)
+                    if not norm:
+                        invalid_colors.append((key, raw))
+                    value = norm if norm else value
                 if '.' in key:
                     main_key, sub_key = key.split('.')
+                    ref_val = self.config.get(main_key, {}).get(sub_key) if isinstance(self.config.get(main_key), dict) else None
+                    try:
+                        parsed_val = ast.literal_eval(value)
+                    except Exception:
+                        parsed_val = value
+                    if ref_val is not None:
+                        coerced = ConfigRepository.coerce_types(parsed_val, ref_val)
+                    else:
+                        coerced = parsed_val
                     if main_key not in new_config or not isinstance(new_config.get(main_key), dict):
                         new_config[main_key] = {}
-                    new_config[main_key][sub_key] = value
+                    new_config[main_key][sub_key] = coerced
                 else:
-                    new_config[key] = value
+                    ref_val = self.config.get(key)
+                    try:
+                        parsed_val = ast.literal_eval(value)
+                    except Exception:
+                        parsed_val = value
+                    if ref_val is not None:
+                        coerced = ConfigRepository.coerce_types(parsed_val, ref_val)
+                    else:
+                        coerced = parsed_val
+                    new_config[key] = coerced
+            if invalid_colors:
+                msg = "\n".join([f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}" for k, v in invalid_colors])
+                QMessageBox.warning(self, "Invalid Color", f"Cannot save: Invalid color(s) selected.\n{msg}")
+                return
             self.config = new_config
             self.config_repo.write_config(self.config)
             logging.info(f"Saved user config: {self.config}")
             self.accept()
 
-    def parse_value(self, value, key):
-        # List of keys that should be treated as lists
-        list_keys = ['default_channel_names', 'm_start', 'h_start']
-        color_keys = ['m_color', 'h_color']
-
-        if key in list_keys:
-            # Split by comma and strip whitespace
-            return [self.convert_to_number(item.strip()) for item in value.split(',')]
-
-        if key in color_keys:
-            return self.parse_color(value)
-
-        return self.convert_to_number(value)
-
-    def parse_color(self, value: str) -> str:
-        color = value.strip().lower()
-        if color.startswith('tab:'):
-            color = color[4:]
-        if color not in TAB_COLOR_NAMES:
-            QMessageBox.warning(
-                self,
-                'Invalid Color',
-                f"'{value}' is not a valid color. Using 'blue'.\n"
-                f"Valid options: {', '.join(TAB_COLOR_NAMES)}",
-            )
-            color = 'blue'
-        return f'tab:{color}'
-
-    def convert_to_number(self, value):
-        try:
-            # Try to convert to int first
-            return int(value)
-        except ValueError:
-            try:
-                # If not int, try float
-                return float(value)
-            except ValueError:
-                # If it's not a number, return as is
-                return value
+    # The parse_value, parse_color, and convert_to_number functions are no longer used for config/profile type handling.
+    # All type coercion is now handled by ConfigRepository.coerce_types for consistency and separation of concerns.

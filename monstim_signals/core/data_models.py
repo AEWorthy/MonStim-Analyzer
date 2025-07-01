@@ -55,6 +55,16 @@ class StimCluster:
             self.pulse_shape = "Square"  # Default to Square if not specified
         if self.ramp_duration is None:
             self.ramp_duration = 0.0  # Default to 0 if not specified
+    @classmethod
+    def from_meta(cls, meta: Dict[str, Any]) -> 'StimCluster':
+        """
+        Create a StimCluster from a metadata dictionary.
+        This is useful for converting from JSON or other formats.
+        """
+        # Filter out unexpected keys
+        valid = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in meta.items() if k in valid}
+        return cls(**filtered)
 
 @dataclass
 class SignalChannel:

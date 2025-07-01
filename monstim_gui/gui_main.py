@@ -181,7 +181,15 @@ class MonstimGUI(QMainWindow):
         self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
 
     def refresh_profile_selector(self):
+        # Store the current selected profile name
+        current_name = self.profile_selector_combo.currentText()
         self._populate_profile_selector()
+        # Try to restore the same profile selection if it still exists
+        idx = self.profile_selector_combo.findText(current_name)
+        if idx >= 0:
+            self.profile_selector_combo.setCurrentIndex(idx)
+        else:
+            self.profile_selector_combo.setCurrentIndex(0)
    
     # Command functions
     def undo(self):
