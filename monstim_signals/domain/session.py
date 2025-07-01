@@ -54,12 +54,7 @@ class Session:
             self.repo.save(self)
 
     def _load_config_settings(self):
-        _config = self._config if self._config is not None else load_config()
-        self.default_m_start : List[float] = _config['m_start']
-        self.default_m_duration : List[float] = [_config['m_duration'] for _ in range(len(self.default_m_start))]
-        self.default_h_start : List[float] = _config['h_start']
-        self.default_h_duration : List[float] = [_config['h_duration'] for _ in range(len(self.default_h_start))]
-        
+        _config = self._config if self._config is not None else load_config()        
         self.time_window_ms : float = _config['time_window']
         self.bin_size : float = _config['bin_size']
         self.latency_window_style : str = _config['latency_window_style']

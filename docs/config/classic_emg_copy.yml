@@ -1,0 +1,19 @@
+name: Classic EMG Copy
+description: Standard M-/H-response EMG analysis with a single-pulse electrical stimulation
+  only.
+signals_to_plot:
+- EMG
+- ElectricalStimulus
+analysis_parameters:
+  time_window: 20.0
+  axis_label_font_size: 20
+  bin_size: 0.01
+  default_method: rms
+  h_color: tab:blue
+  h_threshold: 0.5
+  latency_window_style: ':'
+  m_color: tab:red
+  butter_filter_args:
+    lowcut: 100
+    highcut: 3500
+    order: 4

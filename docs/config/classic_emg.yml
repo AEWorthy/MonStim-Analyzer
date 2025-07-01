@@ -1,0 +1,8 @@
+name: Classic EMG
+description: Standard M-/H-response EMG analysis with a single-pulse electrical stimulation
+  only.
+signals_to_plot:
+- EMG
+- ElectricalStimulus
+analysis_parameters:
+  time_window: 8

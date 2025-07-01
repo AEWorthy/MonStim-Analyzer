@@ -1,0 +1,9 @@
+name: EMG + Force (Vibration)
+description: M-/H-response EMG analysis with vibration conditioning.
+signals_to_plot:
+- EMG
+- Force
+- Length
+- ElectricalStimulus
+analysis_parameters:
+  time_window: 300

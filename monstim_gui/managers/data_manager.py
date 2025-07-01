@@ -28,7 +28,7 @@ from monstim_signals.core.utils import (
     get_config_path,
 )
 
-from ..dialogs import PreferencesDialog
+from monstim_gui.dialogs.preferences import PreferencesDialog
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -354,11 +354,14 @@ class DataManager:
         logging.debug("Showing preferences window.")
         window = PreferencesDialog(get_config_path(), parent=self.gui)
         if window.exec() == QDialog.DialogCode.Accepted:
+            # After closing preferences, refresh the profile selector in the main window
+            if hasattr(self.gui, 'refresh_profile_selector'):
+                self.gui.refresh_profile_selector()
             self.gui.update_domain_configs()
             self.gui.status_bar.showMessage("Preferences applied successfully.", 5000)
             logging.debug("Preferences applied successfully.")
         else:
-            QMessageBox.warning(self.gui, "Warning", "No changes made to preferences.")
+            self.gui.status_bar.showMessage("No changes made to preferences.", 5000)
             logging.debug("No changes made to preferences.")
 
     # ------------------------------------------------------------------

@@ -55,7 +55,7 @@ class MonstimGUI(QMainWindow):
         self.setWindowTitle("MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
         self.setGeometry(30, 30, 800, 770)
-    
+
         # Initialize variables
         self.expts_dict = {}
         self.expts_dict_keys = []  # type: list[str]
@@ -66,11 +66,16 @@ class MonstimGUI(QMainWindow):
         self.PLOT_TYPE_DICT = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
                                "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
                                "Single EMG Recordings": "singleEMG"}
-        
+
         # Set default paths
         self.output_path = get_output_path()
         self.config_file = get_config_path()
 
+        # Profile manager for analysis profiles
+        from monstim_gui.dialogs.preferences import ProfileManager
+        self.profile_manager = ProfileManager()
+        self.active_profile_path = None
+        self.active_profile_data = None
 
         # Helper managers
         self.data_manager = DataManager(self)
@@ -98,11 +103,85 @@ class MonstimGUI(QMainWindow):
         self.plot_widget : 'PlotWidget' = widgets["plot_widget"]
         self.status_bar : 'QStatusBar' = widgets["status_bar"]
 
+        # --- Add Profile Selector to Main Window ---
+        from PyQt6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget
+        self.profile_selector_row = QWidget()
+        self.profile_selector_layout = QHBoxLayout(self.profile_selector_row)
+        self.profile_selector_layout.setContentsMargins(8, 2, 8, 2)
+        self.profile_selector_label = QLabel("Analysis Profile:")
+        self.profile_selector_combo = QComboBox()
+        self.profile_selector_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.profile_selector_combo.setMinimumContentsLength(16)
+        self.profile_selector_combo.setEditable(False)
+        self.profile_selector_layout.addWidget(self.profile_selector_label)
+        self.profile_selector_layout.addWidget(self.profile_selector_combo, 1)
+        self.profile_selector_row.setMaximumHeight(36)
+        # Insert at the top of the left panel (above data selection)
+        left_panel = self.data_selection_widget.parentWidget()
+        while left_panel is not None and not hasattr(left_panel, 'layout'):
+            left_panel = left_panel.parentWidget()
+        if left_panel is not None:
+            left_layout = left_panel.layout()
+            if hasattr(left_layout, 'insertWidget'):
+                left_layout.insertWidget(0, self.profile_selector_row)
+
+        self._populate_profile_selector()
+        self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
+
         self.plot_widget.import_canvas()
 
         self.status_bar.showMessage(
             f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000
         )
+
+    def _populate_profile_selector(self):
+        self.profile_selector_combo.blockSignals(True)
+        self.profile_selector_combo.clear()
+        self.profile_selector_combo.addItem("(default)", userData=None)
+        self.profile_selector_combo.setItemData(0, "Use the global/default analysis settings.", role=Qt.ItemDataRole.ToolTipRole)
+        self._profile_list = self.profile_manager.list_profiles()
+        for idx, (name, path, data) in enumerate(self._profile_list, start=1):
+            self.profile_selector_combo.addItem(name, userData=path)
+            desc = data.get('description', '')
+            if desc:
+                self.profile_selector_combo.setItemData(idx, desc, role=Qt.ItemDataRole.ToolTipRole)
+        self.profile_selector_combo.blockSignals(False)
+        self.profile_selector_combo.setCurrentIndex(0)
+        self._on_profile_selector_changed(0)
+
+    def _set_profile_selector_tooltip(self, idx):
+        # Set the tooltip for the whole combobox to the selected profile's description
+        tooltip = self.profile_selector_combo.itemData(idx, role=Qt.ItemDataRole.ToolTipRole)
+        if tooltip:
+            self.profile_selector_combo.setToolTip(tooltip)
+        else:
+            self.profile_selector_combo.setToolTip("")
+
+    def _on_profile_selector_changed(self, idx):
+        self._set_profile_selector_tooltip(idx)
+        if idx == 0:
+            # Global config
+            self.active_profile_path = None
+            self.active_profile_data = None
+            config = self.config_repo.read_config()
+        else:
+            name, path, data = self._profile_list[idx-1]
+            self.active_profile_path = path
+            self.active_profile_data = data
+            # Merge profile data with global config for fallback
+            config = self.config_repo.read_config()
+            # Overlay profile analysis_parameters and latency_window_preset, etc.
+            if 'analysis_parameters' in data:
+                config.update(data['analysis_parameters'])
+            if 'latency_window_preset' in data:
+                config['latency_window_preset'] = data['latency_window_preset']
+            if 'signals_to_plot' in data:
+                config['signals_to_plot'] = data['signals_to_plot']
+        self.update_domain_configs(config)
+        self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
+
+    def refresh_profile_selector(self):
+        self._populate_profile_selector()
    
     # Command functions
     def undo(self):
@@ -321,7 +400,7 @@ class MonstimGUI(QMainWindow):
                     self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
                     logging.debug("Channel names updated successfully.")
                 else:
-                    QMessageBox.warning(self, "Warning", "No changes made to channel names.")
+                    self.status_bar.showMessage("No changes made to channel names.", 5000)  # Show message for 5 seconds
                     logging.debug("No changes made to channel names.")
         finally:
             QApplication.restoreOverrideCursor()
@@ -344,7 +423,18 @@ class MonstimGUI(QMainWindow):
     def update_domain_configs(self, config=None):
         """Propagate the current config to all loaded domain objects."""
         if config is None:
-            config = self.config_repo.read_config()
+            # Use active profile if set
+            if self.active_profile_data:
+                config = self.config_repo.read_config()
+                data = self.active_profile_data
+                if 'analysis_parameters' in data:
+                    config.update(data['analysis_parameters'])
+                if 'latency_window_preset' in data:
+                    config['latency_window_preset'] = data['latency_window_preset']
+                if 'signals_to_plot' in data:
+                    config['signals_to_plot'] = data['signals_to_plot']
+            else:
+                config = self.config_repo.read_config()
         if self.current_experiment:
             self.current_experiment.set_config(config)
         if self.current_dataset:
