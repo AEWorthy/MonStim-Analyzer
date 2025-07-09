@@ -22,6 +22,27 @@ class PlotController:
         plot_options = self.gui.plot_widget.get_plot_options()
         raw_data = None
 
+        # Only inject signals_to_plot for session-level EMG plots
+        config = None
+        if self.gui.current_session and hasattr(self.gui.current_session, '_config'):
+            config = self.gui.current_session._config
+
+        is_session_emg_plot = (
+            self.gui.plot_widget.session_radio.isChecked() and
+            plot_type_raw == 'EMG'
+        )
+
+        # Determine if the default profile is selected
+        default_profile_selected = False
+        if hasattr(self.gui, 'profile_selector_combo'):
+            default_profile_selected = self.gui.profile_selector_combo.currentIndex() == 0
+
+        if is_session_emg_plot:
+            if config and 'signals_to_plot' in config:
+                plot_options['signals_to_plot'] = config['signals_to_plot']
+            elif default_profile_selected:
+                plot_options['signals_to_plot'] = ['EMG']
+
         if self.gui.plot_widget.session_radio.isChecked():
             level = "session"
             level_object = self.gui.current_session
@@ -70,7 +91,7 @@ class PlotController:
             QApplication.restoreOverrideCursor()
 
         logging.info(
-            f"Plot Created. level: {level} type: {plot_type}, options: {plot_options}, return_raw_data: {return_raw_data}."
+            f"Plot Created. level: {level} type: {plot_type}, return_raw_data: {return_raw_data}."
         )
         self.gui.plot_pane.layout.update()
 

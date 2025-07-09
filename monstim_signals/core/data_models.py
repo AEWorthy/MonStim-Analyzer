@@ -66,6 +66,7 @@ class StimCluster:
         filtered = {k: v for k, v in meta.items() if k in valid}
         return cls(**filtered)
 
+# TODO: Create a system to make non-EMG type objects filtered using different methods (or not at all for right now).
 @dataclass
 class SignalChannel:
     invert : bool = False
