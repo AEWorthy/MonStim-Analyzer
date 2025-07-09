@@ -197,7 +197,7 @@ class SessionPlotter(BasePlotter):
                 fig.legend(handles=legend_elements, loc='upper right')
 
 # Actual plotting functions for Session data
-
+# TODO: implement stimuli plots for relevant plot types. May need to update which plot types receive the stimuli_to_plot parameter injection.
     def plot_emg(self, channel_indices : List[int] = None, all_flags : bool = True, plot_legend : bool = True, plot_colormap: bool = False, data_type : str = 'filtered', stimuli_to_plot: List[str] = None, canvas: FigureCanvas = None):
         """
         Plots EMG data from a Pickle file for a specified time window.
