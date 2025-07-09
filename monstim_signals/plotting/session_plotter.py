@@ -198,7 +198,7 @@ class SessionPlotter(BasePlotter):
 
 # Actual plotting functions for Session data
 
-    def plot_emg(self, channel_indices : List[int] = None, all_flags : bool = True, plot_legend : bool = True, plot_colormap: bool = False, data_type : str = 'filtered', canvas: FigureCanvas = None):
+    def plot_emg(self, channel_indices : List[int] = None, all_flags : bool = True, plot_legend : bool = True, plot_colormap: bool = False, data_type : str = 'filtered', stimuli_to_plot: List[str] = None, canvas: FigureCanvas = None):
         """
         Plots EMG data from a Pickle file for a specified time window.
 
@@ -248,7 +248,7 @@ class SessionPlotter(BasePlotter):
                 if channel_index not in channel_indices:
                     continue
 
-                current_ax = ax if num_channels == 1 else axes[channel_index]
+                current_ax = ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
                 
                 # Plot EMG data
                 self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, stimulus_v, channel_index, norm=norm)
@@ -346,7 +346,7 @@ class SessionPlotter(BasePlotter):
             if channel_index not in channel_indices:
                 continue
 
-            current_ax = ax if num_channels == 1 else axes[channel_index]
+            current_ax = ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
 
             self.plot_channel_data(current_ax, time_axis, channel_data, window_start_sample, window_end_sample, stimulus_v, channel_index)
             self.plot_latency_windows(current_ax, all_flags, channel_index)
@@ -417,7 +417,7 @@ class SessionPlotter(BasePlotter):
             for channel_index, channel_data in enumerate(recording.T):
                 if channel_index not in channel_indices:
                     continue
-                current_ax = ax if num_channels == 1 else axes[channel_index]
+                current_ax = ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
                 latency_window_oi_amplitude = transform.calculate_emg_amplitude(
                     channel_data,
                     latency_window_oi.start_times[channel_index] + self.emg_object.stim_start,

@@ -70,15 +70,13 @@ class DataSelectionWidget(QGroupBox):
         form.setContentsMargins(8, 8, 8, 8)  # outer margins of the groupbox
         
         self.experiment_combo = QComboBox()
-        self.experiment_combo.currentIndexChanged.connect(self.on_experiment_combo_changed)
+        self.experiment_combo.currentIndexChanged.connect(self._on_experiment_combo_changed)
+        
         self.dataset_combo = QComboBox()
-        self.dataset_combo.currentIndexChanged.connect(
-            self.parent.data_manager.load_dataset
-        )
+        self.dataset_combo.currentIndexChanged.connect(self._on_dataset_combo_changed)
+
         self.session_combo = QComboBox()
-        self.session_combo.currentIndexChanged.connect(
-            self.parent.data_manager.load_session
-        )
+        self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
 
         form.addRow("Select Experiment:", self.experiment_combo)
         form.addRow("Select Dataset:",    self.dataset_combo)
@@ -175,11 +173,25 @@ class DataSelectionWidget(QGroupBox):
         for level in ('dataset', 'session'):
             self.update_completion_status(level)
 
-    def on_experiment_combo_changed(self, index):
+    def _on_experiment_combo_changed(self, index):
         if self.parent.has_unsaved_changes:
             self.parent.data_manager.save_experiment()
         self.parent.data_manager.load_experiment(index)
     
+    def _on_dataset_combo_changed(self):
+        if hasattr(self.parent, 'plot_widget'):
+            self.parent.plot_widget.save_current_options()
+        self.parent.data_manager.load_dataset(index=self.dataset_combo.currentIndex())
+        if hasattr(self.parent, 'plot_widget'):
+            self.parent.plot_widget.restore_last_plot_type_and_options()
+
+    def _on_session_combo_changed(self):
+        if hasattr(self.parent, 'plot_widget'):
+            self.parent.plot_widget.save_current_options()
+        self.parent.data_manager.load_session(index=self.session_combo.currentIndex())
+        if hasattr(self.parent, 'plot_widget'):
+            self.parent.plot_widget.restore_last_plot_type_and_options()
+
     def update_experiment_combo(self):
         self.experiment_combo.clear()
         if self.parent.expts_dict_keys:

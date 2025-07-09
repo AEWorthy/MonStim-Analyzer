@@ -2,15 +2,6 @@
 import numpy as np
 
 
-def correct_emg_to_baseline(recording, scan_rate, stim_delay):
-    """Correct EMG absolute amplitude relative to pre-stim baseline amplitude."""
-    adjusted_recording = []
-    for channel in recording:
-        baseline_emg = _calculate_average_amplitude_unrectified(channel, 0, stim_delay, scan_rate)
-        adjusted_recording.append(channel - baseline_emg)
-    return adjusted_recording
-
-
 def rectify_emg(emg_array):
     """Rectify EMG data by taking the absolute value."""
     return np.abs(emg_array)

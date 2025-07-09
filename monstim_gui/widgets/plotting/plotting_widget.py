@@ -18,6 +18,34 @@ if TYPE_CHECKING:
 
 # Plotting Widget
 class PlotWidget(QGroupBox):
+    def restore_last_plot_type_and_options(self):
+        """Restore the last selected plot type and as many options as possible for the current view."""
+        # Determine the last plot type for the current view
+        if not hasattr(self, 'last_plot_type'):
+            return  # If last_plot_type is not initialized, do nothing
+        last_plot_type = self.last_plot_type.get(self.view, None)
+        available_types = list(self.plot_options[self.view].keys())
+        if last_plot_type in available_types:
+            self.plot_type_combo.setCurrentText(last_plot_type)
+        else:
+            self.plot_type_combo.setCurrentText(available_types[0])
+            last_plot_type = available_types[0]
+            self.last_plot_type[self.view] = last_plot_type
+
+        # Re-initialize the options widget for the selected plot type
+        self.update_plot_options()
+        if self.current_option_widget:
+            # Get the default options for the new widget
+            default_options = self.current_option_widget.get_options()
+            # Get the last saved options for this plot type
+            last_options = self.last_options[self.view].get(last_plot_type, {})
+            # Only keep keys that are still valid
+            merged_options = {k: v for k, v in last_options.items() if k in default_options}
+            # Fill in missing keys with defaults
+            for k, v in default_options.items():
+                if k not in merged_options:
+                    merged_options[k] = v
+            self.current_option_widget.set_options(merged_options)
     def __init__(self, parent: 'MonstimGUI'):
         super().__init__("Plotting", parent)
         self.current_option_widget: 'BasePlotOptions' = None

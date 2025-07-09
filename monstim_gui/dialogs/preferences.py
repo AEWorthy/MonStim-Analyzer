@@ -14,14 +14,14 @@ import ast
 PROFILE_DIR = os.path.join(os.path.dirname(__file__), '../../docs/analysis_profiles')
 PROFILE_DIR = os.path.abspath(PROFILE_DIR)
 
-SIGNAL_OPTIONS = ["EMG", "Force", "Length", "ElectricalStimulus"]
+STIMULUS_OPTIONS = ["Force", "Length", "Electrical"]
 
-class SignalSelectorWidget(QWidget):
+class StimulusSelectorWidget(QWidget):
     def __init__(self, selected=None, parent=None):
         super().__init__(parent)
         self.checkboxes = {}
         layout = QHBoxLayout(self)
-        for signal in SIGNAL_OPTIONS:
+        for signal in STIMULUS_OPTIONS:
             cb = QCheckBox(signal)
             layout.addWidget(cb)
             self.checkboxes[signal] = cb
@@ -72,7 +72,7 @@ class ProfileManager:
             filename = os.path.join(self.profile_dir, f"{name.replace(' ', '_').lower()}.yml")
         # Use a regular dict for YAML dumping (insertion order is preserved in Python 3.7+)
         ordered = {}
-        for key in ["name", "description", "latency_window_preset", "signals_to_plot", "analysis_parameters"]:
+        for key in ["name", "description", "latency_window_preset", "stimuli_to_plot", "analysis_parameters"]:
             if key in data:
                 ordered[key] = data[key]
         # Add any extra keys at the end
@@ -553,16 +553,16 @@ class PreferencesDialog(QDialog):
             self.fields["profile_name"] = name_edit
             self.fields["profile_description"] = desc_edit
             vbox.addWidget(name_group)
-            # Signals to plot (checkboxes)
-            signals = data.get("signals_to_plot", [])
-            signals_group = QGroupBox("Signals to Plot")
-            signals_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-            signals_layout = QVBoxLayout(signals_group)
-            signals_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-            signals_widget = SignalSelectorWidget(selected=signals)
-            signals_layout.addWidget(signals_widget)
-            self.fields["signals_to_plot"] = signals_widget
-            vbox.addWidget(signals_group)
+            # Stimuli to plot (checkboxes)
+            stimuli = data.get("stimuli_to_plot", [])
+            stimuli_group = QGroupBox("Stimuli to Plot")
+            stimuli_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+            stimuli_layout = QVBoxLayout(stimuli_group)
+            stimuli_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+            stimuli_widget = StimulusSelectorWidget(selected=stimuli)
+            stimuli_layout.addWidget(stimuli_widget)
+            self.fields["stimuli_to_plot"] = stimuli_widget
+            vbox.addWidget(stimuli_group)
             # Analysis parameters
             analysis_params = data.get("analysis_parameters", {})
             analysis_group = QGroupBox("Analysis Parameters")
@@ -679,11 +679,11 @@ class PreferencesDialog(QDialog):
         name, path, data = self.profiles[idx-1]  # -1 because of global
         self.active_profile_path = path
         self.active_profile_data = data
-        # Update signals fields
-        signals = data.get('signals_to_plot', [])
-        if 'signals_to_plot' in self.fields:
-            signals_widget = self.fields['signals_to_plot']
-            signals_widget.set_selected(signals)
+        # Update stimuli fields
+        stimuli = data.get('stimuli_to_plot', [])
+        if 'stimuli_to_plot' in self.fields:
+            stimuli_widget = self.fields['stimuli_to_plot']
+            stimuli_widget.set_selected(stimuli)
         # Update analysis_parameters fields in the UI
         analysis_params = data.get('analysis_parameters', {})
         if not isinstance(analysis_params, dict):
@@ -704,7 +704,7 @@ class PreferencesDialog(QDialog):
                 'name': name,
                 'description': '',
                 'latency_window_preset': 'default',
-                'signals_to_plot': ['EMG', 'ElectricalStimulus'],
+                'stimuli_to_plot': ['Electrical'],
                 'analysis_parameters': {},
             }
             self.profile_manager.save_profile(new_data)
@@ -785,9 +785,9 @@ class PreferencesDialog(QDialog):
             profile_name = name_edit.text().strip() if name_edit else name
             profile_desc = desc_edit.toPlainText().strip() if desc_edit else data.get("description", "")
             profile_data = dict(name=profile_name, description=profile_desc)
-            signals_widget = self.fields.get("signals_to_plot")
-            if signals_widget:
-                profile_data["signals_to_plot"] = signals_widget.get_selected()
+            stimuli_widget = self.fields.get("stimuli_to_plot")
+            if stimuli_widget:
+                profile_data["stimuli_to_plot"] = stimuli_widget.get_selected()
             analysis_params = {}
             invalid_colors = []
             for key, field in self.fields.items():

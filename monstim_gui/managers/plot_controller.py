@@ -22,7 +22,7 @@ class PlotController:
         plot_options = self.gui.plot_widget.get_plot_options()
         raw_data = None
 
-        # Only inject signals_to_plot for session-level EMG plots
+        # Only inject stimuli_to_plot for session-level EMG plots
         config = None
         if self.gui.current_session and hasattr(self.gui.current_session, '_config'):
             config = self.gui.current_session._config
@@ -38,10 +38,10 @@ class PlotController:
             default_profile_selected = self.gui.profile_selector_combo.currentIndex() == 0
 
         if is_session_emg_plot:
-            if config and 'signals_to_plot' in config:
-                plot_options['signals_to_plot'] = config['signals_to_plot']
+            if config and 'stimuli_to_plot' in config:
+                plot_options['stimuli_to_plot'] = config['stimuli_to_plot']
             elif default_profile_selected:
-                plot_options['signals_to_plot'] = ['EMG']
+                plot_options['stimuli_to_plot'] = ['Electrical']
 
         if self.gui.plot_widget.session_radio.isChecked():
             level = "session"

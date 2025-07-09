@@ -175,8 +175,8 @@ class MonstimGUI(QMainWindow):
                 config.update(data['analysis_parameters'])
             if 'latency_window_preset' in data:
                 config['latency_window_preset'] = data['latency_window_preset']
-            if 'signals_to_plot' in data:
-                config['signals_to_plot'] = data['signals_to_plot']
+            if 'stimuli_to_plot' in data:
+                config['stimuli_to_plot'] = data['stimuli_to_plot']
         self.update_domain_configs(config)
         self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
 
@@ -439,8 +439,8 @@ class MonstimGUI(QMainWindow):
                     config.update(data['analysis_parameters'])
                 if 'latency_window_preset' in data:
                     config['latency_window_preset'] = data['latency_window_preset']
-                if 'signals_to_plot' in data:
-                    config['signals_to_plot'] = data['signals_to_plot']
+                if 'stimuli_to_plot' in data:
+                    config['stimuli_to_plot'] = data['stimuli_to_plot']
             else:
                 config = self.config_repo.read_config()
         if self.current_experiment:
@@ -455,18 +455,21 @@ class MonstimGUI(QMainWindow):
         config = self.config_repo.read_config()
         experiment.set_config(config)
         self.current_experiment = experiment
+        self.update_domain_configs()
 
     def set_current_dataset(self, dataset: 'Dataset'):
         """Set the current dataset and ensure config is injected."""
         config = self.config_repo.read_config()
         dataset.set_config(config)
         self.current_dataset = dataset
+        self.update_domain_configs()
 
     def set_current_session(self, session: 'Session'):
         """Set the current session and ensure config is injected."""
         config = self.config_repo.read_config()
         session.set_config(config)
         self.current_session = session
+        self.update_domain_configs()
 
     # Close event handling
     def show_save_confirmation_dialog(self):

@@ -12,6 +12,7 @@ from monstim_signals.core.utils import load_config
 from monstim_signals.domain.recording import Recording
 from monstim_signals.transform import (
     butter_bandpass_filter,
+    correct_emg_to_baseline,
     calculate_emg_amplitude,
     get_avg_mmax,
     NoCalculableMmaxError,
@@ -278,17 +279,30 @@ class Session:
             filtered_channels = []
             for ch in range(rec.meta.num_channels):
                 channel_data = raw_data[:, ch]
-                filtered = butter_bandpass_filter(
-                    channel_data,
-                    fs=self.scan_rate,
-                    lowcut=bf_args["lowcut"],
-                    highcut=bf_args["highcut"],
-                    order=bf_args["order"]
-                )
+                channel_type = self.channel_types[ch].lower()
+
+                if channel_type in ("force", "length"):
+                    # Apply specific processing for force and length channels
+                    # TODO: Implement specific processing for force and length channels if needed
+                    filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
+                elif channel_type in ("emg",):
+                    # Apply specific processing for EMG channels
+                    filtered = butter_bandpass_filter(
+                        channel_data,
+                        fs=self.scan_rate,
+                        lowcut=bf_args["lowcut"],
+                        highcut=bf_args["highcut"],
+                        order=bf_args["order"]
+                    )
+                else:
+                    logging.warning(f"No specific processing for channel type: {channel_type}")
+                    filtered = channel_data
 
                 if self.annot.channels[ch].invert:
-                    filtered = -filtered
+                        filtered = -filtered
+
                 filtered_channels.append(filtered)
+                    
             return np.column_stack(filtered_channels)
        
         max_workers = (os.cpu_count() - 1) or 1 # Use all available CPU cores
