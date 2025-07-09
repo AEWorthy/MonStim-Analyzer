@@ -167,7 +167,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             x = np.array([0, 1])
             y = np.array([0, 0])
             dummy_item = pg.PlotDataItem(x, y, pen=pen)
-            plot_item.addItem(dummy_item)
             legend.addItem(dummy_item, window.label if hasattr(window, 'label') else str(window))
         return legend
 
@@ -221,12 +220,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Create plot layout
         plot_items : List[pg.PlotItem]
         layout : pg.GraphicsLayout
-        plot_items, layout = self.create_plot_layout(canvas, channel_indices, link_y=False)
-
-        # --- Axis synchronization: link all channel plots' X axes ---
-        if len(plot_items) > 1:
-            for i in range(1, len(plot_items)):
-                plot_items[i].setXLink(plot_items[0])
+        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
 
         # Add synchronized crosshairs to all plots
         self.add_synchronized_crosshairs(plot_items)
@@ -343,11 +337,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
         
-        # Link X-axes for all plots (but not Y-axes - we'll handle Y manually for fixed_y_axis)
-        if len(plot_items) > 1:
-            for i in range(1, len(plot_items)):
-                plot_items[i].setXLink(plot_items[0])
-        
         # Add crosshair for precise measurements
         self.add_synchronized_crosshairs(plot_items)
         
@@ -357,31 +346,40 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if recording_index >= len(emg_recordings):
             raise ValueError(f"Recording index {recording_index} out of range")
         
-        recording = emg_recordings[recording_index]
-        stimulus_v = self.emg_object.stimulus_voltages[recording_index]
-        
         # Calculate fixed y-axis limits if needed
         y_min, y_max = None, None
         if fixed_y_axis:
-            max_y = [] # list to store maximum values for each channel
-            min_y = [] # list to store minimum values for each channel
-            for recording in emg_recordings:
-                # recording.T returns channel data in the expected order (channels as rows, time points as columns).
-                for channel_index, channel_data in enumerate(recording.T):
-                    if channel_index in channel_indices:  # Only consider channels we're plotting
-                        max_y.append(np.max(channel_data[window_start_sample:window_end_sample]))
-                        min_y.append(np.min(channel_data[window_start_sample:window_end_sample]))
-            y_max = max(max_y)
-            y_min = min(min_y)
-            y_range = y_max - y_min
-            y_max += 0.01 * y_range
-            y_min -= 0.01 * y_range
-            
-            # Link Y-axes for all plots when using fixed_y_axis
-            if len(plot_items) > 1:
-                for i in range(1, len(plot_items)):
-                    plot_items[i].setYLink(plot_items[0])
-        
+            max_y = []
+            min_y = []
+            for rec in emg_recordings:
+                for channel_index, channel_data in enumerate(rec.T):
+                    if channel_index in channel_indices:
+                        segment = channel_data[window_start_sample:window_end_sample]
+                        if segment.size > 0:
+                            max_y.append(np.max(segment))
+                            min_y.append(np.min(segment))
+            if max_y and min_y:
+                y_max = max(max_y)
+                y_min = min(min_y)
+                y_range = y_max - y_min
+                y_max += 0.01 * y_range
+                y_min -= 0.01 * y_range
+            else:
+                y_max, y_min = 1, -1
+
+        # call this after calculating y_min and y_max
+        recording = emg_recordings[recording_index]
+        stimulus_v = self.emg_object.stimulus_voltages[recording_index]
+
+        # Prepare colormap normalization if needed
+        norm = None
+        if plot_colormap:
+            min_v = min(self.emg_object.stimulus_voltages)
+            max_v = max(self.emg_object.stimulus_voltages)
+            def norm_func(v):
+                return (v - min_v) / (max_v - min_v) if max_v != min_v else 0.5
+            norm = norm_func
+
         # Raw data collection
         raw_data_dict = {
             'channel_index': [],
@@ -394,35 +392,45 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         for channel_index, channel_data in enumerate(recording.T):
             if channel_index not in channel_indices:
                 continue
-                
             # Get the correct plot index for this channel
             plot_idx = channel_indices.index(channel_index)
             current_plot = plot_items[plot_idx]
 
+            # Show grid by default
+            current_plot.showGrid(x=True, y=True)
+
             # Plot latency windows
             self.plot_latency_windows(current_plot, all_flags, channel_index)
-            
+
             # Get channel data
             data_segment = channel_data[window_start_sample:window_end_sample]
-            
-            # Plot the channel data
+            if data_segment.size == 0:
+                continue
+
+            # Plot the channel data with colormap if requested
+            if norm is not None:
+                # Use colormap for this stimulus voltage
+                color_value = norm(stimulus_v)
+                color = self.stim_colormap.map(color_value, mode='qcolor')
+            else:
+                color = self.default_colors[channel_index % len(self.default_colors)]
             self.plot_time_series(
                 current_plot, time_axis, data_segment,
-                color=self.default_colors[channel_index % len(self.default_colors)],
+                color=color,
                 line_width=1.5
             )
-            
+
             # Set fixed y-axis if requested
             if fixed_y_axis and y_min is not None and y_max is not None:
                 current_plot.setYRange(y_min, y_max)
-            
+
             # Collect raw data
             num_points = len(time_axis)
             raw_data_dict['channel_index'].extend([channel_index] * num_points)
             raw_data_dict['stimulus_V'].extend([stimulus_v] * num_points)
             raw_data_dict['time_point'].extend(time_axis)
             raw_data_dict['amplitude_mV'].extend(data_segment)
-            
+
             # Set labels
             channel_name = self.emg_object.channel_names[channel_index]
             self.set_labels(
@@ -435,10 +443,15 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Add legend if requested
         if plot_legend:
             self.add_latency_window_legend(plot_item=plot_items[0])
-        
+
+        # Add colormap scalebar if requested
+        if plot_colormap:
+            value_range = (min(self.emg_object.stimulus_voltages), max(self.emg_object.stimulus_voltages))
+            self.add_colormap_scalebar(layout, plot_items, value_range)
+
         # Display the plot
         self.display_plot(canvas)
-        
+
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(['channel_index', 'stimulus_V', 'time_point'], inplace=True)

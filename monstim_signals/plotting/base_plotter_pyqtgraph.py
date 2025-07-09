@@ -31,7 +31,7 @@ class BasePlotterPyQtGraph:
             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
         ]
         
-    def create_plot_layout(self, canvas: 'PlotPane', channel_indices: List[int] = None, link_y: bool = True) -> tuple:
+    def create_plot_layout(self, canvas: 'PlotPane', channel_indices: List[int] = None) -> tuple:
         """
         Create plot layout with subplots for multiple channels.
         
@@ -67,9 +67,10 @@ class BasePlotterPyQtGraph:
                 plot_item = canvas.graphics_layout.addPlot(row=0, col=i)
                 plot_items.append(plot_item)
                 
-                # Share Y-axis for all plots except the first one
-                if i > 0 and link_y:
+                # Share axes for all plots
+                if i > 0:
                     plot_item.setYLink(plot_items[0])
+                    plot_item.setXLink(plot_items[0])
         
         # Store reference to current plots
         canvas.current_plots = plot_items
@@ -154,13 +155,12 @@ class BasePlotterPyQtGraph:
                 # Update all vertical crosshairs to this x
                 for v in v_lines:
                     v.setPos(x)
-                # for h in h_lines:
-                #     h.setPos(y)
                 # Only show horizontal crosshair and indicator on the active plot
                 for idx in range(len(plot_items)):
                     if idx == active_plot_idx:
                         h_lines[idx].setPos(y)
                         h_lines[idx].show()
+                        v_lines[idx].show()
                         # Show and update the cursor indicator - position in view coordinates
                         view_range = plot_items[idx].vb.viewRange()
                         x_min, x_max = view_range[0][0], view_range[0][1] * 0.55
@@ -177,8 +177,9 @@ class BasePlotterPyQtGraph:
                         cursor_texts[idx].hide()
             else:
                 # Hide all horizontal crosshairs and indicators if not over any plot
-                for h, t in zip(h_lines, cursor_texts):
+                for h, v, t in zip(h_lines, v_lines, cursor_texts):
                     h.hide()
+                    v.hide()
                     t.hide()
 
         # Connect to the scene of the first plot (all plots share the same scene)
