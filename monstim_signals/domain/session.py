@@ -228,12 +228,12 @@ class Session:
     def excluded_recordings(self):
         return set(self.annot.excluded_recordings)
     @property
-    def stimulus_voltages(self) -> List[float]:
+    def stimulus_voltages(self) -> np.ndarray:
         """
         Return a list of stimulus voltages for each recording in the session.
         This assumes that each recording's primary cluster stim_v is the amplitude for that recording.
         """
-        return [rec.meta.primary_stim.stim_v for rec in self.recordings]
+        return np.array([rec.meta.primary_stim.stim_v for rec in self.recordings])
     @property
     def recordings(self) -> List[Recording]:
         """
@@ -399,7 +399,7 @@ class Session:
         if "m_max" in self.__dict__:
             del self.__dict__["m_max"]
 
-    def reset_recordings_cache (self):
+    def reset_recordings_cache(self):
         """
         Reset the cached processed recordings.
         This is used after changing the filter parameters or excluding/including recordings from the session set.
@@ -508,10 +508,39 @@ class Session:
             for recording in self.recordings_filtered
         ]
         return h_wave_amplitudes
+
+    def get_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
+        # Get the start and end times for the specified window
+        if isinstance(window, LatencyWindow):
+            window_start = window.start_times[channel_index] + self.stim_start
+            window_end = window.end_times[channel_index] + self.stim_start
+        else:
+            # If a string is provided, look up the window by label
+            window_obj = self.get_latency_window(window)
+            if window_obj:
+                window_start = window_obj.start_times[channel_index]
+                window_end = window_obj.end_times[channel_index]
+            else:
+                logging.warning(f"Latency window '{window}' not found.")
+                return []
+
+        # Calculate the reflex amplitudes for the specified window
+        reflex_amplitudes = [
+            calculate_emg_amplitude(
+                recording[:, channel_index],
+                window_start,
+                window_end,
+                self.scan_rate,
+                method=method,
+            )
+            for recording in self.recordings_filtered
+        ]
+        return np.array(reflex_amplitudes)
+
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
-    def rename_channels(self, new_names : dict[str, str]):
+    def rename_channels(self, new_names: dict[str, str]):
         for old_name, new_name in new_names.items():
             if old_name in self.channel_names:
                 i = self.channel_names.index(old_name)

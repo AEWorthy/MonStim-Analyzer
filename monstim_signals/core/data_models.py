@@ -20,6 +20,10 @@ class LatencyWindow:
     def end_times(self):
         return [start + dur for start, dur in zip(self.start_times, self.durations)]
 
+    @property
+    def label(self):
+        return self.name if self.name else "Latency Window"
+
     def get_legend_element(self, stylized=True):
         from matplotlib.lines import Line2D
         if stylized:

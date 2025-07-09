@@ -107,6 +107,10 @@ class EMGOptions(BasePlotOptions):
         self.latency_legend_checkbox.setChecked(True)
         form.addRow("Show Colormap:",self.plot_colormap_checkbox)
         self.plot_colormap_checkbox.setChecked(True)
+        self.interactive_cursor_checkbox = QCheckBox()
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        self.interactive_cursor_checkbox.setChecked(True)
+        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
 
         self.layout.addLayout(form)
 
@@ -126,7 +130,8 @@ class EMGOptions(BasePlotOptions):
             "data_type": self.data_type_combo.currentText(),
             "all_flags": self.all_windows_checkbox.isChecked(),
             "plot_legend": self.latency_legend_checkbox.isChecked(),
-            "plot_colormap": self.plot_colormap_checkbox.isChecked()
+            "plot_colormap": self.plot_colormap_checkbox.isChecked(),
+            "interactive_cursor": self.interactive_cursor_checkbox.isChecked()
         }
     
     def set_options(self, options):
@@ -142,6 +147,8 @@ class EMGOptions(BasePlotOptions):
             self.latency_legend_checkbox.setChecked(options["plot_legend"])
         if "plot_colormap" in options:
             self.plot_colormap_checkbox.setChecked(options["plot_colormap"])
+        if "interactive_cursor" in options:
+            self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
 
 class SingleEMGRecordingOptions(BasePlotOptions):
     def create_options(self):
@@ -166,6 +173,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.plot_colormap_checkbox.setToolTip("If checked, a colormap legend will be shown to the side of the plot.")
         self.fixed_y_axis_checkbox = QCheckBox()
         self.fixed_y_axis_checkbox.setToolTip("If checked, the y-axes for all channels will be fixed to the maximum y-axis value.")
+        self.interactive_cursor_checkbox = QCheckBox()
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         form.addRow("Show Flags:",   self.all_windows_checkbox)
         self.all_windows_checkbox.setChecked(True)
         self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
@@ -176,6 +185,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.plot_colormap_checkbox.setChecked(True)
         form.addRow("Fixed Y-Axis:", self.fixed_y_axis_checkbox)
         self.fixed_y_axis_checkbox.setChecked(True)  # Set the initial state to True
+        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self.interactive_cursor_checkbox.setChecked(True)
 
         self.layout.addLayout(form)
 
@@ -201,7 +212,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             "plot_legend": self.latency_legend_checkbox.isChecked(),
             "recording_index": self.recording_cycler.get_current_recording(),
             "fixed_y_axis": self.fixed_y_axis_checkbox.isChecked(),
-            "plot_colormap": self.plot_colormap_checkbox.isChecked()
+            "plot_colormap": self.plot_colormap_checkbox.isChecked(),
+            "interactive_cursor": self.interactive_cursor_checkbox.isChecked()
         }
     
     def set_options(self, options):
@@ -218,9 +230,11 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         if "recording_index" in options:
             self.recording_cycler.recording_spinbox.setValue(options["recording_index"])
         if "fixed_y_axis" in options:
-            self.fixed_y_axis_checkbox.setChecked(options["fixed_y_axis"]),
+            self.fixed_y_axis_checkbox.setChecked(options["fixed_y_axis"])
         if "plot_colormap" in options:
             self.plot_colormap_checkbox.setChecked(options["plot_colormap"])
+        if "interactive_cursor" in options:
+            self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
 
 class ReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
@@ -240,12 +254,18 @@ class ReflexCurvesOptions(BasePlotOptions):
         # Checkboxes
         self.relative_to_mmax_checkbox    = QCheckBox()
         self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
-        self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Relative to M-max:",   self.relative_to_mmax_checkbox)
         self.relative_to_mmax_checkbox.setChecked(False)
+
+        self.show_legend_checkbox = QCheckBox()
+        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
+
+        self.interactive_cursor_checkbox = QCheckBox()
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self.interactive_cursor_checkbox.setChecked(False)
 
         self.layout.addLayout(form)
 
@@ -258,7 +278,8 @@ class ReflexCurvesOptions(BasePlotOptions):
             "channel_indices" : self.channel_selector.get_selected_channels(),
             "method": self.method_combo.currentText(),
             "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
-            "plot_legend": self.show_legend_checkbox.isChecked()
+            "plot_legend": self.show_legend_checkbox.isChecked(),
+            "interactive_cursor": self.interactive_cursor_checkbox.isChecked()
         }
     
     def set_options(self, options):
@@ -272,6 +293,8 @@ class ReflexCurvesOptions(BasePlotOptions):
             self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
         if "plot_legend" in options:
             self.show_legend_checkbox.setChecked(options["plot_legend"])
+        if "interactive_cursor" in options:
+            self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
 
 class AverageReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
@@ -339,6 +362,12 @@ class MMaxOptions(BasePlotOptions):
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
 
+        # Checkboxes
+        self.interactive_cursor_checkbox = QCheckBox()
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        self.interactive_cursor_checkbox.setChecked(False)
+        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+
         self.layout.addLayout(form)
 
         # channel selection
@@ -348,7 +377,8 @@ class MMaxOptions(BasePlotOptions):
     def get_options(self):
         return {
             "channel_indices" : self.channel_selector.get_selected_channels(),
-            "method": self.method_combo.currentText()
+            "method": self.method_combo.currentText(),
+            "interactive_cursor": self.interactive_cursor_checkbox.isChecked()
         }
     
     def set_options(self, options):
@@ -358,6 +388,8 @@ class MMaxOptions(BasePlotOptions):
             index = self.method_combo.findText(options["method"])
             if index >= 0:
                 self.method_combo.setCurrentIndex(index)
+        if "interactive_cursor" in options:
+            self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
 
 class MaxHReflexOptions(BasePlotOptions):
     def create_options(self):

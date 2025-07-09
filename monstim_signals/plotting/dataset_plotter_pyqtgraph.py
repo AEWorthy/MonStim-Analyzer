@@ -32,7 +32,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 raise UnableToPlotError("Canvas is required for plotting.")
             
             # Clear the canvas
-            canvas.clear()
+            self.clear_current_plots(canvas)
             
             # Get channel information
             if channel_indices is None:

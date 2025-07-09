@@ -53,7 +53,7 @@ class BasePlotterPyQtGraph:
         num_channels = len(channel_indices)
         
         # Clear existing plots
-        canvas.clear_plots()
+        self.clear_current_plots(canvas)
         
         plot_items = []
         
@@ -187,8 +187,6 @@ class BasePlotterPyQtGraph:
             plot_items[0].scene().sigMouseMoved.connect(mouse_moved)
 
         return v_lines, h_lines, cursor_texts
-
-    # REMOVED: add_cursor_indicator. Now handled by add_synchronized_crosshairs.
 
     def add_latency_region(self, plot_item: pg.PlotItem, start_time: float, end_time: float, 
                           color: str = '#ff000030', label: str = '') -> pg.LinearRegionItem:
@@ -395,11 +393,12 @@ class BasePlotterPyQtGraph:
         """
         # PyQtGraph updates automatically, so we just need to process events
         canvas.graphics_layout.update()
-    
-    def clear_current_plots(self):
+
+    def clear_current_plots(self, canvas: 'PlotPane'):
         """Clear all current plot items and regions."""
         self.current_plot_items = []
         self.current_regions = []
+        canvas.clear_plots()
 
 
 class UnableToPlotError(Exception):
