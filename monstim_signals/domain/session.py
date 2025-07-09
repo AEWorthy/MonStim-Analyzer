@@ -17,7 +17,7 @@ from monstim_signals.transform import (
     get_avg_mmax,
     NoCalculableMmaxError,
 )
-from monstim_signals.plotting.session_plotter import SessionPlotter
+from monstim_signals.plotting.session_plotter_pyqtgraph import SessionPlotterPyQtGraph
 
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import SessionRepository
@@ -41,7 +41,7 @@ class Session:
         self._load_config_settings()
         self._load_session_parameters()
         self._initialize_annotations()
-        self.plotter = SessionPlotter(self)
+        self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
 
     @property
@@ -125,7 +125,7 @@ class Session:
         """
         self._load_config_settings()  # Reload config settings to ensure they are up-to-date
 
-        self.plotter = SessionPlotter(self)
+        self.plotter = SessionPlotterPyQtGraph(self)
         for window in self.latency_windows:
             window.linestyle = self.latency_window_style
             window.color = self.m_color if window.name == "M-wave" else window.color

@@ -12,6 +12,7 @@ pytest==8.4.0
 scipy==1.15.3
 setuptools==72.2.0
 traitlets==5.14.3
+pyqtgraph==0.13.7
 
 -e monstim_signals
 -e monstim_gui

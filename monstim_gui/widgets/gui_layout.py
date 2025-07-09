@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStatusBar
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStatusBar, QSizePolicy
 
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
@@ -39,13 +39,18 @@ def setup_main_layout(parent: 'MonstimGUI') -> dict:
 
     # Left panel holding controls
     left_panel = QWidget()
+    left_panel.setFixedWidth(370)
+    
     left_layout = QVBoxLayout(left_panel)
     left_layout.setSpacing(10)
     left_layout.setContentsMargins(0, 0, 0, 0)
     left_layout.addWidget(data_selection_widget)
     left_layout.addWidget(reports_widget)
     left_layout.addWidget(plot_widget)
-    left_layout.addStretch(1)
+    left_panel.setLayout(left_layout)
+    left_panel.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+
+    plot_pane.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     main_layout.addWidget(left_panel)
     main_layout.addWidget(plot_pane)

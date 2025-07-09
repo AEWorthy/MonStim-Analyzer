@@ -3,7 +3,7 @@ from typing import List, Any, TYPE_CHECKING
 import logging
 import numpy as np
 
-from monstim_signals.plotting.dataset_plotter import DatasetPlotter
+from monstim_signals.plotting.dataset_plotter_pyqtgraph import DatasetPlotterPyQtGraph
 from monstim_signals.domain.session import Session
 from monstim_signals.core.data_models import DatasetAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
@@ -30,7 +30,7 @@ class Dataset:
 
         self._load_config_settings()
 
-        self.plotter = DatasetPlotter(self)
+        self.plotter = DatasetPlotterPyQtGraph(self)
 
         # Ensure all sessions share the same recording parameters
         try:
@@ -223,7 +223,7 @@ class Dataset:
             session.apply_config()
 
         self._load_config_settings()
-        self.plotter = DatasetPlotter(self)
+        self.plotter = DatasetPlotterPyQtGraph(self)
         
         if reset_caches:
             self.reset_all_caches()

@@ -77,7 +77,7 @@ class PlotController:
             raw_data = level_object.plot(
                 plot_type=plot_type,
                 **plot_options,
-                canvas=self.gui.plot_widget.canvas,
+                canvas=self.gui.plot_widget.plot_pane,
             )
         except Exception as e:
             QMessageBox.critical(self.gui, "Error", f"An error occurred: {e}")

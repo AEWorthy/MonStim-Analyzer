@@ -26,6 +26,9 @@ class LatencyWindow:
             return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
         else:
             return Line2D([0], [0], color=self.color, linestyle='-', label=self.name)
+        
+    def __str__(self):
+        return self.name
 
 @dataclass
 class StimCluster:

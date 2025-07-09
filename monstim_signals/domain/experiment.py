@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from monstim_signals.domain.dataset import Dataset
-from monstim_signals.plotting.experiment_plotter import ExperimentPlotter
+from monstim_signals.plotting.experiment_plotter_pyqtgraph import ExperimentPlotterPyQtGraph
 from monstim_signals.core.data_models import ExperimentAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
 
@@ -25,7 +25,7 @@ class Experiment:
         self._config = config
 
         self._load_config_settings()
-        self.plotter = ExperimentPlotter(self)
+        self.plotter = ExperimentPlotterPyQtGraph(self)
 
         self.__check_dataset_consistency()
         if self.datasets:
@@ -280,7 +280,7 @@ class Experiment:
             ds.apply_config()
 
         self._load_config_settings()
-        self.plotter = ExperimentPlotter(self)
+        self.plotter = ExperimentPlotterPyQtGraph(self)
 
         if reset_caches:
             self.reset_all_caches()

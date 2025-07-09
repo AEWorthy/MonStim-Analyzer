@@ -4,9 +4,7 @@ import copy
 from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup, QFormLayout,
                              QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QWidget)
 from PyQt6.QtCore import Qt
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+import pyqtgraph as pg
 
 from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
                            MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
@@ -14,7 +12,6 @@ from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOp
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
     from .plot_options import BasePlotOptions
-    from matplotlib import Figure, FigureCanvas
 
 # Plotting Widget
 class PlotWidget(QGroupBox):
@@ -160,8 +157,8 @@ class PlotWidget(QGroupBox):
         self.get_data_button.clicked.connect(self.parent.plot_controller.get_raw_data)
     
     def import_canvas(self):
-        self.canvas : 'FigureCanvas' = self.parent.plot_pane.canvas
-        self.figure : 'Figure' = self.parent.plot_pane.figure        
+        self.canvas = self.parent.plot_pane.graphics_layout
+        self.plot_pane = self.parent.plot_pane        
 
     def on_view_changed(self):
         match self.view_group.checkedButton():
@@ -243,13 +240,21 @@ class PlotPane(QGroupBox):
         self.parent = parent
         self.layout = QVBoxLayout()
 
-        self.figure = Figure()
-        self.canvas = FigureCanvas(self.figure) # Type: FigureCanvas
-        self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.canvas.setMinimumSize(400, 400)       
-        self.layout.addWidget(self.canvas)
+        # Create the main graphics layout widget
+        self.graphics_layout = pg.GraphicsLayoutWidget()
+        self.graphics_layout.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.graphics_layout.setMinimumSize(800, 400)
+        self.layout.addWidget(self.graphics_layout)
         
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.layout.addWidget(self.toolbar)
+        # Store references to current plots
+        self.current_plots = []
+        self.current_plot_items = []
+        
         self.setLayout(self.layout)
-        logging.debug("Canvas created and added to layout.")
+        logging.debug("PyQtGraph canvas created and added to layout.")
+        
+    def clear_plots(self):
+        """Clear all current plots"""
+        self.graphics_layout.clear()
+        self.current_plots = []
+        self.current_plot_items = []
