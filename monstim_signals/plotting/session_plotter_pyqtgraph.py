@@ -107,31 +107,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         plot_item.showGrid(True, True)
         
         return curve
-       
-    def _convert_matplotlib_color(self, mpl_color):
-        """Convert matplotlib color names to PyQtGraph-compatible colors."""
-        color_map = {
-            'tab:red': '#d62728',
-            'tab:blue': '#1f77b4',
-            'tab:orange': '#ff7f0e',
-            'tab:green': '#2ca02c',
-            'tab:purple': '#9467bd',
-            'tab:brown': '#8c564b',
-            'tab:pink': '#e377c2',
-            'tab:gray': '#7f7f7f',
-            'tab:olive': '#bcbd22',
-            'tab:cyan': '#17becf',
-            'red': '#ff0000',
-            'blue': '#0000ff',
-            'green': '#00ff00',
-            'black': '#000000',
-            'white': '#ffffff',
-            'yellow': '#ffff00',
-            'cyan': '#00ffff',
-            'magenta': '#ff00ff'
-        }
-        return color_map.get(mpl_color, mpl_color)
-    
+           
     def plot_latency_windows(self, plot_item: pg.PlotItem, all_flags: bool, channel_index: int):
         """
         Plot latency windows as vertical lines.
@@ -544,7 +520,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             window_amplitudes_dict = {}  # window label -> amplitude list
             window_colors = {}
             for window in self.emg_object.latency_windows:
-                amps : np.ndarray = self.emg_object.get_reflex_amplitudes(
+                amps : np.ndarray = self.emg_object.get_lw_reflex_amplitudes(
                     method=method, channel_index=channel_index, window=window
                 )
                 logging.info(f"Channel {channel_index}, Window {window.label}: {len(amps)} amplitudes")

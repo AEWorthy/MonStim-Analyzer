@@ -205,25 +205,6 @@ class Session:
                 return w
         return None
 
-    def get_latency_window_amplitudes(
-        self, window_name: str, method: str, channel_index: int
-    ) -> List[float]:
-        """Return EMG amplitudes within ``window_name`` for each recording."""
-        window = self.get_latency_window(window_name)
-        if window is None:
-            raise ValueError(f"No latency window named '{window_name}' found.")
-        window_start = window.start_times[channel_index] + self.stim_start
-        window_end = window_start + window.durations[channel_index]
-        return [
-            calculate_emg_amplitude(
-                rec[:, channel_index],
-                window_start,
-                window_end,
-                self.scan_rate,
-                method=method,
-            )
-            for rec in self.recordings_filtered
-        ]
     @property
     def excluded_recordings(self):
         return set(self.annot.excluded_recordings)
@@ -509,20 +490,23 @@ class Session:
         ]
         return h_wave_amplitudes
 
-    def get_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
-        # Get the start and end times for the specified window
-        if isinstance(window, LatencyWindow):
+    def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
+        '''
+        Returns the reflex amplitudes for a specific latency window across all sessions in the dataset.
+        
+        The array in the same order as the stimulus voltage of each recording.
+        '''
+        # Convert window to LatencyWindow if it's a string
+        if not isinstance(window, LatencyWindow):
+            window = self.get_latency_window(window)
+        
+        if window is not None:
+            # Needs to correct window times to the stimulus start time
             window_start = window.start_times[channel_index] + self.stim_start
             window_end = window.end_times[channel_index] + self.stim_start
         else:
-            # If a string is provided, look up the window by label
-            window_obj = self.get_latency_window(window)
-            if window_obj:
-                window_start = window_obj.start_times[channel_index]
-                window_end = window_obj.end_times[channel_index]
-            else:
-                logging.warning(f"Latency window '{window}' not found.")
-                return []
+            logging.warning(f"Latency window '{window}' not found.")
+            return []
 
         # Calculate the reflex amplitudes for the specified window
         reflex_amplitudes = [
@@ -798,7 +782,6 @@ class Session:
         for line in report:
             logging.info(line)
         return report
-
 
     def __repr__(self):
         return f"Session(session_id={self.id}, num_recordings={self.num_recordings})"

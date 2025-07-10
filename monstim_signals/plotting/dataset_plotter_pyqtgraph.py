@@ -1,6 +1,6 @@
 import numpy as np
-import pandas as pd
 import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore
 from typing import TYPE_CHECKING, List
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
@@ -24,89 +24,90 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
         super().__init__(dataset)
         self.emg_object: 'Dataset' = dataset
         
-    def plot_reflexCurves(self, channel_indices: List[int] = None, method=None, plot_legend=True, 
-                         relative_to_mmax=False, manual_mmax=None, canvas=None):
-        """Plot average reflex curves for the dataset with interactive features."""
+    def plot_reflexCurves(self, channel_indices: List[int] = None, method : str = None, plot_legend : bool = True, 
+                         relative_to_mmax : bool = False, manual_mmax : float | int | None =None,
+                         interactive_cursor : bool = False, canvas : 'PlotPane'=None):
+        """Plot average reflex curves for the dataset with interactive features, using domain Dataset object API."""
         try:
             if canvas is None:
                 raise UnableToPlotError("Canvas is required for plotting.")
-            
-            # Clear the canvas
+
             self.clear_current_plots(canvas)
-            
-            # Get channel information
+
+            # Get channel information from domain object
             if channel_indices is None:
-                channel_indices = list(range(self.emg_object.n_channels))
-            
-            # Create subplot layout
-            n_channels = len(channel_indices)
-            cols = min(2, n_channels)
-            rows = (n_channels + cols - 1) // cols
-            
-            plots = []
-            for i, channel_idx in enumerate(channel_indices):
-                row = i // cols
-                col = i % cols
-                
+                channel_indices = list(range(getattr(self.emg_object, 'n_channels', 1)))
+
+            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+
+            for plot_item, channel_idx in zip(plot_items, channel_indices):
+                plot_item : 'pg.PlotItem'
+
                 # Create plot item
-                plot_item = canvas.addPlot(row=row, col=col)
-                plot_item.setLabel('left', f'Channel {channel_idx + 1}')
-                plot_item.setLabel('bottom', 'Stimulus Intensity')
+                self.set_labels(plot_item=plot_item, title=f'{self.emg_object.channel_names[channel_idx]}',
+                                y_label=f'Average Reflex Ampl. (mV{", rel. to M-max" if relative_to_mmax else ""})',
+                                x_label='Stimulus Intensity (V)')
                 plot_item.showGrid(True, True)
-                
-                # Enable interactive features
-                plot_item.setMouseEnabled(x=True, y=True)
-                plot_item.enableAutoRange()
-                
-                # Add crosshair
-                crosshair = self.add_crosshair(plot_item)
-                
-                # Plot reflex curves data
                 self._plot_reflex_curves_data(plot_item, channel_idx, method, relative_to_mmax, manual_mmax)
-                
-                plots.append(plot_item)
-            
-            # Add legend if requested
-            if plot_legend and plots:
-                self.add_legend(plots[0], ['M-wave', 'H-reflex'])
-            
+
+            if interactive_cursor:
+                self.add_synchronized_crosshairs(plot_items)
+
+            # Add legend if requested, after all plotting is done
+            if plot_legend and plot_items:
+                if hasattr(plot_items[0], 'legend') and plot_items[0].legend is not None:
+                    plot_items[0].removeItem(plot_items[0].legend)
+                self.add_legend(plot_items[0])
+
             return self._extract_plot_data('reflexCurves', channel_indices, method, relative_to_mmax, manual_mmax)
-            
+
         except Exception as e:
             raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
-    
-    def _plot_reflex_curves_data(self, plot_item, channel_idx, method, relative_to_mmax, manual_mmax):
-        """Plot reflex curves data for a specific channel."""
-        # Get the data from the dataset
+
+    def _plot_reflex_curves_data(self, plot_item: pg.PlotItem, channel_idx, method, relative_to_mmax, manual_mmax):
+        """Plot reflex curves data for a specific channel, robust to domain object return types."""
         try:
-            reflex_data = self.emg_object.get_average_reflex_curves(
-                channel_indices=[channel_idx], 
-                method=method,
-                relative_to_mmax=relative_to_mmax,
-                manual_mmax=manual_mmax
-            )
-            
-            if reflex_data.empty:
-                return
-            
-            # Plot M-wave curve
-            if 'M-wave' in reflex_data.columns:
-                m_data = reflex_data['M-wave'].dropna()
-                if not m_data.empty:
-                    plot_item.plot(m_data.index, m_data.values, 
-                                 pen=pg.mkPen(color='red', width=2),
-                                 symbol='o', symbolSize=6, symbolBrush='red',
-                                 name='M-wave')
-            
-            # Plot H-reflex curve
-            if 'H-reflex' in reflex_data.columns:
-                h_data = reflex_data['H-reflex'].dropna()
-                if not h_data.empty:
-                    plot_item.plot(h_data.index, h_data.values,
-                                 pen=pg.mkPen(color='blue', width=2),
-                                 symbol='s', symbolSize=6, symbolBrush='blue',
-                                 name='H-reflex')
-                                 
+            # Get the data from the domain Dataset object
+            for window in self.emg_object.latency_windows:
+                window_reflex_data = self.emg_object.get_average_lw_reflex_curve(
+                    method=method,
+                    channel_index=channel_idx,
+                    window=window
+                )
+
+                # Normalize to M-max if needed
+                if relative_to_mmax and window_reflex_data['means'] is not None:
+                    if manual_mmax is None:
+                        mmax = self.emg_object.get_avg_m_max(
+                            channel_index=channel_idx,
+                            method=method
+                        )
+                    else:
+                        mmax = manual_mmax
+                    if mmax == 0:
+                        raise ValueError("M-max cannot be zero when normalizing reflex curves.")
+                    # Normalize means and stdevs by M-max
+                    window_reflex_data['means'] = np.array(window_reflex_data['means']) / mmax
+                    window_reflex_data['stdevs'] = np.array(window_reflex_data['stdevs']) / mmax
+
+                color = self._convert_matplotlib_color(window.color)
+                upper = np.array(window_reflex_data['means']) + np.array(window_reflex_data['stdevs'])
+                lower = np.array(window_reflex_data['means']) - np.array(window_reflex_data['stdevs'])
+                transparent_pen = pg.mkPen(color=color, width=1, style=QtCore.Qt.PenStyle.DotLine)
+                upper_curve = plot_item.plot(window_reflex_data['voltages'], upper, pen=transparent_pen)
+                lower_curve = plot_item.plot(window_reflex_data['voltages'], lower, pen=transparent_pen)
+                if not hasattr(plot_item, '_fill_curves_refs'):
+                    plot_item._fill_curves_refs = []
+                plot_item._fill_curves_refs.extend([upper_curve, lower_curve])
+                fill = pg.FillBetweenItem(curve1=upper_curve, curve2=lower_curve, brush=pg.mkBrush(color=color, alpha=50))
+                plot_item.addItem(fill)
+                # Plot mean line last so it appears on top and is visible
+                plot_item.plot(
+                    window_reflex_data['voltages'],
+                    window_reflex_data['means'],
+                    pen=pg.mkPen(color=color, width=2),
+                    name=f'{window.name} Mean'
+                )
         except Exception as e:
             print(f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}")
     

@@ -1,6 +1,6 @@
 import pyqtgraph as pg
 import numpy as np
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
     from monstim_signals.domain.session import Session
@@ -31,7 +31,7 @@ class BasePlotterPyQtGraph:
             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
         ]
         
-    def create_plot_layout(self, canvas: 'PlotPane', channel_indices: List[int] = None) -> tuple:
+    def create_plot_layout(self, canvas: 'PlotPane', channel_indices: List[int] = None) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
         """
         Create plot layout with subplots for multiple channels.
         
@@ -400,6 +400,29 @@ class BasePlotterPyQtGraph:
         self.current_regions = []
         canvas.clear_plots()
 
+    def _convert_matplotlib_color(self, mpl_color):
+        """Convert matplotlib color names to PyQtGraph-compatible colors."""
+        color_map = {
+            'tab:red': '#d62728',
+            'tab:blue': '#1f77b4',
+            'tab:orange': '#ff7f0e',
+            'tab:green': '#2ca02c',
+            'tab:purple': '#9467bd',
+            'tab:brown': '#8c564b',
+            'tab:pink': '#e377c2',
+            'tab:gray': '#7f7f7f',
+            'tab:olive': '#bcbd22',
+            'tab:cyan': '#17becf',
+            'red': '#ff0000',
+            'blue': '#0000ff',
+            'green': '#00ff00',
+            'black': '#000000',
+            'white': '#ffffff',
+            'yellow': '#ffff00',
+            'cyan': '#00ffff',
+            'magenta': '#ff00ff'
+        }
+        return color_map.get(mpl_color, mpl_color)
 
 class UnableToPlotError(Exception):
     """Exception raised when plotting is not possible."""

@@ -11,8 +11,8 @@ from monstim_signals.core.utils import DATA_VERSION
 class LatencyWindow:
     name: str
     color: str
-    start_times: List[float] # one per channel
-    durations: List[float] # one per channel
+    start_times: List[float] # one per channel; ms, relative to stimulus start time
+    durations: List[float] # one per channel; ms
     linestyle: str = '--'
     window_version: str = DATA_VERSION
 

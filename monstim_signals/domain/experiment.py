@@ -122,14 +122,7 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # Example: gather session “H‐reflex curves” for every dataset & session:
     #    Returns a nested dict: { "Animal_A": { "Session_01": [ … ], … }, … }
-    # ──────────────────────────────────────────────────────────────────
-    def experiment_response_map(self, channel: int, window) -> dict[str, dict[str, list[float]]]:
-        result = {}
-        for ds in self.datasets:
-            ds_map = ds.session_response_map(channel=channel, window=window)
-            result[ds.id] = ds_map
-        return result
-
+    # ──────────────────────────────────────────────────────────────────    
     def plot(self, plot_type: str = None, **kwargs):
         raw_data = getattr(self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}")(**kwargs)
         return raw_data
@@ -143,7 +136,7 @@ class Experiment:
         if dataset.id not in [ds.id for ds in self._all_datasets]:
             self._all_datasets.append(dataset)
             self.reset_all_caches()
-
+            
     def remove_dataset(self, dataset_id: str) -> None:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
         self.reset_all_caches()
