@@ -95,7 +95,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         
         # Plot the data
         curve = plot_item.plot(time_axis, data_segment, 
-                              pen=pg.mkPen(color=color, width=1.0))
+                              pen=pg.mkPen(color=color, width=1.5))
         
         # Store curve reference for dynamic colormap updates
         if norm is not None:
@@ -288,6 +288,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if plot_colormap:
             value_range = (min(self.emg_object.stimulus_voltages), max(self.emg_object.stimulus_voltages))
             self.add_colormap_scalebar(layout, plot_items, value_range)
+        
+        for plot_item in plot_items:
+            plot_item.enableAutoRange(axis='y', enable=True)
 
         # Display the plot
         self.display_plot(canvas)
@@ -456,6 +459,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             value_range = (min(self.emg_object.stimulus_voltages), max(self.emg_object.stimulus_voltages))
             self.add_colormap_scalebar(layout, plot_items, value_range)
 
+        if not fixed_y_axis:
+            for plot_item in plot_items:
+                plot_item.enableAutoRange(axis='y', enable=True)
+
         # Display the plot
         self.display_plot(canvas)
 
@@ -569,6 +576,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 legend = self.add_legend(current_plot)
                 for i, label in enumerate(window_amplitudes_dict.keys()):
                     legend.addItem(current_plot.listDataItems()[i], label)
+
+        for plot_item in plot_items:
+            plot_item.enableAutoRange(axis='y', enable=True)
         
         # Display the plot
         self.display_plot(canvas)

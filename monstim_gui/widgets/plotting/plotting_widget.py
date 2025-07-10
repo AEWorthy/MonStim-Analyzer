@@ -240,10 +240,15 @@ class PlotPane(QGroupBox):
         self.parent = parent
         self.layout = QVBoxLayout()
 
+        # Set the default background color for pyqtgraph to white and text to black
+        # pg.setConfigOption('background', 'w')
+        # pg.setConfigOption('foreground', 'k')
+
         # Create the main graphics layout widget
         self.graphics_layout = pg.GraphicsLayoutWidget()
         self.graphics_layout.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.graphics_layout.setMinimumSize(800, 400)
+        self.graphics_layout.setAntialiasing(True)
         self.layout.addWidget(self.graphics_layout)
         
         # Store references to current plots

@@ -424,6 +424,25 @@ class BasePlotterPyQtGraph:
         }
         return color_map.get(mpl_color, mpl_color)
 
+    def _pale_color(self, color, blend=0.8):
+        """Return a pale version of the given RGB color by blending with white."""
+        
+        def _hex_to_rgb(hex_color):
+            """Convert hex color string to RGB tuple."""
+            hex_color = hex_color.lstrip('#')
+            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        
+        if isinstance(color, str) and color.startswith('#'):
+            r, g, b = _hex_to_rgb(color)
+        else:
+            r, g, b = color[:3]
+        pale = (
+            int(r * (1 - blend) + 255 * blend),
+            int(g * (1 - blend) + 255 * blend),
+            int(b * (1 - blend) + 255 * blend)
+        )
+        return pale
+
 class UnableToPlotError(Exception):
     """Exception raised when plotting is not possible."""
     def __init__(self, message):

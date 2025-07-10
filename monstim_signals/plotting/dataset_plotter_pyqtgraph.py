@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
 from typing import TYPE_CHECKING, List
@@ -48,23 +49,25 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                                 y_label=f'Average Reflex Ampl. (mV{", rel. to M-max" if relative_to_mmax else ""})',
                                 x_label='Stimulus Intensity (V)')
                 plot_item.showGrid(True, True)
-                self._plot_reflex_curves_data(plot_item, channel_idx, method, relative_to_mmax, manual_mmax)
+                self._plot_reflex_curves_data(plot_item, channel_idx, method, relative_to_mmax, manual_mmax, plot_legend)
 
             if interactive_cursor:
                 self.add_synchronized_crosshairs(plot_items)
 
             # Add legend if requested, after all plotting is done
             if plot_legend and plot_items:
-                if hasattr(plot_items[0], 'legend') and plot_items[0].legend is not None:
-                    plot_items[0].removeItem(plot_items[0].legend)
                 self.add_legend(plot_items[0])
 
+            for plot_item in plot_items:
+                plot_item.enableAutoRange(axis='y', enable=True)
+
+            # TODO: Fix data return
             return self._extract_plot_data('reflexCurves', channel_indices, method, relative_to_mmax, manual_mmax)
 
         except Exception as e:
             raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
 
-    def _plot_reflex_curves_data(self, plot_item: pg.PlotItem, channel_idx, method, relative_to_mmax, manual_mmax):
+    def _plot_reflex_curves_data(self, plot_item: pg.PlotItem, channel_idx, method, relative_to_mmax, manual_mmax, plot_legend):
         """Plot reflex curves data for a specific channel, robust to domain object return types."""
         try:
             # Get the data from the domain Dataset object
@@ -91,22 +94,28 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     window_reflex_data['stdevs'] = np.array(window_reflex_data['stdevs']) / mmax
 
                 color = self._convert_matplotlib_color(window.color)
+                pale_color = self._pale_color(color, blend=0.25)
+                
+                # Plot the error bands
                 upper = np.array(window_reflex_data['means']) + np.array(window_reflex_data['stdevs'])
                 lower = np.array(window_reflex_data['means']) - np.array(window_reflex_data['stdevs'])
-                transparent_pen = pg.mkPen(color=color, width=1, style=QtCore.Qt.PenStyle.DotLine)
+                transparent_pen = pg.mkPen(color=pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine)
                 upper_curve = plot_item.plot(window_reflex_data['voltages'], upper, pen=transparent_pen)
                 lower_curve = plot_item.plot(window_reflex_data['voltages'], lower, pen=transparent_pen)
                 if not hasattr(plot_item, '_fill_curves_refs'):
                     plot_item._fill_curves_refs = []
                 plot_item._fill_curves_refs.extend([upper_curve, lower_curve])
-                fill = pg.FillBetweenItem(curve1=upper_curve, curve2=lower_curve, brush=pg.mkBrush(color=color, alpha=50))
+                fill = pg.FillBetweenItem(curve1=upper_curve, curve2=lower_curve, brush=pg.mkBrush(color=pale_color, alpha=50))
                 plot_item.addItem(fill)
+
                 # Plot mean line last so it appears on top and is visible
+                if plot_legend:
+                    plot_item.addLegend()
                 plot_item.plot(
                     window_reflex_data['voltages'],
                     window_reflex_data['means'],
                     pen=pg.mkPen(color=color, width=2),
-                    name=f'{window.name} Mean'
+                    name=window.name
                 )
         except Exception as e:
             print(f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}")
@@ -276,7 +285,72 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             print(f"Warning: Could not plot M-max data for channel {channel_idx}: {e}")
     
     def _extract_plot_data(self, plot_type, *args, **kwargs):
-        """Extract raw data for the plot - placeholder for compatibility."""
-        # This method should extract and return the raw data used in the plot
-        # For now, return empty dict - can be implemented later as needed
-        return {}
+        """Extract raw data for the plot as a pandas DataFrame."""
+        if plot_type == 'reflexCurves':
+            channel_indices = args[0] if args else [0]
+            method = args[1] if len(args) > 1 else None
+            relative_to_mmax = args[2] if len(args) > 2 else False
+            manual_mmax = args[3] if len(args) > 3 else None
+            data = []
+            for channel_idx in channel_indices:
+                for window in self.emg_object.latency_windows:
+                    window_reflex_data = self.emg_object.get_average_lw_reflex_curve(
+                        method=method,
+                        channel_index=channel_idx,
+                        window=window
+                    )
+                    means = window_reflex_data['means']
+                    stdevs = window_reflex_data['stdevs']
+                    voltages = window_reflex_data['voltages']
+                    if relative_to_mmax and means is not None:
+                        mmax = manual_mmax if manual_mmax is not None else self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
+                        if mmax != 0:
+                            means = np.array(means) / mmax
+                            stdevs = np.array(stdevs) / mmax
+                    for v, m, s in zip(voltages, means, stdevs):
+                        data.append({'channel': channel_idx, 'window': window.name, 'voltage': v, 'mean': m, 'stdev': s})
+            return pd.DataFrame(data)
+
+        elif plot_type == 'maxH':
+            channel_indices = args[0] if args else [0]
+            method = args[1] if len(args) > 1 else None
+            relative_to_mmax = args[2] if len(args) > 2 else False
+            manual_mmax = args[3] if len(args) > 3 else None
+            max_stim_value = args[4] if len(args) > 4 else None
+            bin_margin = args[5] if len(args) > 5 else 0
+            data = []
+            for channel_idx in channel_indices:
+                max_h_data = self.emg_object.get_max_h_reflex_data(
+                    channel_indices=[channel_idx],
+                    method=method,
+                    relative_to_mmax=relative_to_mmax,
+                    manual_mmax=manual_mmax,
+                    max_stim_value=max_stim_value,
+                    bin_margin=bin_margin
+                )
+                if not max_h_data.empty:
+                    for i, row in max_h_data.iterrows():
+                        entry = {'channel': channel_idx, 'session': f"Session {i+1}"}
+                        if 'M-wave' in row:
+                            entry['M-wave'] = row['M-wave']
+                        if 'H-reflex' in row:
+                            entry['H-reflex'] = row['H-reflex']
+                        data.append(entry)
+            return pd.DataFrame(data)
+
+        elif plot_type == 'mmax':
+            channel_indices = args[0] if args else [0]
+            method = args[1] if len(args) > 1 else None
+            data = []
+            for channel_idx in channel_indices:
+                mmax_data = self.emg_object.get_mmax_data(
+                    channel_indices=[channel_idx],
+                    method=method
+                )
+                if not mmax_data.empty:
+                    for i, value in enumerate(mmax_data.iloc[:, 0].values):
+                        data.append({'channel': channel_idx, 'session': f"Session {i+1}", 'M-max': value})
+            return pd.DataFrame(data)
+
+        # Default fallback
+        return pd.DataFrame()
