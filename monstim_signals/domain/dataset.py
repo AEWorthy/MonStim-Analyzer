@@ -3,7 +3,7 @@ from typing import List, Any, TYPE_CHECKING
 import logging
 import numpy as np
 
-from monstim_signals.plotting.dataset_plotter_pyqtgraph import DatasetPlotterPyQtGraph
+from monstim_signals.plotting import DatasetPlotterPyQtGraph
 from monstim_signals.domain.session import Session
 from monstim_signals.core.data_models import DatasetAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
@@ -305,16 +305,19 @@ class Dataset:
         sem = [float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return avg, sem
 
-    def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
+    def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
+        """
+        Get M-wave amplitudes at a specific stimulus voltage across all sessions.
+        """
         amps = []
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             if voltage in binned:
                 idx = np.where(binned == voltage)[0][0]
                 amps.append(session.get_m_wave_amplitudes(method, channel_index)[idx])
-        return amps
+        return np.array(amps)
 
-    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int):
+    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
         """Average H-reflex amplitudes for each stimulus bin across sessions."""
         h_wave_bins = {v: [] for v in self.stimulus_voltages}
         for session in self.sessions:
@@ -324,16 +327,16 @@ class Dataset:
                 h_wave_bins[volt].append(amp)
         avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
-        return avg, std
+        return np.array(avg), np.array(std)
 
-    def get_h_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
+    def get_h_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
         amps = []
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             if voltage in binned:
                 idx = np.where(binned == voltage)[0][0]
                 amps.append(session.get_h_wave_amplitudes(method, channel_index)[idx])
-        return amps
+        return np.array(amps)
 
     def get_lw_reflex_amplitudes(self, method: str, channel_index: int, 
                                       window: str | LatencyWindow) -> dict[str, List[float]]:
@@ -353,7 +356,7 @@ class Dataset:
             result[session.id] = session.get_lw_reflex_amplitudes(method, channel_index, window.name)
         return result
 
-    def get_average_lw_reflex_curve(self, method: str, channel_index: int, window: str | LatencyWindow):
+    def get_average_lw_reflex_curve(self, method: str, channel_index: int, window: str | LatencyWindow) -> dict[str, np.ndarray]:
         """
         Returns the average reflex curve for a specific latency window across all sessions in the dataset.
 
@@ -386,7 +389,7 @@ class Dataset:
         voltages = sorted(bin_amplitudes.keys())
         means = [float(np.mean(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in voltages]
         stdevs = [float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in voltages]
-        return {"voltages": voltages, "means": means, "stdevs": stdevs}
+        return {"voltages": np.array(voltages), "means": np.array(means), "stdevs": np.array(stdevs)}
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────

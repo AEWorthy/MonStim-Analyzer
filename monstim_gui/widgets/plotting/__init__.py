@@ -1,4 +1,5 @@
-from .plotting_widget import PlotWidget, PlotPane
+from .plotting_widget import PlotWidget
+from .plot_pane import PlotPane
 from .plot_options import (
     BasePlotOptions,
     EMGOptions,

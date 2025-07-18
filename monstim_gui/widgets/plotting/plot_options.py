@@ -1,5 +1,5 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout, QFormLayout, QGroupBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout, QFormLayout, QGroupBox, QSizePolicy
 from PyQt6.QtGui import QIntValidator
 from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
 from monstim_gui.widgets.plotting.plotting_cycler import RecordingCyclerWidget
@@ -19,8 +19,22 @@ class BasePlotOptions(QWidget):
     def __init__(self, parent : 'PlotWidget'):
         super().__init__(parent)
         self.gui_main = parent.parent
-        self.layout = QVBoxLayout(self)
+        self.layout : QVBoxLayout = QVBoxLayout(self)
+        self.layout.setSpacing(0)  # No spacing between widgets
+        self.layout.setContentsMargins(4, 4, 4, 4)  # Set smaller margins
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.create_options()
+        
+    def create_form_layout(self):
+        """Create a standardized form layout with consistent styling"""
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(4)  # Slightly increased vertical spacing for better readability
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)  # Keep everything on one row
+        return form
 
     def create_options(self):
         # To be implemented by subclasses
@@ -36,8 +50,9 @@ class BasePlotOptions(QWidget):
 
 class ChannelSelectorWidget(QGroupBox):
     def __init__(self, gui_main: 'MonstimGUI', parent=None):
-        super().__init__("Channels", parent)
-        # figure out how many channels we should allow
+        super().__init__("Channel Selector", parent)
+        
+        # Figure out how many channels we should allow
         view = gui_main.plot_widget.view
         if view == "session":
             emg_data = gui_main.current_session
@@ -50,22 +65,26 @@ class ChannelSelectorWidget(QGroupBox):
 
         max_ch = getattr(emg_data, 'num_channels', 0)
 
-        # set up a 2×3 grid
+        # Set up a grid layout with proper spacing and margins
         grid = QGridLayout()
-        grid.setSpacing(6)
-        grid.setContentsMargins(4, 4, 4, 4)
+        grid.setSpacing(6)  # Increased spacing between checkboxes
+        grid.setContentsMargins(8, 8, 8, 8)  # Better padding to prevent border clipping
+        
+        # Set size policy to make it as compact as possible
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.checkboxes: List[QCheckBox] = []
         total = (max_ch + 5) // 6 * 6  # Round up to the nearest multiple of 6
         for idx in range(total):
             cb = QCheckBox(f"{idx}")
-            # only enable the ones your data actually has
+            # Only enable the ones your data actually has
             cb.setEnabled(idx < max_ch)
             cb.setChecked(idx < max_ch)
             row, col = divmod(idx, 6)
-            grid.addWidget(cb, row, col, alignment=Qt.AlignmentFlag.AlignLeft)
+            # Center the checkboxes in their cells for better alignment
+            grid.addWidget(cb, row, col, alignment=Qt.AlignmentFlag.AlignCenter)
             self.checkboxes.append(cb)
-
+            
         self.setLayout(grid)
 
     def get_selected_channels(self) -> List[int]:
@@ -80,11 +99,7 @@ class ChannelSelectorWidget(QGroupBox):
 class EMGOptions(BasePlotOptions):
     def create_options(self):
         ## Data type options box
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)
+        form = self.create_form_layout()
 
         self.data_type_combo = QComboBox()
         self.data_type_combo.addItems([
@@ -111,12 +126,18 @@ class EMGOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         self.interactive_cursor_checkbox.setChecked(True)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
-
-        self.layout.addLayout(form)
-
-        # channel selectors at the bottom
+        
+        # Create the channel selector 
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
     
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
@@ -152,11 +173,7 @@ class EMGOptions(BasePlotOptions):
 
 class SingleEMGRecordingOptions(BasePlotOptions):
     def create_options(self):
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)
+        form = self.create_form_layout()
 
         self.data_type_combo = QComboBox()
         self.data_type_combo.addItems([
@@ -164,39 +181,52 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         ])
         form.addRow("Select Data Type:", self.data_type_combo)
 
-        # flags / legend / colormap
-        self.all_windows_checkbox    = QCheckBox()
-        self.all_windows_checkbox.setToolTip("If checked, all latency windows will be shown in the plot.")
+        
+        # Create and add checkboxes
+        self.all_windows_checkbox = QCheckBox()
+        self.all_windows_checkbox.setToolTip("If checked, all analysis windows will be shown in the plot.")
         self.latency_legend_checkbox = QCheckBox()
-        self.latency_legend_checkbox.setToolTip("If checked, the latency window legend will be shown in the plot.")
-        self.plot_colormap_checkbox  = QCheckBox()
-        self.plot_colormap_checkbox.setToolTip("If checked, a colormap legend will be shown to the side of the plot.")
+        self.latency_legend_checkbox.setToolTip("If checked, a legend for the latency markers will be shown in the plot.")
+        self.plot_colormap_checkbox = QCheckBox()
+        self.plot_colormap_checkbox.setToolTip("If checked, a colormap will be shown in the plot.")
         self.fixed_y_axis_checkbox = QCheckBox()
-        self.fixed_y_axis_checkbox.setToolTip("If checked, the y-axes for all channels will be fixed to the maximum y-axis value.")
+        self.fixed_y_axis_checkbox.setToolTip("If checked, the y-axis will be fixed to a range of [-1, 1].")
         self.interactive_cursor_checkbox = QCheckBox()
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
-        form.addRow("Show Flags:",   self.all_windows_checkbox)
+        
+        # Add checkboxes to form
+        form.addRow("Show Flags:", self.all_windows_checkbox)
         self.all_windows_checkbox.setChecked(True)
         self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
         self._on_all_windows_toggled(self.all_windows_checkbox.checkState())
-        form.addRow("Show Legend:",  self.latency_legend_checkbox)
+        
+        form.addRow("Show Legend:", self.latency_legend_checkbox)
         self.latency_legend_checkbox.setChecked(True)
-        form.addRow("Show Colormap:",self.plot_colormap_checkbox)
+        
+        form.addRow("Show Colormap:", self.plot_colormap_checkbox)
         self.plot_colormap_checkbox.setChecked(True)
+        
         form.addRow("Fixed Y-Axis:", self.fixed_y_axis_checkbox)
         self.fixed_y_axis_checkbox.setChecked(True)  # Set the initial state to True
+        
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self.interactive_cursor_checkbox.setChecked(True)
-
-        self.layout.addLayout(form)
-
         
-        # Recording Cycler
+        # Create the recording cycler widget and add it to the form
         self.recording_cycler = RecordingCyclerWidget(self)
-        self.layout.addWidget(self.recording_cycler)
-        # Channel selection
+        
+        # Create the channel selector widget and add it to the form
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing and organization
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
+        self.layout.addWidget(self.recording_cycler)
         self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
@@ -238,11 +268,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
 
 class ReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)
+        form = self.create_form_layout()
 
         self.method_combo = QComboBox()
         self.method_combo.addItems([
@@ -267,11 +293,17 @@ class ReflexCurvesOptions(BasePlotOptions):
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self.interactive_cursor_checkbox.setChecked(False)
 
-        self.layout.addLayout(form)
-
-        # Channel selection
+        # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -298,11 +330,7 @@ class ReflexCurvesOptions(BasePlotOptions):
 
 class AverageReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)
+        form = self.create_form_layout()
 
         self.method_combo = QComboBox()
         self.method_combo.addItems([
@@ -320,12 +348,18 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         self.relative_to_mmax_checkbox.setChecked(False)
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
-
-        self.layout.addLayout(form)
-
-        # Channel selection
+        
+        # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -349,11 +383,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
 
 class MMaxOptions(BasePlotOptions):
     def create_options(self):
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)
+        form = self.create_form_layout()
 
         self.method_combo = QComboBox()
         self.method_combo.addItems([
@@ -367,12 +397,18 @@ class MMaxOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         self.interactive_cursor_checkbox.setChecked(False)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
-
-        self.layout.addLayout(form)
-
-        # channel selection
+        
+        # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -393,11 +429,7 @@ class MMaxOptions(BasePlotOptions):
 
 class MaxHReflexOptions(BasePlotOptions):
     def create_options(self):
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)
+        form = self.create_form_layout()
 
         self.method_combo = QComboBox()
         self.method_combo.addItems([
@@ -424,13 +456,18 @@ class MaxHReflexOptions(BasePlotOptions):
         self.bin_margin_input.setPlaceholderText("(integer)")
         self.bin_margin_input.setToolTip("Number of bins to add to the left and right of the maximum stimulus value to add nerby datapoints to the average reflex calculation.")
         form.addRow("Bin Margin:", self.bin_margin_input)
-
-        self.layout.addLayout(form)
-
-
-        # Channel selection
+        
+        # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
 
     def get_options(self):
         return {

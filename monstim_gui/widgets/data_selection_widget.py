@@ -179,18 +179,12 @@ class DataSelectionWidget(QGroupBox):
         self.parent.data_manager.load_experiment(index)
     
     def _on_dataset_combo_changed(self):
-        if hasattr(self.parent, 'plot_widget'):
-            self.parent.plot_widget.save_current_options()
         self.parent.data_manager.load_dataset(index=self.dataset_combo.currentIndex())
-        if hasattr(self.parent, 'plot_widget'):
-            self.parent.plot_widget.restore_last_plot_type_and_options()
+
 
     def _on_session_combo_changed(self):
-        if hasattr(self.parent, 'plot_widget'):
-            self.parent.plot_widget.save_current_options()
         self.parent.data_manager.load_session(index=self.session_combo.currentIndex())
-        if hasattr(self.parent, 'plot_widget'):
-            self.parent.plot_widget.restore_last_plot_type_and_options()
+
 
     def update_experiment_combo(self):
         self.experiment_combo.clear()

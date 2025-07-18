@@ -76,7 +76,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     
     def plot_channel_data(self, plot_item: pg.PlotItem, time_axis: np.ndarray, 
                          channel_data: np.ndarray, start: int, end: int, 
-                         stimulus_v: float, channel_index: int, norm=None):
+                         stimulus_v: float, channel_index: int, norm=None,
+                         downsample: int = None):
         """
         Plot channel data with stimulus voltage-based coloring.
         
@@ -629,9 +630,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             'm_max_amplitudes': []
         }
         
-        # Set a light background for the canvas if possible
-        if hasattr(canvas, 'setBackground'):  # GraphicsLayoutWidget
-            canvas.setBackground('#f5f5f5')
+        # Collect all amplitudes for y-axis scaling (matching dataset plotter)
+        all_m_max_amplitudes = []
 
         # Plot each channel
         for plot_idx, channel_index in enumerate(channel_indices):
@@ -641,38 +641,49 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             m_max_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
             m_max, mmax_low_stim, _ = self.emg_object.get_m_max(method=method, channel_index=channel_index, return_mmax_stim_range=True)
 
-            # Plot M-max values as scatter with black edge
+            # Filter out NaN values for plotting (matching dataset plotter)
+            valid_amplitudes = [amp for amp in m_max_amplitudes if not np.isnan(amp)]
+            
+            # Append to superlist for y-axis adjustment (matching dataset plotter)
+            all_m_max_amplitudes.extend(valid_amplitudes)
+
+            # Plot M-max values as scatter with white edge (matching dataset plotter)
             x_pos = 0  # Single position on x-axis
             m_color = self._convert_matplotlib_color(self.emg_object.m_color) if hasattr(self.emg_object, 'm_color') else '#ff3333'
-            scatter = pg.ScatterPlotItem(
-                x=np.array([x_pos] * len(m_max_amplitudes)),
-                y=np.array(m_max_amplitudes),
-                pen=pg.mkPen('black', width=1.5),
-                brush=pg.mkBrush(m_color),
-                size=14,
-                symbol='o',
-                pxMode=True
-            )
-            current_plot.addItem(scatter)
-
-            # Add mean line (dark green, thick, dashed)
-            if len(m_max_amplitudes) > 0:
-                mean_amp = np.mean(m_max_amplitudes)
-                mean_line = pg.InfiniteLine(pos=mean_amp, angle=0, pen=pg.mkPen('#228B22', width=3, style=pg.QtCore.Qt.PenStyle.DashLine))
-                current_plot.addItem(mean_line)
-
-            # Add error bars (standard deviation, semi-transparent blue)
-            if len(m_max_amplitudes) > 1:
-                std_amp = np.std(m_max_amplitudes)
-                error_bar = pg.ErrorBarItem(
-                    x=np.array([x_pos]),
-                    y=np.array([mean_amp]),
-                    top=np.array([std_amp]),
-                    bottom=np.array([std_amp]),
-                    beam=0.22,
-                    pen=pg.mkPen((30, 144, 255, 180), width=4)
+            
+            if len(valid_amplitudes) > 0:
+                mean_amp = np.mean(valid_amplitudes)
+                std_amp = np.std(valid_amplitudes)
+                
+                # Add error bars (white, matching dataset plotter)
+                error_bars = pg.ErrorBarItem(
+                    x=np.array([x_pos]), y=np.array([mean_amp]),
+                    top=np.array([std_amp]), bottom=np.array([std_amp]),
+                    pen=pg.mkPen('white', width=2),
+                    beam=0.2
                 )
-                current_plot.addItem(error_bar)
+                current_plot.addItem(error_bars)
+                
+                # Add mean marker (white, matching dataset plotter)
+                mean_marker = pg.ScatterPlotItem(
+                    x=np.array([x_pos]), y=np.array([mean_amp]),
+                    pen=pg.mkPen('white', width=2),
+                    brush=pg.mkBrush('white'),
+                    size=12,
+                    symbol='+'
+                )
+                current_plot.addItem(mean_marker)
+                
+                # Plot the scatter points (smaller size, white pen, matching dataset plotter)
+                scatter = pg.ScatterPlotItem(
+                    x=np.array([x_pos] * len(valid_amplitudes)),
+                    y=np.array(valid_amplitudes),
+                    pen=pg.mkPen('white', width=0.1),
+                    brush=pg.mkBrush(m_color),
+                    size=8,
+                    symbol='o'
+                )
+                current_plot.addItem(scatter)
 
             # Collect raw data
             raw_data_dict['channel_index'].extend([channel_index] * len(m_max_amplitudes))
@@ -690,45 +701,27 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Set x-axis ticks and center the plot visually
             current_plot.getAxis('bottom').setTicks([[(x_pos, 'M-response')]])
-            # Center the data by setting x-axis range
-            current_plot.setXRange(-0.5, 0.5)
+            # Center the data by setting x-axis range (matching dataset plotter)
+            current_plot.setXRange(x_pos - 1, x_pos + 1.5)
 
-            # Add annotation (pin box to the top right corner of the plot window)
-            if len(m_max_amplitudes) > 0:
-                # Get the viewbox to determine the visible range
-                vb = current_plot.getViewBox()
-                # Use the current y-range, or fallback to data range
-                view_range = vb.viewRange()
-                y_min, y_max = view_range[1]
-                x_min, x_max = view_range[0]
-                y_range = y_max - y_min if y_max != y_min else 1
-                x_range = x_max - x_min if x_max != x_min else 1
-                # Pin to top right, with a small margin
-                margin_x = 0.04 * x_range
-                margin_y = 0.04 * y_range
-                x_annot = x_max - margin_x
-                y_annot = y_max - margin_y
+            # Add annotation text (simplified positioning, matching dataset plotter)
+            if len(valid_amplitudes) > 0:
                 text_item = pg.TextItem(
-                    f'n={len(m_max_amplitudes)}\nM-max: {m_max:.2f}mV\nStim.: >{mmax_low_stim:.2f}V',
-                    anchor=(1, 1), color='black', border=pg.mkPen('w'), fill=(255,255,255,220)
+                    f'n={len(valid_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nStdev. M-Max: {std_amp:.2f}mV\nAvg. Stim.: above {mmax_low_stim:.2f}V',
+                    anchor=(0, 0.5), color='black', border=pg.mkPen('w'), fill=pg.mkBrush(255, 255, 255, 180)
                 )
-                text_item.setFont(pg.QtGui.QFont('Arial', 13, pg.QtGui.QFont.Weight.Bold))
-                text_item.setPos(x_annot, y_annot)
+                text_item.setPos(x_pos + 0.2, mean_amp)
                 current_plot.addItem(text_item)
 
-            # Prettify: add grid (lighter), adjust axis font, tighten y-axis
-            current_plot.showGrid(x=True, y=True, alpha=0.18)
-            ax = current_plot.getAxis('left')
-            ax.setStyle(tickFont=pg.QtGui.QFont('Arial', 13, pg.QtGui.QFont.Weight.Bold))
-            ax = current_plot.getAxis('bottom')
-            ax.setStyle(tickFont=pg.QtGui.QFont('Arial', 13, pg.QtGui.QFont.Weight.Bold))
+            # Enable grid (matching dataset plotter)
+            current_plot.showGrid(True, True)
 
-            # Tighten y-axis
-            if len(m_max_amplitudes) > 0:
-                y_min = min(m_max_amplitudes)
-                y_max = max(m_max_amplitudes)
-                y_range = y_max - y_min if y_max != y_min else 1
-                current_plot.setYRange(y_min - 0.08*y_range, y_max + 0.15*y_range)
+        # Set y-axis limits (matching dataset plotter)
+        if all_m_max_amplitudes:
+            y_max = np.nanmax(all_m_max_amplitudes)
+            if not np.isnan(y_max):
+                for plot_item in plot_items:
+                    plot_item.setYRange(0, 1.1 * y_max)
 
         # Display the plot
         self.display_plot(canvas)

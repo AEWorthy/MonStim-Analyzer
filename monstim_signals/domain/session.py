@@ -17,7 +17,7 @@ from monstim_signals.transform import (
     get_avg_mmax,
     NoCalculableMmaxError,
 )
-from monstim_signals.plotting.session_plotter_pyqtgraph import SessionPlotterPyQtGraph
+from monstim_signals.plotting import SessionPlotterPyQtGraph
 
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import SessionRepository

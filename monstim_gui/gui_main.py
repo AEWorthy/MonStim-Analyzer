@@ -128,8 +128,6 @@ class MonstimGUI(QMainWindow):
         self._populate_profile_selector()
         self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
 
-        self.plot_widget.import_canvas()
-
         self.status_bar.showMessage(
             f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000
         )

@@ -119,10 +119,21 @@ class BasePlotterPyQtGraph:
     def add_synchronized_crosshairs(self, plot_items):
         """
         Add synchronized crosshairs and a cursor indicator to all plot_items. Only the active plot shows a horizontal crosshair and indicator.
+        
+        This is an optimized version that:
+        1. Uses throttling to limit cursor updates (16ms = ~60fps)
+        2. Only updates the text when the position changes significantly
+        3. Caches calculations where possible
+        4. Only shows text on demand (when stationary for a short time)
         """
+        import time
+        from pyqtgraph.Qt import QtCore
+        
         v_lines = []
         h_lines = []
         cursor_texts = []
+        
+        # Create crosshair lines and text items once
         for plot_item in plot_items:
             v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=1))
             h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('w', width=1))
@@ -135,32 +146,43 @@ class BasePlotterPyQtGraph:
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
-
-        # Shared mouse move event
-        def mouse_moved(evt):
-            if isinstance(evt, (list, tuple)):
-                pos = evt[0]
-            else:
-                pos = evt
-            active_plot_idx = None
-            for idx, plot_item in enumerate(plot_items):
-                if plot_item.sceneBoundingRect().contains(pos):
-                    active_plot_idx = idx
-                    break
-            if active_plot_idx is not None:
-                active_plot = plot_items[active_plot_idx]
-                mouse_point = active_plot.vb.mapSceneToView(pos)
-                x = mouse_point.x()
-                y = mouse_point.y()
-                # Update all vertical crosshairs to this x
-                for v in v_lines:
-                    v.setPos(x)
-                # Only show horizontal crosshair and indicator on the active plot
-                for idx in range(len(plot_items)):
-                    if idx == active_plot_idx:
-                        h_lines[idx].setPos(y)
-                        h_lines[idx].show()
-                        v_lines[idx].show()
+        
+        # State variables for optimizations
+        last_update_time = time.time()
+        update_interval = 0.016  # 16ms (~60fps)
+        last_active_plot_idx = None
+        last_x = None
+        last_y = None
+        mouse_idle_timer = QtCore.QTimer()
+        mouse_idle_timer.setSingleShot(True)
+        mouse_idle_timer.setInterval(300)  # 300ms of idle time before showing text
+        show_text = False
+        
+        # Function to show text indicators (called when mouse is idle)
+        def enable_text_display():
+            nonlocal show_text
+            show_text = True
+            # Only update if we have a valid position
+            if last_active_plot_idx is not None and last_x is not None and last_y is not None:
+                update_cursor_display(last_active_plot_idx, last_x, last_y)
+        
+        mouse_idle_timer.timeout.connect(enable_text_display)
+        
+        # Function to update the cursor display with minimal recomputation
+        def update_cursor_display(active_plot_idx, x, y):
+            # Update all vertical crosshairs to this x
+            for v in v_lines:
+                v.setPos(x)
+            
+            # Only show horizontal crosshair and indicator on the active plot
+            for idx in range(len(plot_items)):
+                if idx == active_plot_idx:
+                    h_lines[idx].setPos(y)
+                    h_lines[idx].show()
+                    v_lines[idx].show()
+                    
+                    # Only update text if it's visible
+                    if show_text:
                         # Show and update the cursor indicator - position in view coordinates
                         view_range = plot_items[idx].vb.viewRange()
                         x_min, x_max = view_range[0][0], view_range[0][1] * 0.55
@@ -171,21 +193,77 @@ class BasePlotterPyQtGraph:
                         cursor_texts[idx].setPos(x_clamped, y_top)
                         cursor_texts[idx].setZValue(1000)
                         cursor_texts[idx].show()
-
                     else:
-                        h_lines[idx].hide()
                         cursor_texts[idx].hide()
+                else:
+                    h_lines[idx].hide()
+                    cursor_texts[idx].hide()
+        
+        # Hide all lines and text
+        def hide_all_indicators():
+            for h, v, t in zip(h_lines, v_lines, cursor_texts):
+                h.hide()
+                v.hide()
+                t.hide()
+        
+        # Throttled mouse move event handler
+        def mouse_moved(evt):
+            nonlocal last_update_time, last_active_plot_idx, last_x, last_y, show_text
+            
+            # Throttle updates for performance
+            current_time = time.time()
+            if current_time - last_update_time < update_interval:
+                return
+            
+            last_update_time = current_time
+            
+            # Reset idle timer and hide text temporarily during movement
+            mouse_idle_timer.start()
+            show_text = False
+            
+            # Extract position from event
+            if isinstance(evt, (list, tuple)):
+                pos = evt[0]
             else:
-                # Hide all horizontal crosshairs and indicators if not over any plot
-                for h, v, t in zip(h_lines, v_lines, cursor_texts):
-                    h.hide()
-                    v.hide()
-                    t.hide()
-
+                pos = evt
+            
+            # Find which plot contains the cursor
+            active_plot_idx = None
+            for idx, plot_item in enumerate(plot_items):
+                if plot_item.sceneBoundingRect().contains(pos):
+                    active_plot_idx = idx
+                    break
+            
+            # Update cursor position if over a plot
+            if active_plot_idx is not None:
+                active_plot = plot_items[active_plot_idx]
+                mouse_point = active_plot.vb.mapSceneToView(pos)
+                x = mouse_point.x()
+                y = mouse_point.y()
+                
+                # Only update if position changed significantly
+                position_changed = (
+                    last_active_plot_idx != active_plot_idx or
+                    last_x is None or last_y is None or
+                    abs(x - last_x) > 0.01 or abs(y - last_y) > 0.01
+                )
+                
+                if position_changed:
+                    last_active_plot_idx = active_plot_idx
+                    last_x = x
+                    last_y = y
+                    update_cursor_display(active_plot_idx, x, y)
+            else:
+                # Hide all indicators if not over any plot
+                hide_all_indicators()
+                last_active_plot_idx = None
+                last_x = None
+                last_y = None
+        
         # Connect to the scene of the first plot (all plots share the same scene)
         if plot_items:
             plot_items[0].scene().sigMouseMoved.connect(mouse_moved)
-
+        
         return v_lines, h_lines, cursor_texts
 
     def add_latency_region(self, plot_item: pg.PlotItem, start_time: float, end_time: float, 
