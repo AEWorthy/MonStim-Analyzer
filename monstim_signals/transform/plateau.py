@@ -56,6 +56,11 @@ def get_avg_mmax(
         plateau_data = np.array(m_wave_amplitudes[plateau_start_idx:plateau_end_idx])
         m_max = np.mean(plateau_data)
         if m_max < max(m_wave_amplitudes):
+            # Correct the M-max value by accounting for the difference between the mean of 
+            # amplitudes greater than the current M-max and the mean of plateau data values 
+            # below the maximum plateau value. This adjustment ensures that the M-max 
+            # reflects the true peak amplitude by compensating for any underestimation 
+            # caused by the plateau averaging process.
             m_max = m_max + np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(
                 plateau_data[plateau_data < np.max(plateau_data)]
             )
