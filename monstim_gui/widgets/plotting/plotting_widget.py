@@ -4,9 +4,6 @@ import copy
 from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup, QFormLayout,
                              QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QWidget)
 from PyQt6.QtCore import Qt
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
                            MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
@@ -14,7 +11,6 @@ from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOp
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
     from .plot_options import BasePlotOptions
-    from matplotlib import Figure, FigureCanvas
 
 # Plotting Widget
 class PlotWidget(QGroupBox):
@@ -127,43 +123,117 @@ class PlotWidget(QGroupBox):
         self.additional_options_layout = QVBoxLayout()
         self.layout.addLayout(self.additional_options_layout)
 
-    def create_plot_button(self):
-        self.plot_button.clicked.connect(self.parent.plot_controller.plot_data)
-        self.get_data_button.clicked.connect(self.parent.plot_controller.get_raw_data)
-    
-    def import_canvas(self):
-        self.canvas : 'FigureCanvas' = self.parent.plot_pane.canvas
-        self.figure : 'Figure' = self.parent.plot_pane.figure        
-
     def on_view_changed(self):
         match self.view_group.checkedButton():
             case self.session_radio:
-                view = "session"
+                new_view = "session"
             case self.dataset_radio:
-                view = "dataset"
+                new_view = "dataset"
             case self.experiment_radio:
-                view = "experiment"
+                new_view = "experiment"
         
-        if view == self.view:
+        if new_view == self.view:
             return
 
-        self.save_current_options()
-        self.view = view
-        self.update_plot_types()
+        # Save current options for the current view and plot type before changing
+        if self.current_option_widget and self.view:
+            try:
+                current_plot_type = self.plot_type_combo.currentText()
+                if current_plot_type:
+                    current_options = self.current_option_widget.get_options()
+                    # Deep copy to ensure no reference sharing
+                    self.last_options[self.view][current_plot_type] = copy.deepcopy(current_options)
+            except Exception as e:
+                logging.warning(f"Failed to save options for {self.view} - {current_plot_type}: {e}")
+        
+        # Change to new view
+        self.view = new_view
+        
+        # Block signals to prevent multiple updates
+        self.plot_type_combo.blockSignals(True)
+        self.plot_type_combo.clear()
+        self.plot_type_combo.addItems(self.plot_options[self.view].keys())
+        
+        # Set the last plot type for this view
+        last_plot_type = self.last_plot_type.get(self.view)
+        if last_plot_type and last_plot_type in self.plot_options[self.view]:
+            self.plot_type_combo.setCurrentText(last_plot_type)
+        else:
+            # Use first available plot type
+            available_types = list(self.plot_options[self.view].keys())
+            if available_types:
+                self.plot_type_combo.setCurrentText(available_types[0])
+                self.last_plot_type[self.view] = available_types[0]
+        
+        self.plot_type_combo.blockSignals(False)
+        
+        # Update the plot options
         self.update_plot_options()
 
     def on_plot_type_changed(self):
-        self.save_current_options()
         plot_type = self.plot_type_combo.currentText()
-        if plot_type == self.last_plot_type[self.view]:
-            logging.debug(f"Plot type {plot_type} is already selected. No change needed. self.last_plot_type[self.view]: {self.last_plot_type[self.view]}")
+        
+        # Skip if plot_type is empty (happens during combo box updates)
+        if not plot_type:
             return
+            
+        # Get the previous plot type before updating
+        previous_plot_type = self.last_plot_type.get(self.view)
+        
+        # Skip if this is the same plot type (avoid unnecessary updates)
+        if plot_type == previous_plot_type:
+            return
+        
+        # Save current options for the PREVIOUS plot type before changing
+        if self.current_option_widget and previous_plot_type:
+            try:
+                current_options = self.current_option_widget.get_options()
+                # Deep copy to ensure no reference sharing
+                self.last_options[self.view][previous_plot_type] = copy.deepcopy(current_options)
+            except Exception as e:
+                logging.warning(f"Failed to save options for {self.view} - {previous_plot_type}: {e}")
+        
+        # Update the last plot type and refresh the options widget
         self.last_plot_type[self.view] = plot_type
         self.update_plot_options()
 
     def on_data_selection_changed(self):
+        """Called when the underlying data (session/dataset) changes.
+        This should refresh the current plot options widget without changing saved options."""
         try:
-            self.update_plot_options()
+            # Just refresh the current widget without changing saved options
+            plot_type = self.plot_type_combo.currentText()
+            if plot_type and self.current_option_widget:
+                # Remove the current widget
+                self.options_layout.removeWidget(self.current_option_widget)
+                self.current_option_widget.deleteLater()
+                self.current_option_widget = None
+                
+                # Create a new widget with the same plot type
+                if plot_type in self.plot_options[self.view]:
+                    self.current_option_widget = self.plot_options[self.view][plot_type](self)
+                    self.options_layout.addWidget(self.current_option_widget)
+                    
+                    # Restore the saved options for this view and plot type
+                    if (plot_type in self.last_options[self.view] and 
+                        self.last_options[self.view][plot_type]):
+                        try:
+                            saved_options = self.last_options[self.view][plot_type]
+                            
+                            # Filter options to only include those that are valid for this plot type
+                            default_options = self.current_option_widget.get_options()
+                            filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
+                            
+                            self.current_option_widget.set_options(filtered_options)
+                        except Exception as e:
+                            logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                    
+                    self.options_layout.update()
+                    
+                    # Handle special case for Single EMG Recordings
+                    if plot_type == "Single EMG Recordings":
+                        self.current_option_widget.recording_cycler.reset_max_recordings()
+                        
         except AttributeError:
             pass
 
@@ -175,53 +245,44 @@ class PlotWidget(QGroupBox):
         self.plot_type_combo.blockSignals(False)
 
     def update_plot_options(self):
+        plot_type = self.plot_type_combo.currentText()
+        
+        # Skip if plot_type is empty (happens during combo box updates)
+        if not plot_type:
+            return
+            
         if self.current_option_widget:
             self.options_layout.removeWidget(self.current_option_widget)
-            self.current_option_widget.deleteLater()     
-
-        plot_type = self.plot_type_combo.currentText()
+            self.current_option_widget.deleteLater()
+            self.current_option_widget = None
 
         if plot_type in self.plot_options[self.view]:
-            self.current_option_widget = self.plot_options[self.view][plot_type](self)
+            # Create the new widget
+            option_class = self.plot_options[self.view][plot_type]
+            self.current_option_widget = option_class(self)
             self.options_layout.addWidget(self.current_option_widget)
-
-            if plot_type in self.last_options[self.view]:
-                options = copy.deepcopy(self.last_options[self.view][plot_type])
-                logging.debug(f"Using last options for {self.view} - {plot_type}: {options}")
-                self.current_option_widget.set_options(options)
-            else:
-                logging.debug(f"No last options found for {self.view} - {plot_type}. Using default options.")
+            
+            # Restore saved options if they exist
+            if (plot_type in self.last_options[self.view] and 
+                self.last_options[self.view][plot_type]):
+                try:
+                    saved_options = self.last_options[self.view][plot_type]
+                    
+                    # Filter options to only include those that are valid for this plot type
+                    # Get default options from the widget to see what keys are valid
+                    default_options = self.current_option_widget.get_options()
+                    filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
+                    
+                    self.current_option_widget.set_options(filtered_options)
+                except Exception as e:
+                    logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
         
         self.options_layout.update()
-        if plot_type == "Single EMG Recordings":
+        if plot_type == "Single EMG Recordings" and self.current_option_widget:
             self.current_option_widget.recording_cycler.reset_max_recordings()
-
-    def save_current_options(self):
-       if self.current_option_widget:
-            current_plot_type = self.plot_type_combo.currentText()
-            current_options = self.current_option_widget.get_options()
-            self.last_options[self.view][current_plot_type] = copy.deepcopy(current_options)
-            logging.debug(f"Saved options for {self.view} - {current_plot_type}: {current_options}")
 
     def get_plot_options(self):
         if self.current_option_widget:
             return self.current_option_widget.get_options()
         return {}
 
-
-class PlotPane(QGroupBox):
-    def __init__(self, parent: 'MonstimGUI'):
-        super().__init__("Plot Pane", parent)
-        self.parent = parent
-        self.layout = QVBoxLayout()
-
-        self.figure = Figure()
-        self.canvas = FigureCanvas(self.figure) # Type: FigureCanvas
-        self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.canvas.setMinimumSize(400, 400)       
-        self.layout.addWidget(self.canvas)
-        
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        self.layout.addWidget(self.toolbar)
-        self.setLayout(self.layout)
-        logging.debug("Canvas created and added to layout.")

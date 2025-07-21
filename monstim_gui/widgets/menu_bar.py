@@ -188,6 +188,10 @@ class MenuBar(QMenuBar):
         self.undo_action.setText(undo_text)
         self.redo_action.setText(redo_text)
 
+        # Enable/disable actions based on availability
+        self.undo_action.setEnabled(undo_command_name is not None)
+        self.redo_action.setEnabled(redo_command_name is not None)
+
         # Optionally apply the hint style to make the hint part different (e.g., shadowed)
         self.undo_action.setFont(hint_font)
         self.redo_action.setFont(hint_font)

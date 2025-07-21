@@ -1,7 +1,10 @@
 """Signal transformation utilities."""
-from .filtering import butter_bandpass, butter_bandpass_filter
+from .filtering import (
+    butter_bandpass, 
+    butter_bandpass_filter, 
+    correct_emg_to_baseline
+    )
 from .amplitude import (
-    correct_emg_to_baseline,
     rectify_emg,
     calculate_emg_amplitude,
 )

@@ -1,8 +1,8 @@
 from pathlib import Path
 import pandas as pd
-# import sys
 from typing import Any
 from dataclasses import asdict
+import logging
 
 # # Ensure the project root is in sys.path for sibling imports
 # project_root = Path(__file__).resolve().parent.parent
@@ -170,14 +170,49 @@ def parse_v3h(path: Path):
     n = int(raw_meta['Stim specs cluster array.<size(s)>'])
     clusters = []
     for i in range(n):
+        stim_type = raw_meta[f'Stim type cluster array {i}.Stimulus Output']
+        stim_v = float(raw_meta[f'Stim. {i+1}'])
+        # If stim_type is Motor Length and stim_v is 0, extract from length channel
+        if stim_type.lower() == 'motor length' and stim_v == 0:
+            # Find the index of the length channel
+            try:
+                length_idx = meta['channel_types'].index('length')
+                length_signal = data[:, length_idx]
+                import numpy as np
+                # Use the last 10% of the recording as the tail for baseline
+                tail_len = max(1, int(0.1 * len(length_signal)))
+                baseline = length_signal[-tail_len:]
+                baseline_mean = np.mean(baseline)
+
+                # Find all local maxima and minima in the stim window
+                from scipy.signal import find_peaks
+                peaks, _ = find_peaks(length_signal)
+                troughs, _ = find_peaks(-length_signal)
+                peak_vals = length_signal[peaks] if len(peaks) > 0 else np.array([])
+                trough_vals = length_signal[troughs] if len(troughs) > 0 else np.array([])
+                # Calculate deflections from baseline
+                peak_deflections = np.abs(peak_vals - baseline_mean)
+                trough_deflections = np.abs(trough_vals - baseline_mean)
+                if len(peak_deflections) > 0 or len(trough_deflections) > 0:
+                    logging.info(f"Motor Length cluster {i} peaks: {len(peaks)}, troughs: {len(troughs)}")
+                    logging.info(f"Motor Length cluster {i} avg peak deflection: {np.mean(peak_deflections) if len(peak_deflections) > 0 else 0}, "
+                                 f"avg trough deflection: {np.mean(trough_deflections) if len(trough_deflections) > 0 else 0}")
+                    stim_v = float(max(np.median(peak_deflections) if len(peak_deflections) > 0 else 0,
+                                      np.median(trough_deflections) if len(trough_deflections) > 0 else 0))
+                else:
+                    stim_v = 0.0
+                    logging.warning(f"Motor Length cluster {i} has no peaks or troughs, using 0 for stim_v")
+            except Exception as e:
+                # fallback: leave stim_v as 0 if any error
+                logging.critical(f"Failed to extract robust stim_v for Motor Length: {e}")
+                pass
         clusters.append(StimCluster(
             stim_delay    = float(raw_meta[f'Stim specs cluster array {i}.Start Delay (ms)']),
             stim_duration = None, # not provided in v3h format
-            stim_type     = raw_meta[f'Stim type cluster array {i}.Stimulus Output'],
-            stim_v        = float(raw_meta[f'Stim. {i+1}']),
+            stim_type     = stim_type,
+            stim_v        = stim_v,
             stim_min_v    = float(raw_meta[f'Stim specs cluster array {i}.Initial Stimulus ampl.']),
             stim_max_v    = float(raw_meta[f'Stim specs cluster array {i}.Maximum Stimulus']),
-            
             pulse_shape   = raw_meta[f'Stim specs cluster array {i}.Pulse Shape'],
             num_pulses    = int(raw_meta[f'Stim specs cluster array {i}.#Pulses in train']),
             pulse_period  = float(raw_meta[f'Stim specs cluster array {i}.Total pulse period (ms)']),

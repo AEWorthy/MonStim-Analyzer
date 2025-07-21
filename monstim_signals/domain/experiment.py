@@ -4,7 +4,7 @@ import logging
 import numpy as np
 
 from monstim_signals.domain.dataset import Dataset
-from monstim_signals.plotting.experiment_plotter import ExperimentPlotter
+from monstim_signals.plotting import ExperimentPlotterPyQtGraph
 from monstim_signals.core.data_models import ExperimentAnnot, LatencyWindow
 from monstim_signals.core.utils import load_config
 
@@ -25,7 +25,7 @@ class Experiment:
         self._config = config
 
         self._load_config_settings()
-        self.plotter = ExperimentPlotter(self)
+        self.plotter = ExperimentPlotterPyQtGraph(self)
 
         self.__check_dataset_consistency()
         if self.datasets:
@@ -42,7 +42,7 @@ class Experiment:
         self.annot.is_completed = bool(value)
         if self.repo is not None:
             self.repo.save(self)
-
+            
     def __check_dataset_consistency(self) -> None:
         if not self.datasets:
             return
@@ -60,7 +60,7 @@ class Experiment:
                 warnings.append(f"Inconsistent stim_start for '{ds.id}': {ds.stim_start} != {ref_stim}.")
         for w in warnings:
             logging.warning(w)
-
+    
     def _load_config_settings(self) -> None:
         _config = self._config if self._config is not None else load_config()
         self.bin_size = _config["bin_size"]
@@ -122,14 +122,7 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # Example: gather session “H‐reflex curves” for every dataset & session:
     #    Returns a nested dict: { "Animal_A": { "Session_01": [ … ], … }, … }
-    # ──────────────────────────────────────────────────────────────────
-    def experiment_response_map(self, channel: int, window) -> dict[str, dict[str, list[float]]]:
-        result = {}
-        for ds in self.datasets:
-            ds_map = ds.session_response_map(channel=channel, window=window)
-            result[ds.id] = ds_map
-        return result
-
+    # ──────────────────────────────────────────────────────────────────    
     def plot(self, plot_type: str = None, **kwargs):
         raw_data = getattr(self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}")(**kwargs)
         return raw_data
@@ -143,7 +136,7 @@ class Experiment:
         if dataset.id not in [ds.id for ds in self._all_datasets]:
             self._all_datasets.append(dataset)
             self.reset_all_caches()
-
+            
     def remove_dataset(self, dataset_id: str) -> None:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
         self.reset_all_caches()
@@ -187,7 +180,7 @@ class Experiment:
         else:
             logging.warning(f"Dataset {dataset_id} is not excluded from experiment {self.id}.")
 
-    def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
+    def get_avg_m_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
         """Average M-wave amplitudes for each stimulus bin across datasets."""
         m_wave_bins = {v: [] for v in self.stimulus_voltages}
         for ds in self.datasets:
@@ -199,7 +192,7 @@ class Experiment:
         avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else 0.0 for v in self.stimulus_voltages]
         sem = [float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else 0.0
                for v in self.stimulus_voltages]
-        return avg, sem
+        return np.array(avg), np.array(sem)
 
     def _aggregate_wave_amplitudes(self, method: str, channel_index: int, amplitude_func):
         """Aggregate wave amplitudes across datasets."""
@@ -216,16 +209,17 @@ class Experiment:
         ]
         return avg, sem
 
-    def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
+    def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
+        """Get average M-wave amplitudes at a specific voltage across datasets."""
         amps = []
         for ds in self.datasets:
             if voltage in ds.stimulus_voltages:
                 idx = np.where(ds.stimulus_voltages == voltage)[0][0]
                 avg, _ = ds.get_avg_m_wave_amplitudes(method, channel_index)
                 amps.append(avg[idx])
-        return amps
+        return np.array(amps)
 
-    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int):
+    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
         h_wave_bins = {v: [] for v in self.stimulus_voltages}
         for ds in self.datasets:
             binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
@@ -234,16 +228,16 @@ class Experiment:
                 h_wave_bins[volt].append(amp)
         avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
-        return avg, std
+        return np.array(avg), np.array(std)
 
-    def get_h_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> List[float]:
+    def get_h_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
         amps = []
         for ds in self.datasets:
             if voltage in ds.stimulus_voltages:
                 idx = np.where(ds.stimulus_voltages == voltage)[0][0]
                 avg, _ = ds.get_avg_h_wave_amplitudes(method, channel_index)
                 amps.append(avg[idx])
-        return amps
+        return np.array(amps)
 
     def get_avg_m_max(self, method: str, channel_index: int, return_avg_mmax_thresholds: bool = False):
         m_max_list = []
@@ -280,7 +274,7 @@ class Experiment:
             ds.apply_config()
 
         self._load_config_settings()
-        self.plotter = ExperimentPlotter(self)
+        self.plotter = ExperimentPlotterPyQtGraph(self)
 
         if reset_caches:
             self.reset_all_caches()

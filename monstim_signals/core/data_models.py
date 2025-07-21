@@ -11,8 +11,8 @@ from monstim_signals.core.utils import DATA_VERSION
 class LatencyWindow:
     name: str
     color: str
-    start_times: List[float] # one per channel
-    durations: List[float] # one per channel
+    start_times: List[float] # one per channel; ms, relative to stimulus start time
+    durations: List[float] # one per channel; ms
     linestyle: str = '--'
     window_version: str = DATA_VERSION
 
@@ -20,12 +20,19 @@ class LatencyWindow:
     def end_times(self):
         return [start + dur for start, dur in zip(self.start_times, self.durations)]
 
+    @property
+    def label(self):
+        return self.name if self.name else "Latency Window"
+
     def get_legend_element(self, stylized=True):
         from matplotlib.lines import Line2D
         if stylized:
             return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
         else:
             return Line2D([0], [0], color=self.color, linestyle='-', label=self.name)
+        
+    def __str__(self):
+        return self.name
 
 @dataclass
 class StimCluster:
@@ -55,7 +62,18 @@ class StimCluster:
             self.pulse_shape = "Square"  # Default to Square if not specified
         if self.ramp_duration is None:
             self.ramp_duration = 0.0  # Default to 0 if not specified
+    @classmethod
+    def from_meta(cls, meta: Dict[str, Any]) -> 'StimCluster':
+        """
+        Create a StimCluster from a metadata dictionary.
+        This is useful for converting from JSON or other formats.
+        """
+        # Filter out unexpected keys
+        valid = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in meta.items() if k in valid}
+        return cls(**filtered)
 
+# TODO: Create a system to make non-EMG type objects filtered using different methods (or not at all for right now).
 @dataclass
 class SignalChannel:
     invert : bool = False
@@ -158,13 +176,23 @@ class RecordingAnnot:
 @dataclass
 class SessionAnnot:
     """
-    Holds all user edits for a Session:
-      - Which recordings to exclude
-      - Custom latency windows (persisting user tweaks)
-      - Optional cached m_max values (small arrays)
-      - Custom channel_names (if user renamed channels)
+    SessionAnnot is a data class that encapsulates all user edits and annotations for a session. It tracks which recordings are excluded, custom latency windows, optional cached m_max values, and custom channel names (if the user renamed channels). The class provides methods to create empty annotations, initialize from recording metadata, and construct from a dictionary (e.g., loaded from JSON), handling extra or unexpected keys gracefully.
+    Attributes:
+        excluded_recordings (List[str]): List of recording IDs to exclude from analysis.
+        latency_windows (List[LatencyWindow]): List of custom latency windows, reflecting user adjustments.
+        channels (List[SignalChannel]): List of signal channels, possibly renamed by the user.
+        m_max_values (List[float]): Optional cached m_max values for each channel.
+        is_completed (bool): Indicates if the session annotation is finalized.
+        version (str): Version string for the annotation data format.
+    Methods:
+        create_empty(num_channels: int = 0) -> 'SessionAnnot':
+            Creates an empty SessionAnnot instance with the specified number of channels, all initialized to default values.
+        from_meta(cls, recording_meta: RecordingMeta) -> 'SessionAnnot':
+            Constructs a SessionAnnot from a RecordingMeta object, initializing channels and their names/units based on the metadata.
+        from_dict(cls, raw: dict[str, Any]) -> 'SessionAnnot':
+            Builds a SessionAnnot from a dictionary (such as one loaded from JSON), filtering out unexpected keys and converting nested structures as needed.
     """
-    excluded_recordings  : List[str] = field(default_factory=list)
+    excluded_recordings  : List[str] = field(default_factory=list) # list of recording IDs to exclude
     latency_windows      : List[LatencyWindow] = field(default_factory=list)
     channels             : List[SignalChannel] = field(default_factory=list)
     m_max_values         : List[float] = field(default_factory=list)

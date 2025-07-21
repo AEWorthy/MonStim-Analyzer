@@ -37,24 +37,6 @@ subplot_adjust_args: # dict fot subplots_adjust() function. default is below.
   hspace : 0.20
 
 # Reflex Parameters
-m_start: # (in ms). default is 1.0.
-  - 1
-  - 1
-  - 1
-  - 1
-  - 1
-  - 1
-m_duration: 2 # (in ms). default is 2.0.
-
-h_start: # (in ms). default is 4.1.
-  - 3.2
-  - 3.2
-  - 3.2
-  - 3.2
-  - 3.2
-  - 3.2
-h_duration: 1.5 # (in ms). default is 1.0.
-
 h_threshold: 0.5 # (in mV). default is 0.5.
 
 preferred_date_format: 'YYMMDD'
@@ -67,6 +49,36 @@ latency_window_presets:
       linestyle: ':'
     - name: "H-reflex"
       start: 3.2
+      duration: 1.5
+      color: 'tab:blue'
+      linestyle: ':'
+  vibration_trio:
+    - name: "M1"
+      start: 1.0
+      duration: 2.0
+      color: 'tab:red'
+      linestyle: ':'
+    - name: "H1"
+      start: 3.2
+      duration: 1.5
+      color: 'tab:blue'
+      linestyle: ':'
+    - name: "M2"
+      start: 4.5
+      duration: 2.0
+      color: 'tab:red'
+      linestyle: ':'
+    - name: "H2"
+      start: 6.7
+      duration: 1.5
+      color: 'tab:blue'
+    - name: "M3"
+      start: 8.0
+      duration: 2.0
+      color: 'tab:red'
+      linestyle: ':'
+    - name: "H3"
+      start: 10.2
       duration: 1.5
       color: 'tab:blue'
       linestyle: ':'

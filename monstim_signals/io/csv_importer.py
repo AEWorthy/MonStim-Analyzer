@@ -7,11 +7,13 @@ import logging
 import numpy as np
 import traceback
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock as lock
 
 from monstim_signals.io.csv_parser import parse
 from monstim_signals.core.data_models import RecordingAnnot
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+lock = Lock()
 
 
 def discover_by_ext(base: Path, pattern='*.csv') -> list[Path]:

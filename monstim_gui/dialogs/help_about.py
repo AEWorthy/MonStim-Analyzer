@@ -168,8 +168,8 @@ class AboutDialog(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Program Information")
-        self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'info.png')))
-        self.setFixedSize(400, 300)
+        self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
+        self.setFixedSize(400, 400)
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog)
 
         # Set white background
@@ -178,9 +178,9 @@ class AboutDialog(QWidget):
         layout = QVBoxLayout(self)
 
         # Add logo
-        logo_pixmap = QPixmap(os.path.join(get_source_path(), 'icon.png'))
-        max_width = 100
-        max_height = 100
+        logo_pixmap = QPixmap(os.path.join(get_source_path(), 'logo.png'))
+        max_width = 200
+        max_height = 200
         logo_pixmap = logo_pixmap.scaled(max_width, max_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         logo_label = QLabel()
         logo_label.setPixmap(logo_pixmap)

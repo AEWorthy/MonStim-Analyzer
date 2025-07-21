@@ -12,11 +12,12 @@ from monstim_signals.core.utils import load_config
 from monstim_signals.domain.recording import Recording
 from monstim_signals.transform import (
     butter_bandpass_filter,
+    correct_emg_to_baseline,
     calculate_emg_amplitude,
     get_avg_mmax,
     NoCalculableMmaxError,
 )
-from monstim_signals.plotting.session_plotter import SessionPlotter
+from monstim_signals.plotting import SessionPlotterPyQtGraph
 
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import SessionRepository
@@ -40,7 +41,7 @@ class Session:
         self._load_config_settings()
         self._load_session_parameters()
         self._initialize_annotations()
-        self.plotter = SessionPlotter(self)
+        self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
 
     @property
@@ -54,12 +55,7 @@ class Session:
             self.repo.save(self)
 
     def _load_config_settings(self):
-        _config = self._config if self._config is not None else load_config()
-        self.default_m_start : List[float] = _config['m_start']
-        self.default_m_duration : List[float] = [_config['m_duration'] for _ in range(len(self.default_m_start))]
-        self.default_h_start : List[float] = _config['h_start']
-        self.default_h_duration : List[float] = [_config['h_duration'] for _ in range(len(self.default_h_start))]
-        
+        _config = self._config if self._config is not None else load_config()        
         self.time_window_ms : float = _config['time_window']
         self.bin_size : float = _config['bin_size']
         self.latency_window_style : str = _config['latency_window_style']
@@ -129,7 +125,7 @@ class Session:
         """
         self._load_config_settings()  # Reload config settings to ensure they are up-to-date
 
-        self.plotter = SessionPlotter(self)
+        self.plotter = SessionPlotterPyQtGraph(self)
         for window in self.latency_windows:
             window.linestyle = self.latency_window_style
             window.color = self.m_color if window.name == "M-wave" else window.color
@@ -209,35 +205,16 @@ class Session:
                 return w
         return None
 
-    def get_latency_window_amplitudes(
-        self, window_name: str, method: str, channel_index: int
-    ) -> List[float]:
-        """Return EMG amplitudes within ``window_name`` for each recording."""
-        window = self.get_latency_window(window_name)
-        if window is None:
-            raise ValueError(f"No latency window named '{window_name}' found.")
-        window_start = window.start_times[channel_index] + self.stim_start
-        window_end = window_start + window.durations[channel_index]
-        return [
-            calculate_emg_amplitude(
-                rec[:, channel_index],
-                window_start,
-                window_end,
-                self.scan_rate,
-                method=method,
-            )
-            for rec in self.recordings_filtered
-        ]
     @property
     def excluded_recordings(self):
         return set(self.annot.excluded_recordings)
     @property
-    def stimulus_voltages(self) -> List[float]:
+    def stimulus_voltages(self) -> np.ndarray:
         """
         Return a list of stimulus voltages for each recording in the session.
         This assumes that each recording's primary cluster stim_v is the amplitude for that recording.
         """
-        return [rec.meta.primary_stim.stim_v for rec in self.recordings]
+        return np.array([rec.meta.primary_stim.stim_v for rec in self.recordings])
     @property
     def recordings(self) -> List[Recording]:
         """
@@ -283,17 +260,30 @@ class Session:
             filtered_channels = []
             for ch in range(rec.meta.num_channels):
                 channel_data = raw_data[:, ch]
-                filtered = butter_bandpass_filter(
-                    channel_data,
-                    fs=self.scan_rate,
-                    lowcut=bf_args["lowcut"],
-                    highcut=bf_args["highcut"],
-                    order=bf_args["order"]
-                )
+                channel_type = self.channel_types[ch].lower()
+
+                if channel_type in ("force", "length"):
+                    # Apply specific processing for force and length channels
+                    # TODO: Implement specific processing for force and length channels if needed
+                    filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
+                elif channel_type in ("emg",):
+                    # Apply specific processing for EMG channels
+                    filtered = butter_bandpass_filter(
+                        channel_data,
+                        fs=self.scan_rate,
+                        lowcut=bf_args["lowcut"],
+                        highcut=bf_args["highcut"],
+                        order=bf_args["order"]
+                    )
+                else:
+                    logging.warning(f"No specific processing for channel type: {channel_type}")
+                    filtered = channel_data
 
                 if self.annot.channels[ch].invert:
-                    filtered = -filtered
+                        filtered = -filtered
+
                 filtered_channels.append(filtered)
+                    
             return np.column_stack(filtered_channels)
        
         max_workers = (os.cpu_count() - 1) or 1 # Use all available CPU cores
@@ -390,7 +380,7 @@ class Session:
         if "m_max" in self.__dict__:
             del self.__dict__["m_max"]
 
-    def reset_recordings_cache (self):
+    def reset_recordings_cache(self):
         """
         Reset the cached processed recordings.
         This is used after changing the filter parameters or excluding/including recordings from the session set.
@@ -499,10 +489,42 @@ class Session:
             for recording in self.recordings_filtered
         ]
         return h_wave_amplitudes
+
+    def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
+        '''
+        Returns the reflex amplitudes for a specific latency window across all sessions in the dataset.
+        
+        The array in the same order as the stimulus voltage of each recording.
+        '''
+        # Convert window to LatencyWindow if it's a string
+        if not isinstance(window, LatencyWindow):
+            window = self.get_latency_window(window)
+        
+        if window is not None:
+            # Needs to correct window times to the stimulus start time
+            window_start = window.start_times[channel_index] + self.stim_start
+            window_end = window.end_times[channel_index] + self.stim_start
+        else:
+            logging.warning(f"Latency window '{window}' not found.")
+            return []
+
+        # Calculate the reflex amplitudes for the specified window
+        reflex_amplitudes = [
+            calculate_emg_amplitude(
+                recording[:, channel_index],
+                window_start,
+                window_end,
+                self.scan_rate,
+                method=method,
+            )
+            for recording in self.recordings_filtered
+        ]
+        return np.array(reflex_amplitudes)
+
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
-    def rename_channels(self, new_names : dict[str, str]):
+    def rename_channels(self, new_names: dict[str, str]):
         for old_name, new_name in new_names.items():
             if old_name in self.channel_names:
                 i = self.channel_names.index(old_name)
@@ -760,7 +782,6 @@ class Session:
         for line in report:
             logging.info(line)
         return report
-
 
     def __repr__(self):
         return f"Session(session_id={self.id}, num_recordings={self.num_recordings})"
