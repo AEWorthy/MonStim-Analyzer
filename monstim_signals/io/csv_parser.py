@@ -194,9 +194,9 @@ def parse_v3h(path: Path):
                 peak_deflections = np.abs(peak_vals - baseline_mean)
                 trough_deflections = np.abs(trough_vals - baseline_mean)
                 if len(peak_deflections) > 0 or len(trough_deflections) > 0:
-                    print(f"Motor Length cluster {i} peaks: {len(peaks)}, troughs: {len(troughs)}")
-                    print(f"Motor Length cluster {i} avg peak deflection: {np.mean(peak_deflections) if len(peak_deflections) > 0 else 0}, "
-                          f"avg trough deflection: {np.mean(trough_deflections) if len(trough_deflections) > 0 else 0}")
+                    logging.info(f"Motor Length cluster {i} peaks: {len(peaks)}, troughs: {len(troughs)}")
+                    logging.info(f"Motor Length cluster {i} avg peak deflection: {np.mean(peak_deflections) if len(peak_deflections) > 0 else 0}, "
+                                 f"avg trough deflection: {np.mean(trough_deflections) if len(trough_deflections) > 0 else 0}")
                     stim_v = float(max(np.median(peak_deflections) if len(peak_deflections) > 0 else 0,
                                       np.median(trough_deflections) if len(trough_deflections) > 0 else 0))
                 else:
