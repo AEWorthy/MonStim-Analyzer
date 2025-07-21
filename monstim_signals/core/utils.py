@@ -11,7 +11,7 @@ try:
 except ImportError:  # Allow headless environments
     QApplication = None
 import numpy as np
-from monstim_signals.core.version import __version__
+from monstim_signals.version import __version__
 
 DATA_VERSION = __version__
 DIST_PATH = 'dist'
@@ -158,11 +158,11 @@ def load_config(config_file=None):
         return config
 
 # Custom YAML loader to handle tuples
-class CustomLoader(yaml.SafeLoader):
+class CustomYAMLLoader(yaml.SafeLoader):
     def construct_python_tuple(self, node):
         return tuple(self.construct_sequence(node))
 
-CustomLoader.add_constructor(
+CustomYAMLLoader.add_constructor(
     u'tag:yaml.org,2002:python/tuple',
-    CustomLoader.construct_python_tuple)
+    CustomYAMLLoader.construct_python_tuple)
 

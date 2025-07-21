@@ -5,8 +5,7 @@ import numpy as np
 
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.plotting import ExperimentPlotterPyQtGraph
-from monstim_signals.core.data_models import ExperimentAnnot, LatencyWindow
-from monstim_signals.core.utils import load_config
+from monstim_signals.core import ExperimentAnnot, LatencyWindow, load_config
 
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import ExperimentRepository

@@ -1,7 +1,7 @@
 # monstim_signals/__init__.py
 
 # Version
-from .core.version import __version__ as __version__
+from .version import __version__ as __version__
 
 # Metadata
 __title__ = 'monstim_signals'

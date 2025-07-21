@@ -14,12 +14,12 @@ if __name__ == '__main__':
         print(f"Adding {top_level_dir} to sys.path.")
         sys.path.insert(0, top_level_dir)
 
-from monstim_signals.core.utils import get_source_path
-from monstim_gui import __version__
+from monstim_signals.core import get_source_path
+from monstim_gui.version import VERSION
 
 SPLASH_INFO = {
     'program_name': "MonStim EMG Analyzer",
-    'version': f"Version {__version__} (alpha)",
+    'version': f"Version {VERSION} (alpha)",
     'description': "Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...",
     'copyright': "© 2024 Andrew Worthy"
 }

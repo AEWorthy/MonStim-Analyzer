@@ -1,5 +1,5 @@
 from .base import *
-from monstim_signals.core.utils import get_config_path
+from monstim_signals.core import get_config_path
 from monstim_gui.io.config_repository import ConfigRepository
 
 from typing import TYPE_CHECKING

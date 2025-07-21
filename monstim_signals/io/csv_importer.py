@@ -9,7 +9,7 @@ import traceback
 
 
 from monstim_signals.io.csv_parser import parse
-from monstim_signals.core.data_models import RecordingAnnot
+from monstim_signals.core import RecordingAnnot
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock

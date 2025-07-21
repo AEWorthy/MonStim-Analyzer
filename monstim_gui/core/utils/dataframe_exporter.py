@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QAbstractTableModel
 
-from monstim_signals.core.utils import get_base_path
+from monstim_signals.core import get_base_path
 
 
 class PandasModel(QAbstractTableModel):

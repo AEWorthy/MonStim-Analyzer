@@ -22,7 +22,7 @@ from PyQt6.QtGui import QDesktopServices
 
 from monstim_signals.io.repositories import ExperimentRepository
 from monstim_signals.io.csv_importer import GUIExptImportingThread
-from monstim_signals.core.utils import (
+from monstim_signals.core import (
     get_data_path,
     get_log_dir,
     get_config_path,

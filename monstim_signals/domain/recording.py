@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 from typing import Any
 
-from monstim_signals.core.data_models import RecordingMeta, RecordingAnnot, StimCluster
+from monstim_signals.core import RecordingMeta, RecordingAnnot, StimCluster
 
 class Recording:
     """

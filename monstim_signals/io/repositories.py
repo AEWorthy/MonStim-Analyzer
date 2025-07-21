@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 from dataclasses import asdict
 
-from monstim_signals.core.data_models  import RecordingMeta, RecordingAnnot, SessionAnnot, DatasetAnnot, ExperimentAnnot
+from monstim_signals.core  import RecordingMeta, RecordingAnnot, SessionAnnot, DatasetAnnot, ExperimentAnnot
 from monstim_signals.domain.recording  import Recording
 from monstim_signals.domain.session    import Session
 from monstim_signals.domain.dataset    import Dataset

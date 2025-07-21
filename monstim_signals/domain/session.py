@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 
-from monstim_signals.core.data_models import SessionAnnot, LatencyWindow, StimCluster
-from monstim_signals.core.utils import load_config
+from monstim_signals.core import SessionAnnot, LatencyWindow, StimCluster
+from monstim_signals.core import load_config
 from monstim_signals.domain.recording import Recording
 from monstim_signals.transform import (
     butter_bandpass_filter,
@@ -21,7 +21,7 @@ from monstim_signals.plotting import SessionPlotterPyQtGraph
 
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import SessionRepository
-    from monstim_signals.core.data_models import SessionAnnot
+    from monstim_signals.core import SessionAnnot
     from monstim_signals.domain.recording import Recording
     from monstim_signals.domain.dataset import Dataset
 
@@ -101,7 +101,7 @@ class Session:
     def _initialize_annotations(self):
         # Check in case of empty list annot
         if len(self.annot.channels) != self.num_channels:
-            from monstim_signals.core.data_models import SignalChannel
+            from monstim_signals.core import SignalChannel
             logging.warning(f"Session {self.id} has {len(self.annot.channels)} channels in annot, but {self.num_channels} channels in recordings. Reinitializing channel annotations.")
             self.annot.channels = [
                 SignalChannel(name=self.default_channel_names[i] if i < len(self.default_channel_names) else f"Channel {i+1}", invert=False, type_override=None)
@@ -167,7 +167,7 @@ class Session:
 
     def apply_latency_window_preset(self, preset_name: str) -> None:
         """Replace latency windows using a preset defined in the config file."""
-        from monstim_signals.core.utils import load_config
+        from monstim_signals.core import load_config
 
         presets = load_config().get("latency_window_presets", {})
         if preset_name not in presets:

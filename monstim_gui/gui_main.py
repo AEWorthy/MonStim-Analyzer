@@ -20,7 +20,7 @@ from PyQt6.QtCore import Qt
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
-from monstim_signals.core.utils import (get_output_path, get_source_path, get_docs_path, get_config_path)
+from monstim_signals.core import (get_output_path, get_source_path, get_docs_path, get_config_path)
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.dialogs import (

@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field, fields
 from typing import List, Dict, Any
 import logging
-from monstim_signals.core.utils import DATA_VERSION
+from monstim_signals.core import DATA_VERSION
 
 # -----------------------------------------------------------------------
 # Basic data models for MonStim Signals
@@ -114,12 +114,14 @@ class RecordingMeta:
     primary_stim         : StimCluster | int | None = None  # (1-based index) primary stimulus cluster
     num_samples          : int | None = None                # filled lazily
     meta_version         : str = DATA_VERSION               # version of the meta format, e.g. "0.0.1"
+    
     def __post_init__(self):
         if self.primary_stim and not isinstance(self.primary_stim, StimCluster):
             if isinstance(self.primary_stim, int):
                 self.primary_stim = self.stim_clusters[self.primary_stim - 1] if self.primary_stim > 0 else None
             else:
                 logging.warning(f"primary_stim should be a StimCluster, got {type(self.primary_stim)}. Setting to None.")
+    
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> 'RecordingMeta':
         """
@@ -284,7 +286,7 @@ class DatasetAnnot:
         This is useful for initializing an annotation object for a new dataset.
         """
         from monstim_signals.io.string_parser import parse_dataset_name
-        from monstim_signals.core.utils import load_config
+        from monstim_signals.core import load_config
         cfg = load_config()
         preferred_format = cfg.get('preferred_date_format', 'YYMMDD')
         try:

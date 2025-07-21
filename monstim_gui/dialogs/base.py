@@ -42,11 +42,10 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib import colors as mcolors
 
-from monstim_signals.core.utils import get_source_path, CustomLoader
+from monstim_signals.core import get_source_path, CustomYAMLLoader, LatencyWindow
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.session import Session
 from monstim_signals.domain.experiment import Experiment
-from monstim_signals.core.data_models import LatencyWindow
 from monstim_gui.commands import SetLatencyWindowsCommand
 from monstim_gui.core.splash import SPLASH_INFO
 

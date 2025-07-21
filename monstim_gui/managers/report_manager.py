@@ -1,7 +1,7 @@
 import logging
 from PyQt6.QtWidgets import QMessageBox
 
-from monstim_signals.core.utils import format_report
+from monstim_signals.core import format_report
 from ..dialogs import CopyableReportDialog
 
 
