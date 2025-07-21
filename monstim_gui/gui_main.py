@@ -40,6 +40,7 @@ from monstim_gui.commands import (
     ExcludeRecordingCommand,
     RestoreRecordingCommand,
     InvertChannelPolarityCommand,
+    ChangeChannelNamesCommand,
 )
 from monstim_gui.widgets.gui_layout import setup_main_layout
 from monstim_gui.managers.data_manager import DataManager
@@ -81,18 +82,25 @@ class MonstimGUI(QMainWindow):
         self.data_manager = DataManager(self)
         self.report_manager = ReportManager(self)
         self.plot_controller = PlotController(self)
+
         self.config_repo = ConfigRepository(get_config_path())
         self.help_repo = HelpFileRepository(get_docs_path())
 
         self.init_ui()
+
+        # Initialize managers after UI is set up
+        self.plot_controller.initialize()
 
         # Load existing pickled experiments if available
         self.data_manager.unpack_existing_experiments()
         self.data_selection_widget.update_experiment_combo()
 
         self.plot_widget.initialize_plot_widget()
+        
 
         self.command_invoker = CommandInvoker(self)
+        # Initialize undo/redo menu state
+        self.menu_bar.update_undo_redo_labels()
 
     def init_ui(self):
         widgets = setup_main_layout(self)
@@ -204,18 +212,18 @@ class MonstimGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def exclude_recording(self, recording_index):
+    def exclude_recording(self, recording_id : str):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            command = ExcludeRecordingCommand(self, recording_index)
+            command = ExcludeRecordingCommand(self, recording_id)
             self.command_invoker.execute(command)
         finally:
             QApplication.restoreOverrideCursor()
     
-    def restore_recording(self, recording_index):
+    def restore_recording(self, recording_id : str):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
-            command = RestoreRecordingCommand(self, recording_index)
+            command = RestoreRecordingCommand(self, recording_id)
             self.command_invoker.execute(command)
         finally:
             QApplication.restoreOverrideCursor()
@@ -391,18 +399,10 @@ class MonstimGUI(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 new_names = dialog.get_new_names()
-                if new_names:
-                    match level:
-                        case 'experiment':
-                            self.current_experiment.rename_channels(new_names)
-                        case 'dataset':
-                            self.current_dataset.rename_channels(new_names)
-                        case 'session':
-                            self.current_session.rename_channels(new_names)
-                        case _:
-                            QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
-                            return
-                        
+                if new_names and any(old != new for old, new in new_names.items()):
+                    # Only execute command if there are actual changes
+                    command = ChangeChannelNamesCommand(self, level, new_names)
+                    self.command_invoker.execute(command)
                     self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
                     logging.debug("Channel names updated successfully.")
                 else:
@@ -426,21 +426,23 @@ class MonstimGUI(QMainWindow):
             self.help_window = HelpWindow(html_content, topic)
         self.help_window.show()
 
+    def _get_effective_config(self):
+        """Get the effective config including active profile data."""
+        config = self.config_repo.read_config()
+        if self.active_profile_data:
+            data = self.active_profile_data
+            if 'analysis_parameters' in data:
+                config.update(data['analysis_parameters'])
+            if 'latency_window_preset' in data:
+                config['latency_window_preset'] = data['latency_window_preset']
+            if 'stimuli_to_plot' in data:
+                config['stimuli_to_plot'] = data['stimuli_to_plot']
+        return config
+
     def update_domain_configs(self, config=None):
         """Propagate the current config to all loaded domain objects."""
         if config is None:
-            # Use active profile if set
-            if self.active_profile_data:
-                config = self.config_repo.read_config()
-                data = self.active_profile_data
-                if 'analysis_parameters' in data:
-                    config.update(data['analysis_parameters'])
-                if 'latency_window_preset' in data:
-                    config['latency_window_preset'] = data['latency_window_preset']
-                if 'stimuli_to_plot' in data:
-                    config['stimuli_to_plot'] = data['stimuli_to_plot']
-            else:
-                config = self.config_repo.read_config()
+            config = self._get_effective_config()
         if self.current_experiment:
             self.current_experiment.set_config(config)
         if self.current_dataset:
@@ -450,24 +452,27 @@ class MonstimGUI(QMainWindow):
 
     def set_current_experiment(self, experiment : 'Experiment'):
         """Set the current experiment and ensure config is injected."""
-        config = self.config_repo.read_config()
+        if experiment is None:
+            return  # Handle case where experiment is None, e.g., clear UI, reset state, etc.
+        config = self._get_effective_config()
         experiment.set_config(config)
         self.current_experiment = experiment
-        self.update_domain_configs()
 
     def set_current_dataset(self, dataset: 'Dataset'):
         """Set the current dataset and ensure config is injected."""
-        config = self.config_repo.read_config()
+        if dataset is None:
+            return  # Handle case where dataset is None, e.g., clear UI, reset state, etc.
+        config = self._get_effective_config()
         dataset.set_config(config)
         self.current_dataset = dataset
-        self.update_domain_configs()
 
     def set_current_session(self, session: 'Session'):
         """Set the current session and ensure config is injected."""
-        config = self.config_repo.read_config()
+        if session is None:
+            return  # Handle case where session is None, e.g., clear UI, reset state, etc.
+        config = self._get_effective_config()
         session.set_config(config)
         self.current_session = session
-        self.update_domain_configs()
 
     # Close event handling
     def show_save_confirmation_dialog(self):

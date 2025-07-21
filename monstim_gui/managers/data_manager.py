@@ -276,7 +276,6 @@ class DataManager:
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Session reloaded successfully.", 5000)
             logging.debug("Session reloaded successfully.")
-            self.gui.update_domain_configs()
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
 
@@ -286,22 +285,33 @@ class DataManager:
             if self.gui.current_dataset.repo is not None:
                 if self.gui.current_dataset.repo.dataset_js.exists():
                     self.gui.current_dataset.repo.dataset_js.unlink()
+                else:
+                    logging.warning(
+                        f"Dataset JS file does not exist: {self.gui.current_dataset.repo.dataset_js}. Cannot unlink."
+                    )
+                
                 for sess in self.gui.current_dataset._all_sessions:
                     if sess.repo and sess.repo.session_js.exists():
                         sess.repo.session_js.unlink()
+                    else:
+                        logging.warning(
+                            f"Session JS file does not exist: {sess.repo.session_js}. Cannot unlink."
+                        )
+                
                 new_ds = self.gui.current_dataset.repo.load(config=self.gui.config_repo.read_config())
                 idx = self.gui.current_experiment._all_datasets.index(self.gui.current_dataset)
                 self.gui.current_experiment._all_datasets[idx] = new_ds
                 self.gui.set_current_dataset(new_ds)
+            
             self.gui.data_selection_widget.update_session_combo()
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Dataset reloaded successfully.", 5000)
             logging.debug("Dataset reloaded successfully.")
-            self.gui.update_domain_configs()
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
+        #TODO: Fix pathing issues with reloading experiments.  
         logging.debug(f"Reloading current experiment: {self.gui.current_experiment.id}.")
         current_experiment_combo_index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         if self.gui.current_experiment:
@@ -312,12 +322,25 @@ class DataManager:
                     logging.warning(
                         f"Experiment JS file does not exist: {self.gui.current_experiment.repo.expt_js}. Cannot unlink."
                     )
+                
                 for ds in self.gui.current_experiment._all_datasets:
                     if ds.repo and ds.repo.dataset_js.exists():
                         ds.repo.dataset_js.unlink()
+                    else:
+                        logging.warning(
+                            f"Dataset JS file does not exist: {ds.repo.dataset_js}. Cannot unlink."
+                        )
+                    
                     for sess in ds._all_sessions:
                         if sess.repo and sess.repo.session_js.exists():
                             sess.repo.session_js.unlink()
+                        else:
+                            logging.warning(
+                                f"Session JS file does not exist: {sess.repo.session_js}. Cannot unlink."
+                            )
+                
+                # Reload the experiment from the repository.
+                logging.debug(f"Reloading experiment from repository: {self.gui.current_experiment.repo.folder.name}.")
                 new_expt = self.gui.current_experiment.repo.load(config=self.gui.config_repo.read_config())
                 self.gui.set_current_experiment(new_expt)
             else:
@@ -335,8 +358,8 @@ class DataManager:
 
             logging.debug("Experiment reloaded successfully.")
             self.gui.status_bar.showMessage("Experiment reloaded successfully.", 5000)
-            self.gui.update_domain_configs()
 
+    # ------------------------------------------------------------------
     def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
         logging.debug("Refreshing existing experiments.")
         if select_expt_id is None:
@@ -414,7 +437,8 @@ class DataManager:
                 f"Loading dataset [{index}] from experiment '{self.gui.current_experiment.id}'."
             )
             if self.gui.current_experiment:
-                self.gui.current_dataset = self.gui.current_experiment.datasets[index]
+                dataset = self.gui.current_experiment.datasets[index]
+                self.gui.set_current_dataset(dataset)
             else:
                 logging.error("No current experiment to load dataset from.")
             self.gui.channel_names = self.gui.current_dataset.channel_names
@@ -426,7 +450,8 @@ class DataManager:
             logging.debug(
                 f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'."
             )
-            self.gui.current_session = self.gui.current_dataset.sessions[index]
+            session = self.gui.current_dataset.sessions[index]
+            self.gui.set_current_session(session)
             if hasattr(self.gui.plot_widget.current_option_widget, "recording_cycler"):
                 self.gui.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
             self.gui.plot_widget.on_data_selection_changed()

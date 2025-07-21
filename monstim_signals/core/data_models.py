@@ -176,13 +176,23 @@ class RecordingAnnot:
 @dataclass
 class SessionAnnot:
     """
-    Holds all user edits for a Session:
-      - Which recordings to exclude
-      - Custom latency windows (persisting user tweaks)
-      - Optional cached m_max values (small arrays)
-      - Custom channel_names (if user renamed channels)
+    SessionAnnot is a data class that encapsulates all user edits and annotations for a session. It tracks which recordings are excluded, custom latency windows, optional cached m_max values, and custom channel names (if the user renamed channels). The class provides methods to create empty annotations, initialize from recording metadata, and construct from a dictionary (e.g., loaded from JSON), handling extra or unexpected keys gracefully.
+    Attributes:
+        excluded_recordings (List[str]): List of recording IDs to exclude from analysis.
+        latency_windows (List[LatencyWindow]): List of custom latency windows, reflecting user adjustments.
+        channels (List[SignalChannel]): List of signal channels, possibly renamed by the user.
+        m_max_values (List[float]): Optional cached m_max values for each channel.
+        is_completed (bool): Indicates if the session annotation is finalized.
+        version (str): Version string for the annotation data format.
+    Methods:
+        create_empty(num_channels: int = 0) -> 'SessionAnnot':
+            Creates an empty SessionAnnot instance with the specified number of channels, all initialized to default values.
+        from_meta(cls, recording_meta: RecordingMeta) -> 'SessionAnnot':
+            Constructs a SessionAnnot from a RecordingMeta object, initializing channels and their names/units based on the metadata.
+        from_dict(cls, raw: dict[str, Any]) -> 'SessionAnnot':
+            Builds a SessionAnnot from a dictionary (such as one loaded from JSON), filtering out unexpected keys and converting nested structures as needed.
     """
-    excluded_recordings  : List[str] = field(default_factory=list)
+    excluded_recordings  : List[str] = field(default_factory=list) # list of recording IDs to exclude
     latency_windows      : List[LatencyWindow] = field(default_factory=list)
     channels             : List[SignalChannel] = field(default_factory=list)
     m_max_values         : List[float] = field(default_factory=list)

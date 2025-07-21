@@ -138,13 +138,13 @@ class RecordingCyclerWidget(QGroupBox):
             self.recording_spinbox.setValue(self.recording_spinbox.value() + self.step_size.value())
 
     def on_exclude(self):
-        current = self.recording_spinbox.value()
-        if current in self.main_gui.current_session.excluded_recordings:
+        selected_recording_id = self.main_gui.current_session.recordings[self.recording_spinbox.value()].id
+        if selected_recording_id in self.main_gui.current_session.excluded_recordings:
             self.exclude_button.setText("Exclude")
-            self.main_gui.restore_recording(current)
+            self.main_gui.restore_recording(selected_recording_id)
         else:
             self.exclude_button.setText("Include")
-            self.main_gui.exclude_recording(current)
+            self.main_gui.exclude_recording(selected_recording_id)
 
     def on_recording_changed(self, value):
         if value in self.main_gui.current_session.excluded_recordings:

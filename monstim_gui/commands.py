@@ -36,6 +36,7 @@ class CommandInvoker:
             command = self.history.pop()
             command.undo()
             self.redo_stack.append(command)
+            self.parent.menu_bar.update_undo_redo_labels()
             # Set self.parent._has_unsaved_changes to True if needed
 
     def redo(self):
@@ -43,8 +44,9 @@ class CommandInvoker:
             command = self.redo_stack.pop()
             command.execute()
             self.history.append(command)
+            self.parent.menu_bar.update_undo_redo_labels()
             # Set self.parent._has_unsaved_changes to True if needed
-    
+
     def get_undo_command_name(self):
         if self.history:
             return self.history[-1].command_name
@@ -64,41 +66,41 @@ class CommandInvoker:
                 
 # GUI command classes
 class ExcludeRecordingCommand(Command):
-    def __init__(self, gui, recording_index):
-        self.command_name = "Exclude Recording"
+    def __init__(self, gui, recording_id : str):
+        self.command_name : str = "Exclude Recording"
         self.gui : 'MonstimGUI' = gui
-        self.recording_index = recording_index
-    
+        self.recording_id : str = recording_id
+
     def execute(self):
         try:
-            self.gui.current_session.exclude_recording(self.recording_index)
+            self.gui.current_session.exclude_recording(self.recording_id)
             self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
     
     def undo(self):
         try:
-            self.gui.current_session.restore_recording(self.recording_index)
+            self.gui.current_session.restore_recording(self.recording_id)
             self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
 class RestoreRecordingCommand(Command):
-    def __init__(self, gui, original_recording_index):
-        self.command_name = "Restore Recording"
+    def __init__(self, gui, recording_id : str):
+        self.command_name : str = "Restore Recording"
         self.gui : 'MonstimGUI' = gui
-        self.recording_index = original_recording_index
+        self.recording_id = recording_id
 
     def execute(self):
         try:
-            self.gui.current_session.restore_recording(self.recording_index)
+            self.gui.current_session.restore_recording(self.recording_id)
             self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
     def undo(self):
         try:
-            self.gui.current_session.exclude_recording(self.recording_index)
+            self.gui.current_session.exclude_recording(self.recording_id)
             self.gui.data_selection_widget.update_all_data_combos()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
@@ -221,8 +223,8 @@ class InvertChannelPolarityCommand(Command):
 
 class SetLatencyWindowsCommand(Command):
     def __init__(self, gui, level: str, new_windows: list):
-        self.command_name = "Set Latency Windows"
-        self.gui = gui
+        self.command_name : str = "Set Latency Windows"
+        self.gui : 'MonstimGUI' = gui
         match level:
             case 'experiment':
                 self.level = self.gui.current_experiment
@@ -268,4 +270,29 @@ class SetLatencyWindowsCommand(Command):
                     obj.update_latency_window_parameters()
             else:
                 self.level.update_latency_window_parameters()
+
+class ChangeChannelNamesCommand(Command):
+    def __init__(self, gui, level: str, new_names: dict):
+        self.command_name : str = "Change Channel Names"
+        self.gui : 'MonstimGUI' = gui
+        self.new_names = copy.deepcopy(new_names)
+        
+        match level:
+            case 'experiment':
+                self.level = self.gui.current_experiment
+            case 'dataset':
+                self.level = self.gui.current_dataset
+            case 'session':
+                self.level = self.gui.current_session
+            case _:
+                raise ValueError(f"Invalid level: {level}")
+        
+        # Store old channel names for undo - create reverse mapping
+        self.old_names = {new_name: old_name for old_name, new_name in new_names.items()}
+
+    def execute(self):
+        self.level.rename_channels(self.new_names)
+
+    def undo(self):
+        self.level.rename_channels(self.old_names)
 
