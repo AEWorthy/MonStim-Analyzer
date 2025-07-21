@@ -13,13 +13,13 @@ import sys
 import shutil
 from PyInstaller.config import CONF
 
-
 project_root = os.path.abspath(os.getcwd())
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-from monstim_gui import __version__
-EXE_NAME = f'MonStim Analyzer v{__version__}'
-DIST_NAME = f'MonStim_Analyzer_v{__version__}-alpha'
+from monstim_gui.version import VERSION
+
+EXE_NAME = f'MonStim Analyzer v{VERSION}'
+DIST_NAME = f'MonStim_Analyzer_v{VERSION}-alpha'
 
 
 a = Analysis( # type: ignore

@@ -9,12 +9,12 @@ import multiprocessing
 from PyQt6.QtWidgets import QApplication 
 from PyQt6.QtCore import QTimer, QStandardPaths, QCoreApplication
 
-
 QCoreApplication.setOrganizationName("WorthyLab")
 QCoreApplication.setApplicationName("MonStimAnalyzer")
 LOG_FILE = 'app.log'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
 IS_FROZEN = getattr(sys, 'frozen', False)
+CONSOLE_DEBUG_MODE = False # Only relevant if not frozen
 
 
 def make_default_log_dir() -> str:
@@ -25,7 +25,7 @@ def make_default_log_dir() -> str:
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
-def setup_logging(debug: bool, log_dir: str | None = None) -> None:
+def setup_logging(debug: bool, log_dir: str | None = None) -> str:
     target_dir = log_dir or make_default_log_dir()
     if not os.access(target_dir, os.W_OK):
         raise RuntimeError(f"Cannot write to log directory: {target_dir}")
@@ -52,14 +52,18 @@ def setup_logging(debug: bool, log_dir: str | None = None) -> None:
     # Create a console handler if in debug mode.
     if debug:
         console_h = logging.StreamHandler()
-        console_h.setLevel(logging.DEBUG)
+        if CONSOLE_DEBUG_MODE:
+            console_h.setLevel(logging.DEBUG)
+        else:
+            console_h.setLevel(logging.INFO)
         console_h.setFormatter(logging.Formatter(LOG_FORMAT))
         root.addHandler(console_h)
 
     logging.captureWarnings(True)  # Capture any Python warnings and log them too.
     logging.getLogger("PyQt6").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    root.info(f"Logging to {log_path} (debug={debug})")    
+    root.info(f"Logging to {log_path} (debug={debug})")
+    return target_dir
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -75,11 +79,11 @@ def main(is_frozen : bool) -> int:
     try:
         app = QApplication(sys.argv)
         if is_frozen: # Display splash screen if running as a frozen executable.
-            from monstim_gui.splash import SplashScreen
+            from monstim_gui.core.splash import SplashScreen
             splash = SplashScreen()
             splash.show()
             QTimer.singleShot(3000, splash.close)
-        gui = EMGAnalysisGUI()
+        gui = MonstimGUI()
         gui.show()
         logging.info("Application started successfully.")
         return app.exec()
@@ -95,17 +99,16 @@ def main(is_frozen : bool) -> int:
 if __name__ == '__main__':
     args = parse_arguments()
     if IS_FROZEN:
-        setup_logging(debug=args.debug, log_dir=args.log_dir)
+        log_dir = setup_logging(debug=args.debug, log_dir=args.log_dir)
         logging.info("Logger initialized. Running via frozen executable.")
     else:
-        setup_logging(debug=True)
+        log_dir = setup_logging(debug=True)
         logging.info("Logger initialized. Running via IDE.")
+    os.environ["MONSTIM_LOG_DIR"] = log_dir
     sys.excepthook = exception_hook
     
     # Import the GUI module, matplotlib, and initialize multiprocessing after setting up logging.
-    from monstim_gui import EMGAnalysisGUI
-    import matplotlib
-    matplotlib.use('QtAgg')
+    from monstim_gui import MonstimGUI
     multiprocessing.freeze_support()
 
     logging.info("Initialization complete. Starting application.")

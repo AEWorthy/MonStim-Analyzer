@@ -5,10 +5,10 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 
 ## Installation
 1. **Download** the MonStim EMG Analyzer zip file from GitHub: https://github.com/AEWorthy/MonStim_Analysis/releases
-    - Windows Users: Download `MonStim-Analyzer-vX.x-WIN.zip`
+    - Windows Users: Download `MonStim-Analyzer-v0.4.0-WIN.zip`
     - Mac Users: A public Mac version is currently unavailable.
 2. **Extract** the contents of the zip file to a location of your choice on your computer.
-3. **Navigate** to the extracted folder and locate the `MonStim Analyzer vX.X.exe` file.
+3. **Navigate** to the extracted folder and locate the `MonStim Analyzer v0.4.0.exe` file.
     - Note: Please keep all program files in the unzipped directory and work directly from there.
 
 ## Features
@@ -19,7 +19,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 - **Hierarchical Data Management**: Load and manage multiple EMG recording sessions as a dataset, and store multiple datasets as experiments. Exclude unwanted recordings/sessions/datasets at runtime and reload from the originals if desired.
 
 ## Running the Application
-1. Double-click on `MonStim Analyzer vX.X.exe` to launch the application.
+1. Double-click on `MonStim Analyzer v0.4.0.exe` to launch the application.
     - Note: Your system may aggresively warn you that this program may be a virus. It is an unsigned program because I am an individual developer.
     - Additional Note: The program may take a while to load, especially the first time you use it.
 2. The MonStim EMG Analyzer main window will appear, ready for use.
@@ -65,7 +65,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
         - Use "Undo"/"Redo" to undo/redo the removal/addition of sessions.
         - Alternatively use the "Edit" > "Reload Current Dataset" button to restore all sessions to the dataset. This will preserve any changes you made to the dataset such as channel names or reflex time windows.
     - Use "Edit" > "Change Channel Names" to modify channel labels.
-    - Use "Edit" > "Update Reflex Time Windows" to adjust latency window parameters (For now just M-wave and H-reflex windows).
+    - Use "Edit" > "Manage Latency Windows" to create, remove, or edit latency windows for EMG measurements. Each window can have channel specific start times while the duration stays the same. Changes can be undone with the Undo action.
     - Use "Edit" > "Invert Channel Polarity" to select any desired channels in the currently selected dataset for which you would like to invert the polarity. This will be applied to all sessions in the dataset for each of the selected channels.
     - To view/exclude individual recordings, use the Single Session plot type called "Single EMG Recordings". Cycle through the individual recordings and exclude/include any that you desire. Use "Edit" > "Reload Current Session" to reset all changes.
     - For advanced users, set user preferences in "File" > "Preferences".
@@ -163,10 +163,19 @@ The `Entire Dtaset` view offers the following plot types:
    - Function: `plot_maxH()`
    - Description: Plots the M-wave and H-response amplitudes at the stimulation voltage range where the average H-reflex is maximal.
    - Options:
-     - Choose reflex amplitude calculation method
-     - Plot relative to M-max
+    - Choose reflex amplitude calculation method
+    - Plot relative to M-max
 
 
+## Log Files
+Application errors are written to a log file named `app.log` in your user
+application data directory. On Windows this is usually:
+```
+%APPDATA%\WorthyLab\MonStimAnalyzer\logs
+```
+Use **Help > Open Log Folder** to quickly open this location. You can also
+generate a zip archive of these logs using **Help > Save Error Report** when
+requesting support.
 
 # Support
 For additional help or feature requests, or to report issues and bugs, please contact aeworthy@emory.edu.

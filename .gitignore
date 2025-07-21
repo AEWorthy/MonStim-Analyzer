@@ -1,6 +1,10 @@
 /output
 /files_to_process
 /data
+/.EXAMPLE_DATA
+/.OLD_DATA
+
+docs/config-user.yml
 
 # Obtained from https://github.com/github/gitignore/blob/main/Python.gitignore
 
@@ -167,4 +171,3 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .DS_Store
-docs/config-user.yml

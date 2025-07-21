@@ -1,0 +1,297 @@
+= SPEC-1: MonStim Analyzer GUI Architecture
+:sectnums:
+:toc:
+
+== Background
+
+MonStim Analyzer is a graphical application developed for managing and analyzing EMG signals across multiple experiments, datasets, and recording sessions. Originally created to support the author's own electrophysiological experiments, the tool evolved into a more general-purpose GUI designed to be extensible and usable by other researchers or lab personnel.
+
+The application addresses a common need in experimental neuroscience and physiology: managing large volumes of structured session data, inspecting and modifying signal metadata (e.g., channel names, latency windows), and visualizing EMG-derived features such as reflex curves, M-max, or H-reflex peaks.
+
+Early versions lacked a formal design, leading to tight coupling and difficult scalability. As requirements grew (e.g., undo/redo support, dataset exclusion/restoration, command-based extensibility), architectural improvements were made to decouple UI, domain logic, and data persistence.
+
+This document defines a baseline architecture to guide future growth and reduce refactor effort as new features are added.
+
+== Requirements
+
+System requirements are categorized below using the MoSCoW prioritization model.
+
+=== Must Have
+
+* Support post-hoc analysis of EMG data recorded via an external LabView tool.
+* Parse structured CSV files and convert them into a compressed binary format with accompanying JSON metadata.
+* Organize EMG recordings hierarchically into experiments → datasets → sessions → recordings.
+* Allow annotations and non-destructive user edits via structured JSON overlays.
+* Enable users to exclude or restore datasets, sessions, and recordings.
+* Display EMG data using domain-specific plots: EMG traces, reflex curves, M-max, H-reflex.
+* Provide GUI-based tools to:
+
+  * Rename channel labels at various hierarchy levels.
+  * Invert polarity for selected channels.
+  * Define latency windows for reflex analysis.
+* Support undo/redo via a command pattern.
+* Persist unsaved changes warning on close.
+* Use PyQt6 for GUI implementation.
+
+=== Should Have
+
+* Allow export of reports or figures from the GUI.
+* Include user-friendly splash, help, and about dialogs.
+* Maintain separation between data logic and GUI logic.
+* Cache previously loaded experiments and restore them quickly.
+* Provide modular managers (data, report, plot) to keep code maintainable.
+
+=== Could Have
+
+* Plugin system to support user-defined plots, data transforms, or analysis dialogs.
+* Support future formats (e.g., EDF, HDF5) with adapter pattern.
+* Theming or dark mode support.
+
+=== Won't Have (for now)
+
+* Real-time or live signal acquisition.
+* Direct integration with LabView or other acquisition software.
+
+== Method
+
+The MonStim Analyzer is structured around a clean separation of concerns across two Python packages: `monstim_signals` (data and domain logic) and `monstim_gui` (GUI and interaction logic). This structure allows for scalability, non-destructive editing, and domain-driven development.
+
+=== Component Architecture
+
+[plantuml, target=architecture]
+----
+@startuml
+' =========================
+' monstim_gui package
+' =========================
+
+package "monstim_gui" {
+    class MonstimGUI {
+        - expts_dict
+        - current_experiment
+        - current_dataset
+        - current_session
+        - channel_names
+        - data_manager
+        - report_manager
+        - plot_controller
+        - plot_widget
+        - data_selection_widget
+        - reports_widget
+        - menu_bar
+        - plot_pane
+        - command_invoker
+        + undo()
+        + redo()
+        + exclude_recording()
+        + restore_recording()
+        + exclude_session()
+        + restore_session()
+        + exclude_dataset()
+        + restore_dataset()
+        + select_channels()
+        + change_channel_names()
+        + manage_latency_windows()
+        + invert_channel_polarity()
+        + show_about_screen()
+        + show_help_dialog()
+        + show_save_confirmation_dialog()
+        + closeEvent()
+    }
+
+    class DataManager
+    class ReportManager
+    class PlotController
+    class CommandInvoker {
+        - parent: MonstimGUI
+        - history: deque
+        - redo_stack: deque
+        + execute(cmd)
+        + undo()
+        + redo()
+        + get_undo_command_name()
+        + get_redo_command_name()
+        + remove_command_by_name()
+    }
+
+    abstract class Command {
+        + execute()
+        + undo()
+    }
+
+    class ExcludeRecordingCommand
+    class RestoreRecordingCommand
+    class ExcludeSessionCommand
+    class RestoreSessionCommand
+    class ExcludeDatasetCommand
+    class RestoreDatasetCommand
+    class InvertChannelPolarityCommand
+    class SetLatencyWindowsCommand
+
+    Command <|-- ExcludeRecordingCommand
+    Command <|-- RestoreRecordingCommand
+    Command <|-- ExcludeSessionCommand
+    Command <|-- RestoreSessionCommand
+    Command <|-- ExcludeDatasetCommand
+    Command <|-- RestoreDatasetCommand
+    Command <|-- InvertChannelPolarityCommand
+    Command <|-- SetLatencyWindowsCommand
+
+    MonstimGUI --> DataManager
+    MonstimGUI --> ReportManager
+    MonstimGUI --> PlotController
+    MonstimGUI --> CommandInvoker
+    MonstimGUI --> PlotWidget
+    MonstimGUI --> DataSelectionWidget
+    MonstimGUI --> ReportsWidget
+    MonstimGUI --> MenuBar
+    MonstimGUI --> PlotPane
+
+    CommandInvoker --> Command
+    CommandInvoker ..> MenuBar : updates undo/redo labels
+
+    PlotController --> PlotWidget
+    PlotWidget --> PlotPane
+    PlotWidget --> DataSelectionWidget
+}
+
+' =========================
+' monstim_signals package
+' =========================
+
+package "monstim_signals.domain" {
+    class Experiment
+    class Dataset
+    class Session
+    class Recording
+
+    Experiment "1" o-- "*" Dataset
+    Dataset "1" o-- "*" Session
+    Session "1" o-- "*" Recording
+}
+
+package "monstim_signals.io" {
+    class ExperimentRepository
+    class DatasetRepository
+    class SessionRepository
+    class RecordingRepository
+
+    ExperimentRepository --> Experiment
+    DatasetRepository --> Dataset
+    SessionRepository --> Session
+    RecordingRepository --> Recording
+
+    ExperimentRepository "1" o-- "*" DatasetRepository
+    DatasetRepository "1" o-- "*" SessionRepository
+    SessionRepository "1" o-- "*" RecordingRepository
+}
+
+' =========================
+' Integration
+' =========================
+
+MonstimGUI --> ExperimentRepository : loads/saves experiments
+MonstimGUI --> Experiment
+MonstimGUI --> Dataset
+MonstimGUI --> Session
+MonstimGUI --> Recording
+
+PlotController --> PlotWidget : controls plotting
+PlotWidget --> Session : for plotting data
+
+' Command pattern integration
+CommandInvoker --> MonstimGUI
+ExcludeRecordingCommand --> MonstimGUI
+RestoreRecordingCommand --> MonstimGUI
+ExcludeSessionCommand --> MonstimGUI
+RestoreSessionCommand --> MonstimGUI
+ExcludeDatasetCommand --> MonstimGUI
+RestoreDatasetCommand --> MonstimGUI
+InvertChannelPolarityCommand --> MonstimGUI
+SetLatencyWindowsCommand --> MonstimGUI
+@enduml
+----
+
+
+=== Data Flow and Persistence
+
+* Raw recordings are exported from LabView as CSV.
+* On import, repositories parse and convert them to compressed binary format and structured JSON metadata.
+* Each recording is stored in a session folder containing all session recordings, with their corresponding binary, metadata, and annotation files.
+* Session folders aggregate recordings and contain their own annotation overlays.
+* Dataset and experiment folders follow the same pattern, allowing annotation logic to scale and remain hierarchical.
+* User actions (e.g., exclude session, rename channel) are tracked as Command objects and applied to domain models in-memory.
+* Annotations are stored separately as overlay JSON files, preserving the original data for reproducibility.
+
+=== Command Pattern
+
+Each user-editable action is encapsulated in a `Command` subclass. These are:
+
+* Executed by `CommandInvoker`
+* Recorded in history for undo/redo
+* Operate directly on domain models (`Experiment`, `Dataset`, etc.)
+* Trigger GUI updates through `EMGAnalysisGUI`
+
+This pattern ensures loose coupling and future extensibility, and supports future features like macro replay or batch annotations.
+
+=== Modularity
+
+* `monstim_gui` has no direct file I/O logic: all data is accessed through repositories and managers (`DataManager`, `ReportManager`).
+* `monstim_signals` has no PyQt6 dependencies.
+* Plotting is handled by `PlotController` and `PlotWidget`, which work through `SessionPlotters` in `Session` domain objects (and similar for Dataset/Experiment levels).
+* Widgets are managed via a layout system in `MonstimGUI`, not always as direct attributes.
+
+This design enables testing of data logic independently of the GUI, supports potential CLI modes, and ensures clean layering.
+
+== Implementation
+
+Implementation can be structured in stages:
+
+1. **Bootstrapping Core Architecture**
+
+   * Define base domain classes (`Experiment`, `Dataset`, `Session`, `Recording`).
+   * Implement corresponding repositories for load/save with folder-based hierarchy.
+   * Design command base class and integrate undo/redo stack.
+
+2. **GUI Setup (PyQt6)**
+
+   * Implement `EMGAnalysisGUI` and primary widgets (`PlotPane`, `MenuBar`, `DataSelectionWidget`).
+   * Wire command execution buttons and status bar updates.
+
+3. **Data Conversion and Import**
+
+   * Write CSV importers to convert to binary + metadata.
+   * Add JSON overlay support for annotations.
+
+4. **Plotting Integration**
+
+   * Develop `PlotWidget` with session-driven plotting logic.
+   * Connect selection changes to redraw plots.
+
+5. **Annotation Commands**
+
+   * Add user-driven actions: exclude, restore, invert polarity, rename channels, set latency windows.
+
+6. **Persistence and Save Prompts**
+
+   * Implement save-on-close warning with `has_unsaved_changes`.
+   * Add support for refresh and reloading.
+
+== Milestones
+
+1. ✅ MVP version supporting H-reflex EMG experiments with full UI and undo/redo.
+2. 🔜 Support for multi-modal signals (e.g., force, stimulus traces).
+3. 🔜 Add protocol layer abstraction for long-form experiments with changing stimulus types.
+4. 🔜 Optional plugin mechanism for analysis routines or UI extensions.
+5. 🔜 Exporting annotated recordings or figures to standardized formats.
+
+== Gathering Results
+
+Evaluation criteria:
+
+* **Load performance**: Time to load an experiment with >100 sessions.
+* **Extensibility**: Time/effort to add new domain object (e.g., ForceTrace).
+* **Reliability**: Stability of undo/redo stack across mixed operations.
+* **User utility**: Can a lab user annotate and inspect data without needing to look at raw files?
+
+Performance benchmarks and user feedback can guide further modularization or refactor priorities.
