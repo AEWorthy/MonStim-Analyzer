@@ -74,6 +74,10 @@ def parse_dataset_name(dataset_name : str, preferred_date_format : str = None) -
                 If the dataset name does not match the expected format, returns (None, None, None).
         """
         # Define the regex pattern
+        # The dataset name is expected to follow the format: '[YYMMDD] [AnimalID] [Condition]'
+        # - (\d{6,8}): Captures the date, which can be 6 digits (YYMMDD) or 8 digits (YYYYMMDD).
+        # - ([A-Z0-9.]+): Captures the animal ID, which consists of uppercase letters, digits, and periods.
+        # - (.+): Captures the condition, which can be any sequence of characters.
         pattern = r'^(\d{6,8})\s([A-Z0-9.]+)\s(.+)$'
         
         # Match the pattern
