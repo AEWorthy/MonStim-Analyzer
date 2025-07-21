@@ -10,6 +10,7 @@ import traceback
 
 from monstim_signals.io.csv_parser import parse
 from monstim_signals.core import RecordingAnnot
+from monstim_signals.version import DATA_VERSION
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
@@ -73,6 +74,9 @@ def csv_to_store(csv_path : Path, output_fp : Path, overwrite_h5: bool = False, 
     meta_dict, arr = parse(csv_path)
     meta_dict['session_id'] = output_fp.stem.split('-')[0]  # Use the first part of the filename as session ID
     meta_dict['recording_id'] = output_fp.stem.split('-')[1] if '-' in output_fp.stem else None
+
+    # Add meta's data_version key
+    meta_dict['data_version'] = DATA_VERSION  # Use the global DATA_VERSION
 
     h5_path = output_fp.with_suffix('.raw.h5')
     if h5_path.exists() and not overwrite_h5:

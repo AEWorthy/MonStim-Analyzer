@@ -172,6 +172,8 @@ def parse_v3h(path: Path):
     for i in range(n):
         stim_type = raw_meta[f'Stim type cluster array {i}.Stimulus Output']
         stim_v = float(raw_meta[f'Stim. {i+1}'])
+        
+        # TODO: Remove this correction, or use only when recordings are from the old V3H version
         # If stim_type is Motor Length and stim_v is 0, extract from length channel
         if stim_type.lower() == 'motor length' and stim_v == 0:
             # Find the index of the length channel
@@ -194,18 +196,17 @@ def parse_v3h(path: Path):
                 peak_deflections = np.abs(peak_vals - baseline_mean)
                 trough_deflections = np.abs(trough_vals - baseline_mean)
                 if len(peak_deflections) > 0 or len(trough_deflections) > 0:
-                    logging.info(f"Motor Length cluster {i} peaks: {len(peaks)}, troughs: {len(troughs)}")
-                    logging.info(f"Motor Length cluster {i} avg peak deflection: {np.mean(peak_deflections) if len(peak_deflections) > 0 else 0}, "
-                                 f"avg trough deflection: {np.mean(trough_deflections) if len(trough_deflections) > 0 else 0}")
                     stim_v = float(max(np.median(peak_deflections) if len(peak_deflections) > 0 else 0,
                                       np.median(trough_deflections) if len(trough_deflections) > 0 else 0))
+                    logging.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
                 else:
                     stim_v = 0.0
-                    logging.warning(f"Motor Length cluster {i} has no peaks or troughs, using 0 for stim_v")
+                    logging.warning(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
             except Exception as e:
                 # fallback: leave stim_v as 0 if any error
-                logging.critical(f"Failed to extract robust stim_v for Motor Length: {e}")
+                logging.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
                 pass
+        
         clusters.append(StimCluster(
             stim_delay    = float(raw_meta[f'Stim specs cluster array {i}.Start Delay (ms)']),
             stim_duration = None, # not provided in v3h format

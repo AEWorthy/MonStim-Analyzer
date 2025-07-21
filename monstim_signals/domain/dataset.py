@@ -338,7 +338,7 @@ class Dataset:
         return np.array(amps)
 
     def get_lw_reflex_amplitudes(self, method: str, channel_index: int, 
-                                      window: str | LatencyWindow) -> dict[str, List[float]]:
+                                      window: str | LatencyWindow) -> dict[str, List[np.ndarray]]:
         """Returns reflex amplitudes for a specific latency window across all sessions in the dataset."""
         if not self.sessions:
             return {}
@@ -349,9 +349,8 @@ class Dataset:
                 logging.warning(f"Latency window '{window}' not found in dataset {self.id}.")
                 return {}
 
-        result: dict[str, List[float]] = {}
+        result: dict[str, List[np.ndarray]] = {}
         for session in self.sessions:
-            # TODO: ? Change this to be a 2D array without session ID?
             result[session.id] = session.get_lw_reflex_amplitudes(method, channel_index, window.name)
         return result
 

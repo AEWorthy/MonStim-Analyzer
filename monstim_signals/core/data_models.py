@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field, fields
 from typing import List, Dict, Any
 import logging
-from monstim_signals.core import DATA_VERSION
+from monstim_signals.version import DATA_VERSION
 
 # -----------------------------------------------------------------------
 # Basic data models for MonStim Signals
@@ -14,7 +14,6 @@ class LatencyWindow:
     start_times: List[float] # one per channel; ms, relative to stimulus start time
     durations: List[float] # one per channel; ms
     linestyle: str = '--'
-    window_version: str = DATA_VERSION
 
     @property
     def end_times(self):
@@ -47,6 +46,8 @@ class StimCluster:
     pulse_period:  float  # total pulse period in ms
     peak_duration: float # ms, time from start of pulse to peak amplitude
     ramp_duration: float  # ms, time to ramp up to peak amplitude
+    
+
     def __post_init__(self):
         if self.ramp_duration is None:
             self.ramp_duration = 0.0
@@ -73,7 +74,6 @@ class StimCluster:
         filtered = {k: v for k, v in meta.items() if k in valid}
         return cls(**filtered)
 
-# TODO: Create a system to make non-EMG type objects filtered using different methods (or not at all for right now).
 @dataclass
 class SignalChannel:
     invert : bool = False
@@ -113,8 +113,8 @@ class RecordingMeta:
     stim_clusters        : List[StimCluster]                # list of StimCluster objects, one per stimulus cluster
     primary_stim         : StimCluster | int | None = None  # (1-based index) primary stimulus cluster
     num_samples          : int | None = None                # filled lazily
-    meta_version         : str = DATA_VERSION               # version of the meta format, e.g. "0.0.1"
-    
+    data_version         : str = "0.0.0"                     # version of the meta format, e.g. "0.0.1"
+
     def __post_init__(self):
         if self.primary_stim and not isinstance(self.primary_stim, StimCluster):
             if isinstance(self.primary_stim, int):
@@ -148,8 +148,8 @@ class RecordingAnnot:
     Holds user‐editable flags for one recording.
     e.g., which channels to invert, exclude, or cached computations.
     """
-    cache    : Dict[str, Any] = field(default_factory=dict)
-    version  : str = "0.0.0"
+    cache         : Dict[str, Any] = field(default_factory=dict)
+    data_version  : str = "0.0.0"
 
     @staticmethod
     def create_empty() -> 'RecordingAnnot':
@@ -157,7 +157,7 @@ class RecordingAnnot:
         Create an empty RecordingAnnot with default values.
         """
         return RecordingAnnot(
-            version=DATA_VERSION,
+            data_version=DATA_VERSION,
             cache={}
             )
        
@@ -199,7 +199,7 @@ class SessionAnnot:
     channels             : List[SignalChannel] = field(default_factory=list)
     m_max_values         : List[float] = field(default_factory=list)
     is_completed         : bool = False
-    version              : str = "0.0.0"
+    data_version         : str = "0.0.0"
 
     @staticmethod
     def create_empty(num_channels : int = 0) -> 'SessionAnnot':
@@ -212,7 +212,7 @@ class SessionAnnot:
             channels=[SignalChannel.create_empty() for _ in range(num_channels) if num_channels > 0],
             m_max_values=[],
             is_completed=False,
-            version=DATA_VERSION
+            data_version=DATA_VERSION
         )
     
     @classmethod
@@ -266,7 +266,7 @@ class DatasetAnnot:
     condition: str = None  # e.g., "post-dec mcurve_long-"
     excluded_sessions: List[str] = field(default_factory=list)
     is_completed: bool = False
-    version: str = "0.0.0"
+    data_version: str = "0.0.0"
 
     @staticmethod
     def create_empty(num_channels: int = 0) -> 'DatasetAnnot':
@@ -276,7 +276,7 @@ class DatasetAnnot:
         return DatasetAnnot(
             excluded_sessions=[],
             is_completed=False,
-            version=DATA_VERSION
+            data_version=DATA_VERSION
         )
     
     @classmethod
@@ -300,7 +300,7 @@ class DatasetAnnot:
             condition=condition,
             excluded_sessions=[],
             is_completed=False,
-            version=DATA_VERSION
+            data_version=DATA_VERSION
         )
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> 'DatasetAnnot':
@@ -325,12 +325,12 @@ class ExperimentAnnot:
     """Annotation information for an :class:`Experiment`."""
     excluded_datasets: List[str] = field(default_factory=list)
     is_completed: bool = False
-    version: str = DATA_VERSION
+    data_version: str = DATA_VERSION
 
     @staticmethod
     def create_empty() -> 'ExperimentAnnot':
         """Return a blank annotation object."""
-        return ExperimentAnnot(excluded_datasets=[], is_completed=False, version=DATA_VERSION)
+        return ExperimentAnnot(excluded_datasets=[], is_completed=False, data_version=DATA_VERSION)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> 'ExperimentAnnot':

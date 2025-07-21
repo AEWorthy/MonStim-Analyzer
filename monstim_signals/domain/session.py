@@ -264,7 +264,7 @@ class Session:
 
                 if channel_type in ("force", "length"):
                     # Apply specific processing for force and length channels
-                    # TODO: Implement specific processing for force and length channels if needed
+                    # TODO: Implement specific filtering for force and length channels if needed
                     filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
                 elif channel_type in ("emg",):
                     # Apply specific processing for EMG channels
@@ -462,6 +462,11 @@ class Session:
         """Return a list of M-wave amplitudes for each recording."""
         window_start = self.m_start[channel_index] + self.stim_start
         window_end = window_start + self.m_duration[channel_index]
+
+        if window_end - window_start <= 0:
+            logging.warning(f"Invalid or missing M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}.")
+            raise ValueError(f"Invalid or missing M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}.")
+        
         m_wave_amplitudes = [
             calculate_emg_amplitude(
                 recording[:, channel_index],

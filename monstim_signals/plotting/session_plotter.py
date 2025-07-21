@@ -698,9 +698,13 @@ class SessionPlotter(BasePlotter):
         for channel_index in range(self.emg_object.num_channels):
             if channel_index not in channel_indices:
                 continue
-            m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
-            h_response_amplitudes = self.emg_object.get_h_wave_amplitudes(method=method, channel_index=channel_index)
-            stimulus_voltages = self.emg_object.stimulus_voltages
+            try:
+                m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
+                h_response_amplitudes = self.emg_object.get_h_wave_amplitudes(method=method, channel_index=channel_index)
+                stimulus_voltages = self.emg_object.stimulus_voltages
+            except ValueError:
+                logging.warning(f"Failed to retrieve EMG amplitudes for channel {channel_index} in session {self.emg_object.id}.")
+                continue
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:

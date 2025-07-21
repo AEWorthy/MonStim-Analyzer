@@ -1,6 +1,6 @@
 # monstim_gui/__init__.py
 # Never import packages or modules into this file, or the setup.py will break.
-from version import VERSION
+from .version import VERSION
 
 __version__ = VERSION
 

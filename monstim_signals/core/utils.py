@@ -11,13 +11,9 @@ try:
 except ImportError:  # Allow headless environments
     QApplication = None
 import numpy as np
-from monstim_signals.version import __version__
 
-DATA_VERSION = __version__
 DIST_PATH = 'dist'
 OUTPUT_PATH = 'data'
-SAVED_DATASETS_PATH = 'datasets'
-BIN_EXTENSION = '.pkl'
 
 def to_camel_case(text: str) -> str:
     """Return *text* converted to ``camelCase``."""

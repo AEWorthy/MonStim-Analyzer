@@ -109,8 +109,6 @@ if __name__ == '__main__':
     
     # Import the GUI module, matplotlib, and initialize multiprocessing after setting up logging.
     from monstim_gui import MonstimGUI
-    import matplotlib
-    matplotlib.use('QtAgg')
     multiprocessing.freeze_support()
 
     logging.info("Initialization complete. Starting application.")

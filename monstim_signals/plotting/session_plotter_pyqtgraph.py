@@ -26,14 +26,17 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     def __init__(self, emg_object: 'Session'):
         super().__init__(emg_object)
         self.emg_object: 'Session' = emg_object
-        # Shared colormap for both data and colorbar
-        self.stim_colormap = pg.colormap.get('viridis')
-        self.stim_colormap.reverse()  # Reverse the colormap for better visibility
+        # Shared colormap for both data and colorbar. Get viridis_r from matplotlib
+        self.stim_colormap = pg.colormap.get('viridis_r', source='matplotlib')
         # Store references to plotted curves for dynamic updates
         self.plotted_curves : List[pg.PlotDataItem] = []
         self.curve_stimulus_voltages : List[float] = []
         self.colorbar_item : pg.ColorBarItem = None
-        
+        # Brightness adjustment for colormap (0.0 = no adjustment, 0.5 = much brighter)
+        # For viridis_r: higher values make colors brighter by avoiding dark end of colormap
+        self.brightness_shift = 0
+        # TODO: Make the colorbar brightness change with the brightness_shift so it reflects the adjusted colormap
+
     def get_time_axis(self, offset=2):
         """Get time axis for plotting."""
         # Calculate time values based on the scan rate
@@ -161,6 +164,41 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         }
         return style_map.get(matplotlib_style, pg.QtCore.Qt.PenStyle.SolidLine)
 
+    def get_brightness_adjusted_norm(self, min_val: float = None, max_val: float = None):
+        """
+        Create a normalization function that shifts values to brighter colors.
+        
+        For viridis_r colormap: 0.0 = bright (yellow), 1.0 = dark (purple)
+        So we map values to [0.0, 1.0 - brightness_shift] to prefer brighter colors.
+        
+        Parameters
+        ----------
+        min_val : float, optional
+            Minimum stimulus voltage. If None, uses min of self.emg_object.stimulus_voltages
+        max_val : float, optional  
+            Maximum stimulus voltage. If None, uses max of self.emg_object.stimulus_voltages
+            
+        Returns
+        -------
+        callable
+            Normalization function that maps stimulus voltages to [0.0, 1.0 - brightness_shift] range
+        """
+        if min_val is None:
+            min_val = min(self.emg_object.stimulus_voltages)
+        if max_val is None:
+            max_val = max(self.emg_object.stimulus_voltages)
+            
+        def norm(v):
+            if max_val != min_val:
+                # Standard normalization to 0-1 range
+                normalized = (v - min_val) / (max_val - min_val)
+                # For viridis_r: map to [0.0, 1.0 - brightness_shift] to prefer brighter colors
+                return normalized * (1.0 - self.brightness_shift)
+            else:
+                return 0.3  # Use a bright default when all values are the same
+        
+        return norm
+
     def add_colormap_scalebar(self, layout : pg.GraphicsLayout, plot_items: List[pg.PlotItem], value_range : Tuple[float, float]):
         colorbar = pg.ColorBarItem(
             colorMap=self.stim_colormap,
@@ -172,7 +210,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         )
         # Store reference to colorbar for dynamic updates
         self.colorbar_item = colorbar
-        
+
         # Connect colorbar signals to update curve colors
         self.connect_colorbar_signals()
         
@@ -233,10 +271,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         emg_recordings = self.get_emg_recordings(data_type)
         
         # Create normalization for stimulus voltages (matching matplotlib version)
-        def norm(v):
-            min_v = min(self.emg_object.stimulus_voltages)
-            max_v = max(self.emg_object.stimulus_voltages)
-            return (v - min_v) / (max_v - min_v) if max_v != min_v else 0.5
+        norm = self.get_brightness_adjusted_norm()
         
         # Initialize raw data collection (matching matplotlib version exactly)
         raw_data_dict = {
@@ -385,11 +420,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Prepare colormap normalization if needed
         norm = None
         if plot_colormap:
-            min_v = min(self.emg_object.stimulus_voltages)
-            max_v = max(self.emg_object.stimulus_voltages)
-            def norm_func(v):
-                return (v - min_v) / (max_v - min_v) if max_v != min_v else 0.5
-            norm = norm_func
+            norm = self.get_brightness_adjusted_norm()
 
         # Raw data collection
         raw_data_dict = {
@@ -505,7 +536,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         
         if channel_indices is None:
             channel_indices = list(range(self.emg_object.num_channels))
-                
+
+        if len(self.emg_object.latency_windows) == 0:
+            raise ValueError("No latency windows found. Add some to plot reflex curves.")
+
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
         
@@ -615,6 +649,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         if channel_indices is None:
             channel_indices = list(range(self.emg_object.num_channels))
+
+        if len(self.emg_object.latency_windows) == 0:
+            raise ValueError("No latency windows found. Add an 'M-max' window to calculate M-max.")
                 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -638,8 +675,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             current_plot = plot_items[plot_idx]
 
             # Get M-max data
-            m_max_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
-            m_max, mmax_low_stim, _ = self.emg_object.get_m_max(method=method, channel_index=channel_index, return_mmax_stim_range=True)
+            try:
+                m_max_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
+                m_max, mmax_low_stim, _ = self.emg_object.get_m_max(method=method, channel_index=channel_index, return_mmax_stim_range=True)
+            except Exception as e:
+                logging.error(f"Error getting M-max for channel {channel_index}: {e}")
+                continue
 
             # Filter out NaN values for plotting (matching dataset plotter)
             valid_amplitudes = [amp for amp in m_max_amplitudes if not np.isnan(amp)]
@@ -759,9 +800,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             min_val = min(self.emg_object.stimulus_voltages)
             max_val = max(self.emg_object.stimulus_voltages)
         
-        # Update normalization function
-        def norm(v):
-            return (v - min_val) / (max_val - min_val) if max_val != min_val else 0.5
+        # Get brightness-adjusted normalization function
+        norm = self.get_brightness_adjusted_norm(min_val, max_val)
         
         # Update colors for all stored curves
         for curve, stimulus_v in zip(self.plotted_curves, self.curve_stimulus_voltages):

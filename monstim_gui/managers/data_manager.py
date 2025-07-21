@@ -172,7 +172,7 @@ class DataManager:
 
     # ------------------------------------------------------------------
     def rename_experiment(self):
-        logging.debug("Renaming experiment.")
+        logging.info("Renaming experiment.")
         if self.gui.current_experiment:
             new_name, ok = QInputDialog.getText(
                 self.gui,
@@ -196,7 +196,7 @@ class DataManager:
                             "Warning",
                             "The new experiment name is the same as the current one. No changes made.",
                         )
-                        logging.debug(
+                        logging.info(
                             "No changes made to experiment name as it is the same as the current one."
                         )
                         return
@@ -239,7 +239,7 @@ class DataManager:
 
     # ------------------------------------------------------------------
     def delete_experiment(self):
-        logging.debug("Deleting experiment.")
+        logging.info("Deleting experiment.")
         if self.gui.current_experiment:
             delete = QMessageBox.warning(
                 self.gui,
@@ -251,7 +251,7 @@ class DataManager:
                 current_expt_id = self.gui.current_experiment.id
                 self.gui.current_experiment.close()
                 shutil.rmtree(os.path.join(self.gui.output_path, current_expt_id))
-                logging.debug(
+                logging.info(
                     f"Deleted experiment folder: {os.path.join(self.gui.output_path, current_expt_id)}."
                 )
 
@@ -264,7 +264,7 @@ class DataManager:
 
     # ------------------------------------------------------------------
     def reload_current_session(self):
-        logging.debug("Reloading current session.")
+        logging.info("Reloading current session.")
         if self.gui.current_dataset and self.gui.current_session:
             if self.gui.current_session.repo is not None:
                 if self.gui.current_session.repo.session_js.exists():
@@ -275,12 +275,12 @@ class DataManager:
                 self.gui.set_current_session(new_sess)
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Session reloaded successfully.", 5000)
-            logging.debug("Session reloaded successfully.")
+            logging.info("Session reloaded successfully.")
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
 
     def reload_current_dataset(self):
-        logging.debug("Reloading current dataset.")
+        logging.info("Reloading current dataset.")
         if self.gui.current_dataset:
             if self.gui.current_dataset.repo is not None:
                 if self.gui.current_dataset.repo.dataset_js.exists():
@@ -306,13 +306,13 @@ class DataManager:
             self.gui.data_selection_widget.update_session_combo()
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Dataset reloaded successfully.", 5000)
-            logging.debug("Dataset reloaded successfully.")
+            logging.info("Dataset reloaded successfully.")
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
         #TODO: Fix pathing issues with reloading experiments.  
-        logging.debug(f"Reloading current experiment: {self.gui.current_experiment.id}.")
+        logging.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")
         current_experiment_combo_index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         if self.gui.current_experiment:
             if self.gui.current_experiment.repo is not None:
@@ -340,7 +340,7 @@ class DataManager:
                             )
                 
                 # Reload the experiment from the repository.
-                logging.debug(f"Reloading experiment from repository: {self.gui.current_experiment.repo.folder.name}.")
+                logging.info(f"Reloading experiment from repository: {self.gui.current_experiment.repo.folder.name}.")
                 new_expt = self.gui.current_experiment.repo.load(config=self.gui.config_repo.read_config())
                 self.gui.set_current_experiment(new_expt)
             else:
