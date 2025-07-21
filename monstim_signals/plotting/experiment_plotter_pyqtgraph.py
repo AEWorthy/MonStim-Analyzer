@@ -159,7 +159,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                          name='H-reflex')
                                  
         except Exception as e:
-            print(f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}")
+            logging.warning(f"Could not plot reflex curves for channel {channel_idx}: {e}")
     
     def plot_maxH(self, channel_indices: List[int] = None, method=None, relative_to_mmax=False, 
                   manual_mmax=None, max_stim_value=None, bin_margin=0, canvas=None):
