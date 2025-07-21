@@ -750,7 +750,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         
         # Get current colormap from colorbar
         current_colormap = self.colorbar_item.colorMap() if self.colorbar_item else self.stim_colormap
-        print(f"colormap type: {type(current_colormap)}, {current_colormap}")
+        logging.debug(f"colormap type: {type(current_colormap)}, {current_colormap}")
 
         # Get current value range from colorbar
         if self.colorbar_item:
