@@ -1,16 +1,16 @@
 from setuptools import setup, find_packages
-from __init__ import __title__ as title
-from __init__ import __description__ as description
-from __init__ import __version__ as version
-from __init__ import __author__ as author
-from __init__ import __email__ as author_email
+from monstim_gui.version import VERSION
 
 setup(
-    name=title,
-    version=version,
-    description=description,
-    author=author,
-    author_email=author_email,
+    name="MonStim_Analysis",
+    version=VERSION,
+    description="EMG data analysis and plotting toolkit for MonStim exported CSV data",
+    long_description=open("README.md", encoding="utf-8").read(),
+    long_description_content_type="text/markdown",
+    author="Andrew Worthy",
+    author_email="aeworth@emory.edu",
+    url="https://github.com/AEWorthy/MonStim_Analysis",
+    license="BSD-2-Clause",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
@@ -28,5 +28,10 @@ setup(
         "scipy==1.15.3",
         "setuptools==72.2.0",
         "traitlets==5.14.3",
+    ],
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
     ],
 )

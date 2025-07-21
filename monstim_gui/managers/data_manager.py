@@ -74,7 +74,7 @@ class DataManager:
     def import_expt_data(self):
         logging.info("Importing new experiment data from CSV files.")
         expt_path = QFileDialog.getExistingDirectory(
-            self.gui, "Select Experiment Directory", get_data_path()
+            self.gui, "Select Experiment Directory", str(get_data_path())
         )
         expt_name = os.path.splitext(os.path.basename(expt_path))[0]
 

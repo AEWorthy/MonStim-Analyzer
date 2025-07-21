@@ -31,7 +31,7 @@ def format_report(report: List[str]) -> str:
             formatted_report += line + '\n'
     return formatted_report
 
-def get_base_path() -> str:
+def get_base_path() -> Path:
     """Return the root path of the project installation."""
     if getattr(sys, 'frozen', False):
         if sys.platform == 'darwin':
@@ -91,6 +91,7 @@ def get_data_path() -> str:
     """Return the directory containing packaged data files."""
     if getattr(sys, 'frozen', False):
         data_path = get_base_path()
+        data_path = str(data_path)
     else:
         data_path = os.path.join(get_base_path(), DIST_PATH)
     return data_path
