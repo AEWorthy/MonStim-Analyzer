@@ -53,12 +53,12 @@ class RecordingRepository:
             annot = RecordingAnnot.from_dict(annot_dict)
         else:
             logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
-            annot = RecordingAnnot.create_empty(meta)
+            annot = RecordingAnnot.create_empty()
             self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
 
         # 3) Open HDF5 file in read‐only mode; pass the dataset itself (lazy)
         h5file = h5py.File(self.raw_h5, "r")
-        raw_dataset = h5file["raw"]
+        raw_dataset : h5py.Dataset = h5file["raw"] # type: ignore
 
         # 4) Patch in num_samples from the raw array shape
         meta.num_samples = raw_dataset.shape[0]  # (#samples × #channels)
