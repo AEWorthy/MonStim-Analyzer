@@ -20,6 +20,9 @@ class MenuBar(QMenuBar):
         import_action = file_menu.addAction("Import an Experiment")
         import_action.triggered.connect(self.parent.data_manager.import_expt_data)
 
+        import_multiple_action = file_menu.addAction("Import Multiple Experiments")
+        import_multiple_action.triggered.connect(self.parent.data_manager.import_multiple_expt_data)
+
         rename_experiment_action = file_menu.addAction("Rename Current Experiment")
         rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
 
@@ -133,6 +136,10 @@ class MenuBar(QMenuBar):
         # Show EMG processing info button
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
         processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog('Transform_EMG.md', latex=True))
+
+        # Show Experiment Import Info button
+        data_import_action = help_menu.addAction("Show Experiment Import Info")
+        data_import_action.triggered.connect(lambda: self.parent.show_help_dialog('multi_experiment_import.md'))
 
         help_menu.addSeparator()
 

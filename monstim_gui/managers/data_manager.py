@@ -21,7 +21,7 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 
 from monstim_signals.io.repositories import ExperimentRepository
-from monstim_signals.io.csv_importer import GUIExptImportingThread
+from monstim_signals.io.csv_importer import GUIExptImportingThread, MultiExptImportingThread
 from monstim_signals.core import (
     get_data_path,
     get_log_dir,
@@ -168,6 +168,234 @@ class DataManager:
         else:
             QMessageBox.warning(self.gui, "Warning", "You must select a CSV directory.")
             logging.warning("No CSV directory selected. Import canceled.")
+
+    # ------------------------------------------------------------------
+    # import multiple experiments from CSVs
+    def import_multiple_expt_data(self):
+        logging.info("Importing multiple experiment data from CSV files.")
+        
+        # Use QFileDialog to select multiple directories
+        from PyQt6.QtWidgets import QFileDialog
+        root_path = QFileDialog.getExistingDirectory(
+            self.gui, "Select Root Directory Containing Multiple Experiments", str(get_data_path())
+        )
+        
+        if not root_path:
+            QMessageBox.warning(self.gui, "Warning", "You must select a root directory.")
+            logging.warning("No root directory selected. Import canceled.")
+            return
+            
+        # Find all subdirectories that could be experiments
+        potential_experiments = []
+        try:
+            for item in os.listdir(root_path):
+                item_path = os.path.join(root_path, item)
+                if os.path.isdir(item_path):
+                    # Check if this directory contains subdirectories with CSV files
+                    has_datasets = False
+                    for subitem in os.listdir(item_path):
+                        subitem_path = os.path.join(item_path, subitem)
+                        if os.path.isdir(subitem_path):
+                            csv_files = [f for f in os.listdir(subitem_path) if f.endswith(".csv")]
+                            if csv_files:
+                                has_datasets = True
+                                break
+                    if has_datasets:
+                        potential_experiments.append(item_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self.gui,
+                "Error",
+                f"An error occurred while scanning the directory: {e}",
+            )
+            logging.error(f"An error occurred while scanning directory: {e}")
+            return
+            
+        if not potential_experiments:
+            QMessageBox.warning(
+                self.gui,
+                "Warning",
+                "No valid experiment directories found. Each experiment should contain subdirectories with CSV files.",
+            )
+            return
+            
+        # Show selection dialog
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QPushButton, QLabel, QScrollArea, QWidget
+        dialog = QDialog(self.gui)
+        dialog.setWindowTitle("Select Experiments to Import")
+        dialog.setModal(True)
+        dialog.resize(600, 400)
+        
+        layout = QVBoxLayout()
+        info_text = f"Found {len(potential_experiments)} potential experiments in:\n{root_path}\n\nSelect which experiments to import:"
+        info_label = QLabel(info_text)
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Create scrollable area for checkboxes
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        
+        checkboxes = {}
+        for exp_path in potential_experiments:
+            exp_name = os.path.basename(exp_path)
+            # Count datasets for preview
+            dataset_count = len([d for d in os.listdir(exp_path) 
+                               if os.path.isdir(os.path.join(exp_path, d))])
+            checkbox = QCheckBox(f"{exp_name} ({dataset_count} datasets)")
+            checkbox.setChecked(True)
+            checkbox.setToolTip(f"Full path: {exp_path}")
+            checkboxes[exp_path] = checkbox
+            scroll_layout.addWidget(checkbox)
+            
+        scroll_area.setWidget(scroll_widget)
+        layout.addWidget(scroll_area)
+        
+        # Add buttons
+        from PyQt6.QtWidgets import QHBoxLayout
+        button_layout = QHBoxLayout()
+        select_all_btn = QPushButton("Select All")
+        select_none_btn = QPushButton("Select None")
+        import_btn = QPushButton("Import Selected")
+        cancel_btn = QPushButton("Cancel")
+        
+        button_layout.addWidget(select_all_btn)
+        button_layout.addWidget(select_none_btn)
+        button_layout.addStretch()
+        button_layout.addWidget(import_btn)
+        button_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(button_layout)
+        dialog.setLayout(layout)
+        
+        # Connect buttons
+        select_all_btn.clicked.connect(lambda: [cb.setChecked(True) for cb in checkboxes.values()])
+        select_none_btn.clicked.connect(lambda: [cb.setChecked(False) for cb in checkboxes.values()])
+        cancel_btn.clicked.connect(dialog.reject)
+        import_btn.clicked.connect(dialog.accept)
+        
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+            
+        # Get selected experiments
+        selected_experiments = [path for path, checkbox in checkboxes.items() if checkbox.isChecked()]
+        
+        if not selected_experiments:
+            QMessageBox.warning(self.gui, "Warning", "No experiments selected.")
+            return
+            
+        # Check for existing experiments and handle conflicts
+        conflicts = []
+        for exp_path in selected_experiments:
+            exp_name = os.path.basename(exp_path)
+            if os.path.exists(os.path.join(self.gui.output_path, exp_name)):
+                conflicts.append(exp_name)
+                
+        if conflicts:
+            conflict_msg = f"The following experiments already exist:\n{', '.join(conflicts)}\n\nDo you want to overwrite them?"
+            overwrite = QMessageBox.question(
+                self.gui,
+                "Conflicts Found",
+                conflict_msg,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if overwrite != QMessageBox.StandardButton.Yes:
+                return
+            else:
+                # Close all existing data
+                self.close_all_data()
+                
+            # Remove existing experiments
+            for exp_name in conflicts:
+                existing_path = os.path.join(self.gui.output_path, exp_name)
+                shutil.rmtree(existing_path)
+                logging.info(f"Deleted existing experiment '{exp_name}' for overwrite.")
+        
+        # Validate all selected experiments
+        try:
+            for exp_path in selected_experiments:
+                for dataset_dir in os.listdir(exp_path):
+                    dataset_path = os.path.join(exp_path, dataset_dir)
+                    if os.path.isdir(dataset_path):
+                        self.validate_dataset_name(dataset_path)
+                        csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
+                        if not csv_files:
+                            raise FileNotFoundError(
+                                f"Dataset directory '{dataset_dir}' in experiment '{os.path.basename(exp_path)}' does not contain any .csv files"
+                            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.gui,
+                "Error",
+                f"An error occurred while validating experiments: {e}.\n\nImportation was canceled.",
+            )
+            logging.error(f"An error occurred while validating experiments: {e}. Importation was canceled.")
+            return
+            
+        # Start multi-experiment import
+        progress_dialog = QProgressDialog("Processing...", "Cancel", 0, 100, self.gui)
+        progress_dialog.setWindowTitle("Importing Multiple Experiments")
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.setAutoClose(False)
+        progress_dialog.setAutoReset(False)
+        progress_dialog.show()
+
+        max_workers = max(1, multiprocessing.cpu_count() - 1)
+        self.multi_thread = MultiExptImportingThread(
+            selected_experiments, self.gui.output_path, max_workers=max_workers
+        )
+        self.multi_thread.progress.connect(progress_dialog.setValue)
+        self.multi_thread.status_update.connect(lambda msg: progress_dialog.setLabelText(msg))
+
+        self.multi_thread.finished.connect(progress_dialog.close)
+        self.multi_thread.finished.connect(self.refresh_existing_experiments)
+        self.multi_thread.finished.connect(
+            lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)
+        )
+        self.multi_thread.finished.connect(
+            lambda count: self._show_import_summary(count, len(selected_experiments))
+        )
+        self.multi_thread.finished.connect(
+            lambda count: self.gui.status_bar.showMessage(f"{count} experiments imported successfully.", 5000)
+        )
+        self.multi_thread.finished.connect(lambda count: logging.info(f"{count} experiments imported successfully."))
+
+        self.multi_thread.error.connect(lambda e: QMessageBox.critical(self.gui, "Error", f"An error occurred: {e}"))
+        self.multi_thread.error.connect(lambda e: logging.error(f"An error occurred while importing multiple experiments: {e}"))
+
+        self.multi_thread.canceled.connect(progress_dialog.close)
+        self.multi_thread.canceled.connect(
+            lambda: self.gui.status_bar.showMessage("Multi-experiment import canceled.", 5000)
+        )
+        self.multi_thread.canceled.connect(lambda: logging.info("Multi-experiment import canceled."))
+        self.multi_thread.canceled.connect(self.refresh_existing_experiments)
+
+        self.multi_thread.start()
+        progress_dialog.canceled.connect(self.multi_thread.cancel)
+
+    def _show_import_summary(self, successful_count: int, total_count: int):
+        """Show a summary dialog after multi-experiment import."""
+        if successful_count == total_count:
+            QMessageBox.information(
+                self.gui,
+                "Import Complete",
+                f"Successfully imported all {successful_count} experiments!"
+            )
+        elif successful_count > 0:
+            QMessageBox.warning(
+                self.gui,
+                "Import Partially Complete",
+                f"Successfully imported {successful_count} out of {total_count} experiments.\n\n"
+                f"Check the log files for details about any failed imports."
+            )
+        else:
+            QMessageBox.critical(
+                self.gui,
+                "Import Failed",
+                f"Failed to import any of the {total_count} experiments.\n\n"
+                f"Check the log files for error details."
+            )
 
     # ------------------------------------------------------------------
     def rename_experiment(self):
@@ -592,3 +820,20 @@ class DataManager:
             QMessageBox.critical(self.gui, "Error", f"Could not save error report:\n{e}")
         finally:
             QApplication.restoreOverrideCursor()
+
+    # ------------------------------------------------------------------
+    def close_all_data(self):
+        """Close all currently open data (experiment, dataset, session)."""
+        logging.info("Closing all data.")
+        if self.gui.current_session:
+            self.gui.current_session.close()
+            self.gui.set_current_session(None)
+        if self.gui.current_dataset:
+            self.gui.current_dataset.close()
+            self.gui.set_current_dataset(None)
+        if self.gui.current_experiment:
+            self.gui.current_experiment.close()
+            self.gui.set_current_experiment(None)
+        logging.info("All data closed successfully.")
+
+

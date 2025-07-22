@@ -252,3 +252,83 @@ class GUIExptImportingThread(QThread):
 
     def is_finished(self) -> bool:
         return self._is_finished
+
+
+class MultiExptImportingThread(QThread):
+    """Threaded wrapper to import multiple experiments from the GUI."""
+
+    progress = pyqtSignal(int)
+    status_update = pyqtSignal(str)
+    finished = pyqtSignal(int)  # Emits count of successfully imported experiments
+    error = pyqtSignal(Exception)
+    canceled = pyqtSignal()
+
+    def __init__(self, experiment_paths: list[str], output_dir_path: str, max_workers: int | None = None, overwrite: bool = True) -> None:
+        super().__init__()
+        self.experiment_paths = [Path(p) for p in experiment_paths]
+        self.output_dir_path = Path(output_dir_path)
+        self.max_workers = max_workers
+        self.overwrite = overwrite
+        self._is_canceled = False
+        self._is_finished = False
+        self.successful_imports = 0
+        self.total_experiments = len(experiment_paths)
+
+    def run(self) -> None:
+        try:
+            for i, expt_path in enumerate(self.experiment_paths):
+                if self._is_canceled:
+                    break
+                    
+                expt_name = expt_path.name
+                output_path = self.output_dir_path / expt_name
+                output_path.mkdir(parents=True, exist_ok=True)
+                
+                # Update status
+                self.status_update.emit(f"Importing experiment {i+1}/{self.total_experiments}: {expt_name}")
+                
+                try:
+                    import_experiment(
+                        expt_path,
+                        output_path,
+                        lambda value: self.report_progress(i, value),
+                        self.is_canceled,
+                        overwrite=self.overwrite,
+                        max_workers=self.max_workers,
+                    )
+                    
+                    if not self._is_canceled:
+                        self.successful_imports += 1
+                        logging.info(f"Successfully imported experiment: {expt_name}")
+                        
+                except Exception as e:
+                    logging.error(f"Failed to import experiment {expt_name}: {e}")
+                    # Continue with other experiments instead of stopping
+                    continue
+                    
+            if not self._is_canceled:
+                self.finished.emit(self.successful_imports)
+                self._is_finished = True
+                
+        except Exception as e:
+            if not self._is_canceled:
+                self.error.emit(e)
+                logging.error(f'Error in MultiExptImportingThread: {e}')
+                logging.error(traceback.format_exc())
+
+    def report_progress(self, experiment_index: int, experiment_progress: int) -> None:
+        if not self._is_canceled:
+            # Calculate overall progress across all experiments
+            overall_progress = int(((experiment_index * 100) + experiment_progress) / self.total_experiments)
+            self.progress.emit(overall_progress)
+
+    def cancel(self) -> None:
+        if not self._is_canceled and not self._is_finished:
+            self._is_canceled = True
+            self.canceled.emit()
+
+    def is_canceled(self) -> bool:
+        return self._is_canceled
+
+    def is_finished(self) -> bool:
+        return self._is_finished
