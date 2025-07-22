@@ -57,6 +57,7 @@ class Session:
     def _load_config_settings(self):
         _config = self._config if self._config is not None else load_config()        
         self.time_window_ms : float = _config['time_window']
+        self.pre_stim_time_ms : float = _config['pre_stim_time']
         self.bin_size : float = _config['bin_size']
         self.latency_window_style : str = _config['latency_window_style']
         self.m_color : str = _config['m_color']

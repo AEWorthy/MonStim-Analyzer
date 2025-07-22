@@ -402,7 +402,7 @@ class PreferencesDialog(QDialog):
         self.fields = {}
         if idx == 0:  # Global defaults config
             sections = {
-                "Basic Plotting Parameters": ["bin_size", "time_window", "default_method", "default_channel_names"],
+                "Basic Plotting Parameters": ["bin_size", "time_window", "pre_stim_time", "default_method", "default_channel_names"],
                 "EMG Filter Settings": ["butter_filter_args"],
                 "'Suspected H-reflex' Plot Settings": ["h_threshold"],
                 "M-max Calculation Settings": ["m_max_args"],

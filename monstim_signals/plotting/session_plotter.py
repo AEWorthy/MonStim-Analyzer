@@ -75,13 +75,18 @@ class SessionPlotter(BasePlotter):
         """
         print(help_text)
 
-    def get_time_axis(self, offset=1):
+    def get_time_axis(self):
+        # Get pre_stim_time from session config with fallback
+        pre_stim_time = getattr(self.emg_object, 'pre_stim_time_ms', 2.0)
+        
         # Calculate time values based on the scan rate
         time_values_ms = np.arange(self.emg_object.num_samples) * 1000 / self.emg_object.scan_rate  # Time values in milliseconds
         
         # Define the start and end times for the window
-        window_start_time = self.emg_object.stim_start - offset # Start [offset]ms before stimulus onset
-        window_end_time = window_start_time + self.emg_object.time_window_ms
+        # Start pre_stim_time ms before stimulus onset
+        window_start_time = self.emg_object.stim_start - pre_stim_time
+        # End time_window_ms after stimulus onset (not affected by pre_stim_time)
+        window_end_time = self.emg_object.stim_start + self.emg_object.time_window_ms
 
         # Convert time window to sample indices
         window_start_sample = int(window_start_time * self.emg_object.scan_rate / 1000)

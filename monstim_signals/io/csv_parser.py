@@ -198,10 +198,15 @@ def parse_v3h(path: Path):
                 if len(peak_deflections) > 0 or len(trough_deflections) > 0:
                     stim_v = float(max(np.median(peak_deflections) if len(peak_deflections) > 0 else 0,
                                       np.median(trough_deflections) if len(trough_deflections) > 0 else 0))
-                    logging.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
+                    # TODO: Fix this magic number
+                    if stim_v < 0.002:  # if still too low, set to 0
+                        stim_v = 0.0
+                        logging.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
+                    else:
+                        logging.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
                 else:
                     stim_v = 0.0
-                    logging.warning(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
+                    logging.debug(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
             except Exception as e:
                 # fallback: leave stim_v as 0 if any error
                 logging.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
