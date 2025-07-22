@@ -213,6 +213,7 @@ class GUIExptImportingThread(QThread):
         self.overwrite = overwrite
         self._is_canceled = False
         self._is_finished = False
+        self._last_logged_progress = -5  # For throttling log output
 
     def run(self) -> None:
         try:
@@ -236,7 +237,10 @@ class GUIExptImportingThread(QThread):
     def report_progress(self, value: int) -> None:
         if not self._is_canceled:
             self.progress.emit(value)
-        logging.info(f'CSV conversion progress: {value}%')
+        # Only log every 5% increment
+        if value >= self._last_logged_progress + 5 or value == 100:
+            logging.info(f'CSV conversion progress: {value}%')
+            self._last_logged_progress = value
 
     def cancel(self) -> None:
         if not self._is_canceled and not self._is_finished:

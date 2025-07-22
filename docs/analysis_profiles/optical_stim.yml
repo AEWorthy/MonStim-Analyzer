@@ -1,0 +1,7 @@
+name: Optical Stimulation and EMG
+description: EMG reflex analysis with optical stimulation.
+stimuli_to_plot:
+- Electrical
+- Optical
+analysis_parameters:
+  time_window: 100

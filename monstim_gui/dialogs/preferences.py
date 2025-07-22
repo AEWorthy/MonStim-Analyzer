@@ -4,17 +4,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.dialogs.base import LatencyWindow, COLOR_OPTIONS, TAB_COLOR_NAMES
+from monstim_gui.managers.profile_manager import ProfileManager
 import copy
-import yaml
-import glob
-import os
 import logging
 import ast
 
-PROFILE_DIR = os.path.join(os.path.dirname(__file__), '../../docs/analysis_profiles')
-PROFILE_DIR = os.path.abspath(PROFILE_DIR)
 
-STIMULUS_OPTIONS = ["Force", "Length", "Electrical"]
+
+STIMULUS_OPTIONS = ["Force", "Length", "Electrical", "Optical"]
 
 class StimulusSelectorWidget(QWidget):
     def __init__(self, selected=None, parent=None):
@@ -35,57 +32,6 @@ class StimulusSelectorWidget(QWidget):
     def set_selected(self, selected):
         for sig, cb in self.checkboxes.items():
             cb.setChecked(sig in selected)
-
-class ProfileManager:
-    """Handles loading, saving, and listing analysis profiles."""
-    def __init__(self, profile_dir=PROFILE_DIR, reference_config=None):
-        self.profile_dir = profile_dir
-        os.makedirs(self.profile_dir, exist_ok=True)
-        self.reference_config = reference_config
-
-    def list_profiles(self):
-        files = glob.glob(os.path.join(self.profile_dir, '*.yml'))
-        profiles = []
-        for f in files:
-            with open(f, 'r', encoding='utf-8') as fp:
-                data = yaml.safe_load(fp)
-                if data and self.reference_config:
-                    # Coerce types for the whole profile using reference config
-                    data = ConfigRepository.coerce_types(data, self.reference_config)
-                try:
-                    profiles.append((data.get('name', os.path.splitext(os.path.basename(f))[0]), f, data))
-                except AttributeError as e:
-                    logging.error(f"Error loading profile {f}: {e}")
-                    continue
-        return profiles
-
-    def load_profile(self, filename):
-        with open(filename, 'r', encoding='utf-8') as fp:
-            data = yaml.safe_load(fp)
-            if data and self.reference_config:
-                data = ConfigRepository.coerce_types(data, self.reference_config)
-            return data
-
-    def save_profile(self, data, filename=None):
-        if not filename:
-            name = data.get('name', 'profile')
-            filename = os.path.join(self.profile_dir, f"{name.replace(' ', '_').lower()}.yml")
-        # Use a regular dict for YAML dumping (insertion order is preserved in Python 3.7+)
-        ordered = {}
-        for key in ["name", "description", "latency_window_preset", "stimuli_to_plot", "analysis_parameters"]:
-            if key in data:
-                ordered[key] = data[key]
-        # Add any extra keys at the end
-        for k, v in data.items():
-            if k not in ordered:
-                ordered[k] = v
-        with open(filename, 'w', encoding='utf-8') as fp:
-            yaml.safe_dump(ordered, fp, sort_keys=False)
-        return filename
-
-    def delete_profile(self, filename):
-        if os.path.exists(filename):
-            os.remove(filename)
 
 class LatencyWindowPresetEditor(QWidget):
     """Widget to create and edit latency window presets."""
@@ -153,11 +99,11 @@ class LatencyWindowPresetEditor(QWidget):
         layout.addLayout(control_row)
 
         self.preset_combo.currentIndexChanged.connect(self.load_preset)
-        self.preset_combo.lineEdit().editingFinished.connect(self._commit_preset_name)
+        self.preset_combo.lineEdit().editingFinished.connect(self._commit_preset_name) # type: ignore
         add_btn.clicked.connect(self.add_preset)
         remove_btn.clicked.connect(self.remove_preset)
 
-        self.scroll : QScrollArea = QScrollArea()
+        self.scroll : QScrollArea = QScrollArea() # type: ignore
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -441,10 +387,10 @@ class PreferencesDialog(QDialog):
         # Clear previous form and delete widgets
         while self.form_layout.count():
             item = self.form_layout.takeAt(0)
-            widget = item.widget()
+            widget = item.widget() # type: ignore
             if widget is not None:
                 widget.deleteLater()
-            elif item.layout() is not None:
+            elif item.layout() is not None: # type: ignore
                 def delete_layout(layout):
                     while layout.count():
                         child = layout.takeAt(0)
@@ -452,7 +398,7 @@ class PreferencesDialog(QDialog):
                             child.widget().deleteLater()
                         elif child.layout():
                             delete_layout(child.layout())
-                delete_layout(item.layout())
+                delete_layout(item.layout()) # type: ignore
         self.fields = {}
         if idx == 0:  # Global defaults config
             sections = {
@@ -664,7 +610,7 @@ class PreferencesDialog(QDialog):
                     field.setText(str(value) if value is not None else "")
                 elif isinstance(field, QDoubleSpinBox):
                     try:
-                        field.setValue(float(value))
+                        field.setValue(float(value)) # type: ignore
                     except (TypeError, ValueError):
                         pass
                 # Add more widget types as needed
@@ -835,15 +781,15 @@ class PreferencesDialog(QDialog):
                     raw = field.text()
                     value = raw
                 if key in color_keys:
-                    norm = self.normalize_color(raw)
+                    norm = self.normalize_color(raw) # type: ignore
                     if not norm:
-                        invalid_colors.append((key, raw))
+                        invalid_colors.append((key, raw)) # type: ignore
                     value = norm if norm else value
                 if '.' in key:
                     main_key, sub_key = key.split('.')
                     ref_val = self.config.get(main_key, {}).get(sub_key) if isinstance(self.config.get(main_key), dict) else None
                     try:
-                        parsed_val = ast.literal_eval(value)
+                        parsed_val = ast.literal_eval(value) # type: ignore
                     except Exception:
                         parsed_val = value
                     if ref_val is not None:
@@ -856,7 +802,7 @@ class PreferencesDialog(QDialog):
                 else:
                     ref_val = self.config.get(key)
                     try:
-                        parsed_val = ast.literal_eval(value)
+                        parsed_val = ast.literal_eval(value) # type: ignore
                     except Exception:
                         parsed_val = value
                     if ref_val is not None:

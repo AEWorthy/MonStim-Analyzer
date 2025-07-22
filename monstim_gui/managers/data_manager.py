@@ -28,7 +28,6 @@ from monstim_signals.core import (
     get_config_path,
 )
 
-from monstim_gui.dialogs.preferences import PreferencesDialog
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -299,8 +298,11 @@ class DataManager:
                         )
                 
                 new_ds = self.gui.current_dataset.repo.load(config=self.gui.config_repo.read_config())
-                idx = self.gui.current_experiment._all_datasets.index(self.gui.current_dataset)
-                self.gui.current_experiment._all_datasets[idx] = new_ds
+                if self.gui.current_dataset.parent_experiment is not None:
+                    # Update the dataset in the parent experiment's list if it exists.
+                    logging.info(f"Reloading dataset in parent experiment: {self.gui.current_dataset.parent_experiment.id}.")
+                    idx = self.gui.current_dataset.parent_experiment._all_datasets.index(self.gui.current_dataset)
+                    self.gui.current_dataset.parent_experiment._all_datasets[idx] = new_ds
                 self.gui.set_current_dataset(new_ds)
             
             self.gui.data_selection_widget.update_session_combo()
@@ -312,9 +314,9 @@ class DataManager:
 
     def reload_current_experiment(self):
         #TODO: Fix pathing issues with reloading experiments.  
-        logging.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")
         current_experiment_combo_index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         if self.gui.current_experiment:
+            logging.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")
             if self.gui.current_experiment.repo is not None:
                 if self.gui.current_experiment.repo.expt_js.exists():
                     self.gui.current_experiment.repo.expt_js.unlink()
@@ -362,19 +364,20 @@ class DataManager:
     # ------------------------------------------------------------------
     def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
         logging.debug("Refreshing existing experiments.")
-        if select_expt_id is None:
-            index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         self.unpack_existing_experiments()
         self.gui.data_selection_widget.update_experiment_combo()
         self.gui.plot_widget.on_data_selection_changed()
         if select_expt_id is not None:
             index = self.gui.expts_dict_keys.index(select_expt_id) if select_expt_id in self.gui.expts_dict_keys else 0
+        else:
+            index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         self.gui.data_selection_widget.experiment_combo.setCurrentIndex(index)
         logging.debug("Existing experiments refreshed successfully.")
 
     # ------------------------------------------------------------------
     def show_preferences_window(self):
         logging.debug("Showing preferences window.")
+        from monstim_gui.dialogs.preferences import PreferencesDialog
         window = PreferencesDialog(get_config_path(), parent=self.gui)
         if window.exec() == QDialog.DialogCode.Accepted:
             # After closing preferences, refresh the profile selector in the main window
@@ -432,18 +435,23 @@ class DataManager:
                 QApplication.restoreOverrideCursor()
 
     def load_dataset(self, index):
-        if index >= 0:
-            logging.debug(
-                f"Loading dataset [{index}] from experiment '{self.gui.current_experiment.id}'."
-            )
-            if self.gui.current_experiment:
-                dataset = self.gui.current_experiment.datasets[index]
-                self.gui.set_current_dataset(dataset)
+        if index >= 0 and self.gui.current_experiment:
+            logging.debug(f"Loading dataset [{index}] from experiment '{self.gui.current_experiment.id}'.")
+            dataset = self.gui.current_experiment.datasets[index]
+            self.gui.set_current_dataset(dataset)
+            
+            if self.gui.current_dataset is not None:
+                self.gui.channel_names = self.gui.current_dataset.channel_names
             else:
-                logging.error("No current experiment to load dataset from.")
-            self.gui.channel_names = self.gui.current_dataset.channel_names
+                self.gui.channel_names = []
+                logging.warning("No dataset selected. Channel names will not be updated.")
+                
             self.gui.data_selection_widget.update_session_combo()
             self.gui.plot_widget.on_data_selection_changed()
+        elif not self.gui.current_experiment:
+            logging.error("No current experiment to load dataset from.")
+        else:
+            logging.error(f"Invalid dataset index: {index}. Cannot load dataset.")
 
     def load_session(self, index):
         if self.gui.current_dataset and index >= 0:
@@ -453,7 +461,7 @@ class DataManager:
             session = self.gui.current_dataset.sessions[index]
             self.gui.set_current_session(session)
             if hasattr(self.gui.plot_widget.current_option_widget, "recording_cycler"):
-                self.gui.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()
+                self.gui.plot_widget.current_option_widget.recording_cycler.reset_max_recordings() # type: ignore
             self.gui.plot_widget.on_data_selection_changed()
 
     # ------------------------------------------------------------------

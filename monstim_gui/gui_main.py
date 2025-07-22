@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import os
 import logging
@@ -43,9 +45,7 @@ from monstim_gui.commands import (
     ChangeChannelNamesCommand,
 )
 from monstim_gui.widgets.gui_layout import setup_main_layout
-from monstim_gui.managers.data_manager import DataManager
-from monstim_gui.managers.report_manager import ReportManager
-from monstim_gui.managers.plot_controller import PlotController
+from monstim_gui.managers import DataManager, ReportManager, PlotController
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
 
@@ -73,7 +73,7 @@ class MonstimGUI(QMainWindow):
         self.config_file = get_config_path()
 
         # Profile manager for analysis profiles
-        from monstim_gui.dialogs.preferences import ProfileManager
+        from monstim_gui.managers import ProfileManager
         self.profile_manager = ProfileManager()
         self.active_profile_path = None
         self.active_profile_data = None
@@ -131,7 +131,11 @@ class MonstimGUI(QMainWindow):
         if left_panel is not None:
             left_layout = left_panel.layout()
             if hasattr(left_layout, 'insertWidget'):
-                left_layout.insertWidget(0, self.profile_selector_row)
+                left_layout.insertWidget(0, self.profile_selector_row) # type: ignore
+            else:
+                raise RuntimeError("Left panel layout does not support insertWidget.")
+        else:
+            logging.error("Left panel not found or does not have a layout.")
 
         self._populate_profile_selector()
         self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
@@ -450,7 +454,7 @@ class MonstimGUI(QMainWindow):
         if self.current_session:
             self.current_session.set_config(config)
 
-    def set_current_experiment(self, experiment : 'Experiment'):
+    def set_current_experiment(self, experiment : Experiment | None):
         """Set the current experiment and ensure config is injected."""
         if experiment is None:
             return  # Handle case where experiment is None, e.g., clear UI, reset state, etc.
@@ -458,7 +462,7 @@ class MonstimGUI(QMainWindow):
         experiment.set_config(config)
         self.current_experiment = experiment
 
-    def set_current_dataset(self, dataset: 'Dataset'):
+    def set_current_dataset(self, dataset: Dataset | None):
         """Set the current dataset and ensure config is injected."""
         if dataset is None:
             return  # Handle case where dataset is None, e.g., clear UI, reset state, etc.
@@ -466,7 +470,7 @@ class MonstimGUI(QMainWindow):
         dataset.set_config(config)
         self.current_dataset = dataset
 
-    def set_current_session(self, session: 'Session'):
+    def set_current_session(self, session: Session | None):
         """Set the current session and ensure config is injected."""
         if session is None:
             return  # Handle case where session is None, e.g., clear UI, reset state, etc.
@@ -499,12 +503,13 @@ class MonstimGUI(QMainWindow):
             return False
         return True
     
-    def closeEvent(self, event):
+    def closeEvent(self, event): # type: ignore
         """Handle application closing"""
         if self.show_save_confirmation_dialog():
             event.accept()
         else:
             event.ignore()
+        pass
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

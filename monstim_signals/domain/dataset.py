@@ -16,7 +16,7 @@ class Dataset:
     A “dataset” = all sessions from one animal replicate.
     E.g. Dataset_1(Animal_A) has sessions AA00, AA01, …
     """
-    def __init__(self, dataset_id: str, sessions: List[Session], annot: DatasetAnnot, repo: Any = None, config: dict = None):
+    def __init__(self, dataset_id: str, sessions: List[Session], annot: DatasetAnnot, repo: Any = None, config: dict | None = None):
         self.id : str = dataset_id
         self._all_sessions : List[Session] = sessions
         self.annot         : DatasetAnnot = annot
@@ -221,7 +221,7 @@ class Dataset:
     # ──────────────────────────────────────────────────────────────────
     # 1) Useful properties for GUI & analysis code
     # ──────────────────────────────────────────────────────────────────
-    def plot(self, plot_type: str = None, **kwargs):
+    def plot(self, plot_type: str | None = None, **kwargs):
         """
         Plots EMG data from a single session using the specified plot_type.
 
