@@ -191,7 +191,7 @@ class DataSelectionWidget(QGroupBox):
         if self.parent.expts_dict_keys:
             for expt_id in self.parent.expts_dict_keys:
                 self.experiment_combo.addItem(expt_id)
-                index = self.experiment_combo.count() - 1
+                index = self.experiment_combo.count() - 1 if self.experiment_combo.count() > 0 else 0
                 self.experiment_combo.setItemData(index, expt_id, role=Qt.ItemDataRole.ToolTipRole)
         else:
             logging.warning("Cannot update experiments combo. No experiments loaded.")
@@ -201,7 +201,7 @@ class DataSelectionWidget(QGroupBox):
         if self.parent.current_experiment:
             for dataset in self.parent.current_experiment.datasets:
                 self.dataset_combo.addItem(dataset.formatted_name)
-                index = self.dataset_combo.count() - 1
+                index = self.dataset_combo.count() - 1 if self.dataset_combo.count() > 0 else 0
                 self.dataset_combo.setItemData(index, dataset.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.dataset_combo.setItemData(index, getattr(dataset, 'is_completed', False), Qt.ItemDataRole.UserRole)
         else:
@@ -212,7 +212,7 @@ class DataSelectionWidget(QGroupBox):
         if self.parent.current_dataset:
             for session in self.parent.current_dataset.sessions:
                 self.session_combo.addItem(session.formatted_name)
-                index = self.session_combo.count() - 1
+                index = self.session_combo.count() - 1 if self.session_combo.count() > 0 else 0
                 self.session_combo.setItemData(index, session.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.session_combo.setItemData(index, getattr(session, 'is_completed', False), Qt.ItemDataRole.UserRole)
         else:

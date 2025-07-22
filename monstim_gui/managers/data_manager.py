@@ -679,7 +679,8 @@ class DataManager:
         elif not self.gui.current_experiment:
             logging.error("No current experiment to load dataset from.")
         else:
-            logging.error(f"Invalid dataset index: {index}. Cannot load dataset.")
+            logging.error(f"Invalid dataset index: {index}. Loading index 0 instead.")
+            self.load_dataset(0)
 
     def load_session(self, index):
         if self.gui.current_dataset and index >= 0:
