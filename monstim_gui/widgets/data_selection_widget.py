@@ -74,9 +74,11 @@ class DataSelectionWidget(QGroupBox):
         
         self.dataset_combo = QComboBox()
         self.dataset_combo.currentIndexChanged.connect(self._on_dataset_combo_changed)
+        self.dataset_combo.setEnabled(False)  # Start disabled until experiment is loaded
 
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
+        self.session_combo.setEnabled(False)  # Start disabled until dataset is loaded
 
         form.addRow("Experiment:", self.experiment_combo)
         form.addRow("Dataset:", self.dataset_combo)
@@ -174,25 +176,78 @@ class DataSelectionWidget(QGroupBox):
             self.update_completion_status(level)
 
     def _on_experiment_combo_changed(self, index):
+        # Skip if selecting the placeholder item (index 0)
+        if index == 0:
+            # Clear current experiment if placeholder is selected
+            if self.parent.current_experiment:
+                self.parent.current_experiment = None
+                self.parent.current_dataset = None
+                self.parent.current_session = None
+                
+                # Block signals to prevent recursive calls
+                self.dataset_combo.blockSignals(True)
+                self.session_combo.blockSignals(True)
+                
+                self.update_dataset_combo()
+                self.update_session_combo()
+                
+                # Re-enable signals
+                self.dataset_combo.blockSignals(False)
+                self.session_combo.blockSignals(False)
+                
+                self.parent.plot_widget.on_data_selection_changed()
+            return
+            
+        # Check if we have experiments available
+        if not self.parent.expts_dict_keys or index > len(self.parent.expts_dict_keys):
+            logging.warning(f"Invalid experiment index: {index}")
+            return
+            
         if self.parent.has_unsaved_changes:
             self.parent.data_manager.save_experiment()
-        self.parent.data_manager.load_experiment(index)
+        
+        # Adjust index to account for placeholder item
+        self.parent.data_manager.load_experiment(index - 1)
     
     def _on_dataset_combo_changed(self):
-        self.parent.data_manager.load_dataset(index=self.dataset_combo.currentIndex())
+        index = self.dataset_combo.currentIndex()
+        # Skip if invalid index or no experiment loaded
+        if index < 0 or not self.parent.current_experiment:
+            return
+            
+        self.parent.data_manager.load_dataset(index)
 
 
     def _on_session_combo_changed(self):
-        self.parent.data_manager.load_session(index=self.session_combo.currentIndex())
+        index = self.session_combo.currentIndex()
+        # Skip if invalid index or no dataset loaded
+        if index < 0 or not self.parent.current_dataset:
+            return
+            
+        self.parent.data_manager.load_session(index)
 
 
     def update_experiment_combo(self):
         self.experiment_combo.clear()
+        
+        # Add placeholder item
+        self.experiment_combo.addItem("-- Select an Experiment --")
+        self.experiment_combo.setItemData(0, "Please select an experiment to load", role=Qt.ItemDataRole.ToolTipRole)
+        
+        # Style the placeholder item to be grayed out/italic
+        font = self.experiment_combo.font()
+        font.setItalic(True)
+        self.experiment_combo.setItemData(0, font, Qt.ItemDataRole.FontRole)
+        
         if self.parent.expts_dict_keys:
             for expt_id in self.parent.expts_dict_keys:
                 self.experiment_combo.addItem(expt_id)
-                index = self.experiment_combo.count() - 1 if self.experiment_combo.count() > 0 else 0
+                index = self.experiment_combo.count() - 1
                 self.experiment_combo.setItemData(index, expt_id, role=Qt.ItemDataRole.ToolTipRole)
+                # Ensure regular items have normal font
+                normal_font = self.experiment_combo.font()
+                normal_font.setItalic(False)
+                self.experiment_combo.setItemData(index, normal_font, Qt.ItemDataRole.FontRole)
         else:
             logging.warning("Cannot update experiments combo. No experiments loaded.")
 
@@ -205,7 +260,11 @@ class DataSelectionWidget(QGroupBox):
                 self.dataset_combo.setItemData(index, dataset.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.dataset_combo.setItemData(index, getattr(dataset, 'is_completed', False), Qt.ItemDataRole.UserRole)
         else:
-            logging.warning("Cannot update datasets combo. No experiment loaded.")
+            # Add placeholder when no experiment is loaded
+            self.dataset_combo.addItem("-- No Experiment Selected --")
+            self.dataset_combo.setItemData(0, "Please select an experiment first", role=Qt.ItemDataRole.ToolTipRole)
+            self.dataset_combo.setEnabled(False)
+            logging.debug("Dataset combo cleared - no experiment loaded.")
 
     def update_session_combo(self):
         self.session_combo.clear()
@@ -215,8 +274,13 @@ class DataSelectionWidget(QGroupBox):
                 index = self.session_combo.count() - 1 if self.session_combo.count() > 0 else 0
                 self.session_combo.setItemData(index, session.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.session_combo.setItemData(index, getattr(session, 'is_completed', False), Qt.ItemDataRole.UserRole)
+            self.session_combo.setEnabled(True)
         else:
-            logging.warning("Cannot update sessions combo. No dataset loaded.")
+            # Add placeholder when no dataset is loaded
+            self.session_combo.addItem("-- No Dataset Selected --")
+            self.session_combo.setItemData(0, "Please select a dataset first", role=Qt.ItemDataRole.ToolTipRole)
+            self.session_combo.setEnabled(False)
+            logging.debug("Session combo cleared - no dataset loaded.")
 
     def update_all_data_combos(self):
         self.update_experiment_combo()

@@ -285,7 +285,7 @@ class MultiExptImportingThread(QThread):
                 output_path.mkdir(parents=True, exist_ok=True)
                 
                 # Update status
-                self.status_update.emit(f"Importing experiment {i+1}/{self.total_experiments}: {expt_name}")
+                self.status_update.emit(f"Importing experiment {i+1}/{self.total_experiments}: '{expt_name}'")
                 
                 try:
                     import_experiment(
@@ -299,10 +299,10 @@ class MultiExptImportingThread(QThread):
                     
                     if not self._is_canceled:
                         self.successful_imports += 1
-                        logging.info(f"Successfully imported experiment: {expt_name}")
-                        
+                        logging.info(f"Successfully imported experiment: '{expt_name}'")
+
                 except Exception as e:
-                    logging.error(f"Failed to import experiment {expt_name}: {e}")
+                    logging.error(f"Failed to import experiment '{expt_name}': {e}")
                     # Continue with other experiments instead of stopping
                     continue
                     
