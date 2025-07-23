@@ -78,9 +78,9 @@ class DataSelectionWidget(QGroupBox):
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
 
-        form.addRow("Select Experiment:", self.experiment_combo)
-        form.addRow("Select Dataset:",    self.dataset_combo)
-        form.addRow("Select Session:",    self.session_combo)
+        form.addRow("Experiment:", self.experiment_combo)
+        form.addRow("Dataset:", self.dataset_combo)
+        form.addRow("Session:", self.session_combo)
 
         self.setLayout(form)
         self.setup_context_menus()

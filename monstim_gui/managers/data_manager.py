@@ -598,7 +598,7 @@ class DataManager:
         if select_expt_id is not None:
             index = self.gui.expts_dict_keys.index(select_expt_id) if select_expt_id in self.gui.expts_dict_keys else 0
         else:
-            index = self.gui.data_selection_widget.experiment_combo.currentIndex()
+            index = self.gui.data_selection_widget.experiment_combo.currentIndex() if self.gui.data_selection_widget.experiment_combo.count() > 0 else 0
         self.gui.data_selection_widget.experiment_combo.setCurrentIndex(index)
         logging.debug("Existing experiments refreshed successfully.")
 
