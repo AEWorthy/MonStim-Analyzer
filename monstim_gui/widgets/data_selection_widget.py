@@ -14,6 +14,7 @@ from PyQt6.QtGui import QColor, QPainter
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
+
 class CircleDelegate(QStyledItemDelegate):
     """
     A custom delegate for rendering a colored circle in a view item to indicate completion status.
@@ -286,4 +287,54 @@ class DataSelectionWidget(QGroupBox):
         self.update_experiment_combo()
         self.update_dataset_combo()
         self.update_session_combo()
+
+    def sync_combo_selections(self):
+        """Synchronize combo box selections with current objects without rebuilding them."""
+        # This method is mainly for recording operations that don't affect higher-level selections
+        # For exclude/restore operations, use more targeted updates
+        
+        # Sync experiment combo (should rarely be needed)
+        if self.parent.current_experiment and self.parent.expts_dict_keys:
+            try:
+                exp_index = self.parent.expts_dict_keys.index(self.parent.current_experiment.id) + 1  # +1 for placeholder
+                if self.experiment_combo.currentIndex() != exp_index:
+                    self.experiment_combo.blockSignals(True)
+                    self.experiment_combo.setCurrentIndex(exp_index)
+                    self.experiment_combo.blockSignals(False)
+            except ValueError:
+                # Experiment not found in list - set to placeholder
+                logging.warning("Current experiment not found in combo list. Setting to placeholder.")
+                if self.experiment_combo.currentIndex() != 0:
+                    self.experiment_combo.blockSignals(True)
+                    self.experiment_combo.setCurrentIndex(0)  # Placeholder
+                    self.experiment_combo.blockSignals(False)
+
+        # Sync dataset combo (should rarely be needed for recording operations)
+        if self.parent.current_dataset and self.parent.current_experiment:
+            try:
+                dataset_index = self.parent.current_experiment.datasets.index(self.parent.current_dataset)
+                if self.dataset_combo.currentIndex() != dataset_index:
+                    self.dataset_combo.blockSignals(True)
+                    self.dataset_combo.setCurrentIndex(dataset_index)
+                    self.dataset_combo.blockSignals(False)
+            except ValueError:
+                # Dataset not found in list (might be excluded)
+                pass
+
+        # Sync session combo (should rarely be needed for recording operations)  
+        if self.parent.current_session and self.parent.current_dataset:
+            try:
+                session_index = self.parent.current_dataset.sessions.index(self.parent.current_session)
+                if self.session_combo.currentIndex() != session_index:
+                    self.session_combo.blockSignals(True)
+                    self.session_combo.setCurrentIndex(session_index)
+                    self.session_combo.blockSignals(False)
+            except ValueError:
+                # Session not found in list (might be excluded)
+                pass
+
+    def update_combos_and_sync(self):
+        """Update combo contents and sync selections with current objects."""
+        self.update_all_data_combos()
+        self.sync_combo_selections()
     

@@ -74,14 +74,15 @@ class ExcludeRecordingCommand(Command):
     def execute(self):
         try:
             self.gui.current_session.exclude_recording(self.recording_id)
-            self.gui.data_selection_widget.update_all_data_combos()
+            # Recording exclusion doesn't affect dataset/session selections, so use sync instead
+            self.gui.data_selection_widget.sync_combo_selections()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
     
     def undo(self):
         try:
             self.gui.current_session.restore_recording(self.recording_id)
-            self.gui.data_selection_widget.update_all_data_combos()
+            self.gui.data_selection_widget.sync_combo_selections()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
@@ -94,14 +95,14 @@ class RestoreRecordingCommand(Command):
     def execute(self):
         try:
             self.gui.current_session.restore_recording(self.recording_id)
-            self.gui.data_selection_widget.update_all_data_combos()
+            self.gui.data_selection_widget.sync_combo_selections()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
     def undo(self):
         try:
             self.gui.current_session.exclude_recording(self.recording_id)
-            self.gui.data_selection_widget.update_all_data_combos()
+            self.gui.data_selection_widget.sync_combo_selections()
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
@@ -114,19 +115,36 @@ class ExcludeSessionCommand(Command):
         self.removed_session = None
         self.session_id = None
         self.idx = None
+        self.previous_dataset = None
 
     def execute(self):
         self.removed_session = self.gui.current_session
         self.session_id = self.gui.current_session.id
         self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
+        self.previous_dataset = self.gui.current_dataset  # Preserve dataset selection
+        
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
-        self.gui.data_selection_widget.update_all_data_combos()
+        
+        # Update combos and keep dataset selection
+        self.gui.data_selection_widget.update_session_combo()
 
     def undo(self):
         self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.removed_session
-        self.gui.data_selection_widget.update_all_data_combos()
+        # Ensure we maintain the correct dataset selection
+        if self.previous_dataset and self.gui.current_dataset != self.previous_dataset:
+            self.gui.current_dataset = self.previous_dataset
+        # Update session combo and set the correct selection
+        self.gui.data_selection_widget.update_session_combo()
+        if self.removed_session:
+            try:
+                session_index = self.gui.current_dataset.sessions.index(self.removed_session)
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except ValueError:
+                pass  # Session not found in list
 
 class ExcludeDatasetCommand(Command):
     """Exclude the currently selected dataset."""
@@ -137,19 +155,40 @@ class ExcludeDatasetCommand(Command):
         self.removed_dataset = None
         self.dataset_id = None
         self.idx = None
+        self.previous_experiment = None
 
     def execute(self):
         self.removed_dataset = self.gui.current_dataset
         self.dataset_id = self.gui.current_dataset.id
         self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
+        self.previous_experiment = self.gui.current_experiment  # Preserve experiment selection
+        
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
-        self.gui.data_selection_widget.update_all_data_combos()
+        self.gui.current_session = None
+        
+        # Update combos and keep experiment selection
+        self.gui.data_selection_widget.update_dataset_combo()
+        self.gui.data_selection_widget.update_session_combo()
 
     def undo(self):
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.removed_dataset
-        self.gui.data_selection_widget.update_all_data_combos()
+        # Ensure we maintain the correct experiment selection
+        if self.previous_experiment and self.gui.current_experiment != self.previous_experiment:
+            self.gui.current_experiment = self.previous_experiment
+        # Update dataset combo and set the correct selection
+        self.gui.data_selection_widget.update_dataset_combo()
+        if self.removed_dataset:
+            try:
+                dataset_index = self.gui.current_experiment.datasets.index(self.removed_dataset)
+                self.gui.data_selection_widget.dataset_combo.blockSignals(True)
+                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
+                self.gui.data_selection_widget.dataset_combo.blockSignals(False)
+            except ValueError:
+                pass  # Dataset not found in list
+        # Update session combo since dataset changed
+        self.gui.data_selection_widget.update_session_combo()
 
 class RestoreSessionCommand(Command):
     """Restore an excluded session by ID."""
@@ -167,12 +206,22 @@ class RestoreSessionCommand(Command):
         )
         self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.session_obj
-        self.gui.data_selection_widget.update_all_data_combos()
+        # Only update session combo and sync its selection
+        self.gui.data_selection_widget.update_session_combo()
+        if self.session_obj:
+            # Find the index of the restored session
+            try:
+                session_index = self.gui.current_dataset.sessions.index(self.session_obj)
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except ValueError:
+                pass  # Session not found in list
 
     def undo(self):
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
-        self.gui.data_selection_widget.update_all_data_combos()
+        self.gui.data_selection_widget.update_session_combo()
 
 class RestoreDatasetCommand(Command):
     """Restore an excluded dataset by ID."""
@@ -190,12 +239,26 @@ class RestoreDatasetCommand(Command):
         )
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.dataset_obj
-        self.gui.data_selection_widget.update_all_data_combos()
+        # Update dataset combo and sync its selection
+        self.gui.data_selection_widget.update_dataset_combo()
+        if self.dataset_obj:
+            # Find the index of the restored dataset
+            try:
+                dataset_index = self.gui.current_experiment.datasets.index(self.dataset_obj)
+                self.gui.data_selection_widget.dataset_combo.blockSignals(True)
+                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
+                self.gui.data_selection_widget.dataset_combo.blockSignals(False)
+            except ValueError:
+                pass  # Dataset not found in list
+        # Update session combo since dataset changed
+        self.gui.data_selection_widget.update_session_combo()
 
     def undo(self):
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
-        self.gui.data_selection_widget.update_all_data_combos()
+        self.gui.current_session = None
+        self.gui.data_selection_widget.update_dataset_combo()
+        self.gui.data_selection_widget.update_session_combo()
         
 class InvertChannelPolarityCommand(Command):
     def __init__(self, gui, level : str, channel_indexes_to_invert : list[int]):

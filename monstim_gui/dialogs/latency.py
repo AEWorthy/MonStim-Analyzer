@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
+# TODO: Make window stats edit globally if not on by-channel pane.
+# TODO: Make plot still interactable while editing windows.
 
 class WindowStartDialog(QDialog):
     """Dialog for editing per-channel latency window start times."""

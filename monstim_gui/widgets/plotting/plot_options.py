@@ -9,10 +9,8 @@ if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
     from .plotting_widget import PlotWidget
 
-# Things to do:
-# - change flag system to a more general system of latency windows.
-# - Add option to show or hide the plot legend for emg plots
-# - Add manual mmax option
+# TODO: "Reflex Amplitude Calculation Method" is too long to fit in the combo box.
+# Consider abbreviating or using a tooltip.
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
