@@ -22,6 +22,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     All plotting methods support an 'interactive_cursor' parameter to control
     whether crosshair cursors are enabled (True by default).
     """
+
+    # TODO: ensure only one latency window plotted per channel on EMG plots.
     
     def __init__(self, emg_object: 'Session'):
         super().__init__(emg_object)

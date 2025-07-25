@@ -142,7 +142,7 @@ class Experiment:
 
     def apply_latency_window_preset(self, preset_name: str) -> None:
         """Apply a latency window preset to every dataset and session."""
-        for ds in self.datasets:
+        for ds in self._all_datasets:
             ds.apply_latency_window_preset(preset_name)
         self.update_latency_window_parameters()
 
@@ -163,6 +163,8 @@ class Experiment:
         if not self.datasets:
             self.annot.excluded_datasets.clear()
             logging.warning(f"All datasets excluded from experiment {self.id}. Resetting exclusion list.")
+            if self.repo is not None:
+                self.repo.save(self)
 
     def restore_dataset(self, dataset_id: str) -> None:
         """Restore a previously excluded dataset by its ID."""

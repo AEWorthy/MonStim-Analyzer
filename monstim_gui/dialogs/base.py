@@ -22,10 +22,12 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QCheckBox, 
+    QRadioButton,
     QTabWidget,
     QComboBox,
     QDoubleSpinBox,
-    QLayout
+    QLayout,
+    QButtonGroup
 )
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QDesktopServices
 from PyQt6.QtCore import Qt, QUrl, pyqtSlot, QEvent, QTimer, QSize, QPoint

@@ -325,9 +325,14 @@ class MonstimGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Invalid level for managing latency windows.")
                 return
 
-        dialog = LatencyWindowsDialog(emg_data, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.status_bar.showMessage("Latency windows updated successfully.", 5000)
+        # Check if a latency windows dialog is already open and close it
+        if hasattr(self, '_latency_dialog') and self._latency_dialog:
+            self._latency_dialog.close()
+            
+        self._latency_dialog = LatencyWindowsDialog(emg_data, self)
+        self._latency_dialog.show()  # Use show() instead of exec() to allow interaction with main window
+        self._latency_dialog.raise_()  # Bring to front
+        self._latency_dialog.activateWindow()  # Give focus
 
     def invert_channel_polarity(self, level : str):
         logging.debug("Inverting channel polarity.")

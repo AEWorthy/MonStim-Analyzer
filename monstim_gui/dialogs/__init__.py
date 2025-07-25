@@ -2,7 +2,7 @@ from .channel import ChangeChannelNamesDialog, InvertChannelPolarityDialog
 from .reporting import CopyableReportDialog
 from .preferences import PreferencesDialog
 from .help_about import HelpWindow, LatexHelpWindow, AboutDialog
-from .latency import WindowStartDialog, LatencyWindowsDialog
+from .latency import LatencyWindowsDialog
 
 __all__ = [
     'ChangeChannelNamesDialog',
@@ -12,6 +12,5 @@ __all__ = [
     'HelpWindow',
     'LatexHelpWindow',
     'AboutDialog',
-    'WindowStartDialog',
     'LatencyWindowsDialog',
 ]

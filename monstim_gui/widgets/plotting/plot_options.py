@@ -279,7 +279,7 @@ class ReflexCurvesOptions(BasePlotOptions):
         self.relative_to_mmax_checkbox    = QCheckBox()
         self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         form.addRow("Relative to M-max:",   self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(False)
+        self.relative_to_mmax_checkbox.setChecked(True)
 
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
@@ -343,7 +343,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Relative to M-max:",   self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(False)
+        self.relative_to_mmax_checkbox.setChecked(True)
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
         

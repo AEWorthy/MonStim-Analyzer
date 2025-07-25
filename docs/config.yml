@@ -44,19 +44,19 @@ preferred_date_format: 'YYMMDD'
 latency_window_presets:
   default:
     - name: "M-wave"
-      start: 1.0
-      duration: 2.0
+      start: 0.9
+      duration: 1.5
       color: 'tab:red'
       linestyle: ':'
     - name: "H-reflex"
-      start: 3.2
+      start: 2.4
       duration: 1.5
       color: 'tab:blue'
       linestyle: ':'
   vibration_trio:
     - name: "M1"
       start: 1.0
-      duration: 2.0
+      duration: 1.5
       color: 'tab:red'
       linestyle: ':'
     - name: "H1"
@@ -66,7 +66,7 @@ latency_window_presets:
       linestyle: ':'
     - name: "M2"
       start: 4.5
-      duration: 2.0
+      duration: 1.5
       color: 'tab:red'
       linestyle: ':'
     - name: "H2"
@@ -75,7 +75,7 @@ latency_window_presets:
       color: 'tab:blue'
     - name: "M3"
       start: 8.0
-      duration: 2.0
+      duration: 1.5
       color: 'tab:red'
       linestyle: ':'
     - name: "H3"
