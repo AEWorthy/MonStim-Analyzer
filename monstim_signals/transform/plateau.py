@@ -61,12 +61,17 @@ def get_avg_mmax(
             # below the maximum plateau value. This adjustment ensures that the M-max 
             # reflects the true peak amplitude by compensating for any underestimation 
             # caused by the plateau averaging process.
-            m_max = m_max + np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(
-                plateau_data[plateau_data < np.max(plateau_data)]
-            )
-            logging.debug(
-                f"\tM-max corrected by: {np.mean(m_wave_amplitudes[m_wave_amplitudes > m_max]) - np.mean(plateau_data[plateau_data < np.max(plateau_data)])}"
-            )
+            outliers = m_wave_amplitudes[m_wave_amplitudes > m_max]
+            plateau_below_max = plateau_data[plateau_data < np.max(plateau_data)]
+            
+            if outliers.size > 0 and plateau_below_max.size > 0:
+                correction = np.mean(outliers) - np.mean(plateau_below_max)
+                m_max = m_max + correction
+                logging.debug(f"\tM-max corrected by: {correction}")
+            elif outliers.size == 0:
+                logging.debug("\tNo outliers found above M-max, no correction applied")
+            elif plateau_below_max.size == 0:
+                logging.debug("\tAll plateau data equals maximum, no correction applied")
         logging.debug(f"\tM-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return m_max, stimulus_voltages[plateau_start_idx], stimulus_voltages[plateau_end_idx]

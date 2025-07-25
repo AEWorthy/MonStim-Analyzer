@@ -1,0 +1,9 @@
+name: EMG + Force (Stretch)
+description: M-/H-response EMG analysis with vibration conditioning.
+stimuli_to_plot:
+- Force
+- Length
+- Electrical
+analysis_parameters:
+  time_window: 1200.0
+  pre_stim_time: 550.0
