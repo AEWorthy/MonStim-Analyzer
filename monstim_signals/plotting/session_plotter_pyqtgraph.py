@@ -40,16 +40,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # TODO: Make the colorbar brightness change with the brightness_shift so it reflects the adjusted colormap
 
     def get_time_axis(self):
-        """Get time axis for plotting."""
-        # Get pre_stim_time from session config with fallback
-        pre_stim_time = getattr(self.emg_object, 'pre_stim_time_ms', 2.0)
-        
+        """Get time axis for plotting."""        
         # Calculate time values based on the scan rate
         time_values_ms = np.arange(self.emg_object.num_samples) * 1000 / self.emg_object.scan_rate  # Time values in milliseconds
 
         # Define the start and end times for the window
         # Start pre_stim_time ms before stimulus onset
-        window_start_time = self.emg_object.stim_start - pre_stim_time  
+        window_start_time = self.emg_object.stim_start - self.emg_object.pre_stim_time_ms  
         # End time_window_ms after stimulus onset (not affected by pre_stim_time)
         window_end_time = self.emg_object.stim_start + self.emg_object.time_window_ms
 
@@ -57,10 +54,19 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         window_start_sample = int(window_start_time * self.emg_object.scan_rate / 1000)
         window_end_sample = int(window_end_time * self.emg_object.scan_rate / 1000)
 
-        # Ensure indices are within bounds
-        window_start_sample = max(0, window_start_sample)
-        window_end_sample = min(self.emg_object.num_samples, window_end_sample)
-
+        # Ensure we don't have negative indexing issues that could cause confusion
+        # If the calculated start is negative, it means we're asking for data before recording started
+        if window_start_sample < 0:
+            logging.warning(f"Requested time window starts before recording began. "
+                          f"window_start_sample={window_start_sample}, adjusting to 0.")
+            window_start_sample = 0
+        
+        # Ensure end sample doesn't exceed available data
+        if window_end_sample > self.emg_object.num_samples:
+            logging.warning(f"Requested time window extends beyond recording. "
+                          f"window_end_sample={window_end_sample}, clamping to {self.emg_object.num_samples}.")
+            window_end_sample = self.emg_object.num_samples
+        
         # Slice the time array for the time window
         time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
 

@@ -92,6 +92,19 @@ class SessionPlotter(BasePlotter):
         window_start_sample = int(window_start_time * self.emg_object.scan_rate / 1000)
         window_end_sample = int(window_end_time * self.emg_object.scan_rate / 1000)
 
+        # Ensure we don't have negative indexing issues that could cause confusion
+        # If the calculated start is negative, it means we're asking for data before recording started
+        if window_start_sample < 0:
+            logging.warning(f"Requested time window starts before recording began. "
+                          f"window_start_sample={window_start_sample}, adjusting to 0.")
+            window_start_sample = 0
+        
+        # Ensure end sample doesn't exceed available data
+        if window_end_sample > self.emg_object.num_samples:
+            logging.warning(f"Requested time window extends beyond recording. "
+                          f"window_end_sample={window_end_sample}, clamping to {self.emg_object.num_samples}.")
+            window_end_sample = self.emg_object.num_samples
+
         # Slice the time array for the time window
         time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
         return time_axis, window_start_sample, window_end_sample

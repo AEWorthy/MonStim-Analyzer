@@ -290,9 +290,14 @@ class Session:
         max_workers = (os.cpu_count() - 1) or 1 # Use all available CPU cores
         filtered_recordings : List[np.ndarray] = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_process_single_recording, rec): rec for rec in self.recordings}
+            # Submit futures and maintain order by storing them in a list
+            ordered_futures = []
+            for rec in self.recordings:
+                future = executor.submit(_process_single_recording, rec)
+                ordered_futures.append(future)
             
-            for future in futures:
+            # Get results in the same order as the original recordings
+            for future in ordered_futures:
                 filtered_array = future.result()  # this blocks until that recording is done
                 filtered_recordings.append(filtered_array)
 

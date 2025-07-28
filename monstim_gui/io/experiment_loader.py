@@ -81,19 +81,12 @@ class ExperimentLoadingThread(QThread):
             # Count annotation files
             for annot_file in exp_path.rglob("*.annot.json"):
                 file_count += 1
-
-            # Log warning for very large experiments
-            if file_count > 50:
-                logging.warning(f"Very large experiment detected: {file_count} files. Loading may take several minutes.")
-            if file_count > 20:
-                logging.info(f"Large experiment detected: {file_count} files. Loading may take several minutes.")
-            elif file_count > 10:
-                logging.info(f"Medium-sized experiment detected: {file_count} files. Loading may take 1-2 minutes.")
                 
             return file_count
+        
         except Exception as e:
             logging.debug(f"Error counting files: {e}")
-            return 1000  # Default estimate
+            return 0
               
     def run(self):
         """Load the experiment in a separate thread."""
@@ -119,7 +112,7 @@ class ExperimentLoadingThread(QThread):
 
             logging.debug(f"First load: {is_first_load}, Total files: {files_to_load}, Total Annotations Required: {annotations_required}, Missing annotations: {missing_annotations}")
 
-            # Provide appropriate time estimates and warnings in logging
+            # Provide appropriate time estimates in logging
             if is_first_load:
                 estimated_time = (missing_annotations / 100)  # Rough estimate: 100 files per minute
                 self._estimated_time = int(estimated_time * 60)  # Convert to seconds
