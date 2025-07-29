@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStatusBar, QSize
 from .menu_bar import MenuBar
 from .data_selection_widget import DataSelectionWidget
 from .reports_widget import ReportsWidget
-from .plotting import PlotWidget, PlotPane
+from ..plotting import PlotWidget, PlotPane
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:

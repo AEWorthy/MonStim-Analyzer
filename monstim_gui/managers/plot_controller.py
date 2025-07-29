@@ -7,12 +7,12 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt
 
 from ..core.utils.dataframe_exporter import DataFrameDialog
+from ..plotting import PLOT_NAME_DICT
 
 
 class PlotControllerError(Exception):
     """Custom exception for PlotController errors."""
     pass
-
 
 class PlotController:
     """Handle plotting and returning raw data."""
@@ -34,7 +34,6 @@ class PlotController:
         required_components = [
             ('plot_widget', 'PlotWidget for plot controls'),
             ('plot_pane', 'PlotPane for displaying plots'),
-            ('PLOT_TYPE_DICT', 'Plot type mapping dictionary')
         ]
         
         for component, description in required_components:
@@ -56,7 +55,7 @@ class PlotController:
             raise AttributeError("PlotWidget missing plot_type_combo")
         
         plot_type_raw = self.gui.plot_widget.plot_type_combo.currentText()
-        plot_type = self.gui.PLOT_TYPE_DICT.get(plot_type_raw)
+        plot_type = PLOT_NAME_DICT.get(plot_type_raw)
         plot_options = self.gui.plot_widget.get_plot_options()
         
         return {
@@ -213,7 +212,7 @@ class PlotController:
             return False, f"No {level} data exists to plot. Please try importing experiment data first."
         
         if plot_type is None:
-            return False, "Invalid plot type selected."
+            return False, f"Invalid plot type selected: level={level}, plot_type={plot_type}."
         
         # Add more specific validations as needed
         return True, None

@@ -64,9 +64,6 @@ class MonstimGUI(QMainWindow):
         self.current_dataset: Dataset | None = None
         self.current_session: Session | None = None
         self.channel_names = []
-        self.PLOT_TYPE_DICT = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
-                               "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
-                               "Single EMG Recordings": "singleEMG"}
 
         # Set default paths
         self.output_path = get_output_path()

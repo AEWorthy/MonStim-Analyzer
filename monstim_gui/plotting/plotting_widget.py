@@ -4,9 +4,8 @@ import copy
 from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup, QFormLayout,
                              QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QWidget)
 from PyQt6.QtCore import Qt
+from .plot_types import PLOT_OPTIONS_DICT
 
-from .plot_options import (EMGOptions, ReflexCurvesOptions, SingleEMGRecordingOptions,
-                           MMaxOptions, AverageReflexCurvesOptions, MaxHReflexOptions)
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
@@ -84,25 +83,8 @@ class PlotWidget(QGroupBox):
 
     def initialize_plot_widget(self):
         # Occurs after the data has been loaded. Called from EMGAnalysisGUI.
-        self.plot_options = {
-            "session": {
-                "EMG": EMGOptions,
-                "Single EMG Recordings": SingleEMGRecordingOptions,
-                "Reflex Curves": ReflexCurvesOptions,
-                "M-max": MMaxOptions
-            },
-            "dataset": {
-                "Average Reflex Curves": AverageReflexCurvesOptions,
-                "Max H-reflex": MaxHReflexOptions,
-                "M-max": MMaxOptions
-            },
-            "experiment": {
-                "Average Reflex Curves": AverageReflexCurvesOptions,
-                "Max H-reflex": MaxHReflexOptions,
-                "M-max": MMaxOptions
-            }
-        }
-        
+        self.plot_options = PLOT_OPTIONS_DICT
+
         # Store the last selected plot type and options for each view
         self.last_plot_type = {
             "session": "EMG",
@@ -114,6 +96,9 @@ class PlotWidget(QGroupBox):
             "dataset": {plot_type: {} for plot_type in self.plot_options["dataset"]},
             "experiment": {plot_type: {} for plot_type in self.plot_options["experiment"]}
         }
+        
+        # Persistent channel selection that carries across view and plot type changes
+        self.persistent_channel_selection = []
 
         # Initialize plot types and options
         self.update_plot_types()
@@ -122,6 +107,17 @@ class PlotWidget(QGroupBox):
     def create_additional_options(self):
         self.additional_options_layout = QVBoxLayout()
         self.layout.addLayout(self.additional_options_layout)
+    
+    def save_current_channel_selection(self):
+        """Save the current channel selection to persistent storage."""
+        if self.current_option_widget and hasattr(self.current_option_widget, 'channel_selector'):
+            self.persistent_channel_selection = self.current_option_widget.channel_selector.get_selected_channels()
+    
+    def connect_channel_selection_updates(self):
+        """Connect channel selector checkboxes to update persistent selection."""
+        if self.current_option_widget and hasattr(self.current_option_widget, 'channel_selector'):
+            for checkbox in self.current_option_widget.channel_selector.checkboxes:
+                checkbox.stateChanged.connect(self.save_current_channel_selection)
 
     def on_view_changed(self):
         match self.view_group.checkedButton():
@@ -138,6 +134,9 @@ class PlotWidget(QGroupBox):
         # Save current options for the current view and plot type before changing
         if self.current_option_widget and self.view:
             try:
+                # Save the current channel selection to persistent storage
+                self.save_current_channel_selection()
+                
                 current_plot_type = self.plot_type_combo.currentText()
                 if current_plot_type:
                     current_options = self.current_option_widget.get_options()
@@ -187,6 +186,9 @@ class PlotWidget(QGroupBox):
         # Save current options for the PREVIOUS plot type before changing
         if self.current_option_widget and previous_plot_type:
             try:
+                # Save the current channel selection to persistent storage
+                self.save_current_channel_selection()
+                
                 current_options = self.current_option_widget.get_options()
                 # Deep copy to ensure no reference sharing
                 self.last_options[self.view][previous_plot_type] = copy.deepcopy(current_options)
@@ -224,9 +226,20 @@ class PlotWidget(QGroupBox):
                             default_options = self.current_option_widget.get_options()
                             filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
                             
+                            # Use persistent channel selection instead of view-specific selection
+                            if 'channel_indices' in filtered_options and hasattr(self, 'persistent_channel_selection'):
+                                filtered_options['channel_indices'] = self.persistent_channel_selection
+                            
                             self.current_option_widget.set_options(filtered_options)
                         except Exception as e:
                             logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                    else:
+                        # Apply persistent channel selection even if no other saved options exist
+                        if hasattr(self, 'persistent_channel_selection') and hasattr(self.current_option_widget, 'channel_selector'):
+                            self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
+                    
+                    # Connect channel selection updates for real-time persistence
+                    self.connect_channel_selection_updates()
                     
                     self.options_layout.update()
                     
@@ -273,11 +286,23 @@ class PlotWidget(QGroupBox):
                     default_options = self.current_option_widget.get_options()
                     filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
                     
+                    # Use persistent channel selection instead of view-specific selection
+                    if 'channel_indices' in filtered_options and hasattr(self, 'persistent_channel_selection'):
+                        filtered_options['channel_indices'] = self.persistent_channel_selection
+                    
                     self.current_option_widget.set_options(filtered_options)
                 except Exception as e:
                     logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+            else:
+                # Apply persistent channel selection even if no other saved options exist
+                if hasattr(self, 'persistent_channel_selection') and hasattr(self.current_option_widget, 'channel_selector'):
+                    self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
+            
+            # Connect channel selection updates for real-time persistence
+            self.connect_channel_selection_updates()
         
         self.options_layout.update()
+        
         if plot_type == "Single EMG Recordings" and self.current_option_widget:
             self.current_option_widget.recording_cycler.reset_max_recordings()
 

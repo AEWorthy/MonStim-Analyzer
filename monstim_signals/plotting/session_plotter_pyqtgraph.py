@@ -7,7 +7,7 @@ from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.session import Session
-    from monstim_gui.widgets.plotting.plotting_widget import PlotPane
+    from plotting import PlotPane
 
 class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     """
@@ -822,6 +822,427 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             new_color = current_colormap.map(color_value, mode='qcolor')
             curve.setPen(pg.mkPen(color=new_color, width=1.0))
     
+    def plot_reflexAverages(self, channel_indices: List[int] = None, method: str = None, 
+                           plot_legend: bool = True, relative_to_mmax: bool = False, 
+                           manual_mmax: float = None, interactive_cursor: bool = True, 
+                           canvas: 'PlotPane' = None):
+        """
+        Plot average reflex amplitudes with error bars for all latency windows.
+        
+        Shows scatter plots with error bars representing the mean ± standard deviation
+        of amplitudes for each latency window across all recordings in the session.
+        
+        Parameters
+        ----------
+        channel_indices : List[int], optional
+            List of channel indices to plot
+        method : str, optional
+            Method for amplitude calculation
+        plot_legend : bool, optional
+            Whether to show legend (default: True)
+        relative_to_mmax : bool, optional
+            Whether to normalize to M-max (default: False)
+        manual_mmax : float, optional
+            Manual M-max value for normalization
+        interactive_cursor : bool, optional
+            Whether to enable interactive crosshair cursor (default: True)
+        canvas : PlotPane, optional
+            Canvas to plot on
+            
+        Returns
+        -------
+        pd.DataFrame
+            Raw data used for plotting with mean and std columns
+        """
+        if canvas is None:
+            raise UnableToPlotError("Canvas must be provided for PyQtGraph plotting")
+        
+        if channel_indices is None:
+            channel_indices = list(range(self.emg_object.num_channels))
+
+        if len(self.emg_object.latency_windows) == 0:
+            raise ValueError("No latency windows found. Add some to plot reflex averages.")
+
+        # Create plot layout
+        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        
+        # Add synchronized crosshairs to all plots (if enabled)
+        if interactive_cursor:
+            self.add_synchronized_crosshairs(plot_items)
+        
+        # Raw data collection
+        raw_data_dict = {
+            'channel_index': [],
+            'window_label': [],
+            'mean_amplitude': [],
+            'std_amplitude': [],
+            'n_recordings': []
+        }
+        
+        # Plot each channel
+        for plot_idx, channel_index in enumerate(channel_indices):
+            current_plot = plot_items[plot_idx]
+            
+            # Collect data for all latency windows
+            window_data = []
+            x_positions = []
+            window_labels = []
+            window_colors = []
+            
+            for i, window in enumerate(self.emg_object.latency_windows):
+                # Get amplitudes for this window
+                amps = self.emg_object.get_lw_reflex_amplitudes(
+                    method=method, channel_index=channel_index, window=window
+                )
+                
+                # Filter out NaN values
+                valid_amps = [amp for amp in amps if not np.isnan(amp)]
+                
+                if len(valid_amps) == 0:
+                    logging.warning(f"No valid amplitudes found for channel {channel_index}, window {window.label}")
+                    continue
+                
+                # Normalize if requested
+                if relative_to_mmax:
+                    if manual_mmax is not None:
+                        m_max = manual_mmax
+                    else:
+                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                    if m_max != 0:
+                        valid_amps = [amp / m_max for amp in valid_amps]
+                
+                # Calculate statistics
+                mean_amp = np.mean(valid_amps)
+                std_amp = np.std(valid_amps)
+                n_recordings = len(valid_amps)
+                
+                # Store data
+                window_data.append((mean_amp, std_amp, n_recordings))
+                x_positions.append(i)
+                window_labels.append(window.label if hasattr(window, 'label') else str(window))
+                window_colors.append(self._convert_matplotlib_color(window.color))
+                
+                # Collect raw data
+                raw_data_dict['channel_index'].append(channel_index)
+                raw_data_dict['window_label'].append(window_labels[-1])
+                raw_data_dict['mean_amplitude'].append(mean_amp)
+                raw_data_dict['std_amplitude'].append(std_amp)
+                raw_data_dict['n_recordings'].append(n_recordings)
+                
+                logging.info(f"Channel {channel_index}, Window {window_labels[-1]}: "
+                           f"mean={mean_amp:.3f}, std={std_amp:.3f}, n={n_recordings}")
+            
+            if not window_data:
+                logging.warning(f"No valid data found for channel {channel_index}")
+                continue
+            
+            # Plot scatter points with error bars for each window (matching dataset M-max style)
+            for i, ((mean_amp, std_amp, n_rec), x_pos, label, color) in enumerate(
+                zip(window_data, x_positions, window_labels, window_colors)
+            ):
+                # Get the actual individual amplitudes for this window to plot as scatter
+                amps = self.emg_object.get_lw_reflex_amplitudes(
+                    method=method, channel_index=channel_index, window=self.emg_object.latency_windows[i]
+                )
+                valid_amps = [amp for amp in amps if not np.isnan(amp)]
+                
+                # Normalize individual amplitudes if requested
+                if relative_to_mmax:
+                    if manual_mmax is not None:
+                        m_max = manual_mmax
+                    else:
+                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                    if m_max != 0:
+                        valid_amps = [amp / m_max for amp in valid_amps]
+                
+                # Plot individual data points as scatter (matching dataset plotter)
+                if len(valid_amps) > 0:
+                    scatter = pg.ScatterPlotItem(
+                        x=np.array([x_pos] * len(valid_amps)),
+                        y=np.array(valid_amps),
+                        pen=pg.mkPen('white', width=0.1),
+                        brush=pg.mkBrush(color),
+                        size=8,
+                        symbol='o'
+                    )
+                    current_plot.addItem(scatter)
+                
+                # Add error bars (white, matching dataset plotter)
+                error_bars = pg.ErrorBarItem(
+                    x=np.array([x_pos]), y=np.array([mean_amp]),
+                    top=np.array([std_amp]), bottom=np.array([std_amp]),
+                    pen=pg.mkPen('white', width=2),
+                    beam=0.2
+                )
+                current_plot.addItem(error_bars)
+                
+                # Add mean marker (white cross, matching dataset plotter)
+                mean_marker = pg.ScatterPlotItem(
+                    x=np.array([x_pos]), y=np.array([mean_amp]),
+                    pen=pg.mkPen('white', width=2),
+                    brush=pg.mkBrush('white'),
+                    size=12,
+                    symbol='+'
+                )
+                current_plot.addItem(mean_marker)
+                
+                # Add annotation text (matching dataset plotter format and positioning)
+                text_item = pg.TextItem(
+                    f'n={n_rec}\nAvg. Ampl.: {mean_amp:.2f}mV\nStdev. Ampl.: {std_amp:.2f}mV',
+                    anchor=(0, 0.5), color='black', 
+                    border=pg.mkPen('w'), fill=pg.mkBrush(255, 255, 255, 180)
+                )
+                text_item.setPos(x_pos + 0.2, mean_amp)
+                current_plot.addItem(text_item)
+            
+            # Set labels and formatting
+            channel_name = self.emg_object.channel_names[channel_index]
+            y_label = f'Mean Reflex Ampl. (mV, {method})' if method else 'Mean Reflex Ampl. (mV)'
+            if relative_to_mmax:
+                y_label = f'Mean Reflex Ampl. (M-max, {method})' if method else 'Mean Reflex Ampl. (M-max)'
+            
+            self.set_labels(
+                current_plot,
+                title=f'{channel_name}',
+                x_label='Latency Window',
+                y_label=y_label
+            )
+            
+            # Set x-axis ticks to show window labels
+            if window_labels:
+                tick_pairs = [(i, label) for i, label in enumerate(window_labels)]
+                current_plot.getAxis('bottom').setTicks([tick_pairs])
+                # Set x-axis range to show all windows with some padding
+                current_plot.setXRange(-0.5, len(window_labels) - 0.5)
+            
+            # Enable grid
+            current_plot.showGrid(True, True)
+            
+            # Add legend if requested
+            if plot_legend and window_labels:
+                legend = current_plot.addLegend(offset=(10, 10))
+                for i, (label, color) in enumerate(zip(window_labels, window_colors)):
+                    # Create dummy scatter item for legend
+                    dummy_scatter = pg.ScatterPlotItem(
+                        x=np.array([0]), y=np.array([0]),
+                        pen=pg.mkPen('white', width=2),
+                        brush=pg.mkBrush(color),
+                        size=12, symbol='o'
+                    )
+                    legend.addItem(dummy_scatter, label)
+        
+        # Auto-range y-axis
+        for plot_item in plot_items:
+            plot_item.enableAutoRange(axis='y', enable=True)
+        
+        # Display the plot
+        self.display_plot(canvas)
+        
+        # Create DataFrame with appropriate index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        if not raw_data_df.empty:
+            raw_data_df.set_index(['channel_index', 'window_label'], inplace=True)
+        return raw_data_df
+
+    def plot_latencyWindowTrends(self, channel_indices: List[int] = None, method: str = None,
+                                plot_legend: bool = True, relative_to_mmax: bool = False,
+                                manual_mmax: float = None, interactive_cursor: bool = True,
+                                canvas: 'PlotPane' = None):
+        """
+        Plot latency window amplitudes binned by stimulus voltage showing trends over time.
+        
+        Shows average trend lines with shadowed standard deviations for each latency window,
+        binning stimulus voltages using the config's bin_size like in plot_emg.
+        
+        Parameters
+        ----------
+        channel_indices : List[int], optional
+            List of channel indices to plot
+        method : str, optional
+            Method for amplitude calculation  
+        plot_legend : bool, optional
+            Whether to show legend (default: True)
+        relative_to_mmax : bool, optional
+            Whether to normalize to M-max (default: False)
+        manual_mmax : float, optional
+            Manual M-max value for normalization
+        interactive_cursor : bool, optional
+            Whether to enable interactive crosshair cursor (default: True)
+        canvas : PlotPane, optional
+            Canvas to plot on
+            
+        Returns
+        -------
+        pd.DataFrame
+            Raw data used for plotting with binned voltages and window amplitudes
+        """
+        if canvas is None:
+            raise UnableToPlotError("Canvas must be provided for PyQtGraph plotting")
+        
+        if channel_indices is None:
+            channel_indices = list(range(self.emg_object.num_channels))
+
+        if len(self.emg_object.latency_windows) == 0:
+            raise ValueError("No latency windows found. Add some to plot latency window trends.")
+
+        # Create plot layout
+        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        
+        # Add synchronized crosshairs to all plots (if enabled)
+        if interactive_cursor:
+            self.add_synchronized_crosshairs(plot_items)
+        
+        # Raw data collection
+        raw_data_dict = {
+            'channel_index': [],
+            'window_label': [],
+            'stimulus_voltage': [],
+            'mean_amplitude': [],
+            'std_amplitude': [],
+            'n_recordings': []
+        }
+        
+        # Plot each channel
+        for plot_idx, channel_index in enumerate(channel_indices):
+            current_plot = plot_items[plot_idx]
+            
+            # Get stimulus voltages and apply binning like in the dataset classes
+            stimulus_voltages = self.emg_object.stimulus_voltages
+            binned_voltages = np.round(stimulus_voltages / self.emg_object.bin_size) * self.emg_object.bin_size
+            unique_voltages = np.array(sorted(set(binned_voltages)))
+            
+            # Plot each latency window
+            for window in self.emg_object.latency_windows:
+                # Get all amplitudes for this window
+                all_amps = self.emg_object.get_lw_reflex_amplitudes(
+                    method=method, channel_index=channel_index, window=window
+                )
+                
+                # Create bins for amplitudes based on stimulus voltages
+                voltage_bins = {v: [] for v in unique_voltages}
+                for volt, amp in zip(binned_voltages, all_amps):
+                    if not np.isnan(amp):
+                        voltage_bins[volt].append(amp)
+                
+                # Calculate means and stds for each voltage bin
+                plot_voltages = []
+                plot_means = []
+                plot_stds = []
+                
+                for voltage in unique_voltages:
+                    amps_at_voltage = voltage_bins[voltage]
+                    if len(amps_at_voltage) > 0:
+                        mean_amp = np.mean(amps_at_voltage)
+                        std_amp = np.std(amps_at_voltage) if len(amps_at_voltage) > 1 else 0.0
+                        
+                        # Normalize if requested
+                        if relative_to_mmax:
+                            if manual_mmax is not None:
+                                m_max = manual_mmax
+                            else:
+                                m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                            if m_max != 0:
+                                mean_amp /= m_max
+                                std_amp /= m_max
+                        
+                        plot_voltages.append(voltage)
+                        plot_means.append(mean_amp)
+                        plot_stds.append(std_amp)
+                        
+                        # Collect raw data
+                        raw_data_dict['channel_index'].append(channel_index)
+                        raw_data_dict['window_label'].append(window.label if hasattr(window, 'label') else str(window))
+                        raw_data_dict['stimulus_voltage'].append(voltage)
+                        raw_data_dict['mean_amplitude'].append(mean_amp)
+                        raw_data_dict['std_amplitude'].append(std_amp)
+                        raw_data_dict['n_recordings'].append(len(amps_at_voltage))
+                
+                if len(plot_voltages) == 0:
+                    logging.warning(f"No valid data found for channel {channel_index}, window {window.label}")
+                    continue
+                
+                plot_voltages = np.array(plot_voltages)
+                plot_means = np.array(plot_means)
+                plot_stds = np.array(plot_stds)
+                
+                # Convert matplotlib color to PyQtGraph compatible color
+                window_color = self._convert_matplotlib_color(window.color)
+                
+                # Convert hex color to RGB values for fill brush
+                if isinstance(window_color, str) and window_color.startswith('#'):
+                    # Convert hex to RGB
+                    hex_color = window_color.lstrip('#')
+                    rgb = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
+                else:
+                    # Already RGB values
+                    rgb = window_color[:3] if hasattr(window_color, '__len__') else [128, 128, 128]
+                
+                # Plot shadowed trend line (like dataset plotter)
+                # Calculate upper and lower bounds for the fill
+                upper_bound = plot_means + plot_stds
+                lower_bound = plot_means - plot_stds
+                
+                # Create standard deviation band using FillBetweenItem
+                upper_curve = pg.PlotCurveItem(plot_voltages, upper_bound, pen=None)
+                lower_curve = pg.PlotCurveItem(plot_voltages, lower_bound, pen=None)
+                fill_item = pg.FillBetweenItem(
+                    upper_curve, lower_curve,
+                    brush=pg.mkBrush(*rgb, 50)  # Semi-transparent fill with RGB values
+                )
+                current_plot.addItem(fill_item)
+                
+                # Plot the mean trend line
+                mean_curve = pg.PlotCurveItem(
+                    plot_voltages, plot_means,
+                    pen=pg.mkPen(window_color, width=2),
+                    name=window.label if hasattr(window, 'label') else str(window)
+                )
+                current_plot.addItem(mean_curve)
+                
+                logging.info(f"Channel {channel_index}, Window {window.label}: "
+                           f"plotted {len(plot_voltages)} voltage bins")
+            
+            # Set labels and formatting
+            channel_name = self.emg_object.channel_names[channel_index]
+            y_label = f'Reflex Ampl. (mV, {method})' if method else 'Reflex Ampl. (mV)'
+            if relative_to_mmax:
+                y_label = f'Reflex Ampl. (M-max, {method})' if method else 'Reflex Ampl. (M-max)'
+            
+            self.set_labels(
+                current_plot,
+                title=f'{channel_name}',
+                x_label='Conditioning Stimulus Amplitude (V)',
+                y_label=y_label
+            )
+            
+            # Enable grid
+            current_plot.showGrid(True, True)
+            
+            # Add legend if requested
+            if plot_legend:
+                legend = current_plot.addLegend(offset=(10, 10))
+                for window in self.emg_object.latency_windows:
+                    window_color = self._convert_matplotlib_color(window.color)
+                    # Create dummy curve item for legend
+                    dummy_curve = pg.PlotCurveItem(
+                        x=np.array([0]), y=np.array([0]),
+                        pen=pg.mkPen(window_color, width=2)
+                    )
+                    legend.addItem(dummy_curve, window.label if hasattr(window, 'label') else str(window))
+        
+        # Auto-range both axes
+        for plot_item in plot_items:
+            plot_item.enableAutoRange(axis='xy', enable=True)
+        
+        # Display the plot
+        self.display_plot(canvas)
+        
+        # Create DataFrame with appropriate index
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        if not raw_data_df.empty:
+            raw_data_df.set_index(['channel_index', 'window_label', 'stimulus_voltage'], inplace=True)
+        return raw_data_df
+
     def clear_curve_references(self):
         """Clear stored curve references (call this before plotting new data)."""
         self.plotted_curves.clear()

@@ -1,3 +1,10 @@
+"""
+*** DEPRECATED ***
+
+This file is no longer updated and is kept for reference only.
+Use `monstim_signals.plotting.session_plotter.SessionPlotter` instead.
+
+"""
 import matplotlib
 matplotlib.use('QtAgg')  # Use Qt backend for matplotlib
 

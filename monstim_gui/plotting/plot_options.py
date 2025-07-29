@@ -2,7 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout, QFormLayout, QGroupBox, QSizePolicy
 from PyQt6.QtGui import QIntValidator
 from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
-from monstim_gui.widgets.plotting.plotting_cycler import RecordingCyclerWidget
+from .plotting_cycler import RecordingCyclerWidget
 from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ class ChannelSelectorWidget(QGroupBox):
     def __init__(self, gui_main: 'MonstimGUI', parent=None):
         super().__init__("Channel Selector", parent)
         
-        # Figure out how many channels we should allow
+        # Figure out how many channels we should allow for the current view
         view = gui_main.plot_widget.view
         if view == "session":
             emg_data = gui_main.current_session
@@ -264,7 +264,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         if "interactive_cursor" in options:
             self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
 
-class ReflexCurvesOptions(BasePlotOptions):
+class SessionReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
@@ -378,6 +378,67 @@ class AverageReflexCurvesOptions(BasePlotOptions):
             self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
         if "plot_legend" in options:
             self.show_legend_checkbox.setChecked(options["plot_legend"])
+
+class AverageSessionReflexOptions(BasePlotOptions):
+    def create_options(self):
+        form = self.create_form_layout()
+
+        self.method_combo = QComboBox()
+        self.method_combo.addItems([
+            "rms", "average_rectified", "average_unrectified", "peak_to_trough"
+        ])
+        self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
+        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+
+        # Checkboxes
+        self.relative_to_mmax_checkbox = QCheckBox()
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
+        self.show_legend_checkbox = QCheckBox()
+        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
+        self.interactive_cursor_checkbox = QCheckBox()
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        
+        form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
+        self.relative_to_mmax_checkbox.setChecked(False)  # Default to False
+        form.addRow("Show Plot Legend:", self.show_legend_checkbox)
+        self.show_legend_checkbox.setChecked(True)
+        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self.interactive_cursor_checkbox.setChecked(False)
+        
+        # Create the channel selector
+        self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+        
+        # Add widgets to layout with proper spacing
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        self.layout.addWidget(options_widget)
+        self.layout.addWidget(self.channel_selector)
+        self.layout.addStretch(1)
+
+    def get_options(self):
+        return {
+            "channel_indices": self.channel_selector.get_selected_channels(),
+            "method": self.method_combo.currentText(),
+            "relative_to_mmax": self.relative_to_mmax_checkbox.isChecked(),
+            "plot_legend": self.show_legend_checkbox.isChecked(),
+            "interactive_cursor": self.interactive_cursor_checkbox.isChecked()
+        }
+    
+    def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
+        if "method" in options:
+            index = self.method_combo.findText(options["method"])
+            if index >= 0:
+                self.method_combo.setCurrentIndex(index)
+        if "relative_to_mmax" in options:
+            self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
+        if "plot_legend" in options:
+            self.show_legend_checkbox.setChecked(options["plot_legend"])
+        if "interactive_cursor" in options:
+            self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
 
 class MMaxOptions(BasePlotOptions):
     def create_options(self):

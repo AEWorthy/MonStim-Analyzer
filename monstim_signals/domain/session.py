@@ -409,7 +409,7 @@ class Session:
         Plots EMG data from a single session using the specified plot_type.
 
         Args:
-            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH', 'mmax', and 'reflexCurves', and 'mCurvesSmoothened'.
+            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH', 'mmax', 'reflexCurves', 'reflexAverages', and 'mCurvesSmoothened'.
                 Plot types are defined in the EMGSessionPlotter class in Plot_EMG.py.
             - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
             - **kwargs: Additional keyword arguments to pass to the plotting function.
