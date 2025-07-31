@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from monstim_signals.domain.session import Session
     from monstim_signals.domain.dataset import Dataset
     from monstim_signals.domain.experiment import Experiment
-    from monstim_gui.widgets.plotting.plotting_widget import PlotPane
+    from monstim_gui.plotting import PlotPane
 
 
 class BasePlotterPyQtGraph:
@@ -59,12 +59,14 @@ class BasePlotterPyQtGraph:
         
         if num_channels == 1:
             # Single plot
-            plot_item = canvas.graphics_layout.addPlot(row=0, col=0)
+            plot_item : pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
             plot_items.append(plot_item)
+        elif num_channels == 0:
+            raise UnableToPlotError("No channels to plot. Select at least one channel.")
         else:
             # Multiple plots in a row
             for i, channel_index in enumerate(channel_indices):
-                plot_item = canvas.graphics_layout.addPlot(row=0, col=i)
+                plot_item : pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
                 plot_items.append(plot_item)
                 
                 # Share axes for all plots

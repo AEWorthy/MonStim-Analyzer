@@ -7,7 +7,7 @@ from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.session import Session
-    from plotting import PlotPane
+    from monstim_gui.plotting import PlotPane
 
 class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     """
@@ -626,6 +626,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     legend.addItem(current_plot.listDataItems()[i], label)
 
         for plot_item in plot_items:
+            # Remove link y-axes to the first plot item
+            plot_item.setYLink(None)
             plot_item.enableAutoRange(axis='y', enable=True)
         
         # Display the plot
@@ -1031,9 +1033,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     )
                     legend.addItem(dummy_scatter, label)
         
-        # Auto-range y-axis
+
         for plot_item in plot_items:
+            # Remove link y-axes to the first plot item
+            plot_item.setYLink(None)
             plot_item.enableAutoRange(axis='y', enable=True)
+
         
         # Display the plot
         self.display_plot(canvas)
@@ -1232,7 +1237,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         
         # Auto-range both axes
         for plot_item in plot_items:
-            plot_item.enableAutoRange(axis='xy', enable=True)
+            # Remove link y-axes to the first plot item
+            plot_item.setYLink(None)
+            plot_item.enableAutoRange(axis='y', enable=True)
         
         # Display the plot
         self.display_plot(canvas)

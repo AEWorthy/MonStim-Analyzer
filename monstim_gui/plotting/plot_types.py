@@ -2,10 +2,12 @@ from .plot_options import (EMGOptions, SessionReflexCurvesOptions, SingleEMGReco
                            MMaxOptions, AverageReflexCurvesOptions, AverageSessionReflexOptions,
                            MaxHReflexOptions)
 
-PLOT_NAME_DICT = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
-                  "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
-                  "Single EMG Recordings": "singleEMG", "Reflex Averages": "reflexAverages",
-                  "Latency Window Trends": "latencyWindowTrends"}
+PLOT_NAME_DICT = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", 
+                  "Reflex:Stimulus Curves": "reflexCurves",
+                  "M-max": "mmax", "Max H-reflex": "maxH", 
+                  "Average Reflex:Stimulus Curves": "averageReflexCurves",
+                  "Single EMG Recordings": "singleEMG", 
+                  "Reflex Averages": "reflexAverages"}
 
 PLOT_OPTIONS_DICT = {
             "session": {
@@ -13,7 +15,7 @@ PLOT_OPTIONS_DICT = {
                 "Single EMG Recordings": SingleEMGRecordingOptions,
                 "Reflex Averages": AverageSessionReflexOptions,
                 "Reflex:Stimulus Curves": SessionReflexCurvesOptions,
-                "Average Reflex:Stimulus Curve ": AverageSessionReflexOptions,
+                "Average Reflex:Stimulus Curves": AverageSessionReflexOptions,
                 "M-max": MMaxOptions
             },
             "dataset": {

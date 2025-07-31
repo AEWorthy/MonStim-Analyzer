@@ -25,7 +25,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
         super().__init__(experiment)
         self.emg_object: 'Experiment' = experiment
         
-    def plot_reflexCurves(self, channel_indices: List[int] = None, method=None, plot_legend=True, 
+    def plot_averageReflexCurves(self, channel_indices: List[int] = None, method=None, plot_legend=True, 
                          relative_to_mmax=False, manual_mmax=None, canvas=None):
         """Plot average reflex curves for the experiment with interactive features."""
         try:

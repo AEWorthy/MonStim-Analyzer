@@ -7,7 +7,7 @@ from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.dataset import Dataset
-    from monstim_gui.widgets.plotting.plotting_widget import PlotPane
+    from monstim_gui.plotting import PlotPane
 
 
 class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
@@ -25,7 +25,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
         super().__init__(dataset)
         self.emg_object: 'Dataset' = dataset
         
-    def plot_reflexCurves(self, channel_indices: List[int] = None, method : str = None, plot_legend : bool = True, 
+    def plot_averageReflexCurves(self, channel_indices: List[int] = None, method : str = None, plot_legend : bool = True, 
                          relative_to_mmax : bool = False, manual_mmax : float | int | None =None,
                          interactive_cursor : bool = False, canvas : 'PlotPane'=None):
         """Plot average reflex curves for the dataset with interactive features, using domain Dataset object API."""
