@@ -77,6 +77,9 @@ def exception_hook(exc_type, exc_value, exc_traceback):
 
 def main(is_frozen : bool) -> int:
     try:
+        from monstim_gui.core.ui_scaling import setup_dpi_awareness
+        setup_dpi_awareness()
+        
         app = QApplication(sys.argv)
         if is_frozen: # Display splash screen if running as a frozen executable.
             from monstim_gui.core.splash import SplashScreen

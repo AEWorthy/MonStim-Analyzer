@@ -59,7 +59,10 @@ class RecordingCyclerWidget(QGroupBox):
         super().__init__("Recording Cycler", parent)
 
         self.main_gui = get_main_window() # type: MonstimGUI
-        self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
+        if not self.main_gui.current_session:
+            self.maximum_recordings = 0
+        else:
+            self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
         
         # Set size policy to be fixed height
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -120,7 +123,10 @@ class RecordingCyclerWidget(QGroupBox):
         self.recording_spinbox.valueChanged.connect(self.on_recording_changed)
 
     def reset_max_recordings(self):
-        self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
+        if not self.main_gui.current_session:
+            self.maximum_recordings = 0
+        else:
+            self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
         self.recording_spinbox.setMaximum(self.maximum_recordings)
         if self.recording_spinbox.value() > self.maximum_recordings:
             self.recording_spinbox.setValue(self.maximum_recordings)

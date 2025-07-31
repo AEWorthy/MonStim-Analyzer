@@ -5,6 +5,8 @@ from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QRadioButton, QButtonGroup,
                              QComboBox, QHBoxLayout, QPushButton, QSizePolicy, QWidget)
 from PyQt6.QtCore import Qt
 from .plot_types import PLOT_OPTIONS_DICT
+from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
+from ..core.ui_scaling import ui_scaling
 
 
 if TYPE_CHECKING:
@@ -45,21 +47,33 @@ class PlotWidget(QGroupBox):
         form.addRow("Select Data Level to Plot:", level_widget)
 
         # Plot Type Selection Box
-        self.plot_type_combo = QComboBox()
+        self.plot_type_combo = ResponsiveComboBox()
         form.addRow("Plot Type:", self.plot_type_combo)
         self.plot_type_combo.currentTextChanged.connect(self.on_plot_type_changed)
 
         self.layout.addLayout(form)
 
-        # Dynamic Options Box
+        # Dynamic Options Box with scroll area for long content
         self.options_box = QGroupBox("Options")
         self.options_box.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.MinimumExpanding
         )
-        self.options_layout = QVBoxLayout(self.options_box)
+        
+        # Create scroll area for options content
+        self.options_scroll = ResponsiveScrollArea()
+        self.options_content = QWidget()
+        self.options_layout = QVBoxLayout(self.options_content)
         self.options_layout.setContentsMargins(6, 6, 6, 6)
         self.options_layout.setSpacing(6)
+        
+        self.options_scroll.setWidget(self.options_content)
+        
+        # Layout for the group box
+        options_box_layout = QVBoxLayout(self.options_box)
+        options_box_layout.setContentsMargins(4, 4, 4, 4)
+        options_box_layout.addWidget(self.options_scroll)
+        
         self.layout.addWidget(self.options_box)
 
         # Create the buttons for plotting and extracting data

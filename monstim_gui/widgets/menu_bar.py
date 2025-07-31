@@ -42,6 +42,10 @@ class MenuBar(QMenuBar):
         preferences_action = file_menu.addAction("Preferences")
         preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
 
+        # UI Scaling Preferences button
+        ui_scaling_action = file_menu.addAction("Display Preferences")
+        ui_scaling_action.triggered.connect(self.show_ui_scaling_preferences)
+
         file_menu.addSeparator()
 
         # Save button
@@ -199,6 +203,21 @@ class MenuBar(QMenuBar):
         self.undo_action.setEnabled(undo_command_name is not None)
         self.redo_action.setEnabled(redo_command_name is not None)
 
-        # Optionally apply the hint style to make the hint part different (e.g., shadowed)
+        # Set the hint font for the actions
         self.undo_action.setFont(hint_font)
         self.redo_action.setFont(hint_font)
+
+    def show_ui_scaling_preferences(self):
+        """Show the UI scaling preferences dialog."""
+        try:
+            from monstim_gui.dialogs.ui_scaling_preferences import UIScalingPreferencesDialog
+            dialog = UIScalingPreferencesDialog(self.parent)
+            dialog.exec()
+        except ImportError as e:
+            QMessageBox.warning(
+                self.parent,
+                "UI Scaling Preferences",
+                f"UI scaling preferences dialog is not available: {e}"
+            )   
+
+    

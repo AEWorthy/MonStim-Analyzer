@@ -2,6 +2,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox, QLineEdit, QGridLayout, QFormLayout, QGroupBox, QSizePolicy
 from PyQt6.QtGui import QIntValidator
 from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
+from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
+from monstim_gui.core.ui_scaling import ui_scaling
 from .plotting_cycler import RecordingCyclerWidget
 from typing import List, TYPE_CHECKING
 
@@ -99,7 +101,7 @@ class EMGOptions(BasePlotOptions):
         ## Data type options box
         form = self.create_form_layout()
 
-        self.data_type_combo = QComboBox()
+        self.data_type_combo = ResponsiveComboBox()
         self.data_type_combo.addItems([
             "filtered", "raw", "rectified_raw", "rectified_filtered"
         ])
@@ -173,7 +175,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
-        self.data_type_combo = QComboBox()
+        self.data_type_combo = ResponsiveComboBox()
         self.data_type_combo.addItems([
             "filtered", "raw", "rectified_raw", "rectified_filtered"
         ])
@@ -268,7 +270,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
-        self.method_combo = QComboBox()
+        self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems([
             "rms", "average_rectified", "average_unrectified", "peak_to_trough"
         ])
@@ -330,7 +332,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
-        self.method_combo = QComboBox()
+        self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems([
             "rms", "average_rectified", "average_unrectified", "peak_to_trough"
         ])
@@ -383,7 +385,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
-        self.method_combo = QComboBox()
+        self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems([
             "rms", "average_rectified", "average_unrectified", "peak_to_trough"
         ])
@@ -444,7 +446,7 @@ class MMaxOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
-        self.method_combo = QComboBox()
+        self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems([
             "rms", "average_rectified", "average_unrectified", "peak_to_trough"
         ])
@@ -490,7 +492,7 @@ class MaxHReflexOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
-        self.method_combo = QComboBox()
+        self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems([
             "rms", "average_rectified", "average_unrectified", "peak_to_trough"
         ])
@@ -567,7 +569,7 @@ class SuspectedHReflexesOptions(BasePlotOptions):
         # H-reflex calculation method option
         h_method_layout = QHBoxLayout()
         self.h_method_label = QLabel("H-reflex Calculation Method:")
-        self.h_method_combo = QComboBox()
+        self.h_method_combo = ResponsiveComboBox()
         self.h_method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.h_method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         h_method_layout.addWidget(self.h_method_label)

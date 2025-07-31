@@ -55,7 +55,15 @@ class MonstimGUI(QMainWindow):
         self.has_unsaved_changes = False
         self.setWindowTitle("MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
-        self.setGeometry(30, 30, 800, 770)
+        
+        # Use responsive window sizing with state restoration
+        # from monstim_gui.core.ui_scaling import ui_scaling
+        from monstim_gui.core.ui_config import ui_config
+        
+        # Try to restore previous window state, otherwise use responsive sizing
+        if not ui_config.restore_window_state(self):
+            x, y, width, height = ui_config.get_window_geometry()
+            self.setGeometry(x, y, width, height)
 
         # Initialize variables
         self.expts_dict = {}
@@ -508,6 +516,9 @@ class MonstimGUI(QMainWindow):
     def closeEvent(self, event): # type: ignore
         """Handle application closing"""
         if self.show_save_confirmation_dialog():
+            # Save window state before closing
+            from monstim_gui.core.ui_config import ui_config
+            ui_config.save_window_state(self)
             event.accept()
         else:
             event.ignore()
