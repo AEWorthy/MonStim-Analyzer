@@ -46,6 +46,10 @@ class MenuBar(QMenuBar):
         ui_scaling_action = file_menu.addAction("Display Preferences")
         ui_scaling_action.triggered.connect(self.show_ui_scaling_preferences)
 
+        # Program Preferences button
+        program_prefs_action = file_menu.addAction("Program Preferences")
+        program_prefs_action.triggered.connect(self.show_program_preferences)
+
         file_menu.addSeparator()
 
         # Save button
@@ -219,5 +223,22 @@ class MenuBar(QMenuBar):
                 "UI Scaling Preferences",
                 f"UI scaling preferences dialog is not available: {e}"
             )   
+
+    def show_program_preferences(self):
+        """Show the program preferences dialog."""
+        try:
+            from monstim_gui.dialogs.program_preferences import ProgramPreferencesDialog
+            dialog = ProgramPreferencesDialog(self.parent)
+            
+            # Connect the preferences changed signal to refresh any UI that might depend on it
+            dialog.preferences_changed.connect(self.parent.refresh_preferences_dependent_ui)
+            
+            dialog.exec()
+        except ImportError as e:
+            QMessageBox.warning(
+                self.parent,
+                "Program Preferences",
+                f"Program preferences dialog is not available: {e}"
+            )
 
     

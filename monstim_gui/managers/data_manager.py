@@ -27,6 +27,7 @@ from monstim_signals.core import (
     get_config_path,
 )
 from monstim_gui.io.experiment_loader import ExperimentLoadingThread
+from monstim_gui.core.application_state import app_state
 
 
 from typing import TYPE_CHECKING
@@ -73,12 +74,21 @@ class DataManager:
     # import experiment from CSVs
     def import_expt_data(self):
         logging.info("Importing new experiment data from CSV files.")
+        
+        # Get the last used import directory, fallback to default data path
+        last_import_path = app_state.get_last_import_path()
+        if not last_import_path or not os.path.isdir(last_import_path):
+            last_import_path = str(get_data_path())
+        
         expt_path = QFileDialog.getExistingDirectory(
-            self.gui, "Select Experiment Directory", str(get_data_path())
+            self.gui, "Select Experiment Directory", last_import_path
         )
         expt_name = os.path.splitext(os.path.basename(expt_path))[0]
 
         if expt_path and expt_name:
+            # Save the selected directory for next time
+            app_state.save_last_import_path(os.path.dirname(expt_path))
+            
             if os.path.exists(os.path.join(self.gui.output_path, expt_name)):
                 overwrite = QMessageBox.question(
                     self.gui,
@@ -201,16 +211,24 @@ class DataManager:
     def import_multiple_expt_data(self):
         logging.info("Importing multiple experiment data from CSV files.")
         
+        # Get the last used import directory, fallback to default data path
+        last_import_path = app_state.get_last_import_path()
+        if not last_import_path or not os.path.isdir(last_import_path):
+            last_import_path = str(get_data_path())
+        
         # Use QFileDialog to select multiple directories
         from PyQt6.QtWidgets import QFileDialog
         root_path = QFileDialog.getExistingDirectory(
-            self.gui, "Select Root Directory Containing Multiple Experiments", str(get_data_path())
+            self.gui, "Select Root Directory Containing Multiple Experiments", last_import_path
         )
         
         if not root_path:
             QMessageBox.warning(self.gui, "Warning", "You must select a root directory.")
             logging.warning("No root directory selected. Import canceled.")
             return
+        
+        # Save the selected directory for next time
+        app_state.save_last_import_path(root_path)
             
         # Find all subdirectories that could be experiments
         potential_experiments = []
@@ -854,6 +872,14 @@ class DataManager:
             self.loading_completed_successfully = True
                 
             self.gui.set_current_experiment(experiment)
+            
+            # Track this experiment as recently used
+            app_state.save_recent_experiment(experiment.id)
+            
+            # Save session state for restoration
+            profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, 'profile_selector_combo') else None
+            app_state.save_current_session_state(experiment_id=experiment.id, profile_name=profile_name)
+            
             self.gui.data_selection_widget.update_dataset_combo()
             # Re-enable dataset combo since an experiment is now loaded
             self.gui.data_selection_widget.dataset_combo.setEnabled(True)
@@ -924,6 +950,14 @@ class DataManager:
         dataset = self.gui.current_experiment.datasets[index]
         self.gui.set_current_dataset(dataset)
         
+        # Save session state for restoration
+        profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, 'profile_selector_combo') else None
+        app_state.save_current_session_state(
+            experiment_id=self.gui.current_experiment.id,
+            dataset_id=dataset.id,
+            profile_name=profile_name
+        )
+        
         if self.gui.current_dataset is not None:
             self.gui.channel_names = self.gui.current_dataset.channel_names
         else:
@@ -947,6 +981,16 @@ class DataManager:
         logging.debug(f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'.")
         session = self.gui.current_dataset.sessions[index]
         self.gui.set_current_session(session)
+        
+        # Save complete session state for restoration
+        profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, 'profile_selector_combo') else None
+        app_state.save_current_session_state(
+            experiment_id=self.gui.current_experiment.id if self.gui.current_experiment else None,
+            dataset_id=self.gui.current_dataset.id,
+            session_id=session.id,
+            profile_name=profile_name
+        )
+        
         if hasattr(self.gui.plot_widget.current_option_widget, "recording_cycler"):
             self.gui.plot_widget.current_option_widget.recording_cycler.reset_max_recordings() # type: ignore
         self.gui.plot_widget.on_data_selection_changed()
@@ -1059,12 +1103,22 @@ class DataManager:
 
     def save_error_report(self):
         log_dir = get_log_dir()
-        default_name = os.path.join(os.path.expanduser("~"), "monstim_logs.zip")
+        
+        # Get the last used export directory, fallback to user home
+        last_export_path = app_state.get_last_export_path()
+        if not last_export_path or not os.path.isdir(last_export_path):
+            last_export_path = os.path.expanduser("~")
+        
+        default_name = os.path.join(last_export_path, "monstim_logs.zip")
         file_path, _ = QFileDialog.getSaveFileName(
             self.gui, "Save Error Report", default_name, "Zip Files (*.zip)"
         )
         if not file_path:
             return
+        
+        # Save the directory for next time
+        app_state.save_last_export_path(os.path.dirname(file_path))
+        
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             with ZipFile(file_path, "w", ZIP_DEFLATED) as zf:

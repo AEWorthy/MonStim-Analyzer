@@ -1,4 +1,5 @@
 import sys
+import os
 import pandas as pd
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QTableView,
@@ -7,6 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QAbstractTableModel
 
 from monstim_signals.core import get_base_path
+from monstim_gui.core.application_state import app_state
 
 
 class PandasModel(QAbstractTableModel):
@@ -73,11 +75,19 @@ class DataFrameDialog(QDialog):
         layout.addWidget(button_box)
 
     def save_as(self):
+        # Get the last used export directory, fallback to base path
+        last_export_path = app_state.get_last_export_path()
+        if not last_export_path or not os.path.isdir(last_export_path):
+            last_export_path = str(get_base_path())
+        
+        default_name = os.path.join(last_export_path, "exported_data.csv")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export DataFrame", str(get_base_path()),
+            self, "Export DataFrame", default_name,
             "CSV Files (*.csv);;All Files (*)"
         )
         if path:
+            # Save the directory for next time
+            app_state.save_last_export_path(os.path.dirname(path))
             self.df.to_csv(path, index=True)
 
 

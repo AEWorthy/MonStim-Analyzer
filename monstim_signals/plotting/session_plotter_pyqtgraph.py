@@ -1049,7 +1049,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             raw_data_df.set_index(['channel_index', 'window_label'], inplace=True)
         return raw_data_df
 
-    def plot_latencyWindowTrends(self, channel_indices: List[int] = None, method: str = None,
+    def plot_averageReflexCurves(self, channel_indices: List[int] = None, method: str = None,
                                 plot_legend: bool = True, relative_to_mmax: bool = False,
                                 manual_mmax: float = None, interactive_cursor: bool = True,
                                 canvas: 'PlotPane' = None):

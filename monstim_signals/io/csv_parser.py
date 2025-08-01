@@ -116,23 +116,38 @@ def parse_v3d(path: Path):
     meta['channel_types'] = types
     meta['num_channels'] = int(total_ch)
 
-    # Stimulus Cluster
+    # Stimulus Clusters
+    n = 4 # hardcoded for v3d, as it has 4 stimulus channels
     clusters = []
-    clusters.append(StimCluster(
-        stim_delay    = float(raw_meta['Start Delay (ms)']),
-        stim_duration = float(raw_meta['Stimulus duration (ms)']), 
-        stim_type     = 'Electrical',  # default type for v3d
-        stim_v        = float(raw_meta['Stimulus Value (V)']),
-        stim_min_v    = None,  # not provided in v3d format
-        stim_max_v    = None,  # not provided in v3d format
+    for i in range(n):
+        stim_type_int = int(float(raw_meta[f'Stim Type {i+1}']))
+        if stim_type_int == 0:
+            stim_type = 'Optical'
+        elif stim_type_int == 2:
+            stim_type = 'Electrical'
+        elif stim_type_int == 3:
+            # Indicates off, so go to next cluster without appending this one
+            continue
+        else:
+            stim_type = 'Unknown'
+        stim_v = float(raw_meta[f'Stim Value {i+1}'])
         
-        pulse_shape   = 'Square',  # always square in v3d
-        num_pulses    = int(float(raw_meta['# of Pulses in stim train'])),
-        pulse_period  = float(raw_meta['Stim Train pulse period (ms)']),
-        peak_duration = float(raw_meta['Stimulus duration (ms)']),
-        ramp_duration = None  # N/A in v3d format
-    ))
+        clusters.append(StimCluster(
+            stim_delay    = float(raw_meta['Start Delay (ms)']),
+            stim_duration = float(raw_meta['Stimulus duration (ms)']), 
+            stim_type     = stim_type,
+            stim_v        = stim_v,
+            stim_min_v    = None,  # not provided in v3d format
+            stim_max_v    = None,  # not provided in v3d format
+            
+            pulse_shape   = 'Square',  # always square in v3d
+            num_pulses    = int(float(raw_meta['# of Pulses in stim train'])),
+            pulse_period  = float(raw_meta['Stim Train pulse period (ms)']),
+            peak_duration = float(raw_meta['Stimulus duration (ms)']),
+            ramp_duration = None  # N/A in v3d format
+        ))
     meta['stim_clusters'] = [asdict(c) for c in clusters]
+
     
     # Set additional metadata
     meta['num_samples'] = int(data.shape[0])

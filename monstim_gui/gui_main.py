@@ -102,6 +102,8 @@ class MonstimGUI(QMainWindow):
 
         self.plot_widget.initialize_plot_widget()
         
+        # Restore last session state (profile, experiment, dataset, session)
+        self._restore_last_session()
 
         self.command_invoker = CommandInvoker(self)
         # Initialize undo/redo menu state
@@ -173,7 +175,11 @@ class MonstimGUI(QMainWindow):
             self.profile_selector_combo.setToolTip("")
 
     def _on_profile_selector_changed(self, idx):
+        from monstim_gui.core.application_state import app_state
+        
         self._set_profile_selector_tooltip(idx)
+        profile_name = self.profile_selector_combo.currentText()
+        
         if idx == 0:
             # Global config
             self.active_profile_path = None
@@ -192,6 +198,17 @@ class MonstimGUI(QMainWindow):
                 config['latency_window_preset'] = data['latency_window_preset']
             if 'stimuli_to_plot' in data:
                 config['stimuli_to_plot'] = data['stimuli_to_plot']
+        
+        # Save profile selection and update session state
+        app_state.save_last_profile(profile_name)
+        if self.current_experiment:
+            app_state.save_current_session_state(
+                experiment_id=self.current_experiment.id,
+                dataset_id=self.current_dataset.id if self.current_dataset else None,
+                session_id=self.current_session.id if self.current_session else None, 
+                profile_name=profile_name
+            )
+        
         self.update_domain_configs(config)
         self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
 
@@ -205,6 +222,50 @@ class MonstimGUI(QMainWindow):
             self.profile_selector_combo.setCurrentIndex(idx)
         else:
             self.profile_selector_combo.setCurrentIndex(0)
+    
+    def refresh_preferences_dependent_ui(self):
+        """Refresh any UI elements that depend on program preferences."""
+        # This method can be called when preferences change to update the UI
+        # Currently no specific UI updates are needed, but this is a hook
+        # for future functionality that might depend on preference settings
+        pass
+    
+    def restore_last_profile_selection(self):
+        """Restore the last selected analysis profile."""
+        from monstim_gui.core.application_state import app_state
+        
+        last_profile = app_state.get_last_profile()
+        if last_profile and last_profile != "(default)":
+            idx = self.profile_selector_combo.findText(last_profile)
+            if idx >= 0:
+                self.profile_selector_combo.setCurrentIndex(idx)
+                logging.info(f"Restored last profile selection: {last_profile}")
+                return True
+        return False
+    
+    def _restore_last_session(self):
+        """Restore the last session state including profile, experiment, dataset, and session."""
+        from monstim_gui.core.application_state import app_state
+        
+        try:
+            # First restore the profile selection
+            self.restore_last_profile_selection()
+            
+            # Then attempt to restore the data selections
+            if app_state.should_restore_session():
+                success = app_state.restore_last_session(self)
+                if success:
+                    self.status_bar.showMessage("Previous session state restored", 5000)
+                    logging.info("Session restoration completed successfully")
+                else:
+                    logging.info("Session restoration was not possible")
+            else:
+                logging.info("No previous session state to restore")
+                
+        except Exception as e:
+            logging.error(f"Error during session restoration: {e}")
+            # Clear problematic state
+            app_state.clear_session_state()
    
     # Command functions
     def undo(self):
@@ -487,33 +548,47 @@ class MonstimGUI(QMainWindow):
         config = self._get_effective_config()
         session.set_config(config)
         self.current_session = session
-
-    # Close event handling
-    def show_save_confirmation_dialog(self):
-        """Show dialog asking user if they want to save before closing"""
-        # Shouldn't be needed anymore for most changes, but keeping it in case it's needed for future changes.
-        if not self.current_experiment or not self.has_unsaved_changes:
-            return True
-            
-        reply = QMessageBox.question(
-        self,
-        'Save Changes?',
-        'Do you want to save the current experiment before closing?',
-        QMessageBox.StandardButton.Save | 
-        QMessageBox.StandardButton.Discard | 
-        QMessageBox.StandardButton.Cancel,
-        QMessageBox.StandardButton.Save
-    )
-        
-        if reply == QMessageBox.StandardButton.Save:
-            saved = self.data_manager.save_experiment()
-            if saved:
-                QApplication.quit() # Close the application after saving.
-        elif reply == QMessageBox.StandardButton.Cancel:
-            return False
-        return True
     
-    def closeEvent(self, event): # type: ignore
+    def closeEvent(self, event):
+        """Handle application close event - save current session state."""
+        from monstim_gui.core.application_state import app_state
+        
+        try:
+            # Save current session state before closing
+            if self.current_experiment:
+                profile_name = self.profile_selector_combo.currentText() if hasattr(self, 'profile_selector_combo') else None
+                app_state.save_current_session_state(
+                    experiment_id=self.current_experiment.id,
+                    dataset_id=self.current_dataset.id if self.current_dataset else None,
+                    session_id=self.current_session.id if self.current_session else None,
+                    profile_name=profile_name
+                )
+                logging.info("Session state saved on application close")
+            
+            # Check for unsaved changes
+            if self.has_unsaved_changes:
+                reply = QMessageBox.question(
+                    self,
+                    "Unsaved Changes",
+                    "You have unsaved changes. Do you want to save before closing?",
+                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+                )
+                
+                if reply == QMessageBox.StandardButton.Save:
+                    if self.data_manager.save_experiment():
+                        event.accept()
+                    else:
+                        event.ignore()
+                elif reply == QMessageBox.StandardButton.Discard:
+                    event.accept()
+                else:  # Cancel
+                    event.ignore()
+            else:
+                event.accept()
+                
+        except Exception as e:
+            logging.error(f"Error during application close: {e}")
+            event.accept()  # Still allow closing even if save fails
         """Handle application closing"""
         if self.show_save_confirmation_dialog():
             # Save window state before closing
