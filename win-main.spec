@@ -53,7 +53,7 @@ exe = EXE( # type: ignore
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/icon.png'
+    icon='src/icon.ico'
 )
 
 coll = COLLECT( # type: ignore
