@@ -19,7 +19,7 @@ from monstim_gui.version import VERSION
 
 SPLASH_INFO = {
     'program_name': "MonStim EMG Analyzer",
-    'version': f"Version {VERSION} (alpha)",
+    'version': f"v{VERSION} (alpha)",
     'description': "Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...",
     'copyright': "© 2024 Andrew Worthy"
 }

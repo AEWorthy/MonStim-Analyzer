@@ -7,10 +7,10 @@ import argparse
 import multiprocessing
 
 from PyQt6.QtWidgets import QApplication 
-from PyQt6.QtCore import QTimer, QStandardPaths, QCoreApplication
+from PyQt6.QtCore import QTimer, QStandardPaths
 
-QCoreApplication.setOrganizationName("WorthyLab")
-QCoreApplication.setApplicationName("MonStimAnalyzer")
+from monstim_gui.core.splash import SPLASH_INFO
+
 LOG_FILE = 'app.log'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
 IS_FROZEN = getattr(sys, 'frozen', False)
@@ -81,6 +81,10 @@ def main(is_frozen : bool) -> int:
         setup_dpi_awareness()
         
         app = QApplication(sys.argv)
+        app.setOrganizationName("WorthyLab")
+        app.setApplicationName(f"MonStim Analyzer {SPLASH_INFO['version']}")
+        app.setApplicationVersion(SPLASH_INFO['version'])
+
         if is_frozen: # Display splash screen if running as a frozen executable.
             from monstim_gui.core.splash import SplashScreen
             splash = SplashScreen()

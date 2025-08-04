@@ -53,7 +53,7 @@ class MonstimGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.has_unsaved_changes = False
-        self.setWindowTitle("MonStim Analyzer")
+        self.setWindowTitle(f"MonStim Analyzer {SPLASH_INFO['version']}")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
         
         # Use responsive window sizing with state restoration
