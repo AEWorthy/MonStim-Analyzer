@@ -8,5 +8,5 @@ scipy==1.15.3
 PyYAML==6.0.2
 h5py==3.12.1
 packaging==25.0
-python_markdown_math==0.8
+python_markdown_math==0.9
 traitlets==5.14.3

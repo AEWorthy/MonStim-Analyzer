@@ -24,7 +24,7 @@ setup(
         "numpy==2.2.6",
         "pandas==2.3.0",
         "packaging==25.0",
-        "python_markdown_math==0.8",
+        "python_markdown_math==0.9",
         "pytest==8.4.0",
         "scipy==1.15.3",
         "setuptools==72.2.0",
