@@ -27,7 +27,7 @@ setup(
         "python_markdown_math==0.8",
         "pytest==8.4.0",
         "scipy==1.15.3",
-        "setuptools==72.2.0",
+        "setuptools==80.9.0",
         "traitlets==5.14.3",
     ],
     classifiers=[
