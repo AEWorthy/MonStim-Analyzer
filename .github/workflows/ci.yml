@@ -72,18 +72,32 @@ jobs:
       if: runner.os != 'Windows'
       run: |
         export QT_QPA_PLATFORM=offscreen
-        xvfb-run -a python -c "
-        import sys
-        from PyQt6.QtWidgets import QApplication
-        from monstim_gui.gui_main import MonstimGUI
-        app = QApplication(sys.argv)
-        try:
-            window = MonstimGUI()
-            print('GUI initialization successful')
-        except Exception as e:
-            print(f'GUI initialization failed: {e}')
-            sys.exit(1)
-        "
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          xvfb-run -a python -c "
+          import sys
+          from PyQt6.QtWidgets import QApplication
+          from monstim_gui.gui_main import MonstimGUI
+          app = QApplication(sys.argv)
+          try:
+              window = MonstimGUI()
+              print('GUI initialization successful')
+          except Exception as e:
+              print(f'GUI initialization failed: {e}')
+              sys.exit(1)
+          "
+        else
+          python -c "
+          import sys
+          from PyQt6.QtWidgets import QApplication
+          from monstim_gui.gui_main import MonstimGUI
+          app = QApplication(sys.argv)
+          try:
+              window = MonstimGUI()
+              print('GUI initialization successful')
+          except Exception as e:
+              print(f'GUI initialization failed: {e}')
+              sys.exit(1)
+          "
 
     - name: Test basic application startup (Windows)
       if: runner.os == 'Windows'
