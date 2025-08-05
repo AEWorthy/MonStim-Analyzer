@@ -19,7 +19,7 @@ if project_root not in sys.path:
 from monstim_gui.version import VERSION
 
 EXE_NAME = f'MonStim Analyzer v{VERSION}'
-DIST_NAME = f'MonStim_Analyzer_v{VERSION}-beta'
+DIST_NAME = f'MonStim_Analyzer_v{VERSION}-WIN'
 
 
 a = Analysis( # type: ignore
