@@ -1,13 +1,13 @@
-import sys
-import os
-import traceback
-import logging
-from logging.handlers import RotatingFileHandler
 import argparse
+import logging
 import multiprocessing
+import os
+import sys
+import traceback
+from logging.handlers import RotatingFileHandler
 
+from PyQt6.QtCore import QStandardPaths, QTimer
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer, QStandardPaths
 
 from monstim_gui.core.splash import SPLASH_INFO
 
