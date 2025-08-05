@@ -507,8 +507,7 @@ class ExperimentPlotter(BasePlotter):
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(["M-response", "H-reflex"])
                 ax.set_title(
-                    f"{channel_names[0]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),
-                                                                                    2)}V)"
+                    f"{channel_names[0]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin), 2)}V)"
                 )
                 ax.set_xlim(m_x - 1, h_x + 1)  # Set x-axis limits for each subplot to better center data points.
             else:
