@@ -3,6 +3,7 @@
 # Basic Parameters.
 bin_size: 0.01 # bins for stimulus voltages (in V). default is 0.01.
 time_window: 8.0 # window of EMG time to plot (in ms). default is 8-10.
+pre_stim_time: 2.0 # amount of pre-stimulus data to plot (in ms). default is 2.0.
 default_method: 'rms' # (str) default method for EMG analysis. default is 'rms'.
 default_channel_names: # (list) default channel names for EMG analysis. default is ['LG', 'TA'].
   - 'LG'
@@ -41,45 +42,36 @@ h_threshold: 0.5 # (in mV). default is 0.5.
 
 preferred_date_format: 'YYMMDD'
 latency_window_presets:
-  default:
+  simple_M_H:
     - name: "M-wave"
-      start: 1.0
-      duration: 2.0
+      start: 0.9
+      duration: 1.5
       color: 'tab:red'
       linestyle: ':'
     - name: "H-reflex"
-      start: 3.2
+      start: 2.4
       duration: 1.5
       color: 'tab:blue'
       linestyle: ':'
-  vibration_trio:
-    - name: "M1"
-      start: 1.0
-      duration: 2.0
-      color: 'tab:red'
-      linestyle: ':'
+  vibration_H:
     - name: "H1"
-      start: 3.2
-      duration: 1.5
-      color: 'tab:blue'
-      linestyle: ':'
-    - name: "M2"
-      start: 4.5
-      duration: 2.0
+      start: -103.5
+      duration: 8.5
       color: 'tab:red'
       linestyle: ':'
     - name: "H2"
-      start: 6.7
-      duration: 1.5
+      start: 46.5
+      duration: 8.5
       color: 'tab:blue'
-    - name: "M3"
-      start: 8.0
-      duration: 2.0
-      color: 'tab:red'
       linestyle: ':'
     - name: "H3"
-      start: 10.2
-      duration: 1.5
-      color: 'tab:blue'
+      start: 196.5
+      duration: 8.5
+      color: 'tab:green'
+      linestyle: ':'
+    - name: "H4"
+      start: 346.5
+      duration: 8.5
+      color: 'tab:orange'
       linestyle: ':'
 

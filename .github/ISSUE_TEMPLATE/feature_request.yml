@@ -1,0 +1,154 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for MonStim Analyzer
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide as much detail as possible about what you'd like to see added to MonStim Analyzer.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify these items before submitting
+      options:
+        - label: I have searched existing issues and feature requests to ensure this is not a duplicate
+          required: true
+        - label: I have checked the documentation to confirm this feature doesn't already exist
+          required: true
+        - label: This feature aligns with the goals of EMG data analysis and visualization
+          required: true
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: Feature Category
+      description: What type of feature are you requesting?
+      options:
+        - "Data Import/Export"
+        - "Analysis and Processing"
+        - "Plotting and Visualization"
+        - "User Interface/Experience"
+        - "Performance and Optimization"
+        - "Integration with Other Tools"
+        - "Documentation and Help"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature-summary
+    attributes:
+      label: Feature Summary
+      description: A clear and concise description of the feature you'd like to see
+      placeholder: "I would like MonStim Analyzer to support..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What current limitation does it address?
+      placeholder: "Currently, users cannot... This makes it difficult to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your ideal solution in detail
+      placeholder: |
+        The feature should work like this:
+        1. User clicks on...
+        2. A dialog appears with options for...
+        3. The result is displayed as...
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Describe specific scenarios where this feature would be useful
+      placeholder: |
+        - Scenario 1: When analyzing large datasets...
+        - Scenario 2: For publication-quality figures...
+        - Scenario 3: When comparing multiple experiments...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches or workarounds?
+      placeholder: "I've tried... but it doesn't work because..."
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      description: How important is this feature to your workflow?
+      options:
+        - "Low - Nice to have"
+        - "Medium - Would improve workflow"
+        - "High - Currently blocking important tasks"
+        - "Critical - Cannot complete essential work without it"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: user-type
+    attributes:
+      label: User Type
+      description: What type of user are you?
+      options:
+        - "Graduate Student/PhD"
+        - "Postdoc/Research Fellow"
+        - "Faculty/Principal Investigator"
+        - "Laboratory Technician"
+        - "Industry Researcher"
+        - "Software Developer"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: Mockups or Examples
+      description: |
+        If applicable, add mockups, sketches, or examples from other software.
+        You can drag and drop images here.
+      placeholder: "Attach images, sketches, or describe what you envision"
+
+  - type: textarea
+    id: technical-considerations
+    attributes:
+      label: Technical Considerations
+      description: |
+        Are there any technical aspects to consider? (performance, compatibility, etc.)
+        Only fill this out if you have relevant technical knowledge.
+      placeholder: "This might require... or could impact performance when..."
+
+  - type: checkboxes
+    id: implementation-help
+    attributes:
+      label: Implementation Support
+      options:
+        - label: I would be willing to help test this feature
+        - label: I could provide sample data or test cases
+        - label: I have programming experience and might be able to contribute to development
+        - label: I can help with documentation or user guides
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that might be relevant to this feature request
+      placeholder: "Related features that would work well together, references to papers, etc."

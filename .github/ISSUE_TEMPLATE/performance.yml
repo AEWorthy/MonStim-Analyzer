@@ -1,0 +1,173 @@
+name: Performance Issue
+description: Report performance problems or optimization suggestions
+title: "[Performance]: "
+labels: ["performance", "needs-investigation"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us make MonStim Analyzer faster and more efficient! Please provide details about performance issues you're experiencing.
+
+  - type: dropdown
+    id: performance-type
+    attributes:
+      label: Performance Issue Type
+      description: What kind of performance problem are you experiencing?
+      options:
+        - "Slow application startup"
+        - "Slow data import"
+        - "Slow plot generation"
+        - "High memory usage"
+        - "Application freezing/hanging"
+        - "Slow UI response"
+        - "Long processing times"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: performance-description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem in detail
+      placeholder: "When I try to... the application takes a very long time to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-scale
+    attributes:
+      label: Data Scale and Characteristics
+      description: |
+        Describe the size and characteristics of the data you're working with:
+        - Number of experiments, datasets, sessions
+        - File sizes (individual files and total)
+        - Number of channels and recordings
+        - Time duration of recordings
+        - Any unusual data characteristics
+      placeholder: |
+        - 5 experiments, each with 10 datasets
+        - Individual CSV files: 50-100 MB
+        - Total data: ~5 GB
+        - 4 channels per recording
+        - 200-300 recordings per session
+        - 60-second recording duration
+    validations:
+      required: true
+
+  - type: textarea
+    id: timing-details
+    attributes:
+      label: Timing Details
+      description: |
+        How long do operations take? When does the slowness occur?
+        Provide specific timing information if possible.
+      placeholder: |
+        - Application startup: 30 seconds
+        - Importing one experiment: 5-10 minutes
+        - Generating a plot: 2-3 minutes
+        - The slowness happens when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: system-specs
+    attributes:
+      label: System Specifications
+      description: |
+        Provide detailed system information:
+        - Operating System version
+        - RAM amount
+        - CPU type and speed
+        - Storage type (HDD/SSD)
+        - Available disk space
+      placeholder: |
+        - Windows 11 Pro 64-bit
+        - 16 GB RAM
+        - Intel Core i7-10700K @ 3.80GHz
+        - Samsung SSD 970 EVO 1TB
+        - 500 GB free space
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MonStim Analyzer Version
+      description: What version are you using?
+      placeholder: "v0.4.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-reproduce
+    attributes:
+      label: Steps to Reproduce Performance Issue
+      description: Provide step-by-step instructions to reproduce the performance problem
+      placeholder: |
+        1. Launch MonStim Analyzer
+        2. Import experiment from folder with...
+        3. Select dataset containing...
+        4. Attempt to generate plot type...
+        5. Observe slow performance during...
+    validations:
+      required: true
+
+  - type: textarea
+    id: resource-monitoring
+    attributes:
+      label: Resource Usage Observations
+      description: |
+        If you've monitored system resources during the slow operation:
+        - CPU usage percentage
+        - Memory usage
+        - Disk activity
+        - Any error messages in logs
+      placeholder: |
+        During the slow operation:
+        - CPU usage: 25-30%
+        - Memory usage: 8 GB out of 16 GB
+        - High disk activity visible
+        - No error messages in Help > Open Log Folder
+
+  - type: dropdown
+    id: comparison
+    attributes:
+      label: Performance Comparison
+      description: How does performance compare to your expectations or other tools?
+      options:
+        - "Much slower than expected"
+        - "Somewhat slower than expected"
+        - "Acceptable but could be better"
+        - "Inconsistent (sometimes fast, sometimes slow)"
+        - "No comparison reference"
+
+  - type: textarea
+    id: workarounds
+    attributes:
+      label: Workarounds Attempted
+      description: Have you found any workarounds or settings that help?
+      placeholder: |
+        I tried:
+        - Processing smaller datasets at a time
+        - Closing other applications
+        - Using different plot settings
+        - Restarting the application between operations
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact on Workflow
+      description: How does this performance issue affect your work?
+      placeholder: "This performance issue means I cannot... which impacts my ability to..."
+
+  - type: checkboxes
+    id: testing-offer
+    attributes:
+      label: Testing and Support
+      options:
+        - label: I can provide additional performance measurements if needed
+        - label: I can test potential performance improvements
+        - label: I can provide sample data for performance testing (if possible)
+        - label: I have technical expertise that might help diagnose the issue

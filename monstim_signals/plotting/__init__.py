@@ -1,21 +1,11 @@
-from .session_plotter_pyqtgraph import SessionPlotterPyQtGraph
+from .base_plotter_pyqtgraph import UnableToPlotError
 from .dataset_plotter_pyqtgraph import DatasetPlotterPyQtGraph
 from .experiment_plotter_pyqtgraph import ExperimentPlotterPyQtGraph
-
-from .session_plotter import SessionPlotter
-from .dataset_plotter import DatasetPlotter
-from .experiment_plotter import ExperimentPlotter
-
-from .base_plotter import UnableToPlotError
+from .session_plotter_pyqtgraph import SessionPlotterPyQtGraph
 
 __all__ = [
-    'SessionPlotterPyQtGraph',
-    'DatasetPlotterPyQtGraph',
-    'ExperimentPlotterPyQtGraph',
-
-    'SessionPlotter',
-    'DatasetPlotter',
-    'ExperimentPlotter',
-
-    'UnableToPlotError',
+    "SessionPlotterPyQtGraph",
+    "DatasetPlotterPyQtGraph",
+    "ExperimentPlotterPyQtGraph",
+    "UnableToPlotError",
 ]

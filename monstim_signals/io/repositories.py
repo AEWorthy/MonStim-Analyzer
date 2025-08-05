@@ -1,16 +1,24 @@
 # monstim_signals/io/repositories.py
 import json
-import h5py
 import logging
+from dataclasses import asdict
 from pathlib import Path
 from typing import Iterator
-from dataclasses import asdict
 
-from monstim_signals.core  import RecordingMeta, RecordingAnnot, SessionAnnot, DatasetAnnot, ExperimentAnnot
-from monstim_signals.domain.recording  import Recording
-from monstim_signals.domain.session    import Session
-from monstim_signals.domain.dataset    import Dataset
+import h5py
+
+from monstim_signals.core import (
+    DatasetAnnot,
+    ExperimentAnnot,
+    RecordingAnnot,
+    RecordingMeta,
+    SessionAnnot,
+)
+from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.recording import Recording
+from monstim_signals.domain.session import Session
+
 
 class RecordingRepository:
     """
@@ -18,6 +26,7 @@ class RecordingRepository:
     <stem>.raw.h5, <stem>.meta.json, <stem>.annot.json
     where `stem` is a Path without extension, e.g. Path(".../AA00_0000").
     """
+
     def __init__(self, stem: Path):
         """
         `stem` = Path to the filename prefix, without suffix.
@@ -27,22 +36,22 @@ class RecordingRepository:
             AA00_0000.annot.json
         then stem = Path("/path/to/AA00_0000").
         """
-        self.stem    = stem
-        self.raw_h5  = stem.with_suffix(".raw.h5")
+        self.stem = stem
+        self.raw_h5 = stem.with_suffix(".raw.h5")
         self.meta_js = stem.with_suffix(".meta.json")
-        self.annot_js= stem.with_suffix(".annot.json")
+        self.annot_js = stem.with_suffix(".annot.json")
 
     def update_path(self, new_stem: Path) -> None:
         """
         Update the repository to point to a new stem.
         This is useful if the recording files move.
         """
-        self.stem    = new_stem
-        self.raw_h5  = new_stem.with_suffix(".raw.h5")
+        self.stem = new_stem
+        self.raw_h5 = new_stem.with_suffix(".raw.h5")
         self.meta_js = new_stem.with_suffix(".meta.json")
-        self.annot_js= new_stem.with_suffix(".annot.json")
+        self.annot_js = new_stem.with_suffix(".annot.json")
 
-    def load(self, config=None) -> 'Recording':
+    def load(self, config=None) -> "Recording":
         # 1) Load meta JSON (immutable, record‐time facts)
         meta_dict = json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
@@ -53,24 +62,18 @@ class RecordingRepository:
             annot = RecordingAnnot.from_dict(annot_dict)
         else:
             logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
-            annot = RecordingAnnot.create_empty(meta)
+            annot = RecordingAnnot.create_empty()
             self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
 
         # 3) Open HDF5 file in read‐only mode; pass the dataset itself (lazy)
         h5file = h5py.File(self.raw_h5, "r")
-        raw_dataset = h5file["raw"]
+        raw_dataset: h5py.Dataset = h5file["raw"]  # type: ignore
 
         # 4) Patch in num_samples from the raw array shape
         meta.num_samples = raw_dataset.shape[0]  # (#samples × #channels)
 
         # 5) Build the domain object, passing the `h5py.Dataset` directly
-        recording = Recording(
-            meta=meta,
-            annot=annot,
-            raw=raw_dataset,
-            repo=self,
-            config=config
-        )
+        recording = Recording(meta=meta, annot=annot, raw=raw_dataset, repo=self, config=config)
         return recording
 
     def save(self, recording: Recording) -> None:
@@ -81,7 +84,7 @@ class RecordingRepository:
         self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
 
     @staticmethod
-    def discover_in_folder(folder: Path) -> Iterator['RecordingRepository']:
+    def discover_in_folder(folder: Path) -> Iterator["RecordingRepository"]:
         """
         Given a folder Path, yield a RecordingRepository for each *.raw.h5 found.
         E.g. if folder contains:
@@ -95,11 +98,13 @@ class RecordingRepository:
             stem = raw_h5.with_suffix("")  # drop ".raw.h5" → Path("folder/AA00_0000")
             yield RecordingRepository(stem=stem)
 
+
 class SessionRepository:
     """
     Knows how to load/save one session (i.e. a folder of recordings at various stimuli).
     A session folder must contain multiple <stem>.raw.h5/.meta.json/.annot.json.
     """
+
     def __init__(self, folder: Path):
         """
         `folder` is a Path to a session‐level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
@@ -116,7 +121,7 @@ class SessionRepository:
         self.folder = new_folder
         self.session_js = new_folder / "session.annot.json"
 
-    def load(self, config=None) -> 'Session':
+    def load(self, config=None) -> "Session":
         # 1) Discover all recordings in this folder
         recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
         recordings = [repo.load(config=config) for repo in recording_repos]
@@ -124,13 +129,15 @@ class SessionRepository:
         # 2) Sort by the primary StimCluster’s stim_v
         recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
 
-        # 3) Load or create session annotation JSON 
+        # 3) Load or create session annotation JSON
         if self.session_js.exists():
             session_annot_dict = json.loads(self.session_js.read_text())
             session_annot = SessionAnnot.from_dict(session_annot_dict)
-        else: # If no session.annot.json, initialize a brand‐new one
+        else:  # If no session.annot.json, initialize a brand‐new one
             if recordings:
-                logging.info(f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one.")
+                logging.info(
+                    f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one."
+                )
                 session_annot = SessionAnnot.from_meta(recordings[0].meta)
             else:
                 logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
@@ -143,7 +150,7 @@ class SessionRepository:
             recordings=recordings,
             annot=session_annot,
             repo=self,
-            config=config
+            config=config,
         )
         return session
 
@@ -151,8 +158,8 @@ class SessionRepository:
         self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
         for rec in session.recordings:
             rec.repo.save(rec)
-    
-    def discover_in_folder(folder: Path) -> Iterator['SessionRepository']:
+
+    def discover_in_folder(folder: Path) -> Iterator["SessionRepository"]:
         """
         Given a folder Path, yield a SessionRepository for each session subfolder.
         E.g. if folder contains:
@@ -172,11 +179,13 @@ class SessionRepository:
             else:
                 logging.warning(f"No valid session found in {sess_folder}.")
 
+
 class DatasetRepository:
     """
     Knows how to load/save one dataset (all sessions from one animal).
     A dataset folder contains multiple subfolders, each a session.
     """
+
     def __init__(self, folder: Path):
         """
         `folder` might be Path("/data/ExperimentRoot/Dataset_01").
@@ -193,18 +202,18 @@ class DatasetRepository:
         self.folder = new_folder
         self.dataset_js = new_folder / "dataset.annot.json"
 
-    def load(self, config=None) -> 'Dataset':
+    def load(self, config=None) -> "Dataset":
         # 1) Each subfolder of `folder` is a session
         session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
 
         # 2) Load each Session
         sessions = [SessionRepository(sess_folder).load(config=config) for sess_folder in session_folders]
 
-        # 3) Load or create dataset annotation JSON 
+        # 3) Load or create dataset annotation JSON
         if self.dataset_js.exists():
             session_annot_dict = json.loads(self.dataset_js.read_text())
             dataset_annot = DatasetAnnot.from_dict(session_annot_dict)
-        else: # If no session.annot.json, initialize a brand‐new one
+        else:  # If no session.annot.json, initialize a brand‐new one
             logging.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one.")
             dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
             self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
@@ -215,7 +224,7 @@ class DatasetRepository:
             sessions=sessions,
             annot=dataset_annot,
             repo=self,
-            config=config
+            config=config,
         )
         return dataset
 
@@ -229,11 +238,13 @@ class DatasetRepository:
         for session in dataset.sessions:
             session.repo.save(session)
 
+
 class ExperimentRepository:
     """
     Knows how to load/save an entire experiment (all animals).
     The root folder contains multiple subfolders, each a dataset (animal).
     """
+
     def __init__(self, folder: Path):
         """
         `folder` might be Path("/data/ExperimentRoot").
@@ -249,7 +260,7 @@ class ExperimentRepository:
         self.folder = new_folder
         self.expt_js = new_folder / "experiment.annot.json"
 
-    def load(self, config=None) -> 'Experiment':
+    def load(self, config=None) -> "Experiment":
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
         datasets = [DatasetRepository(ds_folder).load(config=config) for ds_folder in dataset_folders]
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
@@ -262,7 +273,7 @@ class ExperimentRepository:
             self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
         expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
         return expt
-    
+
     def save(self, expt: Experiment) -> None:
         """
         Save all datasets in this experiment.

@@ -1,5 +1,7 @@
 """Filtering utilities for MonStim signals."""
+
 from scipy import signal
+
 from .amplitude import _calculate_average_amplitude_unrectified
 
 
@@ -16,6 +18,7 @@ def butter_bandpass_filter(data, fs, lowcut=100, highcut=3500, order=4):
     """Apply a Butterworth bandpass filter to *data*."""
     b, a = butter_bandpass(lowcut, highcut, fs, order)
     return signal.filtfilt(b, a, data)
+
 
 def correct_emg_to_baseline(channel_recording, scan_rate, stim_delay):
     """Correct EMG absolute amplitude relative to pre-stim baseline amplitude."""

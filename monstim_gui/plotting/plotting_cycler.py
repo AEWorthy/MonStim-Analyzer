@@ -1,10 +1,23 @@
 from typing import TYPE_CHECKING
-from PyQt6.QtWidgets import (QGridLayout, QPushButton, QSpinBox, QLabel, QGroupBox,
-                           QHBoxLayout, QVBoxLayout, QWidget, QSizePolicy)
+
 from PyQt6.QtGui import QValidator
+from PyQt6.QtWidgets import (
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
 from monstim_signals.core import get_main_window
+
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI  # noqa: F401
+
 
 class CustomSpinBox(QSpinBox):
     # Custom SpinBox that wraps around when reaching the maximum or minimum value
@@ -15,7 +28,7 @@ class CustomSpinBox(QSpinBox):
     def validate(self, text, pos):
         if text == "" or text == "-":
             return QValidator.State.Intermediate, text, pos
-        if text.lstrip('-').isdigit():
+        if text.lstrip("-").isdigit():
             return QValidator.State.Acceptable, text, pos
         return QValidator.State.Invalid, text, pos
 
@@ -54,17 +67,21 @@ class CustomSpinBox(QSpinBox):
         except ValueError:
             return str(self.value())
 
+
 class RecordingCyclerWidget(QGroupBox):
     def __init__(self, parent):
         super().__init__("Recording Cycler", parent)
 
-        self.main_gui = get_main_window() # type: MonstimGUI
-        self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
-        
+        self.main_gui = get_main_window()  # type: MonstimGUI
+        if not self.main_gui.current_session:
+            self.maximum_recordings = 0
+        else:
+            self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
+
         # Set size policy to be fixed height
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        
-        self.layout = QGridLayout() # type: QGridLayout
+
+        self.layout = QGridLayout()  # type: QGridLayout
         self.layout.setSpacing(6)  # Increased spacing for better appearance
         self.layout.setContentsMargins(8, 8, 8, 8)  # Increased padding to prevent border clipping
         self.setLayout(self.layout)
@@ -84,31 +101,31 @@ class RecordingCyclerWidget(QGroupBox):
         self.step_size.setMinimum(1)
         self.step_size.setMaximum(self.maximum_recordings)
         self.step_size.setValue(1)
-        
+
         # Simple horizontal layout
         step_label = QLabel("Step size:")
         rec_label = QLabel("Recording:")
-        
+
         # First row
         hbox1 = QHBoxLayout()
         hbox1.addWidget(step_label)
         hbox1.addWidget(self.step_size)
         hbox1.addWidget(self.prev_button)
         hbox1.addWidget(self.next_button)
-        
+
         # Second row
         hbox2 = QHBoxLayout()
         hbox2.addWidget(rec_label)
         hbox2.addWidget(self.recording_spinbox)
         hbox2.addWidget(self.exclude_button)
-        
+
         # Add to main layout
         vbox = QVBoxLayout()
         vbox.addLayout(hbox1)
         vbox.addLayout(hbox2)
         vbox.setSpacing(3)
         vbox.setContentsMargins(8, 8, 8, 8)
-        
+
         # Replace grid layout with vbox
         QWidget().setLayout(self.layout)  # Clear existing layout
         self.layout = vbox
@@ -120,7 +137,10 @@ class RecordingCyclerWidget(QGroupBox):
         self.recording_spinbox.valueChanged.connect(self.on_recording_changed)
 
     def reset_max_recordings(self):
-        self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
+        if not self.main_gui.current_session:
+            self.maximum_recordings = 0
+        else:
+            self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
         self.recording_spinbox.setMaximum(self.maximum_recordings)
         if self.recording_spinbox.value() > self.maximum_recordings:
             self.recording_spinbox.setValue(self.maximum_recordings)

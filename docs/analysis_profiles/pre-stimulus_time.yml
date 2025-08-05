@@ -1,0 +1,7 @@
+name: Pre-Stimulus Time
+description: 50ms of recording before the onset of the primary stimulus for a trial.
+stimuli_to_plot:
+- Electrical
+analysis_parameters:
+  time_window: 5.0
+  pre_stim_time: 50.0

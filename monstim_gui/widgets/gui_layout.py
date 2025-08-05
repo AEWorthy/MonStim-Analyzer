@@ -1,16 +1,18 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStatusBar, QSizePolicy
-
-from .menu_bar import MenuBar
-from .data_selection_widget import DataSelectionWidget
-from .reports_widget import ReportsWidget
-from .plotting import PlotWidget, PlotPane
-
 from typing import TYPE_CHECKING
+
+from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QStatusBar, QVBoxLayout, QWidget
+
+from ..core.ui_scaling import get_responsive_margins, get_responsive_spacing, ui_scaling
+from ..plotting import PlotPane, PlotWidget
+from .data_selection_widget import DataSelectionWidget
+from .menu_bar import MenuBar
+from .reports_widget import ReportsWidget
+
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
 
-def setup_main_layout(parent: 'MonstimGUI') -> dict:
+def setup_main_layout(parent: "MonstimGUI") -> dict:
     """Create and apply the main window layout.
 
     Parameters
@@ -27,8 +29,12 @@ def setup_main_layout(parent: 'MonstimGUI') -> dict:
     central_widget = QWidget()
     parent.setCentralWidget(central_widget)
     main_layout = QHBoxLayout(central_widget)
-    main_layout.setSpacing(10)
-    main_layout.setContentsMargins(20, 20, 20, 20)
+
+    # Apply responsive spacing and margins
+    spacing = get_responsive_spacing(10)
+    margins = get_responsive_margins(20)
+    main_layout.setSpacing(spacing)
+    main_layout.setContentsMargins(*margins)
 
     # Widgets
     menu_bar = MenuBar(parent)
@@ -37,12 +43,15 @@ def setup_main_layout(parent: 'MonstimGUI') -> dict:
     plot_pane = PlotPane(parent)
     plot_widget = PlotWidget(parent)
 
-    # Left panel holding controls
+    # Left panel holding controls - use responsive width instead of fixed
     left_panel = QWidget()
-    left_panel.setFixedWidth(370)
-    
+    optimal_width = ui_scaling.get_optimal_panel_width(300, 600)
+    left_panel.setMinimumWidth(optimal_width)
+    left_panel.setMaximumWidth(int(optimal_width * 1.5))  # Allow some expansion
+
     left_layout = QVBoxLayout(left_panel)
-    left_layout.setSpacing(10)
+    left_spacing = get_responsive_spacing(10)
+    left_layout.setSpacing(left_spacing)
     left_layout.setContentsMargins(0, 0, 0, 0)
     left_layout.addWidget(data_selection_widget)
     left_layout.addWidget(reports_widget)

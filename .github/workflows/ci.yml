@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, development ]
+  pull_request:
+    branches: [ main, development ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12']
+        exclude:
+          # Reduce matrix size - test only critical combinations on macOS
+          - os: macos-latest
+            python-version: '3.11'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~\AppData\Local\pip\Cache
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libegl1 libgl1 libglib2.0-0 libfontconfig1 libdbus-1-3
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-qt
+        pip install -e . --no-deps
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Test import capabilities
+      run: |
+        python -c "import sys; print('Python version:', sys.version)"
+        python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 import successful')"
+        python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
+        python -c "import numpy as np; print('NumPy version:', np.__version__)"
+        python -c "import matplotlib; print('Matplotlib version:', matplotlib.__version__)"
+
+    - name: Test basic application startup (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        export QT_QPA_PLATFORM=offscreen
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          xvfb-run -a python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+        else
+          python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+        fi
+
+    - name: Test basic application startup (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+
+    - name: Test core signal processing modules
+      run: |
+        python -c 'import monstim_signals.domain.experiment; import monstim_signals.domain.dataset; import monstim_signals.domain.session; import monstim_signals.io.csv_importer; print("Core modules import successful")'
+
+    - name: Run basic functionality tests (if test files exist)
+      run: |
+        if (Test-Path "tests") { 
+          if (Get-ChildItem "tests" -Recurse -Name "*.py") {
+            if ("${{ runner.os }}" -ne "Windows") {
+              $env:QT_QPA_PLATFORM = "offscreen"
+              if ("${{ runner.os }}" -eq "Linux") {
+                xvfb-run -a python -m pytest tests/ -v
+              } else {
+                python -m pytest tests/ -v
+              }
+            } else {
+              python -m pytest tests/ -v
+            }
+          } else {
+            Write-Host "Tests directory exists but no test files found, skipping pytest"
+          }
+        } else {
+          Write-Host "No tests directory found, skipping pytest"
+        }
+      shell: pwsh
+
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -e . --no-deps
+        pip install flake8 flake8-pyproject black isort
+
+    - name: Check code formatting with black
+      run: |
+        black --check --diff --line-length=127 .
+
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff .
+
+    - name: Advanced linting with flake8
+      run: |
+        flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -e . --no-deps
+        pip install safety bandit
+
+    - name: Check for security vulnerabilities in dependencies
+      run: |
+        safety check --json --output safety-report.json || echo "Safety check completed with warnings"
+        safety check || echo "Safety check completed"
+
+    - name: Run security linter
+      run: |
+        bandit -r . -x tests/ -f json -o bandit-report.json || true
+        bandit -r . -x tests/ || true
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-report-${{ github.run_id }}
+        path: |
+          bandit-report.json
+          safety-report.json
+        retention-days: 30

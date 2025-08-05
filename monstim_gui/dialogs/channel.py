@@ -1,4 +1,16 @@
-from .base import *
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+)
+
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.session import Session
 
 
 class ChangeChannelNamesDialog(QDialog):
@@ -21,6 +33,7 @@ class ChangeChannelNamesDialog(QDialog):
 
     def get_new_names(self):
         return {old: input.text() for old, input in self.channel_inputs.items()}
+
 
 class InvertChannelPolarityDialog(QDialog):
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
@@ -52,7 +65,10 @@ class InvertChannelPolarityDialog(QDialog):
             layout.addWidget(checkbox)
 
         # Add button box (OK and Cancel buttons)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
         layout.addWidget(button_box)
 
         # Connect signals

@@ -1,61 +1,82 @@
-import sys
-import os
+from __future__ import annotations
+
 import logging
+import os
+import sys
+import traceback
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from monstim_gui.widgets.gui_layout import MenuBar, DataSelectionWidget, ReportsWidget, PlotPane, PlotWidget
+    from monstim_gui.widgets.gui_layout import (
+        MenuBar,
+        DataSelectionWidget,
+        ReportsWidget,
+        PlotPane,
+        PlotWidget,
+    )
     from PyQt6.QtWidgets import QStatusBar
 
 import markdown
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QMessageBox,
     QDialog,
     QInputDialog,
+    QMainWindow,
+    QMessageBox,
 )
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt
 
-from monstim_signals.domain.experiment import Experiment
-from monstim_signals.domain.dataset import Dataset
-from monstim_signals.domain.session import Session
-from monstim_signals.core import (get_output_path, get_source_path, get_docs_path, get_config_path)
-
+from monstim_gui.commands import (
+    ChangeChannelNamesCommand,
+    CommandInvoker,
+    ExcludeDatasetCommand,
+    ExcludeRecordingCommand,
+    ExcludeSessionCommand,
+    InvertChannelPolarityCommand,
+    RestoreDatasetCommand,
+    RestoreRecordingCommand,
+    RestoreSessionCommand,
+)
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.dialogs import (
-    ChangeChannelNamesDialog,
-    LatexHelpWindow,
     AboutDialog,
+    ChangeChannelNamesDialog,
     HelpWindow,
     InvertChannelPolarityDialog,
     LatencyWindowsDialog,
+    LatexHelpWindow,
 )
-from monstim_gui.commands import (
-    ExcludeSessionCommand,
-    ExcludeDatasetCommand,
-    RestoreSessionCommand,
-    RestoreDatasetCommand,
-    CommandInvoker,
-    ExcludeRecordingCommand,
-    RestoreRecordingCommand,
-    InvertChannelPolarityCommand,
-    ChangeChannelNamesCommand,
-)
-from monstim_gui.widgets.gui_layout import setup_main_layout
-from monstim_gui.managers.data_manager import DataManager
-from monstim_gui.managers.report_manager import ReportManager
-from monstim_gui.managers.plot_controller import PlotController
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
+from monstim_gui.managers import DataManager, PlotController, ReportManager
+from monstim_gui.widgets.gui_layout import setup_main_layout
+from monstim_signals.core import (
+    get_config_path,
+    get_docs_path,
+    get_output_path,
+    get_source_path,
+)
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.session import Session
+
 
 class MonstimGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.has_unsaved_changes = False
-        self.setWindowTitle("MonStim Analyzer")
-        self.setWindowIcon(QIcon(os.path.join(get_source_path(), 'icon.png')))
-        self.setGeometry(30, 30, 800, 770)
+        self.setWindowTitle(f"MonStim Analyzer {SPLASH_INFO['version']}")
+        self.setWindowIcon(QIcon(os.path.join(get_source_path(), "icon.png")))
+
+        # Use responsive window sizing with state restoration
+        # from monstim_gui.core.ui_scaling import ui_scaling
+        from monstim_gui.core.ui_config import ui_config
+
+        # Try to restore previous window state, otherwise use responsive sizing
+        if not ui_config.restore_window_state(self):
+            x, y, width, height = ui_config.get_window_geometry()
+            self.setGeometry(x, y, width, height)
 
         # Initialize variables
         self.expts_dict = {}
@@ -64,16 +85,14 @@ class MonstimGUI(QMainWindow):
         self.current_dataset: Dataset | None = None
         self.current_session: Session | None = None
         self.channel_names = []
-        self.PLOT_TYPE_DICT = {"EMG": "emg", "Suspected H-reflexes": "suspectedH", "Reflex Curves": "reflexCurves",
-                               "M-max": "mmax", "Max H-reflex": "maxH", "Average Reflex Curves": "reflexCurves",
-                               "Single EMG Recordings": "singleEMG"}
 
         # Set default paths
         self.output_path = get_output_path()
         self.config_file = get_config_path()
 
         # Profile manager for analysis profiles
-        from monstim_gui.dialogs.preferences import ProfileManager
+        from monstim_gui.managers import ProfileManager
+
         self.profile_manager = ProfileManager()
         self.active_profile_path = None
         self.active_profile_data = None
@@ -96,7 +115,9 @@ class MonstimGUI(QMainWindow):
         self.data_selection_widget.update_experiment_combo()
 
         self.plot_widget.initialize_plot_widget()
-        
+
+        # Restore last session state (profile, experiment, dataset, session)
+        self._restore_last_session()
 
         self.command_invoker = CommandInvoker(self)
         # Initialize undo/redo menu state
@@ -104,15 +125,16 @@ class MonstimGUI(QMainWindow):
 
     def init_ui(self):
         widgets = setup_main_layout(self)
-        self.menu_bar : 'MenuBar' = widgets["menu_bar"]
-        self.data_selection_widget : 'DataSelectionWidget' = widgets["data_selection_widget"]
-        self.reports_widget : 'ReportsWidget' = widgets["reports_widget"]
-        self.plot_pane : 'PlotPane' = widgets["plot_pane"]
-        self.plot_widget : 'PlotWidget' = widgets["plot_widget"]
-        self.status_bar : 'QStatusBar' = widgets["status_bar"]
+        self.menu_bar: "MenuBar" = widgets["menu_bar"]
+        self.data_selection_widget: "DataSelectionWidget" = widgets["data_selection_widget"]
+        self.reports_widget: "ReportsWidget" = widgets["reports_widget"]
+        self.plot_pane: "PlotPane" = widgets["plot_pane"]
+        self.plot_widget: "PlotWidget" = widgets["plot_widget"]
+        self.status_bar: "QStatusBar" = widgets["status_bar"]
 
         # --- Add Profile Selector to Main Window ---
-        from PyQt6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget
+        from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
+
         self.profile_selector_row = QWidget()
         self.profile_selector_layout = QHBoxLayout(self.profile_selector_row)
         self.profile_selector_layout.setContentsMargins(8, 2, 8, 2)
@@ -126,34 +148,40 @@ class MonstimGUI(QMainWindow):
         self.profile_selector_row.setMaximumHeight(36)
         # Insert at the top of the left panel (above data selection)
         left_panel = self.data_selection_widget.parentWidget()
-        while left_panel is not None and not hasattr(left_panel, 'layout'):
+        while left_panel is not None and not hasattr(left_panel, "layout"):
             left_panel = left_panel.parentWidget()
         if left_panel is not None:
             left_layout = left_panel.layout()
-            if hasattr(left_layout, 'insertWidget'):
-                left_layout.insertWidget(0, self.profile_selector_row)
+            if hasattr(left_layout, "insertWidget"):
+                left_layout.insertWidget(0, self.profile_selector_row)  # type: ignore
+            else:
+                raise RuntimeError("Left panel layout does not support insertWidget.")
+        else:
+            logging.error("Left panel not found or does not have a layout.")
 
         self._populate_profile_selector()
         self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
 
-        self.status_bar.showMessage(
-            f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000
-        )
+        self.status_bar.showMessage(f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000)
 
     def _populate_profile_selector(self):
         self.profile_selector_combo.blockSignals(True)
         self.profile_selector_combo.clear()
         self.profile_selector_combo.addItem("(default)", userData=None)
-        self.profile_selector_combo.setItemData(0, "Use the global/default analysis settings.", role=Qt.ItemDataRole.ToolTipRole)
+        self.profile_selector_combo.setItemData(
+            0,
+            "Use the global/default analysis settings.",
+            role=Qt.ItemDataRole.ToolTipRole,
+        )
         self._profile_list = self.profile_manager.list_profiles()
         for idx, (name, path, data) in enumerate(self._profile_list, start=1):
             self.profile_selector_combo.addItem(name, userData=path)
-            desc = data.get('description', '')
+            desc = data.get("description", "")
             if desc:
                 self.profile_selector_combo.setItemData(idx, desc, role=Qt.ItemDataRole.ToolTipRole)
         self.profile_selector_combo.blockSignals(False)
         self.profile_selector_combo.setCurrentIndex(0)
-        self._on_profile_selector_changed(0)
+        self._set_profile_selector_tooltip(0)
 
     def _set_profile_selector_tooltip(self, idx):
         # Set the tooltip for the whole combobox to the selected profile's description
@@ -164,25 +192,44 @@ class MonstimGUI(QMainWindow):
             self.profile_selector_combo.setToolTip("")
 
     def _on_profile_selector_changed(self, idx):
+        from monstim_gui.core.application_state import app_state
+
         self._set_profile_selector_tooltip(idx)
+        profile_name = self.profile_selector_combo.currentText()
+
         if idx == 0:
             # Global config
             self.active_profile_path = None
             self.active_profile_data = None
             config = self.config_repo.read_config()
         else:
-            name, path, data = self._profile_list[idx-1]
+            name, path, data = self._profile_list[idx - 1]
             self.active_profile_path = path
             self.active_profile_data = data
             # Merge profile data with global config for fallback
             config = self.config_repo.read_config()
             # Overlay profile analysis_parameters and latency_window_preset, etc.
-            if 'analysis_parameters' in data:
-                config.update(data['analysis_parameters'])
-            if 'latency_window_preset' in data:
-                config['latency_window_preset'] = data['latency_window_preset']
-            if 'stimuli_to_plot' in data:
-                config['stimuli_to_plot'] = data['stimuli_to_plot']
+            if "analysis_parameters" in data:
+                config.update(data["analysis_parameters"])
+            if "latency_window_preset" in data:
+                config["latency_window_preset"] = data["latency_window_preset"]
+            if "stimuli_to_plot" in data:
+                config["stimuli_to_plot"] = data["stimuli_to_plot"]
+
+        # Save profile selection and update session state
+        app_state.save_last_profile(profile_name)
+        app_state.save_recent_profile(profile_name)  # Also add to recent profiles list
+        if self.current_experiment:
+            app_state.save_current_session_state(
+                experiment_id=self.current_experiment.id,
+                dataset_id=self.current_dataset.id if self.current_dataset else None,
+                session_id=self.current_session.id if self.current_session else None,
+                profile_name=profile_name,
+            )
+        else:
+            # Even when no experiment is loaded, ensure we can track profile changes
+            logging.info(f"No experiment loaded, but profile selection saved: {profile_name}")
+
         self.update_domain_configs(config)
         self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
 
@@ -196,7 +243,95 @@ class MonstimGUI(QMainWindow):
             self.profile_selector_combo.setCurrentIndex(idx)
         else:
             self.profile_selector_combo.setCurrentIndex(0)
-   
+
+    def refresh_preferences_dependent_ui(self):
+        """Refresh any UI elements that depend on program preferences."""
+        # This method can be called when preferences change to update the UI
+        # Currently no specific UI updates are needed, but this is a hook
+        # for future functionality that might depend on preference settings
+        pass
+
+    def restore_last_profile_selection(self):
+        """Restore the last selected analysis profile."""
+        from monstim_gui.core.application_state import app_state
+
+        # Check if profile tracking is enabled
+        if not app_state.should_track_analysis_profiles():
+            logging.info("Profile tracking is disabled - not restoring profile selection")
+            return False
+
+        last_profile = app_state.get_last_profile()
+        logging.info(f"Attempting to restore last profile selection: '{last_profile}'")
+
+        if last_profile:
+            idx = self.profile_selector_combo.findText(last_profile)
+            if idx >= 0:
+                # Block signals to prevent triggering the change handler during restoration
+                self.profile_selector_combo.blockSignals(True)
+                self.profile_selector_combo.setCurrentIndex(idx)
+                self.profile_selector_combo.blockSignals(False)
+
+                # Manually apply the profile configuration
+                self._set_profile_selector_tooltip(idx)
+                self._apply_profile_configuration(idx, last_profile)
+
+                logging.info(f"Successfully restored profile selection: {last_profile}")
+                return True
+            else:
+                logging.warning(f"Profile '{last_profile}' not found in available profiles")
+
+        logging.info("No valid profile to restore, using default")
+        return False
+
+    def _apply_profile_configuration(self, idx: int, profile_name: str):
+        """Apply the configuration for the selected profile without saving it again."""
+        if idx == 0:
+            # Global config
+            self.active_profile_path = None
+            self.active_profile_data = None
+            config = self.config_repo.read_config()
+        else:
+            name, path, data = self._profile_list[idx - 1]
+            self.active_profile_path = path
+            self.active_profile_data = data
+            # Merge profile data with global config for fallback
+            config = self.config_repo.read_config()
+            # Overlay profile analysis_parameters and latency_window_preset, etc.
+            if "analysis_parameters" in data:
+                config.update(data["analysis_parameters"])
+            if "latency_window_preset" in data:
+                config["latency_window_preset"] = data["latency_window_preset"]
+            if "stimuli_to_plot" in data:
+                config["stimuli_to_plot"] = data["stimuli_to_plot"]
+
+        self.update_domain_configs(config)
+        logging.info(f"Applied configuration for profile: {profile_name}")
+
+    def _restore_last_session(self):
+        """Restore the last session state and analysis profile based on preferences."""
+        from monstim_gui.core.application_state import app_state
+
+        try:
+            # Always attempt to restore profile selection (controlled by its own preference)
+            self.restore_last_profile_selection()
+
+            # Only restore data selections if session restoration is enabled
+            if app_state.should_restore_session():
+                success = app_state.restore_last_session(self)
+                if success:
+                    self.status_bar.showMessage("Previous session state restored", 5000)
+                    logging.info("Session restoration completed successfully")
+                else:
+                    logging.info("Session restoration was not possible")
+            else:
+                logging.info("Session restoration is disabled - not restoring experiment/dataset/session")
+
+        except Exception as e:
+            logging.error(f"Error during session restoration: {e}")
+            logging.error(traceback.format_exc())
+            # Clear problematic state
+            app_state.clear_session_state()
+
     # Command functions
     def undo(self):
         try:
@@ -212,15 +347,15 @@ class MonstimGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def exclude_recording(self, recording_id : str):
+    def exclude_recording(self, recording_id: str):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             command = ExcludeRecordingCommand(self, recording_id)
             self.command_invoker.execute(command)
         finally:
             QApplication.restoreOverrideCursor()
-    
-    def restore_recording(self, recording_id : str):
+
+    def restore_recording(self, recording_id: str):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             command = RestoreRecordingCommand(self, recording_id)
@@ -297,22 +432,22 @@ class MonstimGUI(QMainWindow):
         )
         if ok and dataset_id:
             self.restore_dataset(dataset_id)
-    
+
     # Menu bar functions
     def manage_latency_windows(self, level: str):
         logging.debug("Managing latency windows.")
         match level:
-            case 'experiment':
+            case "experiment":
                 if not self.current_experiment:
                     QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 emg_data = self.current_experiment
-            case 'dataset':
+            case "dataset":
                 if not self.current_dataset:
                     QMessageBox.warning(self, "Warning", "Please load a dataset first.")
                     return
                 emg_data = self.current_dataset
-            case 'session':
+            case "session":
                 if not self.current_session:
                     QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
@@ -321,27 +456,32 @@ class MonstimGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Invalid level for managing latency windows.")
                 return
 
-        dialog = LatencyWindowsDialog(emg_data, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.status_bar.showMessage("Latency windows updated successfully.", 5000)
+        # Check if a latency windows dialog is already open and close it
+        if hasattr(self, "_latency_dialog") and self._latency_dialog:
+            self._latency_dialog.close()
 
-    def invert_channel_polarity(self, level : str):
+        self._latency_dialog = LatencyWindowsDialog(emg_data, self)
+        self._latency_dialog.show()  # Use show() instead of exec() to allow interaction with main window
+        self._latency_dialog.raise_()  # Bring to front
+        self._latency_dialog.activateWindow()  # Give focus
+
+    def invert_channel_polarity(self, level: str):
         logging.debug("Inverting channel polarity.")
 
-        match level: # Check the level of the channel polarity inversion.
-            case 'experiment':
+        match level:  # Check the level of the channel polarity inversion.
+            case "experiment":
                 if not self.current_experiment:
                     QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 else:
                     dialog = InvertChannelPolarityDialog(self.current_experiment, self)
-            case 'dataset':
+            case "dataset":
                 if not self.current_dataset:
                     QMessageBox.warning(self, "Warning", "Please load a dataset first.")
                     return
                 else:
                     dialog = InvertChannelPolarityDialog(self.current_dataset, self)
-            case 'session':
+            case "session":
                 if not self.current_session:
                     QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
@@ -367,23 +507,23 @@ class MonstimGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def change_channel_names(self, level : str):
+    def change_channel_names(self, level: str):
         logging.debug("Changing channel names.")
 
-        match level: # Check the level of the channel name change and set the channel names accordingly.
-            case 'experiment':
+        match level:  # Check the level of the channel name change and set the channel names accordingly.
+            case "experiment":
                 if not self.current_experiment:
                     QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 else:
                     self.channel_names = self.current_experiment.channel_names
-            case 'dataset':
+            case "dataset":
                 if not self.current_dataset:
                     QMessageBox.warning(self, "Warning", "Please load a dataset first.")
                     return
                 else:
                     self.channel_names = self.current_dataset.channel_names
-            case 'session':
+            case "session":
                 if not self.current_session:
                     QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
@@ -417,7 +557,7 @@ class MonstimGUI(QMainWindow):
 
     def show_help_dialog(self, topic=None, latex=False):
         """Show help dialog using HelpFileRepository."""
-        file = 'readme.md' if topic is None else topic
+        file = "readme.md" if topic is None else topic
         markdown_content = self.help_repo.read_help_file(file)
         html_content = markdown.markdown(markdown_content)
         if latex:
@@ -431,12 +571,12 @@ class MonstimGUI(QMainWindow):
         config = self.config_repo.read_config()
         if self.active_profile_data:
             data = self.active_profile_data
-            if 'analysis_parameters' in data:
-                config.update(data['analysis_parameters'])
-            if 'latency_window_preset' in data:
-                config['latency_window_preset'] = data['latency_window_preset']
-            if 'stimuli_to_plot' in data:
-                config['stimuli_to_plot'] = data['stimuli_to_plot']
+            if "analysis_parameters" in data:
+                config.update(data["analysis_parameters"])
+            if "latency_window_preset" in data:
+                config["latency_window_preset"] = data["latency_window_preset"]
+            if "stimuli_to_plot" in data:
+                config["stimuli_to_plot"] = data["stimuli_to_plot"]
         return config
 
     def update_domain_configs(self, config=None):
@@ -450,7 +590,7 @@ class MonstimGUI(QMainWindow):
         if self.current_session:
             self.current_session.set_config(config)
 
-    def set_current_experiment(self, experiment : 'Experiment'):
+    def set_current_experiment(self, experiment: Experiment | None):
         """Set the current experiment and ensure config is injected."""
         if experiment is None:
             return  # Handle case where experiment is None, e.g., clear UI, reset state, etc.
@@ -458,7 +598,7 @@ class MonstimGUI(QMainWindow):
         experiment.set_config(config)
         self.current_experiment = experiment
 
-    def set_current_dataset(self, dataset: 'Dataset'):
+    def set_current_dataset(self, dataset: Dataset | None):
         """Set the current dataset and ensure config is injected."""
         if dataset is None:
             return  # Handle case where dataset is None, e.g., clear UI, reset state, etc.
@@ -466,7 +606,7 @@ class MonstimGUI(QMainWindow):
         dataset.set_config(config)
         self.current_dataset = dataset
 
-    def set_current_session(self, session: 'Session'):
+    def set_current_session(self, session: Session | None):
         """Set the current session and ensure config is injected."""
         if session is None:
             return  # Handle case where session is None, e.g., clear UI, reset state, etc.
@@ -474,39 +614,70 @@ class MonstimGUI(QMainWindow):
         session.set_config(config)
         self.current_session = session
 
-    # Close event handling
-    def show_save_confirmation_dialog(self):
-        """Show dialog asking user if they want to save before closing"""
-        # Shouldn't be needed anymore for most changes, but keeping it in case it's needed for future changes.
-        if not self.current_experiment or not self.has_unsaved_changes:
-            return True
-            
-        reply = QMessageBox.question(
-        self,
-        'Save Changes?',
-        'Do you want to save the current experiment before closing?',
-        QMessageBox.StandardButton.Save | 
-        QMessageBox.StandardButton.Discard | 
-        QMessageBox.StandardButton.Cancel,
-        QMessageBox.StandardButton.Save
-    )
-        
-        if reply == QMessageBox.StandardButton.Save:
-            saved = self.data_manager.save_experiment()
-            if saved:
-                QApplication.quit() # Close the application after saving.
-        elif reply == QMessageBox.StandardButton.Cancel:
-            return False
-        return True
-    
     def closeEvent(self, event):
-        """Handle application closing"""
-        if self.show_save_confirmation_dialog():
-            event.accept()
-        else:
-            event.ignore()
+        """Handle application close event - save current session state."""
+        from monstim_gui.core.application_state import app_state
 
-if __name__ == '__main__':
+        try:
+            # Save current window state before closing
+            app_state.save_last_profile(self.profile_selector_combo.currentText())
+
+            if self.current_experiment:
+                profile_name = self.profile_selector_combo.currentText() if hasattr(self, "profile_selector_combo") else None
+                app_state.save_current_session_state(
+                    experiment_id=self.current_experiment.id,
+                    dataset_id=(self.current_dataset.id if self.current_dataset else None),
+                    session_id=(self.current_session.id if self.current_session else None),
+                    profile_name=profile_name,
+                )
+                logging.info("Session state saved on application close")
+
+            # Check for unsaved changes
+            if self.has_unsaved_changes:
+                reply = QMessageBox.question(
+                    self,
+                    "Unsaved Changes",
+                    "You have unsaved changes. Do you want to save before closing?",
+                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                )
+
+                if reply == QMessageBox.StandardButton.Save:
+                    if self.data_manager.save_experiment():
+                        # Save window state before closing
+                        from monstim_gui.core.ui_config import ui_config
+
+                        ui_config.save_window_state(self)
+                        event.accept()
+                    else:
+                        event.ignore()
+                elif reply == QMessageBox.StandardButton.Discard:
+                    # Save window state before closing
+                    from monstim_gui.core.ui_config import ui_config
+
+                    ui_config.save_window_state(self)
+                    event.accept()
+                else:  # Cancel
+                    event.ignore()
+            else:
+                # Save window state before closing
+                from monstim_gui.core.ui_config import ui_config
+
+                ui_config.save_window_state(self)
+                event.accept()
+
+        except Exception as e:
+            logging.error(f"Error during application close: {e}")
+            # Still save window state and allow closing even if other operations fail
+            try:
+                from monstim_gui.core.ui_config import ui_config
+
+                ui_config.save_window_state(self)
+            except Exception as e2:
+                logging.error(f"Error saving window state: {e2}")
+            event.accept()
+
+
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = MonstimGUI()
     gui.show()

@@ -1,10 +1,10 @@
-from PyQt6.QtCore import Qt, QPoint, QRect, QSize
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt
 from PyQt6.QtWidgets import QLayout
 
 
 class FlowLayout(QLayout):
     """A flow layout that arranges items horizontally and wraps when needed."""
-    
+
     def __init__(self, parent=None, margin=0, spacing=-1):
         super().__init__(parent)
         self.setContentsMargins(margin, margin, margin, margin)
@@ -47,7 +47,7 @@ class FlowLayout(QLayout):
         size = QSize()
         for item in self._item_list:
             size = size.expandedTo(item.minimumSize())
-        
+
         margins = self.contentsMargins()
         size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
         return size
@@ -59,24 +59,24 @@ class FlowLayout(QLayout):
         y = effective_rect.y()
         line_height = 0
         spacing = self.spacing()
-        
+
         for item in self._item_list:
             widget = item.widget()
             if widget and not widget.isVisible():
                 continue
-                
+
             item_width = item.sizeHint().width()
             item_height = item.sizeHint().height()
-            
+
             if x + item_width > effective_rect.right() and line_height > 0:
                 x = effective_rect.x()
                 y += line_height + spacing
                 line_height = 0
-            
+
             if not test_only:
                 item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
-                
+
             x += item_width + spacing
             line_height = max(line_height, item_height)
-            
+
         return y + line_height - rect.y() + m.bottom()

@@ -19,7 +19,7 @@ if project_root not in sys.path:
 from monstim_gui.version import VERSION
 
 EXE_NAME = f'MonStim Analyzer v{VERSION}'
-DIST_NAME = f'MonStim_Analyzer_v{VERSION}-alpha'
+DIST_NAME = f'MonStim_Analyzer_v{VERSION}-beta'
 
 
 a = Analysis( # type: ignore
@@ -53,7 +53,7 @@ exe = EXE( # type: ignore
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/icon.png'
+    icon='src/icon.ico'
 )
 
 coll = COLLECT( # type: ignore

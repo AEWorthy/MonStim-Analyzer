@@ -1,8 +1,10 @@
 name: EMG + Force (Vibration)
 description: M-/H-response EMG analysis with vibration conditioning.
 stimuli_to_plot:
-- Electrical
 - Force
 - Length
+- Electrical
 analysis_parameters:
-  time_window: 300
+  time_window: 400.0
+  pre_stim_time: 200.0
+  bin_size: 0.5

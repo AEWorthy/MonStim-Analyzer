@@ -1,5 +1,6 @@
 # Monstim_Analysis/__init__.py
 from monstim_gui.version import VERSION
+
 # Never import other packages or modules into this file, or the setup.py will break.
 
 __version__ = VERSION
@@ -8,8 +9,7 @@ __version__ = VERSION
 # monstim_signals has its own versioning system for data compatibility.
 
 # Metadata
-__title__ = 'MonStim Analyzer'
+__title__ = "MonStim Analyzer"
 __description__ = '"MonStimAnalyzer: EMG data analysis and plotting tools"'
-__author__ = 'Andrew Worthy'
-__email__ = 'aeworth@emory.edu'
-
+__author__ = "Andrew Worthy"
+__email__ = "aeworth@emory.edu"

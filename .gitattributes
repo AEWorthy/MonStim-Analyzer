@@ -1,0 +1,203 @@
+# Git Attributes for MonStim Analyzer
+
+# Set default behavior for files
+* text=auto
+
+# Text files that should be normalized (convert crlf => lf)
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.adoc text eol=lf
+*.rst text eol=lf
+
+# Configuration files
+*.cfg text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+requirements*.txt text eol=lf
+setup.py text eol=lf
+setup.cfg text eol=lf
+pyproject.toml text eol=lf
+*.spec text eol=lf
+
+# Shell scripts (Unix line endings)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows scripts (Windows line endings)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files that should not be normalized
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.tif binary
+*.tiff binary
+*.svg binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# Data files (preserve original line endings)
+*.csv text
+*.tsv text
+*.dat binary
+*.h5 binary
+*.hdf5 binary
+*.mat binary
+*.npz binary
+*.pkl binary
+*.pickle binary
+
+# Documentation files
+*.docx binary
+*.doc binary
+*.xls binary
+*.xlsx binary
+*.ppt binary
+*.pptx binary
+
+# Archive files
+*.7z binary
+*.dmg binary
+*.gz binary
+*.iso binary
+*.jar binary
+*.rar binary
+*.tar binary
+*.zip binary
+*.bz2 binary
+*.xz binary
+
+# Font files
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+# Git and GitHub specific
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.gitmodules text eol=lf
+
+# IDE and editor files
+*.code-workspace text eol=lf
+.vscode/* text eol=lf
+*.sublime-project text eol=lf
+*.sublime-workspace text eol=lf
+
+# Package files
+*.whl binary
+*.egg binary
+*.egg-info/* text eol=lf
+
+# Lock files
+poetry.lock text eol=lf
+Pipfile.lock text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+
+# License and legal files
+LICENSE* text eol=lf
+COPYING* text eol=lf
+COPYRIGHT* text eol=lf
+NOTICE* text eol=lf
+
+# Changelog and documentation
+CHANGELOG* text eol=lf
+HISTORY* text eol=lf
+NEWS* text eol=lf
+README* text eol=lf
+CONTRIBUTING* text eol=lf
+SECURITY* text eol=lf
+CODE_OF_CONDUCT* text eol=lf
+
+# Python specific
+__pycache__/ export-ignore
+*.py[cod] export-ignore
+*$py.class export-ignore
+*.so export-ignore
+.Python export-ignore
+build/ export-ignore
+develop-eggs/ export-ignore
+dist/ export-ignore
+downloads/ export-ignore
+eggs/ export-ignore
+.eggs/ export-ignore
+lib/ export-ignore
+lib64/ export-ignore
+parts/ export-ignore
+sdist/ export-ignore
+var/ export-ignore
+wheels/ export-ignore
+*.egg-info/ export-ignore
+.installed.cfg export-ignore
+*.egg export-ignore
+
+# Testing
+.pytest_cache/ export-ignore
+.coverage export-ignore
+htmlcov/ export-ignore
+.tox/ export-ignore
+.nox/ export-ignore
+.cache export-ignore
+nosetests.xml export-ignore
+coverage.xml export-ignore
+*.cover export-ignore
+.hypothesis/ export-ignore
+
+# Development
+.venv/ export-ignore
+venv/ export-ignore
+ENV/ export-ignore
+env/ export-ignore
+.env export-ignore
+.envrc export-ignore
+
+# IDE
+.vscode/ export-ignore
+.idea/ export-ignore
+*.swp export-ignore
+*.swo export-ignore
+*~ export-ignore
+
+# OS generated
+.DS_Store export-ignore
+.DS_Store? export-ignore
+._* export-ignore
+.Spotlight-V100 export-ignore
+.Trashes export-ignore
+ehthumbs.db export-ignore
+Thumbs.db export-ignore
+
+# Language detection overrides for GitHub
+*.adoc linguist-documentation
+docs/*.md linguist-documentation
+*.md linguist-documentation=false
+monstim_gui/*.py linguist-language=Python
+monstim_signals/*.py linguist-language=Python
+
+# Mark specific paths as documentation
+docs/* linguist-documentation
+README* linguist-documentation
+CHANGELOG* linguist-documentation
+CONTRIBUTING* linguist-documentation
+LICENSE* linguist-documentation
+SECURITY* linguist-documentation
