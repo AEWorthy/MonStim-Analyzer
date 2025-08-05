@@ -15,7 +15,7 @@ setup(
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
-        "Markdown==3.6",
+        "Markdown==3.8.2",
         "PyQt6==6.9.1",
         "PyQt6_sip==13.8.0",
         "PyYAML==6.0.2",
