@@ -1,5 +1,5 @@
 PyQt6==6.9.1
-PyQt6_sip==13.8.0
+PyQt6_sip==13.10.2
 numpy==1.26.4
 pandas==2.3.0
 matplotlib==3.8.4

@@ -17,7 +17,7 @@ setup(
     install_requires=[
         "Markdown==3.8.2",
         "PyQt6==6.9.1",
-        "PyQt6_sip==13.8.0",
+        "PyQt6_sip==13.10.2",
         "PyYAML==6.0.2",
         "h5py==3.12.1",
         "matplotlib==3.10.3",
