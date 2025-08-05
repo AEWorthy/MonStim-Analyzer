@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import os
 import logging
+import traceback
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from monstim_gui.widgets.gui_layout import MenuBar, DataSelectionWidget, ReportsWidget, PlotPane, PlotWidget
@@ -164,7 +165,7 @@ class MonstimGUI(QMainWindow):
                 self.profile_selector_combo.setItemData(idx, desc, role=Qt.ItemDataRole.ToolTipRole)
         self.profile_selector_combo.blockSignals(False)
         self.profile_selector_combo.setCurrentIndex(0)
-        self._on_profile_selector_changed(0)
+        self._set_profile_selector_tooltip(0)
 
     def _set_profile_selector_tooltip(self, idx):
         # Set the tooltip for the whole combobox to the selected profile's description
@@ -201,6 +202,7 @@ class MonstimGUI(QMainWindow):
         
         # Save profile selection and update session state
         app_state.save_last_profile(profile_name)
+        app_state.save_recent_profile(profile_name)  # Also add to recent profiles list
         if self.current_experiment:
             app_state.save_current_session_state(
                 experiment_id=self.current_experiment.id,
@@ -208,6 +210,9 @@ class MonstimGUI(QMainWindow):
                 session_id=self.current_session.id if self.current_session else None, 
                 profile_name=profile_name
             )
+        else:
+            # Even when no experiment is loaded, ensure we can track profile changes
+            logging.info(f"No experiment loaded, but profile selection saved: {profile_name}")
         
         self.update_domain_configs(config)
         self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
@@ -234,24 +239,67 @@ class MonstimGUI(QMainWindow):
         """Restore the last selected analysis profile."""
         from monstim_gui.core.application_state import app_state
         
+        # Check if profile tracking is enabled
+        if not app_state.should_track_analysis_profiles():
+            logging.info("Profile tracking is disabled - not restoring profile selection")
+            return False
+        
         last_profile = app_state.get_last_profile()
-        if last_profile and last_profile != "(default)":
+        logging.info(f"Attempting to restore last profile selection: '{last_profile}'")
+        
+        if last_profile:
             idx = self.profile_selector_combo.findText(last_profile)
             if idx >= 0:
+                # Block signals to prevent triggering the change handler during restoration
+                self.profile_selector_combo.blockSignals(True)
                 self.profile_selector_combo.setCurrentIndex(idx)
-                logging.info(f"Restored last profile selection: {last_profile}")
+                self.profile_selector_combo.blockSignals(False)
+                
+                # Manually apply the profile configuration
+                self._set_profile_selector_tooltip(idx)
+                self._apply_profile_configuration(idx, last_profile)
+                
+                logging.info(f"Successfully restored profile selection: {last_profile}")
                 return True
+            else:
+                logging.warning(f"Profile '{last_profile}' not found in available profiles")
+        
+        logging.info("No valid profile to restore, using default")
         return False
     
+    def _apply_profile_configuration(self, idx: int, profile_name: str):
+        """Apply the configuration for the selected profile without saving it again."""
+        if idx == 0:
+            # Global config
+            self.active_profile_path = None
+            self.active_profile_data = None
+            config = self.config_repo.read_config()
+        else:
+            name, path, data = self._profile_list[idx-1]
+            self.active_profile_path = path
+            self.active_profile_data = data
+            # Merge profile data with global config for fallback
+            config = self.config_repo.read_config()
+            # Overlay profile analysis_parameters and latency_window_preset, etc.
+            if 'analysis_parameters' in data:
+                config.update(data['analysis_parameters'])
+            if 'latency_window_preset' in data:
+                config['latency_window_preset'] = data['latency_window_preset']
+            if 'stimuli_to_plot' in data:
+                config['stimuli_to_plot'] = data['stimuli_to_plot']
+        
+        self.update_domain_configs(config)
+        logging.info(f"Applied configuration for profile: {profile_name}")
+    
     def _restore_last_session(self):
-        """Restore the last session state including profile, experiment, dataset, and session."""
+        """Restore the last session state and analysis profile based on preferences."""
         from monstim_gui.core.application_state import app_state
         
         try:
-            # First restore the profile selection
+            # Always attempt to restore profile selection (controlled by its own preference)
             self.restore_last_profile_selection()
             
-            # Then attempt to restore the data selections
+            # Only restore data selections if session restoration is enabled
             if app_state.should_restore_session():
                 success = app_state.restore_last_session(self)
                 if success:
@@ -260,10 +308,11 @@ class MonstimGUI(QMainWindow):
                 else:
                     logging.info("Session restoration was not possible")
             else:
-                logging.info("No previous session state to restore")
+                logging.info("Session restoration is disabled - not restoring experiment/dataset/session")
                 
         except Exception as e:
             logging.error(f"Error during session restoration: {e}")
+            logging.error(traceback.format_exc())
             # Clear problematic state
             app_state.clear_session_state()
    
@@ -554,7 +603,9 @@ class MonstimGUI(QMainWindow):
         from monstim_gui.core.application_state import app_state
         
         try:
-            # Save current session state before closing
+            # Save current window state before closing
+            app_state.save_last_profile(self.profile_selector_combo.currentText())
+
             if self.current_experiment:
                 profile_name = self.profile_selector_combo.currentText() if hasattr(self, 'profile_selector_combo') else None
                 app_state.save_current_session_state(
@@ -576,28 +627,34 @@ class MonstimGUI(QMainWindow):
                 
                 if reply == QMessageBox.StandardButton.Save:
                     if self.data_manager.save_experiment():
+                        # Save window state before closing
+                        from monstim_gui.core.ui_config import ui_config
+                        ui_config.save_window_state(self)
                         event.accept()
                     else:
                         event.ignore()
                 elif reply == QMessageBox.StandardButton.Discard:
+                    # Save window state before closing
+                    from monstim_gui.core.ui_config import ui_config
+                    ui_config.save_window_state(self)
                     event.accept()
                 else:  # Cancel
                     event.ignore()
             else:
+                # Save window state before closing
+                from monstim_gui.core.ui_config import ui_config
+                ui_config.save_window_state(self)
                 event.accept()
                 
         except Exception as e:
             logging.error(f"Error during application close: {e}")
-            event.accept()  # Still allow closing even if save fails
-        """Handle application closing"""
-        if self.show_save_confirmation_dialog():
-            # Save window state before closing
-            from monstim_gui.core.ui_config import ui_config
-            ui_config.save_window_state(self)
+            # Still save window state and allow closing even if other operations fail
+            try:
+                from monstim_gui.core.ui_config import ui_config
+                ui_config.save_window_state(self)
+            except Exception as e2:
+                logging.error(f"Error saving window state: {e2}")
             event.accept()
-        else:
-            event.ignore()
-        pass
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

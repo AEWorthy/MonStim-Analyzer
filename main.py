@@ -82,8 +82,13 @@ def main(is_frozen : bool) -> int:
         
         app = QApplication(sys.argv)
         app.setOrganizationName("WorthyLab")
-        app.setApplicationName(f"MonStim Analyzer {SPLASH_INFO['version']}")
+        app.setApplicationName("MonStim Analyzer")
         app.setApplicationVersion(SPLASH_INFO['version'])
+        
+        # Reinitialize app_state after QApplication is configured
+        from monstim_gui.core.application_state import app_state
+        app_state.reinitialize_settings()
+        logging.info(f"QSettings initialized with org={app.organizationName()}, app={app.applicationName()}")
 
         if is_frozen: # Display splash screen if running as a frozen executable.
             from monstim_gui.core.splash import SplashScreen

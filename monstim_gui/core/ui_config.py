@@ -2,8 +2,13 @@
 Configuration file for UI scaling and responsive design settings.
 """
 from typing import Dict, Any
+import logging
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QSettings
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from gui_main import MonstimGUI
 
 
 class UIConfig:
@@ -129,8 +134,10 @@ class UIConfig:
         else:
             return 30, 30, width, height
     
-    def save_window_state(self, window, key: str = 'main_window'):
+    def save_window_state(self, window : 'MonstimGUI', key: str = 'main_window'):
         """Save window geometry and state."""
+        logging.info(f"Saving window state for {key}"
+                        f" QSettings org={QApplication.instance().organizationName()}, app={QApplication.instance().applicationName()}")
         if hasattr(window, 'saveGeometry') and hasattr(window, 'saveState'):
             self.settings.setValue(f"WindowState/{key}/geometry", window.saveGeometry())
             if hasattr(window, 'saveState'):

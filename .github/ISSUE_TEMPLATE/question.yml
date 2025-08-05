@@ -1,0 +1,145 @@
+name: Question or Help
+description: Ask a question about using MonStim Analyzer
+title: "[Question]: "
+labels: ["question", "help-wanted"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about MonStim Analyzer? We're here to help! Please provide as much context as possible so we can give you the best answer.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please check these first
+      options:
+        - label: I have read the README and documentation
+          required: true
+        - label: I have searched existing issues for similar questions
+          required: true
+        - label: I have tried the troubleshooting steps in the documentation
+          required: true
+
+  - type: dropdown
+    id: question-category
+    attributes:
+      label: Question Category
+      description: What is your question about?
+      options:
+        - "Installation and Setup"
+        - "Data Import and File Formats"
+        - "Using Analysis Profiles"
+        - "Creating and Customizing Plots"
+        - "Understanding Analysis Results"
+        - "Performance and Optimization"
+        - "Integration with Other Software"
+        - "Best Practices and Workflows"
+        - "Technical/Programming Questions"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: "I'm trying to... but I'm not sure how to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and Background
+      description: |
+        Provide context about what you're trying to achieve:
+        - What type of EMG data are you working with?
+        - What is your analysis goal?
+        - What have you tried so far?
+      placeholder: |
+        I'm analyzing EMG data from...
+        My goal is to...
+        I've tried...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MonStim Analyzer Version
+      description: What version are you using?
+      placeholder: "v0.4.1"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you using?
+      placeholder: "Windows 11, macOS 13, Ubuntu 22.04, etc."
+
+  - type: textarea
+    id: data-info
+    attributes:
+      label: Data Information (if relevant)
+      description: |
+        If your question is about specific data:
+        - Data source and format
+        - File sizes and structure
+        - Number of experiments/datasets/sessions
+        - Any special characteristics
+      placeholder: |
+        - CSV files from MonStim system
+        - 10-20 sessions per dataset
+        - Some channels have artifacts
+        - Using custom stimulus protocols
+
+  - type: textarea
+    id: attempted-solutions
+    attributes:
+      label: What You've Tried
+      description: What approaches have you already attempted?
+      placeholder: |
+        I tried:
+        1. Following the user guide section on...
+        2. Adjusting the settings for...
+        3. Looking at similar examples but...
+
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected or Desired Outcome
+      description: What result are you hoping to achieve?
+      placeholder: "I want to be able to..."
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: How urgent is this question?
+      options:
+        - "Low - Learning/exploring"
+        - "Medium - Working on a project"
+        - "High - Deadline approaching"
+        - "Urgent - Blocking critical work"
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Any other details that might be helpful
+      placeholder: "Screenshots, error messages, or other relevant information..."
+
+  - type: checkboxes
+    id: follow-up
+    attributes:
+      label: Follow-up
+      options:
+        - label: I can provide additional information if needed
+        - label: I can test suggested solutions
+        - label: I would be willing to share example data (if safe to do so)
+        - label: I can help improve documentation based on the answer

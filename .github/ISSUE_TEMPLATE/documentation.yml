@@ -1,0 +1,117 @@
+name: Documentation Issue
+description: Report problems with documentation or suggest improvements
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the MonStim Analyzer documentation! This includes the README, user guides, API documentation, and any other project documentation.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs attention?
+      options:
+        - "README.md (main documentation)"
+        - "User Guide sections"
+        - "Installation instructions"
+        - "Plot types documentation"
+        - "Analysis profiles guide"
+        - "Troubleshooting section"
+        - "Code comments/docstrings"
+        - "Example files or tutorials"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What kind of documentation issue is this?
+      options:
+        - "Missing information"
+        - "Incorrect or outdated information"
+        - "Unclear or confusing explanation"
+        - "Typo or formatting issue"
+        - "Broken links or references"
+        - "Missing examples"
+        - "Suggestion for improvement"
+        - "Translation request"
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where specifically is the issue located?
+      placeholder: |
+        - File: docs/readme.md
+        - Section: "EMG Plot Types"
+        - Line numbers or heading: Lines 150-160
+        - URL: (if applicable)
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-content
+    attributes:
+      label: Current Content (if applicable)
+      description: Copy the current text that needs to be fixed or improved
+      placeholder: "The current documentation says..."
+
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: Issue Description
+      description: Describe the problem with the current documentation
+      placeholder: "The issue is that..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-improvement
+    attributes:
+      label: Suggested Improvement
+      description: How should the documentation be improved?
+      placeholder: |
+        The documentation should:
+        - Explain...
+        - Include examples of...
+        - Clarify that...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: user-level
+    attributes:
+      label: Target User Level
+      description: What level of user would benefit from this documentation improvement?
+      options:
+        - "Beginner (new to EMG analysis)"
+        - "Intermediate (familiar with EMG but new to software)"
+        - "Advanced (experienced users)"
+        - "Developer (contributing to the project)"
+        - "All users"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other relevant information about this documentation issue
+      placeholder: "This would help users who..."
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution Offer
+      options:
+        - label: I would be willing to help write or improve this documentation
+        - label: I can provide examples or screenshots to illustrate the point
+        - label: I can review proposed changes for accuracy

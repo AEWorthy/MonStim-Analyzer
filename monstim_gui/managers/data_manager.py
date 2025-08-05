@@ -29,7 +29,6 @@ from monstim_signals.core import (
 from monstim_gui.io.experiment_loader import ExperimentLoadingThread
 from monstim_gui.core.application_state import app_state
 
-
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
