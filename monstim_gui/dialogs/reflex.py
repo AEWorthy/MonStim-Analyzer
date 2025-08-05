@@ -1,4 +1,20 @@
-from .base import *
+import logging
+
+from PyQt6.QtCore import QEvent, QTimer
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
+
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.session import Session
 
 """LEGACY DIALOG: This dialog is used to update the reflex window settings for an Experiment, Dataset, or Session.
 It allows users to set global or per-channel start times and durations for the reflex windows.

@@ -24,9 +24,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from monstim_gui.dialogs.base import COLOR_OPTIONS, TAB_COLOR_NAMES, LatencyWindow
+from monstim_gui.dialogs.base import COLOR_OPTIONS, TAB_COLOR_NAMES
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.managers.profile_manager import ProfileManager
+from monstim_signals.core import LatencyWindow
 
 STIMULUS_OPTIONS = ["Force", "Length", "Electrical", "Optical"]
 

@@ -1,4 +1,16 @@
-from .base import *
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+)
+
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.session import Session
 
 
 class ChangeChannelNamesDialog(QDialog):

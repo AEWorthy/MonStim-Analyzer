@@ -1,4 +1,11 @@
-from .base import *
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QHBoxLayout,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+)
 
 
 class CopyableReportDialog(QDialog):

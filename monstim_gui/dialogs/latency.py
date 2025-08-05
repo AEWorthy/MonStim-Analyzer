@@ -1,9 +1,36 @@
+import copy
 from typing import TYPE_CHECKING
 
+from PyQt6.QtCore import QPoint, QTimer, Qt
+from PyQt6.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .base import COLOR_OPTIONS
+from monstim_gui.commands import SetLatencyWindowsCommand
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_signals.core import get_config_path
-
-from .base import *
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.session import Session
+from monstim_signals.core import LatencyWindow
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI

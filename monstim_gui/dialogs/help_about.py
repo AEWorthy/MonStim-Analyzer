@@ -1,4 +1,20 @@
-from .base import *
+import os
+
+import markdown
+from markdown.extensions.codehilite import CodeHiliteExtension
+from markdown.extensions.fenced_code import FencedCodeExtension
+from markdown.extensions.tables import TableExtension
+from mdx_math import MathExtension
+from PyQt6.QtCore import Qt, QUrl, pyqtSlot
+from PyQt6.QtGui import QDesktopServices, QFont, QIcon, QPixmap
+from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtWebEngineCore import QWebEngineScript
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
+
+from .base import WebEnginePage
+from monstim_gui.core.splash import SPLASH_INFO
+from monstim_signals.core import get_source_path
 
 
 class HelpWindow(QWidget):
