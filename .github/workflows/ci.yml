@@ -70,63 +70,19 @@ jobs:
       run: |
         export QT_QPA_PLATFORM=offscreen
         if [ "$RUNNER_OS" = "Linux" ]; then
-          xvfb-run -a python -c "
-          import sys
-          try:
-              from PyQt6.QtWidgets import QApplication
-              from monstim_gui.gui_main import MonstimGUI
-              app = QApplication(sys.argv)
-              window = MonstimGUI()
-              print('GUI initialization successful')
-          except Exception as e:
-              print('GUI initialization failed:', str(e))
-              sys.exit(1)
-          "
+          xvfb-run -a python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
         else
-          python -c "
-          import sys
-          try:
-              from PyQt6.QtWidgets import QApplication
-              from monstim_gui.gui_main import MonstimGUI
-              app = QApplication(sys.argv)
-              window = MonstimGUI()
-              print('GUI initialization successful')
-          except Exception as e:
-              print('GUI initialization failed:', str(e))
-              sys.exit(1)
-          "
+          python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
         fi
 
     - name: Test basic application startup (Windows)
       if: runner.os == 'Windows'
       run: |
-        python -c "
-        import sys
-        try:
-            from PyQt6.QtWidgets import QApplication
-            from monstim_gui.gui_main import MonstimGUI
-            app = QApplication(sys.argv)
-            window = MonstimGUI()
-            print('GUI initialization successful')
-        except Exception as e:
-            print('GUI initialization failed:', str(e))
-            sys.exit(1)
-        "
+        python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
 
     - name: Test core signal processing modules
       run: |
-        python -c "
-        try:
-            from monstim_signals.core.experiment import Experiment
-            from monstim_signals.core.dataset import Dataset
-            from monstim_signals.core.session import Session
-            from monstim_signals.io.csv_manager import CSVManager
-            print('Core modules import successful')
-        except Exception as e:
-            print('Core modules import failed:', str(e))
-            import sys
-            sys.exit(1)
-        "
+        python -c 'from monstim_signals.core.experiment import Experiment; from monstim_signals.core.dataset import Dataset; from monstim_signals.core.session import Session; from monstim_signals.io.csv_manager import CSVManager; print("Core modules import successful")'
 
     - name: Run basic functionality tests (if test files exist)
       run: |
