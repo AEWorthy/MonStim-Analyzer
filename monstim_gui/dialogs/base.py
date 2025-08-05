@@ -1,4 +1,3 @@
-
 from matplotlib import colors as mcolors
 from PyQt6.QtWebEngineCore import QWebEnginePage
 

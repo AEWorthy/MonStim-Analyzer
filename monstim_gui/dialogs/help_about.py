@@ -12,9 +12,10 @@ from PyQt6.QtWebEngineCore import QWebEngineScript
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
 
-from .base import WebEnginePage
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
+
+from .base import WebEnginePage
 
 
 class HelpWindow(QWidget):
