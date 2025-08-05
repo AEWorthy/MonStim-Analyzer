@@ -98,6 +98,7 @@ jobs:
               print(f'GUI initialization failed: {e}')
               sys.exit(1)
           "
+        fi
 
     - name: Test basic application startup (Windows)
       if: runner.os == 'Windows'
