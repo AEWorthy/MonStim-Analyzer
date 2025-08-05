@@ -1,13 +1,26 @@
 from matplotlib import colors as mcolors
-from PyQt6.QtWebEngineCore import QWebEnginePage
+
+# Conditional import for WebEngine
+try:
+    from PyQt6.QtWebEngineCore import QWebEnginePage
+    WEB_ENGINE_AVAILABLE = True
+except ImportError:
+    QWebEnginePage = None
+    WEB_ENGINE_AVAILABLE = False
 
 # Small set of pleasant colors for latency windows
 COLOR_OPTIONS = list(mcolors.TABLEAU_COLORS.keys())
 TAB_COLOR_NAMES = [c.replace("tab:", "") for c in COLOR_OPTIONS]
 
 
-class WebEnginePage(QWebEnginePage):
-    """Custom WebEnginePage to handle JavaScript messages."""
+if WEB_ENGINE_AVAILABLE:
+    class WebEnginePage(QWebEnginePage):
+        """Custom WebEnginePage to handle JavaScript messages."""
 
-    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
-        print(f"JS: {message}")
+        def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+            print(f"JS: {message}")
+else:
+    # Placeholder class when WebEngine is not available
+    class WebEnginePage:
+        def __init__(self, *args, **kwargs):
+            pass
