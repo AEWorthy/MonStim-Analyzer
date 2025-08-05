@@ -50,11 +50,17 @@ class ReportManager:
         logging.debug("Showing M-max report.")
         if self.gui.current_session:
             from ..dialogs import CopyableReportDialog
-            report = self.gui.current_session.m_max_report()
-            report = format_report(report)
-            dialog = CopyableReportDialog(
-                "M-max Report (method = RMS)", report, self.gui
-            )
-            dialog.exec()
+            try:
+                report = self.gui.current_session.m_max_report()
+                report = format_report(report)
+                dialog = CopyableReportDialog(
+                    "M-max Report (method = RMS)", report, self.gui
+                )
+                dialog.exec()
+            except ValueError as e:
+                logging.error(f"Error generating M-max report: {str(e)}")
+                QMessageBox.critical(
+                    self.gui, "Error", f"Failed to generate M-max report: {str(e)}"
+                )
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
