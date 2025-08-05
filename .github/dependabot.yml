@@ -18,6 +18,8 @@ updates:
     labels:
       - "dependencies"
       - "security"
+    # Allow dependabot to resolve conflicts automatically
+    rebase-strategy: "auto"
     # Group minor updates together to reduce PR noise
     groups:
       development-dependencies:
@@ -34,10 +36,17 @@ updates:
           - "pandas*"
           - "matplotlib*"
           - "scipy*"
+          - "h5py*"
       gui-framework:
         patterns:
           - "PyQt6*"
           - "pyqtgraph*"
+      utility-libraries:
+        patterns:
+          - "PyYAML*"
+          - "packaging*"
+          - "python-markdown-math*"
+          - "traitlets*"
 
   # Monitor GitHub Actions
   - package-ecosystem: "github-actions"
@@ -57,3 +66,5 @@ updates:
     labels:
       - "github-actions"
       - "ci"
+    # Allow dependabot to resolve conflicts automatically
+    rebase-strategy: "auto"
