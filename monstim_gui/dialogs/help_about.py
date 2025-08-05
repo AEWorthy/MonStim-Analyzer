@@ -14,6 +14,7 @@ try:
     from PyQt6.QtWebChannel import QWebChannel
     from PyQt6.QtWebEngineCore import QWebEngineScript
     from PyQt6.QtWebEngineWidgets import QWebEngineView
+
     WEB_ENGINE_AVAILABLE = True
 except ImportError:
     # Fallback for environments without PyQt6-WebEngine
@@ -24,6 +25,7 @@ except ImportError:
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
+
 from .base import WebEnginePage
 
 
@@ -49,7 +51,7 @@ class LatexHelpWindow(QWidget):
         self.resize(600, 400)
 
         layout = QVBoxLayout(self)
-        
+
         if not WEB_ENGINE_AVAILABLE:
             # Fallback to simple text browser if WebEngine is not available
             self.text_browser = QTextBrowser()
@@ -70,7 +72,7 @@ class LatexHelpWindow(QWidget):
     def process_content(self, markdown_content):
         if not WEB_ENGINE_AVAILABLE:
             return
-            
+
         # Convert markdown to HTML
         html_content = self.markdown_to_html(markdown_content)
 

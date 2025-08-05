@@ -82,7 +82,7 @@ jobs:
 
     - name: Test core signal processing modules
       run: |
-        python -c 'from monstim_signals.core.experiment import Experiment; from monstim_signals.core.dataset import Dataset; from monstim_signals.core.session import Session; from monstim_signals.io.csv_manager import CSVManager; print("Core modules import successful")'
+        python -c 'import monstim_signals.domain.experiment; import monstim_signals.domain.dataset; import monstim_signals.domain.session; import monstim_signals.io.csv_importer; print("Core modules import successful")'
 
     - name: Run basic functionality tests (if test files exist)
       run: |
