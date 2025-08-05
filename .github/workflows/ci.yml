@@ -45,8 +45,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .
+        pip install -r requirements.txt
         pip install pytest pytest-qt
+        pip install -e . --no-deps
 
     - name: Lint with flake8
       run: |
@@ -119,7 +120,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .
+        pip install -r requirements.txt
+        pip install -e . --no-deps
         pip install flake8 flake8-pyproject black isort
 
     - name: Check code formatting with black
@@ -148,7 +150,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .
+        pip install -r requirements.txt
+        pip install -e . --no-deps
         pip install safety bandit
 
     - name: Check for security vulnerabilities in dependencies
