@@ -28,9 +28,7 @@ class ReflexSettingsDialog(QDialog):
         self.data = data
 
         self.setModal(True)
-        self.setWindowTitle(
-            f"Update Reflex Window Settings: Dataset {self.data.formatted_name}"
-        )
+        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.data.formatted_name}")
 
         self.init_ui()
 
@@ -102,9 +100,7 @@ class ReflexSettingsDialog(QDialog):
         layout.addLayout(self.per_channel_layout)
 
         # Buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
@@ -147,14 +143,8 @@ class ReflexSettingsDialog(QDialog):
 
     def save_settings(self):
         try:
-            m_duration = [
-                float(self.global_m_duration_entry.text())
-                for _ in range(len(self.data.m_start))
-            ]
-            h_duration = [
-                float(self.global_h_duration_entry.text())
-                for _ in range(len(self.data.m_start))
-            ]
+            m_duration = [float(self.global_m_duration_entry.text()) for _ in range(len(self.data.m_start))]
+            h_duration = [float(self.global_h_duration_entry.text()) for _ in range(len(self.data.m_start))]
         except ValueError:
             QMessageBox.warning(
                 self,
@@ -166,14 +156,8 @@ class ReflexSettingsDialog(QDialog):
         if self.toggle_button.isChecked():
             # Global start times
             try:
-                m_start = [
-                    float(self.global_m_start_entry.text())
-                    for _ in range(len(self.data.m_start))
-                ]
-                h_start = [
-                    float(self.global_h_start_entry.text())
-                    for _ in range(len(self.data.m_start))
-                ]
+                m_start = [float(self.global_m_start_entry.text()) for _ in range(len(self.data.m_start))]
+                h_start = [float(self.global_h_start_entry.text()) for _ in range(len(self.data.m_start))]
             except ValueError:
                 QMessageBox.warning(
                     self,
@@ -198,9 +182,7 @@ class ReflexSettingsDialog(QDialog):
                     return
 
         try:
-            self.data.change_reflex_latency_windows(
-                m_start, m_duration, h_start, h_duration
-            )
+            self.data.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error saving settings: {str(e)}")
             logging.error(

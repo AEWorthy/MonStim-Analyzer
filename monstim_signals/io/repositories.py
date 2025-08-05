@@ -61,9 +61,7 @@ class RecordingRepository:
             annot_dict = json.loads(self.annot_js.read_text())
             annot = RecordingAnnot.from_dict(annot_dict)
         else:
-            logging.warning(
-                f"Annotation file '{self.annot_js}' not found. Creating a new empty one."
-            )
+            logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
             annot = RecordingAnnot.create_empty()
             self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
 
@@ -75,9 +73,7 @@ class RecordingRepository:
         meta.num_samples = raw_dataset.shape[0]  # (#samples × #channels)
 
         # 5) Build the domain object, passing the `h5py.Dataset` directly
-        recording = Recording(
-            meta=meta, annot=annot, raw=raw_dataset, repo=self, config=config
-        )
+        recording = Recording(meta=meta, annot=annot, raw=raw_dataset, repo=self, config=config)
         return recording
 
     def save(self, recording: Recording) -> None:
@@ -144,9 +140,7 @@ class SessionRepository:
                 )
                 session_annot = SessionAnnot.from_meta(recordings[0].meta)
             else:
-                logging.warning(
-                    f"Session annotation file '{self.session_js}' not found. Creating a new empty one."
-                )
+                logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
                 session_annot = SessionAnnot.create_empty()
             self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
 
@@ -181,9 +175,7 @@ class SessionRepository:
                 yield SessionRepository(sess_folder)
             elif sess_folder.is_dir() and any(sess_folder.glob("*.raw.h5")):
                 logging.info(f"Discovered session without annot: {sess_folder.name}")
-                yield SessionRepository(
-                    sess_folder
-                )  # still yield, but no session.annot.json
+                yield SessionRepository(sess_folder)  # still yield, but no session.annot.json
             else:
                 logging.warning(f"No valid session found in {sess_folder}.")
 
@@ -199,9 +191,7 @@ class DatasetRepository:
         `folder` might be Path("/data/ExperimentRoot/Dataset_01").
         """
         self.folder = folder
-        self.dataset_id = (
-            folder.name
-        )  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
+        self.dataset_id = folder.name  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
         self.dataset_js = folder / "dataset.annot.json"
 
     def update_path(self, new_folder: Path) -> None:
@@ -217,19 +207,14 @@ class DatasetRepository:
         session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
 
         # 2) Load each Session
-        sessions = [
-            SessionRepository(sess_folder).load(config=config)
-            for sess_folder in session_folders
-        ]
+        sessions = [SessionRepository(sess_folder).load(config=config) for sess_folder in session_folders]
 
         # 3) Load or create dataset annotation JSON
         if self.dataset_js.exists():
             session_annot_dict = json.loads(self.dataset_js.read_text())
             dataset_annot = DatasetAnnot.from_dict(session_annot_dict)
         else:  # If no session.annot.json, initialize a brand‐new one
-            logging.info(
-                f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one."
-            )
+            logging.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one.")
             dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
             self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
 
@@ -277,23 +262,16 @@ class ExperimentRepository:
 
     def load(self, config=None) -> "Experiment":
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
-        datasets = [
-            DatasetRepository(ds_folder).load(config=config)
-            for ds_folder in dataset_folders
-        ]
+        datasets = [DatasetRepository(ds_folder).load(config=config) for ds_folder in dataset_folders]
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
         if self.expt_js.exists():
             annot_dict = json.loads(self.expt_js.read_text())
             annot = ExperimentAnnot.from_dict(annot_dict)
         else:
-            logging.info(
-                f"Experiment annotation file '{self.expt_js}' not found. Creating a new one."
-            )
+            logging.info(f"Experiment annotation file '{self.expt_js}' not found. Creating a new one.")
             annot = ExperimentAnnot.create_empty()
             self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
-        expt = Experiment(
-            expt_id, datasets=datasets, annot=annot, repo=self, config=config
-        )
+        expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
         return expt
 
     def save(self, expt: Experiment) -> None:

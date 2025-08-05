@@ -35,9 +35,7 @@ class ResponsiveComboBox(QComboBox):
         self.setMinimumWidth(min_width)
 
         # Enable text elision and tooltip on hover
-        self.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.setMinimumContentsLength(15)  # Show at least 15 characters
 
     def addItem(self, text, userData=None):
@@ -46,9 +44,7 @@ class ResponsiveComboBox(QComboBox):
 
         # Add tooltip if text is longer than what can be displayed
         font_metrics = QFontMetrics(self.font())
-        available_width = self.width() - ui_scaling.scale_size(
-            40
-        )  # Account for dropdown arrow
+        available_width = self.width() - ui_scaling.scale_size(40)  # Account for dropdown arrow
 
         if font_metrics.horizontalAdvance(text) > available_width:
             self.setItemData(self.count() - 1, text, Qt.ItemDataRole.ToolTipRole)
@@ -69,9 +65,7 @@ class ResponsiveComboBox(QComboBox):
 
             # Add padding and ensure minimum size
             popup_width = max(max_width + ui_scaling.scale_size(40), self.width())
-            popup_width = min(
-                popup_width, ui_scaling.scale_size(400)
-            )  # Cap maximum width
+            popup_width = min(popup_width, ui_scaling.scale_size(400))  # Cap maximum width
 
             self.view().setMinimumWidth(popup_width)
 
@@ -103,9 +97,7 @@ class ResponsiveScrollArea(QScrollArea):
     def setWidget(self, widget):
         """Override to ensure proper size policies on the contained widget."""
         if widget:
-            widget.setSizePolicy(
-                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
-            )
+            widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         super().setWidget(widget)
 
 

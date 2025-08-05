@@ -30,9 +30,7 @@ def detect_plateau(y, max_window_size, min_window_size, threshold):
             plateau_start_idx = None
             plateau_end_idx = None
     if plateau_start_idx is not None and plateau_end_idx is not None:
-        logging.debug(
-            f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD."
-        )
+        logging.debug(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
         return plateau_start_idx, plateau_end_idx
     elif max_window_size > min_window_size:
         return detect_plateau(y, max_window_size - 1, min_window_size, threshold)
@@ -51,9 +49,7 @@ def get_avg_mmax(
 ):
     """Return the M-max amplitude and optionally its stimulus range."""
     m_wave_amplitudes = np.array(m_wave_amplitudes)
-    plateau_start_idx, plateau_end_idx = detect_plateau(
-        m_wave_amplitudes, max_window_size, min_window_size, threshold
-    )
+    plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
     if plateau_start_idx is not None and plateau_end_idx is not None:
         plateau_data = np.array(m_wave_amplitudes[plateau_start_idx:plateau_end_idx])
         m_max = np.mean(plateau_data)
@@ -73,9 +69,7 @@ def get_avg_mmax(
             elif outliers.size == 0:
                 logging.debug("\tNo outliers found above M-max, no correction applied")
             elif plateau_below_max.size == 0:
-                logging.debug(
-                    "\tAll plateau data equals maximum, no correction applied"
-                )
+                logging.debug("\tAll plateau data equals maximum, no correction applied")
         logging.debug(f"\tM-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return (
@@ -88,7 +82,5 @@ def get_avg_mmax(
 
 
 class NoCalculableMmaxError(Exception):
-    def __init__(
-        self, message="No calculable M-max. Try adjusting the threshold values."
-    ):
+    def __init__(self, message="No calculable M-max. Try adjusting the threshold values."):
         super().__init__(message)

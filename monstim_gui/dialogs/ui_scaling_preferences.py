@@ -42,9 +42,7 @@ class UIScalingPreferencesDialog(QDialog):
 
         # Auto scale checkbox
         self.auto_scale_cb = QCheckBox()
-        self.auto_scale_cb.setToolTip(
-            "Automatically scale UI based on screen DPI and resolution"
-        )
+        self.auto_scale_cb.setToolTip("Automatically scale UI based on screen DPI and resolution")
         self.auto_scale_cb.toggled.connect(self._on_auto_scale_toggled)
         scaling_layout.addRow("Auto Scale:", self.auto_scale_cb)
 
@@ -54,9 +52,7 @@ class UIScalingPreferencesDialog(QDialog):
         self.manual_scale_spin.setSingleStep(0.1)
         self.manual_scale_spin.setDecimals(1)
         self.manual_scale_spin.setSuffix("x")
-        self.manual_scale_spin.setToolTip(
-            "Manual scaling factor when auto-scale is disabled"
-        )
+        self.manual_scale_spin.setToolTip("Manual scaling factor when auto-scale is disabled")
         scaling_layout.addRow("Manual Scale Factor:", self.manual_scale_spin)
 
         # Current scale info
@@ -73,9 +69,7 @@ class UIScalingPreferencesDialog(QDialog):
         self.panel_width_spin = QSpinBox()
         self.panel_width_spin.setRange(15, 40)
         self.panel_width_spin.setSuffix("%")
-        self.panel_width_spin.setToolTip(
-            "Preferred width of left panel as percentage of screen width"
-        )
+        self.panel_width_spin.setToolTip("Preferred width of left panel as percentage of screen width")
         panel_layout.addRow("Left Panel Width:", self.panel_width_spin)
 
         layout.addWidget(panel_group)
@@ -142,9 +136,7 @@ class UIScalingPreferencesDialog(QDialog):
         """Load current settings into the dialog."""
         self.auto_scale_cb.setChecked(ui_config.get("auto_scale", True))
         self.manual_scale_spin.setValue(ui_config.get("manual_scale_factor", 1.0))
-        self.panel_width_spin.setValue(
-            ui_config.get("left_panel_preferred_width_percent", 22)
-        )
+        self.panel_width_spin.setValue(ui_config.get("left_panel_preferred_width_percent", 22))
         self.base_font_spin.setValue(ui_config.get("base_font_size", 9))
         self.max_font_scale_spin.setValue(ui_config.get("max_font_scale", 1.5))
 
@@ -172,9 +164,7 @@ class UIScalingPreferencesDialog(QDialog):
         # Save all settings
         ui_config.set("auto_scale", self.auto_scale_cb.isChecked())
         ui_config.set("manual_scale_factor", self.manual_scale_spin.value())
-        ui_config.set(
-            "left_panel_preferred_width_percent", self.panel_width_spin.value()
-        )
+        ui_config.set("left_panel_preferred_width_percent", self.panel_width_spin.value())
         ui_config.set("base_font_size", self.base_font_spin.value())
         ui_config.set("max_font_scale", self.max_font_scale_spin.value())
 

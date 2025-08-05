@@ -149,18 +149,14 @@ class BasePlotterPyQtGraph:
 
         # Create crosshair lines and text items once
         for plot_item in plot_items:
-            v_line = pg.InfiniteLine(
-                angle=90, movable=False, pen=pg.mkPen("w", width=1)
-            )
+            v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen("w", width=1))
             h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("w", width=1))
             plot_item.addItem(v_line, ignoreBounds=True)
             plot_item.addItem(h_line, ignoreBounds=True)
             v_lines.append(v_line)
             h_lines.append(h_line)
             # Add a cursor indicator (TextItem) to each plot
-            cursor_text = pg.TextItem(
-                "", anchor=(0, 1), color="k", fill=pg.mkBrush(255, 255, 255, 180)
-            )
+            cursor_text = pg.TextItem("", anchor=(0, 1), color="k", fill=pg.mkBrush(255, 255, 255, 180))
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
@@ -181,11 +177,7 @@ class BasePlotterPyQtGraph:
             nonlocal show_text
             show_text = True
             # Only update if we have a valid position
-            if (
-                last_active_plot_idx is not None
-                and last_x is not None
-                and last_y is not None
-            ):
+            if last_active_plot_idx is not None and last_x is not None and last_y is not None:
                 update_cursor_display(last_active_plot_idx, last_x, last_y)
 
         mouse_idle_timer.timeout.connect(enable_text_display)
@@ -332,9 +324,7 @@ class BasePlotterPyQtGraph:
         if label:
             # Add text label for the region
             text_item = pg.TextItem(label, anchor=(0.5, 0), color="white")
-            text_item.setPos(
-                (start_time + end_time) / 2, plot_item.viewRange()[1][1] * 0.9
-            )
+            text_item.setPos((start_time + end_time) / 2, plot_item.viewRange()[1][1] * 0.9)
             plot_item.addItem(text_item)
 
         return region
@@ -372,9 +362,7 @@ class BasePlotterPyQtGraph:
             The created plot data item
         """
         if color is None:
-            color = self.default_colors[
-                len(self.current_plot_items) % len(self.default_colors)
-            ]
+            color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
 
         pen = pg.mkPen(color, width=line_width)
 
@@ -419,9 +407,7 @@ class BasePlotterPyQtGraph:
             The created scatter plot item
         """
         if color is None:
-            color = self.default_colors[
-                len(self.current_plot_items) % len(self.default_colors)
-            ]
+            color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
 
         scatter = pg.ScatterPlotItem(
             x=x_data,
@@ -467,13 +453,9 @@ class BasePlotterPyQtGraph:
             The created error bar item
         """
         if color is None:
-            color = self.default_colors[
-                len(self.current_plot_items) % len(self.default_colors)
-            ]
+            color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
 
-        error_bars = pg.ErrorBarItem(
-            x=x_data, y=y_data, top=y_error, bottom=y_error, pen=pg.mkPen(color)
-        )
+        error_bars = pg.ErrorBarItem(x=x_data, y=y_data, top=y_error, bottom=y_error, pen=pg.mkPen(color))
 
         plot_item.addItem(error_bars)
         self.current_plot_items.append(error_bars)

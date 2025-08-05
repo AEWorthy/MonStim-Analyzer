@@ -66,10 +66,7 @@ def detect_format(path: Path) -> str:
                 return "v3h"
             if line.lower().startswith("file version"):
                 return "v3d"
-    raise ValueError(
-        f"Could not detect MonStim version for {path}. "
-        "Please ensure it is a valid MonStim CSV file."
-    )
+    raise ValueError(f"Could not detect MonStim version for {path}. " "Please ensure it is a valid MonStim CSV file.")
 
 
 def csv_to_store(
@@ -84,21 +81,15 @@ def csv_to_store(
     meta_dict: dict[str, Any]
     arr: np.ndarray
     meta_dict, arr = parse(csv_path)
-    meta_dict["session_id"] = output_fp.stem.split("-")[
-        0
-    ]  # Use the first part of the filename as session ID
-    meta_dict["recording_id"] = (
-        output_fp.stem.split("-")[1] if "-" in output_fp.stem else None
-    )
+    meta_dict["session_id"] = output_fp.stem.split("-")[0]  # Use the first part of the filename as session ID
+    meta_dict["recording_id"] = output_fp.stem.split("-")[1] if "-" in output_fp.stem else None
 
     # Add meta's data_version key
     meta_dict["data_version"] = DATA_VERSION  # Use the global DATA_VERSION
 
     h5_path = output_fp.with_suffix(".raw.h5")
     if h5_path.exists() and not overwrite_h5:
-        logging.warning(
-            f"HDF5 file {h5_path} already exists. Use 'overwrite=True' to replace it."
-        )
+        logging.warning(f"HDF5 file {h5_path} already exists. Use 'overwrite=True' to replace it.")
     else:
         if h5_path.exists() and overwrite_h5:
             logging.warning(f"HDF5 file {h5_path} already exists. Overwriting it.")
@@ -120,9 +111,7 @@ def csv_to_store(
     # Write meta JSON
     meta_path = output_fp.with_suffix(".meta.json")
     if meta_path.exists() and not overwrite_meta:
-        logging.warning(
-            f"Meta file {meta_path} already exists. Use 'overwrite_meta=True' to replace it."
-        )
+        logging.warning(f"Meta file {meta_path} already exists. Use 'overwrite_meta=True' to replace it.")
     else:
         if meta_path.exists() and overwrite_meta:
             logging.warning(f"Meta file {meta_path} already exists. Overwriting it.")
@@ -132,14 +121,10 @@ def csv_to_store(
     # Write annotation JSON
     annot_path = output_fp.with_suffix(".annot.json")
     if annot_path.exists() and not overwrite_annot:
-        logging.warning(
-            f"Annotation file {annot_path} already exists. Use 'overwrite_annot=True' to replace it."
-        )
+        logging.warning(f"Annotation file {annot_path} already exists. Use 'overwrite_annot=True' to replace it.")
     else:
         if annot_path.exists() and overwrite_annot:
-            logging.warning(
-                f"Annotation file {annot_path} already exists. Overwriting it."
-            )
+            logging.warning(f"Annotation file {annot_path} already exists. Overwriting it.")
         with annot_path.open("w") as f:
             annot = RecordingAnnot.create_empty()
             json.dump(asdict(annot), f, indent=2)
@@ -214,9 +199,7 @@ def import_experiment(
                         f.result()
                     except Exception:
                         csv_path, ds_name, sess_name = future_to_args[f]
-                        logging.error(
-                            f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}"
-                        )
+                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
                         logging.error(traceback.format_exc())
         else:
             for sess_name, paths in sess_map.items():
@@ -331,9 +314,7 @@ class MultiExptImportingThread(QThread):
                 output_path.mkdir(parents=True, exist_ok=True)
 
                 # Update status
-                self.status_update.emit(
-                    f"Importing experiment {i+1}/{self.total_experiments}: '{expt_name}'"
-                )
+                self.status_update.emit(f"Importing experiment {i+1}/{self.total_experiments}: '{expt_name}'")
 
                 try:
                     import_experiment(
@@ -367,10 +348,7 @@ class MultiExptImportingThread(QThread):
     def report_progress(self, experiment_index: int, experiment_progress: int) -> None:
         if not self._is_canceled:
             # Calculate overall progress across all experiments
-            overall_progress = int(
-                ((experiment_index * 100) + experiment_progress)
-                / self.total_experiments
-            )
+            overall_progress = int(((experiment_index * 100) + experiment_progress) / self.total_experiments)
             self.progress.emit(overall_progress)
 
     def cancel(self) -> None:

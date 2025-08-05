@@ -126,9 +126,7 @@ class MonstimGUI(QMainWindow):
     def init_ui(self):
         widgets = setup_main_layout(self)
         self.menu_bar: "MenuBar" = widgets["menu_bar"]
-        self.data_selection_widget: "DataSelectionWidget" = widgets[
-            "data_selection_widget"
-        ]
+        self.data_selection_widget: "DataSelectionWidget" = widgets["data_selection_widget"]
         self.reports_widget: "ReportsWidget" = widgets["reports_widget"]
         self.plot_pane: "PlotPane" = widgets["plot_pane"]
         self.plot_widget: "PlotWidget" = widgets["plot_widget"]
@@ -142,9 +140,7 @@ class MonstimGUI(QMainWindow):
         self.profile_selector_layout.setContentsMargins(8, 2, 8, 2)
         self.profile_selector_label = QLabel("Analysis Profile:")
         self.profile_selector_combo = QComboBox()
-        self.profile_selector_combo.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToContents
-        )
+        self.profile_selector_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.profile_selector_combo.setMinimumContentsLength(16)
         self.profile_selector_combo.setEditable(False)
         self.profile_selector_layout.addWidget(self.profile_selector_label)
@@ -164,13 +160,9 @@ class MonstimGUI(QMainWindow):
             logging.error("Left panel not found or does not have a layout.")
 
         self._populate_profile_selector()
-        self.profile_selector_combo.currentIndexChanged.connect(
-            self._on_profile_selector_changed
-        )
+        self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
 
-        self.status_bar.showMessage(
-            f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000
-        )
+        self.status_bar.showMessage(f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000)
 
     def _populate_profile_selector(self):
         self.profile_selector_combo.blockSignals(True)
@@ -186,18 +178,14 @@ class MonstimGUI(QMainWindow):
             self.profile_selector_combo.addItem(name, userData=path)
             desc = data.get("description", "")
             if desc:
-                self.profile_selector_combo.setItemData(
-                    idx, desc, role=Qt.ItemDataRole.ToolTipRole
-                )
+                self.profile_selector_combo.setItemData(idx, desc, role=Qt.ItemDataRole.ToolTipRole)
         self.profile_selector_combo.blockSignals(False)
         self.profile_selector_combo.setCurrentIndex(0)
         self._set_profile_selector_tooltip(0)
 
     def _set_profile_selector_tooltip(self, idx):
         # Set the tooltip for the whole combobox to the selected profile's description
-        tooltip = self.profile_selector_combo.itemData(
-            idx, role=Qt.ItemDataRole.ToolTipRole
-        )
+        tooltip = self.profile_selector_combo.itemData(idx, role=Qt.ItemDataRole.ToolTipRole)
         if tooltip:
             self.profile_selector_combo.setToolTip(tooltip)
         else:
@@ -240,14 +228,10 @@ class MonstimGUI(QMainWindow):
             )
         else:
             # Even when no experiment is loaded, ensure we can track profile changes
-            logging.info(
-                f"No experiment loaded, but profile selection saved: {profile_name}"
-            )
+            logging.info(f"No experiment loaded, but profile selection saved: {profile_name}")
 
         self.update_domain_configs(config)
-        self.status_bar.showMessage(
-            f"Profile applied: {self.profile_selector_combo.currentText()}", 4000
-        )
+        self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
 
     def refresh_profile_selector(self):
         # Store the current selected profile name
@@ -273,9 +257,7 @@ class MonstimGUI(QMainWindow):
 
         # Check if profile tracking is enabled
         if not app_state.should_track_analysis_profiles():
-            logging.info(
-                "Profile tracking is disabled - not restoring profile selection"
-            )
+            logging.info("Profile tracking is disabled - not restoring profile selection")
             return False
 
         last_profile = app_state.get_last_profile()
@@ -296,9 +278,7 @@ class MonstimGUI(QMainWindow):
                 logging.info(f"Successfully restored profile selection: {last_profile}")
                 return True
             else:
-                logging.warning(
-                    f"Profile '{last_profile}' not found in available profiles"
-                )
+                logging.warning(f"Profile '{last_profile}' not found in available profiles")
 
         logging.info("No valid profile to restore, using default")
         return False
@@ -344,9 +324,7 @@ class MonstimGUI(QMainWindow):
                 else:
                     logging.info("Session restoration was not possible")
             else:
-                logging.info(
-                    "Session restoration is disabled - not restoring experiment/dataset/session"
-                )
+                logging.info("Session restoration is disabled - not restoring experiment/dataset/session")
 
         except Exception as e:
             logging.error(f"Error during session restoration: {e}")
@@ -357,27 +335,21 @@ class MonstimGUI(QMainWindow):
     # Command functions
     def undo(self):
         try:
-            QApplication.setOverrideCursor(
-                Qt.CursorShape.WaitCursor
-            )  # Set cursor to busy
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             self.command_invoker.undo()
         finally:
             QApplication.restoreOverrideCursor()
 
     def redo(self):
         try:
-            QApplication.setOverrideCursor(
-                Qt.CursorShape.WaitCursor
-            )  # Set cursor to busy
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             self.command_invoker.redo()
         finally:
             QApplication.restoreOverrideCursor()
 
     def exclude_recording(self, recording_id: str):
         try:
-            QApplication.setOverrideCursor(
-                Qt.CursorShape.WaitCursor
-            )  # Set cursor to busy
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             command = ExcludeRecordingCommand(self, recording_id)
             self.command_invoker.execute(command)
         finally:
@@ -385,9 +357,7 @@ class MonstimGUI(QMainWindow):
 
     def restore_recording(self, recording_id: str):
         try:
-            QApplication.setOverrideCursor(
-                Qt.CursorShape.WaitCursor
-            )  # Set cursor to busy
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             command = RestoreRecordingCommand(self, recording_id)
             self.command_invoker.execute(command)
         finally:
@@ -395,9 +365,7 @@ class MonstimGUI(QMainWindow):
 
     def exclude_session(self):
         try:
-            QApplication.setOverrideCursor(
-                Qt.CursorShape.WaitCursor
-            )  # Set cursor to busy
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             command = ExcludeSessionCommand(self)
             self.command_invoker.execute(command)
         finally:
@@ -405,9 +373,7 @@ class MonstimGUI(QMainWindow):
 
     def exclude_dataset(self):
         try:
-            QApplication.setOverrideCursor(
-                Qt.CursorShape.WaitCursor
-            )  # Set cursor to busy
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
             command = ExcludeDatasetCommand(self)
             self.command_invoker.execute(command)
         finally:
@@ -473,9 +439,7 @@ class MonstimGUI(QMainWindow):
         match level:
             case "experiment":
                 if not self.current_experiment:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select an experiment first."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 emg_data = self.current_experiment
             case "dataset":
@@ -485,15 +449,11 @@ class MonstimGUI(QMainWindow):
                 emg_data = self.current_dataset
             case "session":
                 if not self.current_session:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select a session first."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
                 emg_data = self.current_session
             case _:
-                QMessageBox.warning(
-                    self, "Warning", "Invalid level for managing latency windows."
-                )
+                QMessageBox.warning(self, "Warning", "Invalid level for managing latency windows.")
                 return
 
         # Check if a latency windows dialog is already open and close it
@@ -511,9 +471,7 @@ class MonstimGUI(QMainWindow):
         match level:  # Check the level of the channel polarity inversion.
             case "experiment":
                 if not self.current_experiment:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select an experiment first."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 else:
                     dialog = InvertChannelPolarityDialog(self.current_experiment, self)
@@ -525,37 +483,25 @@ class MonstimGUI(QMainWindow):
                     dialog = InvertChannelPolarityDialog(self.current_dataset, self)
             case "session":
                 if not self.current_session:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select a session first."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
                 else:
                     dialog = InvertChannelPolarityDialog(self.current_session, self)
             case _:
-                QMessageBox.warning(
-                    self, "Warning", "Invalid level for inverting channel polarity."
-                )
+                QMessageBox.warning(self, "Warning", "Invalid level for inverting channel polarity.")
                 return
 
         try:
             if dialog.exec():  # Show the dialog and wait for the user's response
-                QApplication.setOverrideCursor(
-                    Qt.CursorShape.WaitCursor
-                )  # Set cursor to busy
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 channel_indexes_to_invert = dialog.get_selected_channel_indexes()
                 if not channel_indexes_to_invert:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select at least one channel to invert."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select at least one channel to invert.")
                     return
                 else:
-                    command = InvertChannelPolarityCommand(
-                        self, level, channel_indexes_to_invert
-                    )
+                    command = InvertChannelPolarityCommand(self, level, channel_indexes_to_invert)
                     self.command_invoker.execute(command)
-                    self.status_bar.showMessage(
-                        "Channel polarity inverted successfully.", 5000
-                    )
+                    self.status_bar.showMessage("Channel polarity inverted successfully.", 5000)
             else:
                 QMessageBox.warning(self, "Warning", "Please load a dataset first.")
         finally:
@@ -567,9 +513,7 @@ class MonstimGUI(QMainWindow):
         match level:  # Check the level of the channel name change and set the channel names accordingly.
             case "experiment":
                 if not self.current_experiment:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select an experiment first."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
                     return
                 else:
                     self.channel_names = self.current_experiment.channel_names
@@ -581,38 +525,28 @@ class MonstimGUI(QMainWindow):
                     self.channel_names = self.current_dataset.channel_names
             case "session":
                 if not self.current_session:
-                    QMessageBox.warning(
-                        self, "Warning", "Please select a session first."
-                    )
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
                     return
                 else:
                     self.channel_names = self.current_session.channel_names
             case _:
-                QMessageBox.warning(
-                    self, "Warning", "Invalid level for changing channel names."
-                )
+                QMessageBox.warning(self, "Warning", "Invalid level for changing channel names.")
                 return
 
         # Open dialog to change channel names
         dialog = ChangeChannelNamesDialog(self.channel_names, self)
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                QApplication.setOverrideCursor(
-                    Qt.CursorShape.WaitCursor
-                )  # Set cursor to busy
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)  # Set cursor to busy
                 new_names = dialog.get_new_names()
                 if new_names and any(old != new for old, new in new_names.items()):
                     # Only execute command if there are actual changes
                     command = ChangeChannelNamesCommand(self, level, new_names)
                     self.command_invoker.execute(command)
-                    self.status_bar.showMessage(
-                        "Channel names updated successfully.", 5000
-                    )  # Show message for 5 seconds
+                    self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
                     logging.debug("Channel names updated successfully.")
                 else:
-                    self.status_bar.showMessage(
-                        "No changes made to channel names.", 5000
-                    )  # Show message for 5 seconds
+                    self.status_bar.showMessage("No changes made to channel names.", 5000)  # Show message for 5 seconds
                     logging.debug("No changes made to channel names.")
         finally:
             QApplication.restoreOverrideCursor()
@@ -689,19 +623,11 @@ class MonstimGUI(QMainWindow):
             app_state.save_last_profile(self.profile_selector_combo.currentText())
 
             if self.current_experiment:
-                profile_name = (
-                    self.profile_selector_combo.currentText()
-                    if hasattr(self, "profile_selector_combo")
-                    else None
-                )
+                profile_name = self.profile_selector_combo.currentText() if hasattr(self, "profile_selector_combo") else None
                 app_state.save_current_session_state(
                     experiment_id=self.current_experiment.id,
-                    dataset_id=(
-                        self.current_dataset.id if self.current_dataset else None
-                    ),
-                    session_id=(
-                        self.current_session.id if self.current_session else None
-                    ),
+                    dataset_id=(self.current_dataset.id if self.current_dataset else None),
+                    session_id=(self.current_session.id if self.current_session else None),
                     profile_name=profile_name,
                 )
                 logging.info("Session state saved on application close")
@@ -712,9 +638,7 @@ class MonstimGUI(QMainWindow):
                     self,
                     "Unsaved Changes",
                     "You have unsaved changes. Do you want to save before closing?",
-                    QMessageBox.StandardButton.Save
-                    | QMessageBox.StandardButton.Discard
-                    | QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
                 )
 
                 if reply == QMessageBox.StandardButton.Save:

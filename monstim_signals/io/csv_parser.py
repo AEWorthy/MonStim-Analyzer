@@ -26,10 +26,7 @@ def detect_format(path: Path) -> str:
                 return "v3h"
             if line.lower().startswith("file version"):
                 return "v3d"
-    raise ValueError(
-        f"Could not detect MonStim version for {path}. "
-        "Please ensure it is a valid MonStim CSV file."
-    )
+    raise ValueError(f"Could not detect MonStim version for {path}. " "Please ensure it is a valid MonStim CSV file.")
 
 
 def parse(path: Path):
@@ -162,8 +159,7 @@ def parse_v3d(path: Path):
     # Set additional metadata
     meta["num_samples"] = int(data.shape[0])
     meta["emg_amp_gains"] = [
-        int(float(raw_meta[f"EMG amp gain ch {i}"]))
-        for i in range(1, int(float(meta["num_emg_channels"])) + 1)
+        int(float(raw_meta[f"EMG amp gain ch {i}"])) for i in range(1, int(float(meta["num_emg_channels"])) + 1)
     ]
     meta["primary_stim"] = 1  # default to channel 1 for v3d
 
@@ -222,76 +218,44 @@ def parse_v3h(path: Path):
                 peaks, _ = find_peaks(length_signal)
                 troughs, _ = find_peaks(-length_signal)
                 peak_vals = length_signal[peaks] if len(peaks) > 0 else np.array([])
-                trough_vals = (
-                    length_signal[troughs] if len(troughs) > 0 else np.array([])
-                )
+                trough_vals = length_signal[troughs] if len(troughs) > 0 else np.array([])
                 # Calculate deflections from baseline
                 peak_deflections = np.abs(peak_vals - baseline_mean)
                 trough_deflections = np.abs(trough_vals - baseline_mean)
                 if len(peak_deflections) > 0 or len(trough_deflections) > 0:
                     stim_v = float(
                         max(
-                            (
-                                np.median(peak_deflections)
-                                if len(peak_deflections) > 0
-                                else 0
-                            ),
-                            (
-                                np.median(trough_deflections)
-                                if len(trough_deflections) > 0
-                                else 0
-                            ),
+                            (np.median(peak_deflections) if len(peak_deflections) > 0 else 0),
+                            (np.median(trough_deflections) if len(trough_deflections) > 0 else 0),
                         )
                     )
                     # TODO: Fix this magic number
                     if stim_v < 0.002:  # if still too low, set to 0
                         stim_v = 0.0
-                        logging.debug(
-                            f"Motor Length cluster {i} extracted stim_v is too low, using 0"
-                        )
+                        logging.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
                     else:
-                        logging.info(
-                            f"Extracted stim_v for Motor Length cluster {i}: {stim_v}"
-                        )
+                        logging.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
                 else:
                     stim_v = 0.0
-                    logging.debug(
-                        f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v"
-                    )
+                    logging.debug(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
             except Exception as e:
                 # fallback: leave stim_v as 0 if any error
-                logging.critical(
-                    f"Failed to extract a stim_v for Motor Length channel data: {e}"
-                )
+                logging.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
                 pass
 
         clusters.append(
             StimCluster(
-                stim_delay=float(
-                    raw_meta[f"Stim specs cluster array {i}.Start Delay (ms)"]
-                ),
+                stim_delay=float(raw_meta[f"Stim specs cluster array {i}.Start Delay (ms)"]),
                 stim_duration=None,  # not provided in v3h format
                 stim_type=stim_type,
                 stim_v=stim_v,
-                stim_min_v=float(
-                    raw_meta[f"Stim specs cluster array {i}.Initial Stimulus ampl."]
-                ),
-                stim_max_v=float(
-                    raw_meta[f"Stim specs cluster array {i}.Maximum Stimulus"]
-                ),
+                stim_min_v=float(raw_meta[f"Stim specs cluster array {i}.Initial Stimulus ampl."]),
+                stim_max_v=float(raw_meta[f"Stim specs cluster array {i}.Maximum Stimulus"]),
                 pulse_shape=raw_meta[f"Stim specs cluster array {i}.Pulse Shape"],
-                num_pulses=int(
-                    raw_meta[f"Stim specs cluster array {i}.#Pulses in train"]
-                ),
-                pulse_period=float(
-                    raw_meta[f"Stim specs cluster array {i}.Total pulse period (ms)"]
-                ),
-                peak_duration=float(
-                    raw_meta[f"Stim specs cluster array {i}.Peak Level time (ms)"]
-                ),
-                ramp_duration=float(
-                    raw_meta[f"Stim specs cluster array {i}.Ramp/Rel. time (ms)"]
-                ),
+                num_pulses=int(raw_meta[f"Stim specs cluster array {i}.#Pulses in train"]),
+                pulse_period=float(raw_meta[f"Stim specs cluster array {i}.Total pulse period (ms)"]),
+                peak_duration=float(raw_meta[f"Stim specs cluster array {i}.Peak Level time (ms)"]),
+                ramp_duration=float(raw_meta[f"Stim specs cluster array {i}.Ramp/Rel. time (ms)"]),
             )
         )
     meta["stim_clusters"] = [asdict(c) for c in clusters]

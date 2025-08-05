@@ -18,9 +18,7 @@ CONSOLE_DEBUG_MODE = False  # Only relevant if not frozen
 
 
 def make_default_log_dir() -> str:
-    base = QStandardPaths.writableLocation(
-        QStandardPaths.StandardLocation.AppDataLocation
-    )
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
         base = os.getenv("APPDATA", r"C:\Users\%USERNAME%\AppData\Roaming")
     log_dir = os.path.join(base, "logs")
@@ -73,9 +71,7 @@ def setup_logging(debug: bool, log_dir: str | None = None) -> str:
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    parser.add_argument(
-        "--log-dir", metavar="DIR", help="Path to write log files (overrides default)"
-    )
+    parser.add_argument("--log-dir", metavar="DIR", help="Path to write log files (overrides default)")
     return parser.parse_args()
 
 
@@ -99,9 +95,7 @@ def main(is_frozen: bool) -> int:
         from monstim_gui.core.application_state import app_state
 
         app_state.reinitialize_settings()
-        logging.info(
-            f"QSettings initialized with org={app.organizationName()}, app={app.applicationName()}"
-        )
+        logging.info(f"QSettings initialized with org={app.organizationName()}, app={app.applicationName()}")
 
         if is_frozen:  # Display splash screen if running as a frozen executable.
             from monstim_gui.core.splash import SplashScreen

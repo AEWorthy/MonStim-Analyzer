@@ -20,10 +20,7 @@ class ConfigRepository:
             return result
         elif isinstance(reference_data, list) and isinstance(user_data, list):
             if reference_data:
-                return [
-                    ConfigRepository.coerce_types(v, reference_data[0])
-                    for v in user_data
-                ]
+                return [ConfigRepository.coerce_types(v, reference_data[0]) for v in user_data]
             else:
                 return user_data
         elif isinstance(reference_data, bool):

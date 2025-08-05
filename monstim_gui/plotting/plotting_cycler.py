@@ -83,9 +83,7 @@ class RecordingCyclerWidget(QGroupBox):
 
         self.layout = QGridLayout()  # type: QGridLayout
         self.layout.setSpacing(6)  # Increased spacing for better appearance
-        self.layout.setContentsMargins(
-            8, 8, 8, 8
-        )  # Increased padding to prevent border clipping
+        self.layout.setContentsMargins(8, 8, 8, 8)  # Increased padding to prevent border clipping
         self.setLayout(self.layout)
 
         self.prev_button = QPushButton("<--")
@@ -151,25 +149,16 @@ class RecordingCyclerWidget(QGroupBox):
         if self.recording_spinbox.value() - self.step_size.value() < 0:
             self.recording_spinbox.setValue(self.recording_spinbox.maximum())
         else:
-            self.recording_spinbox.setValue(
-                self.recording_spinbox.value() - self.step_size.value()
-            )
+            self.recording_spinbox.setValue(self.recording_spinbox.value() - self.step_size.value())
 
     def on_next(self):
-        if (
-            self.recording_spinbox.value() + self.step_size.value()
-            > self.recording_spinbox.maximum()
-        ):
+        if self.recording_spinbox.value() + self.step_size.value() > self.recording_spinbox.maximum():
             self.recording_spinbox.setValue(self.recording_spinbox.minimum())
         else:
-            self.recording_spinbox.setValue(
-                self.recording_spinbox.value() + self.step_size.value()
-            )
+            self.recording_spinbox.setValue(self.recording_spinbox.value() + self.step_size.value())
 
     def on_exclude(self):
-        selected_recording_id = self.main_gui.current_session.recordings[
-            self.recording_spinbox.value()
-        ].id
+        selected_recording_id = self.main_gui.current_session.recordings[self.recording_spinbox.value()].id
         if selected_recording_id in self.main_gui.current_session.excluded_recordings:
             self.exclude_button.setText("Exclude")
             self.main_gui.restore_recording(selected_recording_id)

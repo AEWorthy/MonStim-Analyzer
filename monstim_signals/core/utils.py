@@ -20,9 +20,7 @@ OUTPUT_PATH = "data"
 def to_camel_case(text: str) -> str:
     """Return *text* converted to ``camelCase``."""
     words = text.split()
-    camel_case_text = words[0].lower() + "".join(
-        word.capitalize() for word in words[1:]
-    )
+    camel_case_text = words[0].lower() + "".join(word.capitalize() for word in words[1:])
     return camel_case_text
 
 
@@ -116,9 +114,7 @@ def get_log_dir() -> str:
     if env_path and os.path.isdir(env_path):
         return env_path
 
-    base = QStandardPaths.writableLocation(
-        QStandardPaths.StandardLocation.AppDataLocation
-    )
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
         base = os.getenv("APPDATA", r"C:\\Users\\%USERNAME%\\AppData\\Roaming")
     log_dir = os.path.join(base, "logs")
@@ -163,9 +159,7 @@ def load_config(config_file=None):
     """
     if config_file is None:
         default_config_file = get_config_path()
-        user_config_file = os.path.join(
-            os.path.dirname(default_config_file), "config-user.yml"
-        )
+        user_config_file = os.path.join(os.path.dirname(default_config_file), "config-user.yml")
         # if it exists, get user config file
         if os.path.exists(user_config_file):
             config_file = user_config_file
@@ -182,6 +176,4 @@ class CustomYAMLLoader(yaml.SafeLoader):
         return tuple(self.construct_sequence(node))
 
 
-CustomYAMLLoader.add_constructor(
-    "tag:yaml.org,2002:python/tuple", CustomYAMLLoader.construct_python_tuple
-)
+CustomYAMLLoader.add_constructor("tag:yaml.org,2002:python/tuple", CustomYAMLLoader.construct_python_tuple)

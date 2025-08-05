@@ -4,7 +4,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIntValidator
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -16,8 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
-from monstim_gui.core.ui_scaling import ui_scaling
+from monstim_gui.core.responsive_widgets import ResponsiveComboBox
 from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
 
 from .plotting_cycler import RecordingCyclerWidget
@@ -49,12 +47,8 @@ class BasePlotOptions(QWidget):
         form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(
-            4
-        )  # Slightly increased vertical spacing for better readability
-        form.setRowWrapPolicy(
-            QFormLayout.RowWrapPolicy.DontWrapRows
-        )  # Keep everything on one row
+        form.setVerticalSpacing(4)  # Slightly increased vertical spacing for better readability
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)  # Keep everything on one row
         return form
 
     def create_options(self):
@@ -121,28 +115,20 @@ class ChannelSelectorWidget(QGroupBox):
 # EMG Options
 class EMGOptions(BasePlotOptions):
     def create_options(self):
-        ## Data type options box
+        # Data type options box
         form = self.create_form_layout()
 
         self.data_type_combo = ResponsiveComboBox()
-        self.data_type_combo.addItems(
-            ["filtered", "raw", "rectified_raw", "rectified_filtered"]
-        )
+        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # flags / legend / colormap
         self.all_windows_checkbox = QCheckBox()
-        self.all_windows_checkbox.setToolTip(
-            "If checked, all latency windows will be shown in the plot."
-        )
+        self.all_windows_checkbox.setToolTip("If checked, all latency windows will be shown in the plot.")
         self.latency_legend_checkbox = QCheckBox()
-        self.latency_legend_checkbox.setToolTip(
-            "If checked, the latency window legend will be shown in the plot."
-        )
+        self.latency_legend_checkbox.setToolTip("If checked, the latency window legend will be shown in the plot.")
         self.plot_colormap_checkbox = QCheckBox()
-        self.plot_colormap_checkbox.setToolTip(
-            "If checked, a colormap legend will be shown to the side of the plot."
-        )
+        self.plot_colormap_checkbox.setToolTip("If checked, a colormap legend will be shown to the side of the plot.")
         form.addRow("Show Flags:", self.all_windows_checkbox)
         self.all_windows_checkbox.setChecked(True)
         self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
@@ -152,9 +138,7 @@ class EMGOptions(BasePlotOptions):
         form.addRow("Show Colormap:", self.plot_colormap_checkbox)
         self.plot_colormap_checkbox.setChecked(True)
         self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip(
-            "If checked, an interactive crosshair cursor will be shown in the plot."
-        )
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         self.interactive_cursor_checkbox.setChecked(True)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
 
@@ -164,9 +148,7 @@ class EMGOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
@@ -210,32 +192,20 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.data_type_combo = ResponsiveComboBox()
-        self.data_type_combo.addItems(
-            ["filtered", "raw", "rectified_raw", "rectified_filtered"]
-        )
+        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # Create and add checkboxes
         self.all_windows_checkbox = QCheckBox()
-        self.all_windows_checkbox.setToolTip(
-            "If checked, all analysis windows will be shown in the plot."
-        )
+        self.all_windows_checkbox.setToolTip("If checked, all analysis windows will be shown in the plot.")
         self.latency_legend_checkbox = QCheckBox()
-        self.latency_legend_checkbox.setToolTip(
-            "If checked, a legend for the latency markers will be shown in the plot."
-        )
+        self.latency_legend_checkbox.setToolTip("If checked, a legend for the latency markers will be shown in the plot.")
         self.plot_colormap_checkbox = QCheckBox()
-        self.plot_colormap_checkbox.setToolTip(
-            "If checked, a colormap will be shown in the plot."
-        )
+        self.plot_colormap_checkbox.setToolTip("If checked, a colormap will be shown in the plot.")
         self.fixed_y_axis_checkbox = QCheckBox()
-        self.fixed_y_axis_checkbox.setToolTip(
-            "If checked, the y-axis will be fixed to a range of [-1, 1]."
-        )
+        self.fixed_y_axis_checkbox.setToolTip("If checked, the y-axis will be fixed to a range of [-1, 1].")
         self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip(
-            "If checked, an interactive crosshair cursor will be shown in the plot."
-        )
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         # Add checkboxes to form
         form.addRow("Show Flags:", self.all_windows_checkbox)
@@ -264,9 +234,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing and organization
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.recording_cycler)
@@ -317,9 +285,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(
-            ["rms", "average_rectified", "average_unrectified", "peak_to_trough"]
-        )
+        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
 
@@ -332,16 +298,12 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         self.relative_to_mmax_checkbox.setChecked(True)
 
         self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip(
-            "If checked, the plot legend will be shown."
-        )
+        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
 
         self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip(
-            "If checked, an interactive crosshair cursor will be shown in the plot."
-        )
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self.interactive_cursor_checkbox.setChecked(False)
 
@@ -351,9 +313,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
@@ -388,9 +348,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(
-            ["rms", "average_rectified", "average_unrectified", "peak_to_trough"]
-        )
+        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
 
@@ -400,9 +358,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
             "If checked, the reflex amplitudes will be calculated relative to the M-max value."
         )
         self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip(
-            "If checked, the plot legend will be shown."
-        )
+        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
         self.relative_to_mmax_checkbox.setChecked(True)
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
@@ -414,9 +370,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
@@ -448,9 +402,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(
-            ["rms", "average_rectified", "average_unrectified", "peak_to_trough"]
-        )
+        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
 
@@ -460,13 +412,9 @@ class AverageSessionReflexOptions(BasePlotOptions):
             "If checked, the reflex amplitudes will be calculated relative to the M-max value."
         )
         self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip(
-            "If checked, the plot legend will be shown."
-        )
+        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip(
-            "If checked, an interactive crosshair cursor will be shown in the plot."
-        )
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
         self.relative_to_mmax_checkbox.setChecked(False)  # Default to False
@@ -481,9 +429,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
@@ -518,17 +464,13 @@ class MMaxOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(
-            ["rms", "average_rectified", "average_unrectified", "peak_to_trough"]
-        )
+        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
 
         # Checkboxes
         self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip(
-            "If checked, an interactive crosshair cursor will be shown in the plot."
-        )
+        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         self.interactive_cursor_checkbox.setChecked(False)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
 
@@ -538,9 +480,7 @@ class MMaxOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
@@ -569,9 +509,7 @@ class MaxHReflexOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(
-            ["rms", "average_rectified", "average_unrectified", "peak_to_trough"]
-        )
+        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
 
@@ -606,9 +544,7 @@ class MaxHReflexOptions(BasePlotOptions):
         # Add widgets to layout with proper spacing
         options_widget = QWidget()
         options_widget.setLayout(form)
-        options_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
@@ -656,9 +592,7 @@ class SuspectedHReflexesOptions(BasePlotOptions):
         h_method_layout = QHBoxLayout()
         self.h_method_label = QLabel("H-reflex Calculation Method:")
         self.h_method_combo = ResponsiveComboBox()
-        self.h_method_combo.addItems(
-            ["rms", "average_rectified", "average_unrectified", "peak_to_trough"]
-        )
+        self.h_method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.h_method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         h_method_layout.addWidget(self.h_method_label)
         h_method_layout.addWidget(self.h_method_combo)

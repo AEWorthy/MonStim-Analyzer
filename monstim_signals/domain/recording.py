@@ -74,9 +74,7 @@ class Recording:
     # ──────────────────────────────────────────────────────────────────
     # 2) Raw vs. Filtered views of signal data
     # ──────────────────────────────────────────────────────────────────
-    def raw_view(
-        self, ch: int | slice | list[int] = slice(None), t: slice = slice(None)
-    ) -> np.ndarray:
+    def raw_view(self, ch: int | slice | list[int] = slice(None), t: slice = slice(None)) -> np.ndarray:
         """
         Return a NumPy view (or slice) of raw data [time, channels].
         If self._raw is an h5py.Dataset, this will not load the entire array,
@@ -101,9 +99,7 @@ class Recording:
             try:
                 self._raw.file.close()
             except Exception as exception:
-                logging.exception(
-                    f"Failed to close HDF5 file for recording '{self.id}': {exception}"
-                )
+                logging.exception(f"Failed to close HDF5 file for recording '{self.id}': {exception}")
                 pass
 
     # ──────────────────────────────────────────────────────────────────

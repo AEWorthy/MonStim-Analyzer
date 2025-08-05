@@ -46,9 +46,7 @@ class CircleDelegate(QStyledItemDelegate):
         is_completed = index.data(Qt.ItemDataRole.UserRole)
 
         # Draw circle indicating completion
-        circle_rect = QRect(
-            option.rect.right() - 18, option.rect.center().y() - 6, 12, 12
-        )
+        circle_rect = QRect(option.rect.right() - 18, option.rect.center().y() - 6, 12, 12)
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -73,15 +71,11 @@ class DataSelectionWidget(QGroupBox):
         form.setContentsMargins(8, 8, 8, 8)  # outer margins of the groupbox
 
         self.experiment_combo = QComboBox()
-        self.experiment_combo.currentIndexChanged.connect(
-            self._on_experiment_combo_changed
-        )
+        self.experiment_combo.currentIndexChanged.connect(self._on_experiment_combo_changed)
 
         self.dataset_combo = QComboBox()
         self.dataset_combo.currentIndexChanged.connect(self._on_dataset_combo_changed)
-        self.dataset_combo.setEnabled(
-            False
-        )  # Start disabled until experiment is loaded
+        self.dataset_combo.setEnabled(False)  # Start disabled until experiment is loaded
 
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
@@ -106,12 +100,8 @@ class DataSelectionWidget(QGroupBox):
             combo.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
         # Connect signals
-        self.dataset_combo.customContextMenuRequested.connect(
-            lambda pos: self.show_context_menu(pos, "dataset")
-        )
-        self.session_combo.customContextMenuRequested.connect(
-            lambda pos: self.show_context_menu(pos, "session")
-        )
+        self.dataset_combo.customContextMenuRequested.connect(lambda pos: self.show_context_menu(pos, "dataset"))
+        self.session_combo.customContextMenuRequested.connect(lambda pos: self.show_context_menu(pos, "session"))
 
     def show_context_menu(self, pos, level):
         current_obj = {
@@ -122,11 +112,7 @@ class DataSelectionWidget(QGroupBox):
         menu = QMenu(self)
 
         if current_obj:
-            action_text = (
-                "Mark as Incomplete"
-                if getattr(current_obj, "is_completed", False)
-                else "Mark as Complete"
-            )
+            action_text = "Mark as Incomplete" if getattr(current_obj, "is_completed", False) else "Mark as Complete"
             toggle_action = menu.addAction(action_text)
             exclude_action = menu.addAction(f"Exclude {level.capitalize()}")
         else:
@@ -163,9 +149,7 @@ class DataSelectionWidget(QGroupBox):
 
     def update_completion_status(self, level):
         """Update visual completion status for specified level"""
-        combo = {"dataset": self.dataset_combo, "session": self.session_combo}.get(
-            level
-        )
+        combo = {"dataset": self.dataset_combo, "session": self.session_combo}.get(level)
 
         if combo and combo.currentIndex() >= 0:
             current_obj = {
@@ -241,9 +225,7 @@ class DataSelectionWidget(QGroupBox):
 
         # Add placeholder item
         self.experiment_combo.addItem("-- Select an Experiment --")
-        self.experiment_combo.setItemData(
-            0, "Please select an experiment to load", role=Qt.ItemDataRole.ToolTipRole
-        )
+        self.experiment_combo.setItemData(0, "Please select an experiment to load", role=Qt.ItemDataRole.ToolTipRole)
 
         # Style the placeholder item to be grayed out/italic
         font = self.experiment_combo.font()
@@ -254,15 +236,11 @@ class DataSelectionWidget(QGroupBox):
             for expt_id in self.parent.expts_dict_keys:
                 self.experiment_combo.addItem(expt_id)
                 index = self.experiment_combo.count() - 1
-                self.experiment_combo.setItemData(
-                    index, expt_id, role=Qt.ItemDataRole.ToolTipRole
-                )
+                self.experiment_combo.setItemData(index, expt_id, role=Qt.ItemDataRole.ToolTipRole)
                 # Ensure regular items have normal font
                 normal_font = self.experiment_combo.font()
                 normal_font.setItalic(False)
-                self.experiment_combo.setItemData(
-                    index, normal_font, Qt.ItemDataRole.FontRole
-                )
+                self.experiment_combo.setItemData(index, normal_font, Qt.ItemDataRole.FontRole)
         else:
             logging.warning("Cannot update experiments combo. No experiments loaded.")
 
@@ -271,14 +249,8 @@ class DataSelectionWidget(QGroupBox):
         if self.parent.current_experiment:
             for dataset in self.parent.current_experiment.datasets:
                 self.dataset_combo.addItem(dataset.formatted_name)
-                index = (
-                    self.dataset_combo.count() - 1
-                    if self.dataset_combo.count() > 0
-                    else 0
-                )
-                self.dataset_combo.setItemData(
-                    index, dataset.formatted_name, role=Qt.ItemDataRole.ToolTipRole
-                )
+                index = self.dataset_combo.count() - 1 if self.dataset_combo.count() > 0 else 0
+                self.dataset_combo.setItemData(index, dataset.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.dataset_combo.setItemData(
                     index,
                     getattr(dataset, "is_completed", False),
@@ -287,9 +259,7 @@ class DataSelectionWidget(QGroupBox):
         else:
             # Add placeholder when no experiment is loaded
             self.dataset_combo.addItem("-- No Experiment Selected --")
-            self.dataset_combo.setItemData(
-                0, "Please select an experiment first", role=Qt.ItemDataRole.ToolTipRole
-            )
+            self.dataset_combo.setItemData(0, "Please select an experiment first", role=Qt.ItemDataRole.ToolTipRole)
             self.dataset_combo.setEnabled(False)
             logging.debug("Dataset combo cleared - no experiment loaded.")
 
@@ -298,14 +268,8 @@ class DataSelectionWidget(QGroupBox):
         if self.parent.current_dataset:
             for session in self.parent.current_dataset.sessions:
                 self.session_combo.addItem(session.formatted_name)
-                index = (
-                    self.session_combo.count() - 1
-                    if self.session_combo.count() > 0
-                    else 0
-                )
-                self.session_combo.setItemData(
-                    index, session.formatted_name, role=Qt.ItemDataRole.ToolTipRole
-                )
+                index = self.session_combo.count() - 1 if self.session_combo.count() > 0 else 0
+                self.session_combo.setItemData(index, session.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
                 self.session_combo.setItemData(
                     index,
                     getattr(session, "is_completed", False),
@@ -315,9 +279,7 @@ class DataSelectionWidget(QGroupBox):
         else:
             # Add placeholder when no dataset is loaded
             self.session_combo.addItem("-- No Dataset Selected --")
-            self.session_combo.setItemData(
-                0, "Please select a dataset first", role=Qt.ItemDataRole.ToolTipRole
-            )
+            self.session_combo.setItemData(0, "Please select a dataset first", role=Qt.ItemDataRole.ToolTipRole)
             self.session_combo.setEnabled(False)
             logging.debug("Session combo cleared - no dataset loaded.")
 
@@ -334,19 +296,14 @@ class DataSelectionWidget(QGroupBox):
         # Sync experiment combo (should rarely be needed)
         if self.parent.current_experiment and self.parent.expts_dict_keys:
             try:
-                exp_index = (
-                    self.parent.expts_dict_keys.index(self.parent.current_experiment.id)
-                    + 1
-                )  # +1 for placeholder
+                exp_index = self.parent.expts_dict_keys.index(self.parent.current_experiment.id) + 1  # +1 for placeholder
                 if self.experiment_combo.currentIndex() != exp_index:
                     self.experiment_combo.blockSignals(True)
                     self.experiment_combo.setCurrentIndex(exp_index)
                     self.experiment_combo.blockSignals(False)
             except ValueError:
                 # Experiment not found in list - set to placeholder
-                logging.warning(
-                    "Current experiment not found in combo list. Setting to placeholder."
-                )
+                logging.warning("Current experiment not found in combo list. Setting to placeholder.")
                 if self.experiment_combo.currentIndex() != 0:
                     self.experiment_combo.blockSignals(True)
                     self.experiment_combo.setCurrentIndex(0)  # Placeholder
@@ -355,9 +312,7 @@ class DataSelectionWidget(QGroupBox):
         # Sync dataset combo (should rarely be needed for recording operations)
         if self.parent.current_dataset and self.parent.current_experiment:
             try:
-                dataset_index = self.parent.current_experiment.datasets.index(
-                    self.parent.current_dataset
-                )
+                dataset_index = self.parent.current_experiment.datasets.index(self.parent.current_dataset)
                 if self.dataset_combo.currentIndex() != dataset_index:
                     self.dataset_combo.blockSignals(True)
                     self.dataset_combo.setCurrentIndex(dataset_index)
@@ -369,9 +324,7 @@ class DataSelectionWidget(QGroupBox):
         # Sync session combo (should rarely be needed for recording operations)
         if self.parent.current_session and self.parent.current_dataset:
             try:
-                session_index = self.parent.current_dataset.sessions.index(
-                    self.parent.current_session
-                )
+                session_index = self.parent.current_dataset.sessions.index(self.parent.current_session)
                 if self.session_combo.currentIndex() != session_index:
                     self.session_combo.blockSignals(True)
                     self.session_combo.setCurrentIndex(session_index)

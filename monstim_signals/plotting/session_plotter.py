@@ -54,12 +54,8 @@ class SessionPlotter(BasePlotter):
         from monstim_signals.domain.session import Session
 
         if not isinstance(session, Session):
-            raise TypeError(
-                "The session parameter must be an instance of the Session class."
-            )
-        self.emg_object: "Session" = (
-            session  # The EMGSession object to be imported containing the EMG data.
-        )
+            raise TypeError("The session parameter must be an instance of the Session class.")
+        self.emg_object: "Session" = session  # The EMGSession object to be imported containing the EMG data.
         super().__init__(self.emg_object)
         self.set_plot_defaults()
 
@@ -71,19 +67,19 @@ class SessionPlotter(BasePlotter):
         1. plot_emg: Plots EMG data for a specified time window.
             -Example:
                 plot_emg(channel_names=['Channel 1', 'Channel 2'], m_flags=True, h_flags=True, data_type='filtered')
-        
+
         2. plot_emg_suspectedH: Detects and plots session recordings with potential H-reflexes.
             -Example:
                 plot_emg_suspectedH(channel_names=['Channel 1', 'Channel 2'], h_threshold=0.3, plot_legend=True)
-        
+
         3. plot_reflex_curves: Plots overlayed M-response and H-reflex curves for each recorded channel.
             -Example:
                 plot_reflex_curves(channel_names=['Channel 1', 'Channel 2'], method='rms', relative_to_mmax=False, manual_mmax=None)
-       
+
         4. plot_m_curves_smoothened: Plots overlayed M-response and H-reflex curves for each recorded channel, smoothened using a Savitzky-Golay filter.
             -Example:
                 plot_m_curves_smoothened(channel_names=['Channel 1', 'Channel 2'], method='rms', relative_to_mmax=False, manual_mmax=None)
-        
+
         5. help: Displays this help text.
         ========================================================================
 
@@ -127,10 +123,7 @@ class SessionPlotter(BasePlotter):
             window_end_sample = self.emg_object.num_samples
 
         # Slice the time array for the time window
-        time_axis = (
-            time_values_ms[window_start_sample:window_end_sample]
-            - self.emg_object.stim_start
-        )
+        time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
         return time_axis, window_start_sample, window_end_sample
 
     def get_emg_recordings(self, data_type, original=False):
@@ -181,9 +174,7 @@ class SessionPlotter(BasePlotter):
         # Create a colormap and normalize stimulus voltage
         colormap = plt.get_cmap(cmap)
         if norm is None:
-            logging.warning(
-                "Normalization object not provided. Using default normalization."
-            )
+            logging.warning("Normalization object not provided. Using default normalization.")
             norm = plt.Normalize(
                 vmin=self.emg_object.stimulus_voltages[0],
                 vmax=self.emg_object.stimulus_voltages[-1],
@@ -213,15 +204,9 @@ class SessionPlotter(BasePlotter):
                 start_exists = end_exists = False
                 for line in ax.lines:
                     if isinstance(line, Line2D):
-                        if (
-                            line.get_xdata()[0] == window.start_times[channel_index]
-                            and line.get_color() == window.color
-                        ):
+                        if line.get_xdata()[0] == window.start_times[channel_index] and line.get_color() == window.color:
                             start_exists = True
-                        elif (
-                            line.get_xdata()[0] == window.end_times[channel_index]
-                            and line.get_color() == window.color
-                        ):
+                        elif line.get_xdata()[0] == window.end_times[channel_index] and line.get_color() == window.color:
                             end_exists = True
                         if start_exists and end_exists:
                             break
@@ -326,13 +311,9 @@ class SessionPlotter(BasePlotter):
             num_channels = len(channel_indices)
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas, figsizes="large"
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes="large")
         legend_elements = (
-            [window.get_legend_element() for window in self.emg_object.latency_windows]
-            if plot_latency_windows
-            else []
+            [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         )
         emg_recordings = self.get_emg_recordings(data_type)
 
@@ -358,11 +339,7 @@ class SessionPlotter(BasePlotter):
                 if channel_index not in channel_indices:
                     continue
 
-                current_ax = (
-                    ax
-                    if num_channels == 1
-                    else axes[channel_indices.index(channel_index)]
-                )
+                current_ax = ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
 
                 # Plot EMG data
                 self.plot_channel_data(
@@ -385,9 +362,7 @@ class SessionPlotter(BasePlotter):
                 raw_data_dict["time_point"].extend(time_axis)
 
                 # Add each individual EMG value for the current channel
-                raw_data_dict["amplitude_mV"].extend(
-                    channel_data[window_start_sample:window_end_sample]
-                )
+                raw_data_dict["amplitude_mV"].extend(channel_data[window_start_sample:window_end_sample])
 
         # Sanity check to ensure all lists in the dictionary are of the same length
         lengths = [len(lst) for lst in raw_data_dict.values()]
@@ -422,7 +397,7 @@ class SessionPlotter(BasePlotter):
         )
         return raw_data_df
 
-    ###### Likely to find errors in code below this point, as it was not tested.
+    # ------- Likely to find errors in code below this point, as it was not tested.
     def plot_singleEMG(
         self,
         channel_indices: List[int] = None,
@@ -465,13 +440,9 @@ class SessionPlotter(BasePlotter):
         }
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas, figsizes="large"
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes="large")
         legend_elements = (
-            [window.get_legend_element() for window in self.emg_object.latency_windows]
-            if plot_latency_windows
-            else []
+            [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         )
         emg_recordings = self.get_emg_recordings(data_type)
 
@@ -481,12 +452,8 @@ class SessionPlotter(BasePlotter):
             for recording in emg_recordings:
                 # recording.T returns channel data in the expected order (channels as rows, time points as columns).
                 for channel_data in recording.T:
-                    max_y.append(
-                        np.max(channel_data[window_start_sample:window_end_sample])
-                    )
-                    min_y.append(
-                        np.min(channel_data[window_start_sample:window_end_sample])
-                    )
+                    max_y.append(np.max(channel_data[window_start_sample:window_end_sample]))
+                    min_y.append(np.min(channel_data[window_start_sample:window_end_sample]))
             y_max = max(max_y)
             y_min = min(min_y)
             y_range = y_max - y_min
@@ -494,9 +461,7 @@ class SessionPlotter(BasePlotter):
             y_min -= 0.01 * y_range
 
         if recording_index < 0 or recording_index >= len(emg_recordings):
-            raise ValueError(
-                f"Invalid recording index. Must be between 0 and {len(emg_recordings) - 1}"
-            )
+            raise ValueError(f"Invalid recording index. Must be between 0 and {len(emg_recordings) - 1}")
 
         recording = emg_recordings[recording_index]
         stimulus_v = self.emg_object.stimulus_voltages[recording_index]
@@ -505,9 +470,7 @@ class SessionPlotter(BasePlotter):
             if channel_index not in channel_indices:
                 continue
 
-            current_ax = (
-                ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
-            )
+            current_ax = ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
 
             self.plot_channel_data(
                 current_ax,
@@ -527,9 +490,7 @@ class SessionPlotter(BasePlotter):
             raw_data_dict["time_point"].extend(time_axis)
 
             # Add each individual EMG value for the current channel
-            raw_data_dict["amplitude_mV"].extend(
-                channel_data[window_start_sample:window_end_sample]
-            )
+            raw_data_dict["amplitude_mV"].extend(channel_data[window_start_sample:window_end_sample])
 
             if fixed_y_axis:
                 current_ax.set_ylim(y_min, y_max)
@@ -555,9 +516,7 @@ class SessionPlotter(BasePlotter):
 
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
-        raw_data_df.set_index(
-            ["channel_index", "stimulus_V", "time_point"], inplace=True
-        )
+        raw_data_df.set_index(["channel_index", "stimulus_V", "time_point"], inplace=True)
         return raw_data_df
 
     def plot_emg_thresholded(
@@ -593,24 +552,16 @@ class SessionPlotter(BasePlotter):
             num_channels = len(channel_indices)
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas, figsizes="large"
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes="large")
         # legend_elements = [window.get_legend_element() for window in self.emg_object.latency_windows] if plot_latency_windows else []
         emg_recordings = self.get_emg_recordings("filtered")
 
         latency_window_oi = next(
-            (
-                window
-                for window in self.emg_object.latency_windows
-                if window.name == latency_window_oi_name
-            ),
+            (window for window in self.emg_object.latency_windows if window.name == latency_window_oi_name),
             None,
         )
         if latency_window_oi is None:
-            raise UnableToPlotError(
-                f"No latency window named '{latency_window_oi_name}' found in the session."
-            )
+            raise UnableToPlotError(f"No latency window named '{latency_window_oi_name}' found in the session.")
 
         # Plot the EMG arrays for each channel, only for the first 10ms
         for rec_idx, recording in enumerate(emg_recordings):
@@ -618,23 +569,15 @@ class SessionPlotter(BasePlotter):
             for channel_index, channel_data in enumerate(recording.T):
                 if channel_index not in channel_indices:
                     continue
-                current_ax = (
-                    ax
-                    if num_channels == 1
-                    else axes[channel_indices.index(channel_index)]
-                )
+                current_ax = ax if num_channels == 1 else axes[channel_indices.index(channel_index)]
                 latency_window_oi_amplitude = transform.calculate_emg_amplitude(
                     channel_data,
-                    latency_window_oi.start_times[channel_index]
-                    + self.emg_object.stim_start,
-                    latency_window_oi.end_times[channel_index]
-                    + self.emg_object.stim_start,
+                    latency_window_oi.start_times[channel_index] + self.emg_object.stim_start,
+                    latency_window_oi.end_times[channel_index] + self.emg_object.stim_start,
                     self.emg_object.scan_rate,
                     method=method,
                 )
-                if (
-                    latency_window_oi_amplitude > emg_threshold_v
-                ):  # Check EMG amplitude within H-reflex window
+                if latency_window_oi_amplitude > emg_threshold_v:  # Check EMG amplitude within H-reflex window
                     self.plot_channel_data(
                         current_ax,
                         time_axis,
@@ -645,9 +588,7 @@ class SessionPlotter(BasePlotter):
                         channel_index,
                     )
                     if plot_latency_windows:
-                        self.plot_latency_windows(
-                            current_ax, all_flags=False, channel_index=channel_index
-                        )
+                        self.plot_latency_windows(current_ax, all_flags=False, channel_index=channel_index)
                     if plot_legend:
                         current_ax.legend()
 
@@ -656,9 +597,7 @@ class SessionPlotter(BasePlotter):
         x_title = "Time (ms)"
         y_title = "EMG (mV)"
 
-        self.set_fig_labels_and_legends(
-            fig, channel_indices, sup_title, x_title, y_title, plot_legend=False
-        )
+        self.set_fig_labels_and_legends(fig, channel_indices, sup_title, x_title, y_title, plot_legend=False)
         self.display_plot(canvas)
 
     def plot_suspectedH(
@@ -715,9 +654,7 @@ class SessionPlotter(BasePlotter):
 
         channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas, figsizes="small"
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes="small")
 
         emg_recordings = self.get_emg_recordings("filtered")
 
@@ -745,12 +682,8 @@ class SessionPlotter(BasePlotter):
                 try:
                     m_wave_amplitude = transform.calculate_emg_amplitude(
                         channel_data,
-                        self.emg_object.m_start[channel_index]
-                        + self.emg_object.stim_start,
-                        (
-                            self.emg_object.m_start[channel_index]
-                            + self.emg_object.m_duration[channel_index]
-                        )
+                        self.emg_object.m_start[channel_index] + self.emg_object.stim_start,
+                        (self.emg_object.m_start[channel_index] + self.emg_object.m_duration[channel_index])
                         + self.emg_object.stim_start,
                         self.emg_object.scan_rate,
                         method=method,
@@ -810,9 +743,7 @@ class SessionPlotter(BasePlotter):
 
                 ax.set_xticklabels(["M-response"])
                 ax.set_title(f"{channel_names[0]}")
-                ax.set_xlim(
-                    m_x - 1, m_x + 1.5
-                )  # Set x-axis limits for each subplot to better center data points.
+                ax.set_xlim(m_x - 1, m_x + 1.5)  # Set x-axis limits for each subplot to better center data points.
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
                 axes[channel_index].plot(
@@ -898,9 +829,7 @@ class SessionPlotter(BasePlotter):
 
         channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
 
         raw_data_dict = {
             "channel_index": [],
@@ -915,12 +844,8 @@ class SessionPlotter(BasePlotter):
                 continue
             try:
                 stimulus_voltages = self.emg_object.stimulus_voltages
-                m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(
-                    method=method, channel_index=channel_index
-                )
-                h_wave_amplitudes = self.emg_object.get_h_wave_amplitudes(
-                    method=method, channel_index=channel_index
-                )
+                m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
+                h_wave_amplitudes = self.emg_object.get_h_wave_amplitudes(method=method, channel_index=channel_index)
             except ValueError:
                 raise UnableToPlotError(
                     f"The method {method} is not supported. Please use 'rms', 'average_rectified', 'average_unrectified', or 'peak_to_trough'."
@@ -932,29 +857,17 @@ class SessionPlotter(BasePlotter):
                     m_max = manual_mmax[channel_index]
                 else:
                     try:
-                        m_max = self.emg_object.get_m_max(
-                            method=method, channel_index=channel_index
-                        )
+                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
                     except transform.NoCalculableMmaxError:
-                        raise UnableToPlotError(
-                            f"M-max could not be calculated for channel {channel_index}."
-                        )
+                        raise UnableToPlotError(f"M-max could not be calculated for channel {channel_index}.")
                 try:
-                    m_wave_amplitudes = [
-                        amplitude / m_max for amplitude in m_wave_amplitudes
-                    ]
-                    h_wave_amplitudes = [
-                        amplitude / m_max for amplitude in h_wave_amplitudes
-                    ]
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_wave_amplitudes = [amplitude / m_max for amplitude in h_wave_amplitudes]
                 except ZeroDivisionError:
-                    raise UnableToPlotError(
-                        f"M-max for channel {channel_index} is 0. Cannot divide by 0."
-                    )
+                    raise UnableToPlotError(f"M-max for channel {channel_index} is 0. Cannot divide by 0.")
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
-            raw_data_dict["channel_index"].extend(
-                [channel_index] * len(stimulus_voltages)
-            )
+            raw_data_dict["channel_index"].extend([channel_index] * len(stimulus_voltages))
             raw_data_dict["stimulus_V"].extend(stimulus_voltages)
             raw_data_dict["m_wave_amplitudes"].extend(m_wave_amplitudes)
             raw_data_dict["h_wave_amplitudes"].extend(h_wave_amplitudes)
@@ -1047,21 +960,15 @@ class SessionPlotter(BasePlotter):
 
         channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
 
         # Plot the M-wave and H-response amplitudes for each channel
         for channel_index in range(self.emg_object.num_channels):
             if channel_index not in channel_indices:
                 continue
             try:
-                m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(
-                    method=method, channel_index=channel_index
-                )
-                h_response_amplitudes = self.emg_object.get_h_wave_amplitudes(
-                    method=method, channel_index=channel_index
-                )
+                m_wave_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
+                h_response_amplitudes = self.emg_object.get_h_wave_amplitudes(method=method, channel_index=channel_index)
                 stimulus_voltages = self.emg_object.stimulus_voltages
             except ValueError:
                 logging.warning(
@@ -1074,20 +981,12 @@ class SessionPlotter(BasePlotter):
                 if manual_mmax is not None:
                     m_max = manual_mmax[channel_index]
                 else:
-                    m_max = self.emg_object.get_m_max(
-                        method=method, channel_index=channel_index
-                    )
+                    m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
                 try:
-                    m_wave_amplitudes = [
-                        amplitude / m_max for amplitude in m_wave_amplitudes
-                    ]
-                    h_response_amplitudes = [
-                        amplitude / m_max for amplitude in h_response_amplitudes
-                    ]
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
                 except ZeroDivisionError:
-                    raise UnableToPlotError(
-                        f"M-max for channel {channel_index} is 0. Cannot divide by 0."
-                    )
+                    raise UnableToPlotError(f"M-max for channel {channel_index} is 0. Cannot divide by 0.")
 
             # Smoothen the data
             m_wave_amplitudes = transform.savgol_filter_y(m_wave_amplitudes)

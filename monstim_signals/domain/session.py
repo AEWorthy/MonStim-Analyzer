@@ -19,9 +19,7 @@ from monstim_signals.transform import (
 )
 
 if TYPE_CHECKING:
-    from monstim_signals.core import SessionAnnot
     from monstim_signals.domain.dataset import Dataset
-    from monstim_signals.domain.recording import Recording
     from monstim_signals.io.repositories import SessionRepository
 
 
@@ -82,35 +80,23 @@ class Session:
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
         first_meta = self.recordings[0].meta
-        self.formatted_name = (
-            self.id + "_" + first_meta.recording_id
-        )  # e.g., "AA00_0000"
+        self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
         self.scan_rate = first_meta.scan_rate  # Hz
         self.num_samples = first_meta.num_samples  # samples/channel
         self.num_channels = first_meta.num_channels  # number of channels
-        self._channel_types: List[str] = (
-            first_meta.channel_types.copy()
-        )  # list of channel types
+        self._channel_types: List[str] = first_meta.channel_types.copy()  # list of channel types
 
         # Stimulus parameters
-        self.stim_clusters: List[StimCluster] = (
-            first_meta.stim_clusters.copy()
-        )  # list of StimCluster objects
-        self.primary_stim: StimCluster = getattr(
-            first_meta, "primary_stim", None
-        )  # the primary StimCluster for this session
+        self.stim_clusters: List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
+        self.primary_stim: StimCluster = getattr(first_meta, "primary_stim", None)  # the primary StimCluster for this session
         if self.primary_stim is None:
             logging.warning(
                 f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster."
             )
             self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
             if self.primary_stim is None:
-                logging.error(
-                    f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus."
-                )
-                raise ValueError(
-                    f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus."
-                )
+                logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+                raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
         self.pre_stim_acquired = first_meta.pre_stim_acquired
         self.post_stim_acquired = first_meta.post_stim_acquired
         self.stim_delay = self.primary_stim.stim_delay  # in ms, delay
@@ -121,9 +107,7 @@ class Session:
         self.recording_interval: float = getattr(
             first_meta, "recording_interval", None
         )  # in seconds, time between recordings (if applicable)
-        self.emg_amp_gains: List[int] = getattr(
-            first_meta, "emg_amp_gains", None
-        )  # default to 1000 if not specified
+        self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
 
     def _initialize_annotations(self):
         # Check in case of empty list annot
@@ -135,29 +119,19 @@ class Session:
             )
             self.annot.channels = [
                 SignalChannel(
-                    name=(
-                        self.default_channel_names[i]
-                        if i < len(self.default_channel_names)
-                        else f"Channel {i+1}"
-                    ),
+                    name=(self.default_channel_names[i] if i < len(self.default_channel_names) else f"Channel {i+1}"),
                     invert=False,
                     type_override=None,
                 )
                 for i in range(self.num_channels)
             ]
-        self.channel_names = [
-            self.annot.channels[i].name for i in range(self.num_channels)
-        ]
-        self.channel_units = [
-            self.annot.channels[i].unit for i in range(self.num_channels)
-        ]
+        self.channel_names = [self.annot.channels[i].name for i in range(self.num_channels)]
+        self.channel_units = [self.annot.channels[i].unit for i in range(self.num_channels)]
         self.channel_types = [
             (
                 self.annot.channels[i].type_override
                 if self.annot.channels[i].type_override is not None
-                else (
-                    self._channel_types[i] if i < len(self._channel_types) else "SIGNAL"
-                )
+                else (self._channel_types[i] if i < len(self._channel_types) else "SIGNAL")
             )
             for i in range(self.num_channels)
         ]
@@ -244,9 +218,7 @@ class Session:
 
     def remove_latency_window(self, name: str) -> None:
         """Remove a latency window by name."""
-        self.annot.latency_windows = [
-            w for w in self.annot.latency_windows if w.name != name
-        ]
+        self.annot.latency_windows = [w for w in self.annot.latency_windows if w.name != name]
         self.update_latency_window_parameters()
         if self.repo is not None:
             self.repo.save(self)
@@ -275,11 +247,7 @@ class Session:
         Return a list of active recordings in the session.
         This filters out any recordings that are marked as excluded in the session annotations.
         """
-        return [
-            rec
-            for rec in self._all_recordings
-            if rec.id not in self.excluded_recordings
-        ]
+        return [rec for rec in self._all_recordings if rec.id not in self.excluded_recordings]
 
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
@@ -327,9 +295,7 @@ class Session:
                 if channel_type in ("force", "length"):
                     # Apply specific processing for force and length channels
                     # TODO: Implement specific filtering for force and length channels if needed
-                    filtered = correct_emg_to_baseline(
-                        channel_data, self.scan_rate, self.stim_delay
-                    )
+                    filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
                 elif channel_type in ("emg",):
                     # Apply specific processing for EMG channels
                     filtered = butter_bandpass_filter(
@@ -340,9 +306,7 @@ class Session:
                         order=bf_args["order"],
                     )
                 else:
-                    logging.warning(
-                        f"No specific processing for channel type: {channel_type}"
-                    )
+                    logging.warning(f"No specific processing for channel type: {channel_type}")
                     filtered = channel_data
 
                 if self.annot.channels[ch].invert:
@@ -363,9 +327,7 @@ class Session:
 
             # Get results in the same order as the original recordings
             for future in ordered_futures:
-                filtered_array = (
-                    future.result()
-                )  # this blocks until that recording is done
+                filtered_array = future.result()  # this blocks until that recording is done
                 filtered_recordings.append(filtered_array)
 
         return filtered_recordings
@@ -407,19 +369,13 @@ class Session:
         for rec in self.recordings:
             for channel_index in range(self.num_channels):
                 try:  # Check if the channel has a valid M-max amplitude.
-                    channel_mmax = self.get_m_max(
-                        self.default_method, channel_index, return_mmax_stim_range=False
-                    )
+                    channel_mmax = self.get_m_max(self.default_method, channel_index, return_mmax_stim_range=False)
                     results.append(channel_mmax)
                 except NoCalculableMmaxError:
-                    logging.info(
-                        f"Channel {channel_index} does not have a valid M-max amplitude."
-                    )
+                    logging.info(f"Channel {channel_index} does not have a valid M-max amplitude.")
                     results.append(None)
                 except ValueError as e:
-                    logging.error(
-                        f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}"
-                    )
+                    logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
                     results.append(None)
         return results
 
@@ -537,9 +493,7 @@ class Session:
             session.plot(plot_type='reflexCurves')
         """
         # Call the appropriate plotting method from the plotter object
-        raw_data = getattr(
-            self.plotter, f'plot_{"emg" if not plot_type else plot_type}'
-        )(**kwargs)
+        raw_data = getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
         return raw_data
 
     def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
@@ -562,9 +516,7 @@ class Session:
                 return_mmax_stim_range=True,
             )
         else:
-            return get_avg_mmax(
-                self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args
-            )
+            return get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
 
     def get_m_wave_amplitudes(self, method, channel_index):
         """Return a list of M-wave amplitudes for each recording."""
@@ -607,9 +559,7 @@ class Session:
         ]
         return h_wave_amplitudes
 
-    def get_lw_reflex_amplitudes(
-        self, method: str, channel_index: int, window: str | LatencyWindow
-    ) -> np.ndarray:
+    def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
         """
         Returns the reflex amplitudes for a specific latency window across all sessions in the dataset.
 
@@ -650,15 +600,11 @@ class Session:
                 if 0 <= i < self.num_channels:
                     #
                     self.annot.channels[i].name = new_name
-                    logging.info(
-                        f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}."
-                    )
+                    logging.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
                 else:
                     logging.warning(f"Channel index {i} out of range for renaming.")
             else:
-                logging.warning(
-                    f"Channel '{old_name}' not found in session {self.id}. No action taken."
-                )
+                logging.warning(f"Channel '{old_name}' not found in session {self.id}. No action taken.")
         # Optionally update cached names and save
         self.channel_names = [ch.name for ch in self.annot.channels]
         if self.repo is not None:
@@ -699,17 +645,13 @@ class Session:
                     self.annot.excluded_recordings.remove(recording_id)
                     break
             else:
-                logging.warning(
-                    f"Recording {recording_id} not found in session {self.id}."
-                )
+                logging.warning(f"Recording {recording_id} not found in session {self.id}.")
                 return
             self.reset_all_caches()
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(
-                f"Recording {recording_id} is not excluded from session {self.id}. No action taken."
-            )
+            logging.warning(f"Recording {recording_id} is not excluded from session {self.id}. No action taken.")
 
     def restore_recording(self, recording_id: str):
         """Alias for :meth:`include_recording` for GUI commands."""
@@ -727,18 +669,14 @@ class Session:
                     self.annot.excluded_recordings.append(recording_id)
                     break
             else:
-                logging.warning(
-                    f"Recording {recording_id} not found in session {self.id}."
-                )
+                logging.warning(f"Recording {recording_id} not found in session {self.id}.")
                 return
 
             self.reset_all_caches()
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(
-                f"Recording {recording_id} is already excluded in session {self.id}."
-            )
+            logging.warning(f"Recording {recording_id} is already excluded in session {self.id}.")
 
         if not self.recordings:
             # If no recordings remain, mark the session and inform parent dataset
@@ -799,9 +737,7 @@ class Session:
                 self.initUI()
 
             def initUI(self):
-                self.setWindowTitle(
-                    f"Update Reflex Window Settings: Session {self.parent.session_id}"
-                )
+                self.setWindowTitle(f"Update Reflex Window Settings: Session {self.parent.session_id}")
                 layout = QVBoxLayout()
 
                 duration_layout = QHBoxLayout()
@@ -842,9 +778,7 @@ class Session:
                     m_duration = float(self.m_duration_entry.text())
                     h_duration = float(self.h_duration_entry.text())
                 except ValueError:
-                    logging.error(
-                        "Invalid input for durations. Please enter valid numbers."
-                    )
+                    logging.error("Invalid input for durations. Please enter valid numbers.")
                     return
                 m_start = []
                 h_start = []
@@ -857,9 +791,7 @@ class Session:
 
                 # Update the reflex windows in the parent object based on the new windows.
                 try:
-                    self.parent.change_reflex_latency_windows(
-                        m_start, m_duration, h_start, h_duration
-                    )
+                    self.parent.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
                     self.parent.reset_all_caches()
                 except Exception as e:
                     logging.error(
@@ -870,9 +802,7 @@ class Session:
 
                 self.close()
 
-        app = (
-            QApplication.instance()
-        )  # Check if there's an existing QApplication instance
+        app = QApplication.instance()  # Check if there's an existing QApplication instance
         if not app:
             app = QApplication(sys.argv)
             window = ReflexSettingsDialog(self)
@@ -930,9 +860,7 @@ class Session:
         print(self.m_max)
         for i, channel_name in enumerate(self.channel_names):
             try:
-                channel_m_max = self.get_m_max(
-                    self.default_method, i, return_mmax_stim_range=False
-                )
+                channel_m_max = self.get_m_max(self.default_method, i, return_mmax_stim_range=False)
                 line = f"- {channel_name}: M-max amplitude ({self.default_method}) = {channel_m_max:.2f} V"
                 report.append(line)
             except TypeError:

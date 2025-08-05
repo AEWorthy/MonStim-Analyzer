@@ -42,9 +42,7 @@ class ReportsWidget(QGroupBox):
             btn.clicked.connect(callback)
 
             # 1) make it expand to fill whatever cell size you're given
-            btn.setSizePolicy(
-                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-            )
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
             row = idx // N_COLS
             col = idx % N_COLS
@@ -55,6 +53,4 @@ class ReportsWidget(QGroupBox):
             self.layout.setColumnStretch(c, 1)
 
         # 3) pin the whole grid at the top and center horizontally
-        self.layout.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
-        )
+        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)

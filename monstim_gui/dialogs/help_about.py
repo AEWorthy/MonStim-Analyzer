@@ -55,9 +55,7 @@ class LatexHelpWindow(QWidget):
         html_content = self.markdown_to_html(markdown_content)
 
         # Get the path to your local MathJax installation
-        mathjax_path = os.path.abspath(
-            os.path.join(get_source_path(), "mathjax", "es5", "tex-mml-chtml.js")
-        )
+        mathjax_path = os.path.abspath(os.path.join(get_source_path(), "mathjax", "es5", "tex-mml-chtml.js"))
 
         # Full HTML content
         full_html = f"""
@@ -158,9 +156,7 @@ class LatexHelpWindow(QWidget):
         """
         )
         bridge_script.setWorldId(QWebEngineScript.ScriptWorldId.ApplicationWorld)
-        bridge_script.setInjectionPoint(
-            QWebEngineScript.InjectionPoint.DocumentCreation
-        )
+        bridge_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
         bridge_script.setRunsOnSubFrames(False)
         self.page.scripts().insert(bridge_script)
 
@@ -238,9 +234,7 @@ class AboutDialog(QWidget):
 
         copyright = QLabel(SPLASH_INFO["copyright"])
         copyright.setStyleSheet("color: #999999;")
-        copyright.setAlignment(
-            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom
-        )
+        copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
         layout.addWidget(copyright)
 
         self.setLayout(layout)

@@ -34,9 +34,7 @@ def test_csv_importer(overwrite_annot: bool = False):
         ex = ex or ds  # If no experiment name, use dataset name
 
         # Store the CSV path in a nested dictionary structure
-        experiments.setdefault(ex, {}).setdefault(ds, {}).setdefault(sess, []).append(
-            csv_path
-        )
+        experiments.setdefault(ex, {}).setdefault(ds, {}).setdefault(sess, []).append(csv_path)
 
     # Print the discovered structure for debugging
     print(f"Found {len(all_csv)} CSV files in {data_path}:")
@@ -81,9 +79,7 @@ def test_domain_loading():
     )
 
     base = Path(__file__).resolve().parent.parent
-    session_path = (
-        base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-" / "RX35"
-    )
+    session_path = base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-" / "RX35"
     session = SessionRepository(session_path).load()
     print(
         f"Session ID: {session.id}, Recordings: {session.num_recordings}, Channels: {session.num_channels}, Scan Rate: {session.scan_rate} Hz"
@@ -93,9 +89,7 @@ def test_domain_loading():
     for rec in session.recordings:
         print(f"  {rec.id}: {rec.num_channels} channels, {rec.scan_rate} Hz")
 
-    dataset_path = (
-        base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-"
-    )
+    dataset_path = base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-"
     dataset = DatasetRepository(dataset_path).load()
     print(dataset)
     for sess in dataset.sessions:
@@ -116,9 +110,7 @@ def test_session_object():
     from monstim_signals.io.repositories import SessionRepository
 
     base = Path(__file__).resolve().parent.parent
-    session_path = (
-        base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-" / "RX35"
-    )
+    session_path = base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-" / "RX35"
     session = SessionRepository(session_path).load()
 
     # Print parameters and build caches
@@ -149,9 +141,7 @@ def test_dataset_object():
     from monstim_signals.io.repositories import DatasetRepository
 
     base = Path(__file__).resolve().parent.parent
-    dataset_path = (
-        base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-"
-    )
+    dataset_path = base / "data" / "EMG-only data" / "240829 C328.1 post-dec mcurve_long-"
     dataset = DatasetRepository(dataset_path).load()
 
     dataset.dataset_parameters()

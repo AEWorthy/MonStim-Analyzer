@@ -76,9 +76,7 @@ class SplashScreen(QSplashScreen):
 
         copyright = QLabel(SPLASH_INFO["copyright"])
         copyright.setStyleSheet("color: #999999;")
-        copyright.setAlignment(
-            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom
-        )
+        copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
         layout.addWidget(copyright)
 
 

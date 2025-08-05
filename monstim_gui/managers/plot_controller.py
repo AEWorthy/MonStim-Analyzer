@@ -42,9 +42,7 @@ class PlotController:
 
         for component, description in required_components:
             if not hasattr(self.gui, component):
-                raise AttributeError(
-                    f"GUI missing required component: {component} ({description})"
-                )
+                raise AttributeError(f"GUI missing required component: {component} ({description})")
 
         self._validated = True
 
@@ -91,9 +89,7 @@ class PlotController:
             self.gui.plot_pane.show()
             config_data = self.get_plot_configuration()
         except AttributeError as e:
-            QMessageBox.critical(
-                self.gui, "Configuration Error", f"Plot configuration error: {e}"
-            )
+            QMessageBox.critical(self.gui, "Configuration Error", f"Plot configuration error: {e}")
             logging.error(f"Plot configuration error: {e}")
             return None
 
@@ -107,16 +103,12 @@ class PlotController:
         if self.gui.current_session and hasattr(self.gui.current_session, "_config"):
             config = self.gui.current_session._config
 
-        is_session_emg_plot = (
-            self.gui.plot_widget.session_radio.isChecked() and plot_type_raw == "EMG"
-        )
+        is_session_emg_plot = self.gui.plot_widget.session_radio.isChecked() and plot_type_raw == "EMG"
 
         # Determine if the default profile is selected
         default_profile_selected = False
         if hasattr(self.gui, "profile_selector_combo"):
-            default_profile_selected = (
-                self.gui.profile_selector_combo.currentIndex() == 0
-            )
+            default_profile_selected = self.gui.profile_selector_combo.currentIndex() == 0
 
         if is_session_emg_plot:
             if config and "stimuli_to_plot" in config:
@@ -170,9 +162,7 @@ class PlotController:
         finally:
             QApplication.restoreOverrideCursor()
 
-        logging.info(
-            f"Plot Created. level: {level} type: {plot_type}, return_raw_data: {return_raw_data}."
-        )
+        logging.info(f"Plot Created. level: {level} type: {plot_type}, return_raw_data: {return_raw_data}.")
 
         # Update plot pane with error handling
         try:
@@ -203,9 +193,7 @@ class PlotController:
         try:
             raw_data = self.plot_data(return_raw_data=True)
         except AttributeError as e:
-            QMessageBox.critical(
-                self.gui, "Configuration Error", f"Cannot get raw data: {e}"
-            )
+            QMessageBox.critical(self.gui, "Configuration Error", f"Cannot get raw data: {e}")
             logging.error(f"Configuration error in get_raw_data: {e}")
             return
 
@@ -239,9 +227,7 @@ class PlotController:
 
         logging.error(error_msg)
         logging.error(f"Plot type: {plot_type}, options: {plot_options}")
-        logging.error(
-            f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}"
-        )
+        logging.error(f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}")
         logging.error(traceback.format_exc())
 
         # Call error hooks

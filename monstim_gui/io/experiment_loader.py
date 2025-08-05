@@ -93,27 +93,21 @@ class ExperimentLoadingThread(QThread):
     def run(self):
         """Load the experiment in a separate thread."""
         try:
-            logging.debug(
-                f"Starting async load of experiment: '{self.experiment_name}'"
-            )
+            logging.debug(f"Starting async load of experiment: '{self.experiment_name}'")
             self.status_update.emit(f"Loading experiment: '{self.experiment_name}'")
             self.progress.emit(10)
 
             # Check if path exists
             exp_path = Path(self.experiment_path)
             if not exp_path.exists():
-                self.error.emit(
-                    f"Experiment folder '{self.experiment_path}' not found."
-                )
+                self.error.emit(f"Experiment folder '{self.experiment_path}' not found.")
                 return
 
             self.progress.emit(15)
             self.status_update.emit("Analyzing experiment structure...")
 
             # Analyze if this is a first-time load
-            is_first_load, annotations_required, missing_annotations = (
-                self._analyze_load_requirements(exp_path)
-            )
+            is_first_load, annotations_required, missing_annotations = self._analyze_load_requirements(exp_path)
             self._is_first_load = is_first_load
 
             files_to_load = self._count_files_to_load(exp_path)
@@ -124,9 +118,7 @@ class ExperimentLoadingThread(QThread):
 
             # Provide appropriate time estimates in logging
             if is_first_load:
-                estimated_time = (
-                    missing_annotations / 100
-                )  # Rough estimate: 100 files per minute
+                estimated_time = missing_annotations / 100  # Rough estimate: 100 files per minute
                 self._estimated_time = int(estimated_time * 60)  # Convert to seconds
                 time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created.\nEstimated time: {estimated_time} seconds for {annotations_required} annotations."
                 logging.info(time_msg)
@@ -161,9 +153,7 @@ class ExperimentLoadingThread(QThread):
             self.status_update.emit("Finalizing experiment structure...")
 
             self.progress.emit(100)
-            logging.debug(
-                f"Experiment '{self.experiment_name}' loaded successfully in thread."
-            )
+            logging.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
             self.finished.emit(experiment)
 
         except OSError as e:

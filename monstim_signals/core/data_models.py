@@ -29,9 +29,7 @@ class LatencyWindow:
         from matplotlib.lines import Line2D
 
         if stylized:
-            return Line2D(
-                [0], [0], color=self.color, linestyle=self.linestyle, label=self.name
-            )
+            return Line2D([0], [0], color=self.color, linestyle=self.linestyle, label=self.name)
         else:
             return Line2D([0], [0], color=self.color, linestyle="-", label=self.name)
 
@@ -61,8 +59,7 @@ class StimCluster:
                 # if stim_duration is not specified, compute it from pulses/ramp
                 self.stim_delay
                 + (
-                    (self.pulse_period + self.ramp_duration * 2 + self.peak_duration)
-                    * self.num_pulses
+                    (self.pulse_period + self.ramp_duration * 2 + self.peak_duration) * self.num_pulses
                     - (self.pulse_period + self.ramp_duration)
                 )
             )
@@ -95,9 +92,7 @@ class SignalChannel:
         """
         Create an empty ChannelAnnot with default values.
         """
-        return SignalChannel(
-            invert=False, name="[NAME]", unit="unit(s)", type_override=None
-        )
+        return SignalChannel(invert=False, name="[NAME]", unit="unit(s)", type_override=None)
 
 
 # -----------------------------------------------------------------------
@@ -118,27 +113,17 @@ class RecordingMeta:
     recording_interval: float  # in seconds, time between consecutive recordings/stimuli
     channel_types: List[str]  # e.g. ["EMG", "Force", "Accelerometer"]
     emg_amp_gains: List[int]  # e.g. [1000, 1000, 1000] (gain for each EMG channel)
-    stim_clusters: List[
-        StimCluster
-    ]  # list of StimCluster objects, one per stimulus cluster
-    primary_stim: StimCluster | int | None = (
-        None  # (1-based index) primary stimulus cluster
-    )
+    stim_clusters: List[StimCluster]  # list of StimCluster objects, one per stimulus cluster
+    primary_stim: StimCluster | int | None = None  # (1-based index) primary stimulus cluster
     num_samples: int | None = None  # filled lazily
     data_version: str = "0.0.0"  # version of the meta format, e.g. "0.0.1"
 
     def __post_init__(self):
         if self.primary_stim and not isinstance(self.primary_stim, StimCluster):
             if isinstance(self.primary_stim, int):
-                self.primary_stim = (
-                    self.stim_clusters[self.primary_stim - 1]
-                    if self.primary_stim > 0
-                    else None
-                )
+                self.primary_stim = self.stim_clusters[self.primary_stim - 1] if self.primary_stim > 0 else None
             else:
-                logging.warning(
-                    f"primary_stim should be a StimCluster, got {type(self.primary_stim)}. Setting to None."
-                )
+                logging.warning(f"primary_stim should be a StimCluster, got {type(self.primary_stim)}. Setting to None.")
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "RecordingMeta":
@@ -187,9 +172,7 @@ class RecordingAnnot:
         valid = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in raw.items() if k in valid}
         for invalid_key in raw.keys() - valid:
-            logging.warning(
-                f"Invalid key '{invalid_key}' found in RecordingAnnot dict. Ignoring it."
-            )
+            logging.warning(f"Invalid key '{invalid_key}' found in RecordingAnnot dict. Ignoring it.")
 
         # 2) Now call the real constructor
         return RecordingAnnot(**filtered)
@@ -215,9 +198,7 @@ class SessionAnnot:
             Builds a SessionAnnot from a dictionary (such as one loaded from JSON), filtering out unexpected keys and converting nested structures as needed.
     """
 
-    excluded_recordings: List[str] = field(
-        default_factory=list
-    )  # list of recording IDs to exclude
+    excluded_recordings: List[str] = field(default_factory=list)  # list of recording IDs to exclude
     latency_windows: List[LatencyWindow] = field(default_factory=list)
     channels: List[SignalChannel] = field(default_factory=list)
     m_max_values: List[float] = field(default_factory=list)
@@ -232,11 +213,7 @@ class SessionAnnot:
         return SessionAnnot(
             excluded_recordings=[],
             latency_windows=[],
-            channels=[
-                SignalChannel.create_empty()
-                for _ in range(num_channels)
-                if num_channels > 0
-            ],
+            channels=[SignalChannel.create_empty() for _ in range(num_channels) if num_channels > 0],
             m_max_values=[],
             is_completed=False,
             data_version=DATA_VERSION,
@@ -252,21 +229,9 @@ class SessionAnnot:
 
         # Fill in channel names and units based on meta
         for i in range(recording_meta.num_channels):
-            channel = (
-                annot.channels[i]
-                if i < len(annot.channels)
-                else SignalChannel.create_empty()
-            )
-            channel_type = (
-                recording_meta.channel_types[i]
-                if i < len(recording_meta.channel_types)
-                else None
-            )
-            channel.name = (
-                channel_type
-                if (channel_type not in (None, "unknown", "emg"))
-                else f"Ch{i}"
-            )
+            channel = annot.channels[i] if i < len(annot.channels) else SignalChannel.create_empty()
+            channel_type = recording_meta.channel_types[i] if i < len(recording_meta.channel_types) else None
+            channel.name = channel_type if (channel_type not in (None, "unknown", "emg")) else f"Ch{i}"
             channel.unit = "V"
             annot.channels[i] = channel
 
@@ -281,9 +246,7 @@ class SessionAnnot:
         valid = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in raw.items() if k in valid}
         for invalid_key in raw.keys() - valid:
-            logging.warning(
-                f"Invalid key '{invalid_key}' found in SessionAnnot dict. Ignoring it."
-            )
+            logging.warning(f"Invalid key '{invalid_key}' found in SessionAnnot dict. Ignoring it.")
 
         # 2) Convert latency_windows and channels if present
         lw_list = filtered.get("latency_windows", [])
@@ -304,9 +267,7 @@ class DatasetAnnot:
       - Custom channel_names (if user renamed channels)
     """
 
-    date: str | None = (
-        None  # Date of dataset collection: e.g., "240829" for 29 Aug 2024
-    )
+    date: str | None = None  # Date of dataset collection: e.g., "240829" for 29 Aug 2024
     animal_id: str = None  # e.g., "C328.1"
     condition: str = None  # e.g., "post-dec mcurve_long-"
     excluded_sessions: List[str] = field(default_factory=list)
@@ -318,9 +279,7 @@ class DatasetAnnot:
         """
         Create an empty DatasetAnnot with default values.
         """
-        return DatasetAnnot(
-            excluded_sessions=[], is_completed=False, data_version=DATA_VERSION
-        )
+        return DatasetAnnot(excluded_sessions=[], is_completed=False, data_version=DATA_VERSION)
 
     @classmethod
     def from_ds_name(cls, dataset_name: str) -> "DatasetAnnot":
@@ -334,9 +293,7 @@ class DatasetAnnot:
         cfg = load_config()
         preferred_format = cfg.get("preferred_date_format", "YYMMDD")
         try:
-            date, animal_id, condition = parse_dataset_name(
-                dataset_name, preferred_date_format=preferred_format
-            )
+            date, animal_id, condition = parse_dataset_name(dataset_name, preferred_date_format=preferred_format)
         except ValueError:
             date = animal_id = condition = None
 
@@ -358,9 +315,7 @@ class DatasetAnnot:
         valid = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in raw.items() if k in valid}
         for invalid_key in raw.keys() - valid:
-            logging.warning(
-                f"Invalid key '{invalid_key}' found in DatasetAnnot dict. Ignoring it."
-            )
+            logging.warning(f"Invalid key '{invalid_key}' found in DatasetAnnot dict. Ignoring it.")
 
         # 2) Now call the real constructor
         return DatasetAnnot(**filtered)
@@ -382,16 +337,12 @@ class ExperimentAnnot:
     @staticmethod
     def create_empty() -> "ExperimentAnnot":
         """Return a blank annotation object."""
-        return ExperimentAnnot(
-            excluded_datasets=[], is_completed=False, data_version=DATA_VERSION
-        )
+        return ExperimentAnnot(excluded_datasets=[], is_completed=False, data_version=DATA_VERSION)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ExperimentAnnot":
         valid = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in raw.items() if k in valid}
         for invalid_key in raw.keys() - valid:
-            logging.warning(
-                f"Invalid key '{invalid_key}' found in ExperimentAnnot dict. Ignoring it."
-            )
+            logging.warning(f"Invalid key '{invalid_key}' found in ExperimentAnnot dict. Ignoring it.")
         return ExperimentAnnot(**filtered)

@@ -99,9 +99,7 @@ class ApplicationState:
             self.save_last_profile(profile_name)
 
         if not self.should_track_session_restoration():
-            logging.info(
-                "save_current_session_state: Session restoration tracking is disabled"
-            )
+            logging.info("save_current_session_state: Session restoration tracking is disabled")
             return
 
         # Only save session state if we have at least an experiment
@@ -127,20 +125,14 @@ class ApplicationState:
             # Debug: Verify what was actually saved
             saved_exp = self.settings.value("SessionRestore/experiment", "", type=str)
             saved_profile = self.settings.value("SessionRestore/profile", "", type=str)
-            logging.info(
-                f"save_current_session_state: Verified saved experiment={saved_exp}, profile={saved_profile}"
-            )
+            logging.info(f"save_current_session_state: Verified saved experiment={saved_exp}, profile={saved_profile}")
         else:
-            logging.info(
-                "save_current_session_state: No experiment_id provided, not saving session state"
-            )
+            logging.info("save_current_session_state: No experiment_id provided, not saving session state")
 
     def get_last_session_state(self) -> Dict[str, str]:
         """Get the last saved session state."""
         return {
-            "experiment": self.settings.value(
-                "SessionRestore/experiment", "", type=str
-            ),
+            "experiment": self.settings.value("SessionRestore/experiment", "", type=str),
             "dataset": self.settings.value("SessionRestore/dataset", "", type=str),
             "session": self.settings.value("SessionRestore/session", "", type=str),
             "profile": self.settings.value("SessionRestore/profile", "", type=str),
@@ -159,9 +151,7 @@ class ApplicationState:
         return bool(state.get("experiment"))
 
     # Last selected items (for session restoration)
-    def save_last_selection(
-        self, experiment_id: str = None, dataset_id: str = None, session_id: str = None
-    ):
+    def save_last_selection(self, experiment_id: str = None, dataset_id: str = None, session_id: str = None):
         """Save the last selected experiment/dataset/session."""
         if experiment_id is not None:
             self.settings.setValue("LastSelection/experiment", experiment_id)
@@ -201,9 +191,7 @@ class ApplicationState:
     def save_last_profile(self, profile_name: str):
         """Save the last selected analysis profile."""
         if not self.should_track_analysis_profiles():
-            logging.info(
-                f"Profile tracking is disabled - not saving profile '{profile_name}'"
-            )
+            logging.info(f"Profile tracking is disabled - not saving profile '{profile_name}'")
             return
         logging.info(f"Saving last profile selection: '{profile_name}'")
         self.settings.setValue("LastSelection/profile", profile_name)
@@ -242,16 +230,12 @@ class ApplicationState:
 
             # Check if experiment still exists
             if experiment_id not in gui.expts_dict_keys:
-                logging.info(
-                    f"Cannot restore session: experiment '{experiment_id}' no longer exists"
-                )
+                logging.info(f"Cannot restore session: experiment '{experiment_id}' no longer exists")
                 self.clear_session_state()
                 return False
 
             # Restore experiment
-            exp_index = (
-                gui.expts_dict_keys.index(experiment_id) + 1
-            )  # +1 for placeholder
+            exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
             gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
 
             # Wait for experiment to load, then restore dataset/session
@@ -260,33 +244,21 @@ class ApplicationState:
                 from PyQt6.QtCore import QTimer
 
                 def restore_nested():
-                    if (
-                        gui.current_experiment
-                        and gui.current_experiment.id == experiment_id
-                    ):
+                    if gui.current_experiment and gui.current_experiment.id == experiment_id:
                         try:
                             # Restore dataset
                             if dataset_id:
-                                dataset_names = [
-                                    ds.id for ds in gui.current_experiment.datasets
-                                ]
+                                dataset_names = [ds.id for ds in gui.current_experiment.datasets]
                                 if dataset_id in dataset_names:
                                     ds_index = dataset_names.index(dataset_id)
-                                    gui.data_selection_widget.dataset_combo.setCurrentIndex(
-                                        ds_index
-                                    )
+                                    gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
 
                                     # Restore session
                                     if session_id and gui.current_dataset:
-                                        session_names = [
-                                            sess.id
-                                            for sess in gui.current_dataset.sessions
-                                        ]
+                                        session_names = [sess.id for sess in gui.current_dataset.sessions]
                                         if session_id in session_names:
                                             sess_index = session_names.index(session_id)
-                                            gui.data_selection_widget.session_combo.setCurrentIndex(
-                                                sess_index
-                                            )
+                                            gui.data_selection_widget.session_combo.setCurrentIndex(sess_index)
                         except Exception as e:
                             logging.error(f"Error restoring dataset/session: {e}")
 
@@ -307,9 +279,7 @@ class ApplicationState:
             f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
         )
         """Get a program preference setting."""
-        return self.settings.value(
-            f"ProgramPreferences/{key}", default_value, type=bool
-        )
+        return self.settings.value(f"ProgramPreferences/{key}", default_value, type=bool)
 
     def set_preference(self, key: str, value: bool):
         """Set a program preference setting."""

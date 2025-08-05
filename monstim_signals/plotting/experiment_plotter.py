@@ -6,7 +6,7 @@ Use `monstim_signals.plotting.session_plotter.SessionPlotter` instead.
 
 """
 
-from typing import TYPE_CHECKING, List
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -14,18 +14,13 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from monstim_signals.plotting.base_plotter import BasePlotter, UnableToPlotError
 
-if TYPE_CHECKING:
-    from monstim_signals.domain.experiment import Experiment
-
 
 class ExperimentPlotter(BasePlotter):
     def __init__(self, experiment):
         from monstim_signals.domain.experiment import Experiment
 
         if not isinstance(experiment, Experiment):
-            raise TypeError(
-                "The provided object is not an instance of the Experiment class."
-            )
+            raise TypeError("The provided object is not an instance of the Experiment class.")
         # Store the experiment to plot.  BasePlotter uses ``emg_object`` as the
         # generic data container attribute.
         self.emg_object: "Experiment" = experiment
@@ -62,9 +57,7 @@ class ExperimentPlotter(BasePlotter):
         else:
             num_channels = len(channel_indices)
 
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
 
         # Get unique binned stimulus voltages
         stimulus_voltages = self.emg_object.stimulus_voltages
@@ -82,12 +75,8 @@ class ExperimentPlotter(BasePlotter):
         for channel_index in range(self.emg_object.num_channels):
             if channel_index not in channel_indices:
                 continue
-            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(
-                method, channel_index
-            )
-            h_response_means, h_response_error = (
-                self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
-            )
+            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(method, channel_index)
+            h_response_means, h_response_error = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified.
             if relative_to_mmax:
@@ -96,27 +85,15 @@ class ExperimentPlotter(BasePlotter):
                 else:
                     channel_m_max = self.emg_object.get_avg_m_max(method, channel_index)
                 try:
-                    m_wave_means = [
-                        (amplitude / channel_m_max) for amplitude in m_wave_means
-                    ]
-                    m_wave_error = [
-                        (amplitude / channel_m_max) for amplitude in m_wave_error
-                    ]
-                    h_response_means = [
-                        (amplitude / channel_m_max) for amplitude in h_response_means
-                    ]
-                    h_response_error = [
-                        (amplitude / channel_m_max) for amplitude in h_response_error
-                    ]
+                    m_wave_means = [(amplitude / channel_m_max) for amplitude in m_wave_means]
+                    m_wave_error = [(amplitude / channel_m_max) for amplitude in m_wave_error]
+                    h_response_means = [(amplitude / channel_m_max) for amplitude in h_response_means]
+                    h_response_error = [(amplitude / channel_m_max) for amplitude in h_response_error]
                 except ZeroDivisionError:
-                    raise UnableToPlotError(
-                        f"M-max for channel {channel_index} is zero. Cannot divide by zero."
-                    )
+                    raise UnableToPlotError(f"M-max for channel {channel_index} is zero. Cannot divide by zero.")
 
             # Append data to raw data dictionary - will be relative to M-max if specified.
-            raw_data_dict["channel_index"].extend(
-                [channel_index] * len(stimulus_voltages)
-            )
+            raw_data_dict["channel_index"].extend([channel_index] * len(stimulus_voltages))
             raw_data_dict["stimulus_v"].extend(stimulus_voltages)
             raw_data_dict["avg_m_wave"].extend(m_wave_means)
             raw_data_dict["stderr_m_wave"].extend(m_wave_error)
@@ -234,9 +211,7 @@ class ExperimentPlotter(BasePlotter):
 
         channel_names = self.emg_object.channel_names
 
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas)
 
         all_m_max_amplitudes = []
         raw_data_dict = {
@@ -271,12 +246,8 @@ class ExperimentPlotter(BasePlotter):
                 animal_ids.append(dataset.animal_id)
 
             # Drop None values from the list
-            avg_m_max_amplitudes = [
-                x for x in avg_m_max_amplitudes_raw if x is not None
-            ]
-            avg_m_max_thresholds = [
-                x for x in avg_m_max_thresholds_raw if x is not None
-            ]
+            avg_m_max_amplitudes = [x for x in avg_m_max_amplitudes_raw if x is not None]
+            avg_m_max_thresholds = [x for x in avg_m_max_thresholds_raw if x is not None]
 
             # Append M-wave amplitudes to superlist for y-axis adjustment.
             all_m_max_amplitudes.extend(avg_m_max_amplitudes)
@@ -285,9 +256,7 @@ class ExperimentPlotter(BasePlotter):
             m_x = 1
             mean_amp = np.mean(avg_m_max_amplitudes) if avg_m_max_amplitudes else np.nan
             std_amp = np.std(avg_m_max_amplitudes) if avg_m_max_amplitudes else np.nan
-            mean_thresh = (
-                np.mean(avg_m_max_thresholds) if avg_m_max_thresholds else np.nan
-            )
+            mean_thresh = np.mean(avg_m_max_thresholds) if avg_m_max_thresholds else np.nan
 
             if num_channels == 1:
                 ax.plot(
@@ -317,9 +286,7 @@ class ExperimentPlotter(BasePlotter):
 
                 ax.set_xticklabels(["M-response"])
                 ax.set_title(f"{channel_names[0]}")
-                ax.set_xlim(
-                    m_x - 1, m_x + 1.5
-                )  # Set x-axis limits for each subplot to better center data points.
+                ax.set_xlim(m_x - 1, m_x + 1.5)  # Set x-axis limits for each subplot to better center data points.
                 ax.set_ylim(0, 1.1 * max(all_m_max_amplitudes))
             else:
                 axes[channel_index].plot(
@@ -414,9 +381,7 @@ class ExperimentPlotter(BasePlotter):
         else:
             num_channels = len(channel_indices)
 
-        fig, ax, axes = self.create_fig_and_axes(
-            channel_indices=channel_indices, canvas=canvas, figsizes="small"
-        )
+        fig, ax, axes = self.create_fig_and_axes(channel_indices=channel_indices, canvas=canvas, figsizes="small")
 
         raw_data_dict = {
             "channel_index": [],
@@ -429,24 +394,18 @@ class ExperimentPlotter(BasePlotter):
             if channel_index not in channel_indices:
                 continue
             # Get average H-wave amplitudes
-            h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(
-                method, channel_index
-            )
+            h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
             stimulus_voltages = self.emg_object.stimulus_voltages
 
             # Filter out stimulus voltages greater than max_stim_value if specified
             if max_stim_value is not None:
-                filtered_indices = [
-                    i for i, v in enumerate(stimulus_voltages) if v <= max_stim_value
-                ]
+                filtered_indices = [i for i, v in enumerate(stimulus_voltages) if v <= max_stim_value]
                 stimulus_voltages = [stimulus_voltages[i] for i in filtered_indices]
                 h_response_means = [h_response_means[i] for i in filtered_indices]
 
             # Find the voltage with the maximum average H-reflex amplitude
             max_h_reflex_amplitude = max(h_response_means)
-            max_h_reflex_voltage = stimulus_voltages[
-                h_response_means.index(max_h_reflex_amplitude)
-            ]
+            max_h_reflex_voltage = stimulus_voltages[h_response_means.index(max_h_reflex_amplitude)]
 
             # Define the range of voltages around the max H-reflex voltage
             voltage_indices = range(
@@ -463,12 +422,8 @@ class ExperimentPlotter(BasePlotter):
             m_wave_amplitudes = []
             h_response_amplitudes = []
             for voltage in marginal_voltages:
-                m_wave_avgs = self.emg_object.get_m_wave_amplitude_avgs_at_voltage(
-                    method, channel_index, voltage
-                )
-                h_response_avgs = self.emg_object.get_h_wave_amplitude_avgs_at_voltage(
-                    method, channel_index, voltage
-                )
+                m_wave_avgs = self.emg_object.get_m_wave_amplitude_avgs_at_voltage(method, channel_index, voltage)
+                h_response_avgs = self.emg_object.get_h_wave_amplitude_avgs_at_voltage(method, channel_index, voltage)
                 m_wave_amplitudes.extend(m_wave_avgs)
                 h_response_amplitudes.extend(h_response_avgs)
                 stimulus_voltages.extend([voltage] * len(m_wave_avgs))
@@ -478,29 +433,17 @@ class ExperimentPlotter(BasePlotter):
                 if manual_mmax is not None:
                     m_max = manual_mmax[channel_index]
                 else:
-                    m_max = self.emg_object.get_avg_m_max(
-                        method=method, channel_index=channel_index
-                    )
+                    m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
                 try:
-                    m_wave_amplitudes = [
-                        amplitude / m_max for amplitude in m_wave_amplitudes
-                    ]
-                    h_response_amplitudes = [
-                        amplitude / m_max for amplitude in h_response_amplitudes
-                    ]
+                    m_wave_amplitudes = [amplitude / m_max for amplitude in m_wave_amplitudes]
+                    h_response_amplitudes = [amplitude / m_max for amplitude in h_response_amplitudes]
                 except TypeError:
-                    raise UnableToPlotError(
-                        f"M-max could not be calculated for channel {channel_index}."
-                    )
+                    raise UnableToPlotError(f"M-max could not be calculated for channel {channel_index}.")
                 except ZeroDivisionError:
-                    raise UnableToPlotError(
-                        f"M-max is zero for channel {channel_index}. Cannot divide by zero."
-                    )
+                    raise UnableToPlotError(f"M-max is zero for channel {channel_index}. Cannot divide by zero.")
 
             # Append data to raw data dictionary
-            raw_data_dict["channel_index"].extend(
-                [channel_index] * len(m_wave_amplitudes)
-            )
+            raw_data_dict["channel_index"].extend([channel_index] * len(m_wave_amplitudes))
             raw_data_dict["stimulus_v"].extend(stimulus_voltages)
             raw_data_dict["avg_m_wave_amplitudes"].extend(m_wave_amplitudes)
             raw_data_dict["avg_h_wave_amplitudes"].extend(h_response_amplitudes)
@@ -542,12 +485,8 @@ class ExperimentPlotter(BasePlotter):
                     marker="o",
                     markersize=5,
                 )
-                mean_h = (
-                    np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
-                )
-                std_h = (
-                    np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
-                )
+                mean_h = np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
+                std_h = np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
                 ax.annotate(
                     f"n={len(h_response_amplitudes)}",
                     xy=(h_x + 0.4, mean_h),
@@ -568,11 +507,10 @@ class ExperimentPlotter(BasePlotter):
                 ax.set_xticks([m_x, h_x])
                 ax.set_xticklabels(["M-response", "H-reflex"])
                 ax.set_title(
-                    f"{channel_names[0]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)"
+                    f"{channel_names[0]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),
+                                                                                    2)}V)"
                 )
-                ax.set_xlim(
-                    m_x - 1, h_x + 1
-                )  # Set x-axis limits for each subplot to better center data points.
+                ax.set_xlim(m_x - 1, h_x + 1)  # Set x-axis limits for each subplot to better center data points.
             else:
                 axes[channel_index].plot(
                     m_x,
@@ -607,12 +545,8 @@ class ExperimentPlotter(BasePlotter):
                     marker="o",
                     markersize=5,
                 )
-                mean_h = (
-                    np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
-                )
-                std_h = (
-                    np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
-                )
+                mean_h = np.mean(h_response_amplitudes) if h_response_amplitudes else np.nan
+                std_h = np.std(h_response_amplitudes) if h_response_amplitudes else np.nan
                 axes[channel_index].annotate(
                     f"n={len(h_response_amplitudes)}",
                     xy=(h_x + 0.4, mean_h),
@@ -631,7 +565,7 @@ class ExperimentPlotter(BasePlotter):
                     )
 
                 axes[channel_index].set_title(
-                    f"{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin),2)}V)"
+                    f"{channel_names[channel_index]} ({round(max_h_reflex_voltage, 2)} ± {round((self.emg_object.bin_size/2)+(self.emg_object.bin_size * bin_margin), 2)}V)"
                 )
                 axes[channel_index].set_xticks([m_x, h_x])
                 axes[channel_index].set_xticklabels(["M-response", "H-reflex"])

@@ -62,9 +62,7 @@ class DataFrameDialog(QDialog):
         # Table view
         self.table_view = QTableView(self)
         self.table_view.setModel(PandasModel(self.df, self))
-        self.table_view.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.table_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.table_view.setAlternatingRowColors(True)
         self.table_view.setSortingEnabled(True)
         self.table_view.resizeColumnsToContents()
@@ -73,8 +71,7 @@ class DataFrameDialog(QDialog):
 
         # Button box: Export and Close
         button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save
-            | QDialogButtonBox.StandardButton.Close,
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Close,
             Qt.Orientation.Horizontal,
             self,
         )
@@ -92,9 +89,7 @@ class DataFrameDialog(QDialog):
             last_export_path = str(get_base_path())
 
         default_name = os.path.join(last_export_path, "exported_data.csv")
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export DataFrame", default_name, "CSV Files (*.csv);;All Files (*)"
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "Export DataFrame", default_name, "CSV Files (*.csv);;All Files (*)")
         if path:
             # Save the directory for next time
             app_state.save_last_export_path(os.path.dirname(path))

@@ -114,15 +114,11 @@ class LatencyWindowPresetEditor(QWidget):
         control_row = QHBoxLayout()
         control_row.addWidget(QLabel("Preset:"))
         # Ensure preset names are fully visible and don't get clipped
-        self.preset_combo.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToContents
-        )
+        self.preset_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         # Provide some extra space for descriptive names without forcing the
         # combo box wider than the dialog.
         self.preset_combo.setMinimumContentsLength(20)
-        self.preset_combo.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
-        )
+        self.preset_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         control_row.addWidget(self.preset_combo, 1)
         add_btn = QPushButton("Add")
         remove_btn = QPushButton("Remove")
@@ -138,15 +134,11 @@ class LatencyWindowPresetEditor(QWidget):
         self.scroll: QScrollArea = QScrollArea()  # type: ignore
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setMinimumSize(0, 0)
-        self.scroll_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.scroll_widget)
@@ -167,9 +159,7 @@ class LatencyWindowPresetEditor(QWidget):
     def add_preset(self) -> None:
         self._commit_preset_name()
         typed = self.preset_combo.currentText().strip()
-        existing = {
-            self.preset_combo.itemText(i) for i in range(self.preset_combo.count())
-        }
+        existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
         if typed and typed not in existing:
             name = typed
         else:
@@ -225,9 +215,7 @@ class LatencyWindowPresetEditor(QWidget):
         self.presets[index] = windows
 
     def _unique_name(self, base: str) -> str:
-        existing = {
-            self.preset_combo.itemText(i) for i in range(self.preset_combo.count())
-        }
+        existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
         idx = 1
         name = f"{base} {idx}"
         while name in existing:
@@ -250,9 +238,7 @@ class LatencyWindowPresetEditor(QWidget):
             grp.deleteLater()
         self.window_entries.clear()
 
-    def add_window_group(
-        self, window: LatencyWindow | None = None, *, checked: bool | None = None
-    ) -> None:
+    def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
             window = LatencyWindow(
                 name=f"Window {len(self.window_entries)+1}",
@@ -290,9 +276,7 @@ class LatencyWindowPresetEditor(QWidget):
         form.addRow(remove_btn)
         group.setLayout(form)
         self.scroll_layout.addWidget(group)
-        self.window_entries.append(
-            (group, window, name_edit, start_spin, dur_spin, color_combo)
-        )
+        self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
 
     def _remove_window_group(self, group: QGroupBox) -> None:
         for i, (grp, *_) in enumerate(self.window_entries):
@@ -352,18 +336,11 @@ class PreferencesDialog(QDialog):
                 try:
                     parsed = ast.literal_eval(value)
                     if isinstance(parsed, list):
-                        return [
-                            self.parse_field_value(
-                                str(v), global_value[0] if global_value else None
-                            )
-                            for v in parsed
-                        ]
+                        return [self.parse_field_value(str(v), global_value[0] if global_value else None) for v in parsed]
                 except Exception:
                     # fallback: comma split
                     return [
-                        self.parse_field_value(
-                            v.strip(), global_value[0] if global_value else None
-                        )
+                        self.parse_field_value(v.strip(), global_value[0] if global_value else None)
                         for v in value.split(",")
                         if v.strip()
                     ]
@@ -372,10 +349,7 @@ class PreferencesDialog(QDialog):
                     parsed = ast.literal_eval(value)
                     if isinstance(parsed, dict):
                         # Recursively parse values
-                        return {
-                            k: self.parse_field_value(str(v), global_value.get(k))
-                            for k, v in parsed.items()
-                        }
+                        return {k: self.parse_field_value(str(v), global_value.get(k)) for k, v in parsed.items()}
                 except Exception:
                     pass
         # Try to parse as int/float if no global type
@@ -415,9 +389,7 @@ class PreferencesDialog(QDialog):
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profile:"))
         self.profile_combo = QComboBox()
-        self.profile_combo.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToContents
-        )
+        self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.profile_combo.setMinimumContentsLength(20)
         self.profile_combo.setEditable(False)
         self.profile_add_btn = QPushButton("Add")
@@ -507,38 +479,26 @@ class PreferencesDialog(QDialog):
                 ],
             }
             tab_widget = QTabWidget()
-            tab_widget.setSizePolicy(
-                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-            )
+            tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             for tab_name, section_names in tabs.items():
                 tab_scroll = QScrollArea()
                 tab_scroll.setWidgetResizable(True)
-                tab_scroll.setSizePolicy(
-                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-                )
+                tab_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 tab_content = QWidget()
-                tab_content.setSizePolicy(
-                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-                )
+                tab_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 tab_layout = QVBoxLayout(tab_content)
                 for section in section_names:
                     if section == "Latency Window Presets":
                         group = QGroupBox(section)
-                        group.setSizePolicy(
-                            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
-                        )
+                        group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
                         vbox = QVBoxLayout(group)
-                        editor = LatencyWindowPresetEditor(
-                            self.config["latency_window_presets"]
-                        )
+                        editor = LatencyWindowPresetEditor(self.config["latency_window_presets"])
                         vbox.addWidget(editor, 1)
                         self.fields["latency_window_presets"] = editor
                         tab_layout.addWidget(group, 1)
                         continue
                     group_box = QGroupBox(section)
-                    group_box.setSizePolicy(
-                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
-                    )
+                    group_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
                     form_layout = QFormLayout()
                     for key in sections[section]:
                         value = self.config.get(key)
@@ -564,9 +524,7 @@ class PreferencesDialog(QDialog):
                             if key in ("m_color", "h_color"):
                                 text = text.replace("tab:", "")
                                 field = QLineEdit(text)
-                                field.setToolTip(
-                                    "Valid colors: " + ", ".join(TAB_COLOR_NAMES)
-                                )
+                                field.setToolTip("Valid colors: " + ", ".join(TAB_COLOR_NAMES))
                             else:
                                 field = QLineEdit(text)
                             form_layout.addRow(key, field)
@@ -583,9 +541,7 @@ class PreferencesDialog(QDialog):
             vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
             # --- Name and Description fields ---
             name_group = QGroupBox("Profile Name and Description")
-            name_group.setSizePolicy(
-                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
-            )
+            name_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
             name_layout = QFormLayout(name_group)
             name_edit = QLineEdit(data.get("name", ""))
             desc_edit = QTextEdit(data.get("description", ""))
@@ -598,9 +554,7 @@ class PreferencesDialog(QDialog):
             # Stimuli to plot (checkboxes)
             stimuli = data.get("stimuli_to_plot", [])
             stimuli_group = QGroupBox("Stimuli to Plot")
-            stimuli_group.setSizePolicy(
-                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
-            )
+            stimuli_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
             stimuli_layout = QVBoxLayout(stimuli_group)
             stimuli_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
             stimuli_widget = StimulusSelectorWidget(selected=stimuli)
@@ -610,32 +564,22 @@ class PreferencesDialog(QDialog):
             # Analysis parameters
             analysis_params = data.get("analysis_parameters", {})
             analysis_group = QGroupBox("Analysis Parameters")
-            analysis_group.setSizePolicy(
-                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-            )
+            analysis_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             # Wrap the analysis parameters in a scroll area
             analysis_scroll = QScrollArea()
             analysis_scroll.setWidgetResizable(True)
-            analysis_scroll.setSizePolicy(
-                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-            )
+            analysis_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             analysis_widget = QWidget()
             analysis_layout = QFormLayout(analysis_widget)
             analysis_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-            self.analysis_param_fields = (
-                {}
-            )  # param_name: (QLineEdit, remove_btn, row_widget)
+            self.analysis_param_fields = {}  # param_name: (QLineEdit, remove_btn, row_widget)
             # Add button to add new param (always last row)
             add_param_btn = QPushButton("Add Parameter")
-            add_param_btn.clicked.connect(
-                lambda: self._on_add_analysis_param(analysis_layout, add_param_btn)
-            )
+            add_param_btn.clicked.connect(lambda: self._on_add_analysis_param(analysis_layout, add_param_btn))
             analysis_layout.addRow(add_param_btn)
             # Add existing params (insert before button)
             for key, value in analysis_params.items():
-                self._add_analysis_param_row(
-                    analysis_layout, key, value, before_widget=add_param_btn
-                )
+                self._add_analysis_param_row(analysis_layout, key, value, before_widget=add_param_btn)
             analysis_widget.setLayout(analysis_layout)
             analysis_scroll.setWidget(analysis_widget)
             analysis_group_layout = QVBoxLayout(analysis_group)
@@ -661,8 +605,7 @@ class PreferencesDialog(QDialog):
             for i in range(layout.rowCount()):
                 if (
                     layout.itemAt(i, QFormLayout.ItemRole.FieldRole)
-                    and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget()
-                    is row_widget
+                    and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is row_widget
                 ):
                     layout.removeRow(i)
                     break
@@ -681,8 +624,7 @@ class PreferencesDialog(QDialog):
             for i in range(layout.rowCount()):
                 if (
                     layout.itemAt(i, QFormLayout.ItemRole.FieldRole)
-                    and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget()
-                    is before_widget
+                    and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is before_widget
                 ):
                     layout.insertRow(i, row_widget)
                     break
@@ -700,24 +642,16 @@ class PreferencesDialog(QDialog):
         already = set(self.analysis_param_fields.keys())
         available = sorted(list(global_keys - already))
         if not available:
-            QMessageBox.information(
-                self, "No Parameters", "No more global parameters available to add."
-            )
+            QMessageBox.information(self, "No Parameters", "No more global parameters available to add.")
             return
-        item, ok = QInputDialog.getItem(
-            self, "Add Parameter", "Select parameter:", available, 0, False
-        )
+        item, ok = QInputDialog.getItem(self, "Add Parameter", "Select parameter:", available, 0, False)
         if ok and item:
-            self._add_analysis_param_row(
-                layout, item, self.config.get(item, ""), before_widget=add_param_btn
-            )
+            self._add_analysis_param_row(layout, item, self.config.get(item, ""), before_widget=add_param_btn)
 
     def reload_profiles(self):
         self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
-        self.profile_combo.addItem(
-            "(default)", userData=None
-        )  # Add a global config option
+        self.profile_combo.addItem("(default)", userData=None)  # Add a global config option
         self.profiles = self.profile_manager.list_profiles()
         for name, path, data in self.profiles:
             self.profile_combo.addItem(name, userData=path)
@@ -743,9 +677,7 @@ class PreferencesDialog(QDialog):
             # Set latency window preset
             if "latency_window_presets" in self.fields:
                 editor = self.fields["latency_window_presets"]
-                preset_name = self.config.get(
-                    "default_latency_window_preset", "default"
-                )
+                preset_name = self.config.get("default_latency_window_preset", "default")
                 idx = editor.preset_combo.findText(preset_name)
                 if idx >= 0:
                     editor.preset_combo.setCurrentIndex(idx)
@@ -816,9 +748,7 @@ class PreferencesDialog(QDialog):
         if idx < 0 or idx >= len(self.profiles):
             return
         name, _, data = self.profiles[idx]
-        new_name, ok = QInputDialog.getText(
-            self, "Duplicate Profile", "New profile name:", text=f"{name} Copy"
-        )
+        new_name, ok = QInputDialog.getText(self, "Duplicate Profile", "New profile name:", text=f"{name} Copy")
         if ok and new_name:
             new_data = copy.deepcopy(data)
             new_data["name"] = new_name
@@ -859,11 +789,7 @@ class PreferencesDialog(QDialog):
             name_edit = self.fields.get("profile_name")
             desc_edit = self.fields.get("profile_description")
             profile_name = name_edit.text().strip() if name_edit else name
-            profile_desc = (
-                desc_edit.toPlainText().strip()
-                if desc_edit
-                else data.get("description", "")
-            )
+            profile_desc = desc_edit.toPlainText().strip() if desc_edit else data.get("description", "")
             profile_data = dict(name=profile_name, description=profile_desc)
             stimuli_widget = self.fields.get("stimuli_to_plot")
             if stimuli_widget:
@@ -885,9 +811,7 @@ class PreferencesDialog(QDialog):
                     except Exception:
                         parsed_val = val
                     if ref_val is not None:
-                        analysis_params[param] = ConfigRepository.coerce_types(
-                            parsed_val, ref_val
-                        )
+                        analysis_params[param] = ConfigRepository.coerce_types(parsed_val, ref_val)
                     else:
                         analysis_params[param] = parsed_val
             if invalid_colors:
@@ -937,9 +861,7 @@ class PreferencesDialog(QDialog):
                 if "." in key:
                     main_key, sub_key = key.split(".")
                     ref_val = (
-                        self.config.get(main_key, {}).get(sub_key)
-                        if isinstance(self.config.get(main_key), dict)
-                        else None
+                        self.config.get(main_key, {}).get(sub_key) if isinstance(self.config.get(main_key), dict) else None
                     )
                     try:
                         parsed_val = ast.literal_eval(value)  # type: ignore
@@ -949,9 +871,7 @@ class PreferencesDialog(QDialog):
                         coerced = ConfigRepository.coerce_types(parsed_val, ref_val)
                     else:
                         coerced = parsed_val
-                    if main_key not in new_config or not isinstance(
-                        new_config.get(main_key), dict
-                    ):
+                    if main_key not in new_config or not isinstance(new_config.get(main_key), dict):
                         new_config[main_key] = {}
                     new_config[main_key][sub_key] = coerced
                 else:

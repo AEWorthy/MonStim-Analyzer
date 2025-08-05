@@ -62,16 +62,10 @@ class CommandInvoker:
 
     def remove_command_by_name(self, command_name: str):
         # Remove all occurrences from history
-        self.history = deque(
-            command for command in self.history if command.command_name != command_name
-        )
+        self.history = deque(command for command in self.history if command.command_name != command_name)
 
         # Remove all occurrences from redo_stack
-        self.redo_stack = deque(
-            command
-            for command in self.redo_stack
-            if command.command_name != command_name
-        )
+        self.redo_stack = deque(command for command in self.redo_stack if command.command_name != command_name)
 
 
 # GUI command classes
@@ -151,13 +145,9 @@ class ExcludeSessionCommand(Command):
         self.gui.data_selection_widget.update_session_combo()
         if self.removed_session:
             try:
-                session_index = self.gui.current_dataset.sessions.index(
-                    self.removed_session
-                )
+                session_index = self.gui.current_dataset.sessions.index(self.removed_session)
                 self.gui.data_selection_widget.session_combo.blockSignals(True)
-                self.gui.data_selection_widget.session_combo.setCurrentIndex(
-                    session_index
-                )
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError:
                 pass  # Session not found in list
@@ -178,9 +168,7 @@ class ExcludeDatasetCommand(Command):
         self.removed_dataset = self.gui.current_dataset
         self.dataset_id = self.gui.current_dataset.id
         self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
-        self.previous_experiment = (
-            self.gui.current_experiment
-        )  # Preserve experiment selection
+        self.previous_experiment = self.gui.current_experiment  # Preserve experiment selection
 
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
@@ -194,22 +182,15 @@ class ExcludeDatasetCommand(Command):
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.removed_dataset
         # Ensure we maintain the correct experiment selection
-        if (
-            self.previous_experiment
-            and self.gui.current_experiment != self.previous_experiment
-        ):
+        if self.previous_experiment and self.gui.current_experiment != self.previous_experiment:
             self.gui.current_experiment = self.previous_experiment
         # Update dataset combo and set the correct selection
         self.gui.data_selection_widget.update_dataset_combo()
         if self.removed_dataset:
             try:
-                dataset_index = self.gui.current_experiment.datasets.index(
-                    self.removed_dataset
-                )
+                dataset_index = self.gui.current_experiment.datasets.index(self.removed_dataset)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(True)
-                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(
-                    dataset_index
-                )
+                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError:
                 pass  # Dataset not found in list
@@ -228,11 +209,7 @@ class RestoreSessionCommand(Command):
 
     def execute(self):
         self.session_obj = next(
-            (
-                s
-                for s in self.gui.current_dataset._all_sessions
-                if s.id == self.session_id
-            ),
+            (s for s in self.gui.current_dataset._all_sessions if s.id == self.session_id),
             None,
         )
         self.gui.current_dataset.restore_session(self.session_id)
@@ -242,13 +219,9 @@ class RestoreSessionCommand(Command):
         if self.session_obj:
             # Find the index of the restored session
             try:
-                session_index = self.gui.current_dataset.sessions.index(
-                    self.session_obj
-                )
+                session_index = self.gui.current_dataset.sessions.index(self.session_obj)
                 self.gui.data_selection_widget.session_combo.blockSignals(True)
-                self.gui.data_selection_widget.session_combo.setCurrentIndex(
-                    session_index
-                )
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError:
                 pass  # Session not found in list
@@ -270,11 +243,7 @@ class RestoreDatasetCommand(Command):
 
     def execute(self):
         self.dataset_obj = next(
-            (
-                ds
-                for ds in self.gui.current_experiment._all_datasets
-                if ds.id == self.dataset_id
-            ),
+            (ds for ds in self.gui.current_experiment._all_datasets if ds.id == self.dataset_id),
             None,
         )
         self.gui.current_experiment.restore_dataset(self.dataset_id)
@@ -284,13 +253,9 @@ class RestoreDatasetCommand(Command):
         if self.dataset_obj:
             # Find the index of the restored dataset
             try:
-                dataset_index = self.gui.current_experiment.datasets.index(
-                    self.dataset_obj
-                )
+                dataset_index = self.gui.current_experiment.datasets.index(self.dataset_obj)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(True)
-                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(
-                    dataset_index
-                )
+                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError:
                 pass  # Dataset not found in list
@@ -347,9 +312,7 @@ class SetLatencyWindowsCommand(Command):
             case _:
                 raise ValueError(f"Invalid level: {level}")
         self.new_windows = [copy.deepcopy(w) for w in new_windows]
-        self.old_windows = {
-            s.id: copy.deepcopy(s.annot.latency_windows) for s in self.sessions
-        }
+        self.old_windows = {s.id: copy.deepcopy(s.annot.latency_windows) for s in self.sessions}
 
     def _apply(self, windows):
         import copy
@@ -401,9 +364,7 @@ class ChangeChannelNamesCommand(Command):
                 raise ValueError(f"Invalid level: {level}")
 
         # Store old channel names for undo - create reverse mapping
-        self.old_names = {
-            new_name: old_name for old_name, new_name in new_names.items()
-        }
+        self.old_names = {new_name: old_name for old_name, new_name in new_names.items()}
 
     def execute(self):
         self.level.rename_channels(self.new_names)

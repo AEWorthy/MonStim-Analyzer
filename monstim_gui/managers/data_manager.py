@@ -61,9 +61,7 @@ class DataManager:
                     "Error",
                     f"An error occurred while unpacking existing experiments: {e}",
                 )
-                logging.error(
-                    f"An error occurred while unpacking existing experiments: {e}"
-                )
+                logging.error(f"An error occurred while unpacking existing experiments: {e}")
                 logging.error(traceback.format_exc())
             finally:
                 QApplication.restoreOverrideCursor()
@@ -78,9 +76,7 @@ class DataManager:
         if not last_import_path or not os.path.isdir(last_import_path):
             last_import_path = str(get_data_path())
 
-        expt_path = QFileDialog.getExistingDirectory(
-            self.gui, "Select Experiment Directory", last_import_path
-        )
+        expt_path = QFileDialog.getExistingDirectory(self.gui, "Select Experiment Directory", last_import_path)
         expt_name = os.path.splitext(os.path.basename(expt_path))[0]
 
         if expt_path and expt_name:
@@ -95,9 +91,7 @@ class DataManager:
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 )
                 if overwrite == QMessageBox.StandardButton.Yes:
-                    logging.info(
-                        f"Overwriting existing experiment '{expt_name}' in the output folder."
-                    )
+                    logging.info(f"Overwriting existing experiment '{expt_name}' in the output folder.")
 
                     # Close all existing data to prevent file locking issues
                     self.close_all_data()
@@ -112,18 +106,12 @@ class DataManager:
                         max_retries = 3
                         for retry in range(max_retries):
                             try:
-                                shutil.rmtree(
-                                    os.path.join(self.gui.output_path, expt_name)
-                                )
-                                logging.info(
-                                    f"Deleted existing experiment '{expt_name}' in 'data' folder."
-                                )
+                                shutil.rmtree(os.path.join(self.gui.output_path, expt_name))
+                                logging.info(f"Deleted existing experiment '{expt_name}' in 'data' folder.")
                                 break
                             except (OSError, PermissionError) as e:
                                 if retry < max_retries - 1:
-                                    logging.warning(
-                                        f"Failed to delete '{expt_name}' on attempt {retry + 1}: {e}. Retrying..."
-                                    )
+                                    logging.warning(f"Failed to delete '{expt_name}' on attempt {retry + 1}: {e}. Retrying...")
                                     time.sleep(0.5)
                                 else:
                                     raise e
@@ -133,14 +121,10 @@ class DataManager:
                             "Error",
                             f"Failed to delete existing experiment '{expt_name}': {e}\n\nPlease close any applications that might be using these files and try again.",
                         )
-                        logging.error(
-                            f"Failed to delete existing experiment '{expt_name}': {e}"
-                        )
+                        logging.error(f"Failed to delete existing experiment '{expt_name}': {e}")
                         return
                 else:
-                    logging.info(
-                        f"User chose not to overwrite existing experiment '{expt_name}' in the output folder."
-                    )
+                    logging.info(f"User chose not to overwrite existing experiment '{expt_name}' in the output folder.")
                     QMessageBox.warning(
                         self.gui,
                         "Canceled",
@@ -154,9 +138,7 @@ class DataManager:
                     dataset_path = os.path.join(expt_path, dataset_dir)
                     if os.path.isdir(dataset_path):
                         self.validate_dataset_name(dataset_path)
-                        csv_files = [
-                            f for f in os.listdir(dataset_path) if f.endswith(".csv")
-                        ]
+                        csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
                         if not csv_files:
                             dataset_dirs_without_csv.append(dataset_dir)
                 if dataset_dirs_without_csv:
@@ -169,15 +151,11 @@ class DataManager:
                     "Error",
                     f"An error occurred while validating your experiment: {e}.\n\nImportation was canceled.",
                 )
-                logging.error(
-                    f"An error occurred while validating dataset names: {e}. Importation was canceled."
-                )
+                logging.error(f"An error occurred while validating dataset names: {e}. Importation was canceled.")
                 logging.error(traceback.format_exc())
                 return
 
-            progress_dialog = QProgressDialog(
-                "Processing...", "Cancel", 0, 100, self.gui
-            )
+            progress_dialog = QProgressDialog("Processing...", "Cancel", 0, 100, self.gui)
             progress_dialog.setWindowTitle("Importing Data")
             progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             progress_dialog.setAutoClose(False)
@@ -185,46 +163,24 @@ class DataManager:
             progress_dialog.show()
 
             max_workers = max(1, multiprocessing.cpu_count() - 1)
-            self.thread = GUIExptImportingThread(
-                expt_name, expt_path, self.gui.output_path, max_workers=max_workers
-            )
+            self.thread = GUIExptImportingThread(expt_name, expt_path, self.gui.output_path, max_workers=max_workers)
             self.thread.progress.connect(progress_dialog.setValue)
 
             self.thread.finished.connect(progress_dialog.close)
             self.thread.finished.connect(self.refresh_existing_experiments)
+            self.thread.finished.connect(lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0))
             self.thread.finished.connect(
-                lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(
-                    0
-                )
+                lambda: self.gui.status_bar.showMessage("Data processed and imported successfully.", 5000)
             )
-            self.thread.finished.connect(
-                lambda: self.gui.status_bar.showMessage(
-                    "Data processed and imported successfully.", 5000
-                )
-            )
-            self.thread.finished.connect(
-                lambda: logging.info("Data processed and imported successfully.")
-            )
+            self.thread.finished.connect(lambda: logging.info("Data processed and imported successfully."))
 
-            self.thread.error.connect(
-                lambda e: QMessageBox.critical(
-                    self.gui, "Error", f"An error occurred: {e}"
-                )
-            )
-            self.thread.error.connect(
-                lambda e: logging.error(f"An error occurred while importing CSVs: {e}")
-            )
+            self.thread.error.connect(lambda e: QMessageBox.critical(self.gui, "Error", f"An error occurred: {e}"))
+            self.thread.error.connect(lambda e: logging.error(f"An error occurred while importing CSVs: {e}"))
             self.thread.error.connect(lambda: logging.error(traceback.format_exc()))
 
             self.thread.canceled.connect(progress_dialog.close)
-            self.thread.canceled.connect(
-                lambda: self.gui.status_bar.showMessage(
-                    "Data processing canceled.", 5000
-                )
-            )
-            self.thread.canceled.connect(
-                lambda: logging.info("Data processing canceled.")
-            )
+            self.thread.canceled.connect(lambda: self.gui.status_bar.showMessage("Data processing canceled.", 5000))
+            self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
             self.thread.canceled.connect(self.refresh_existing_experiments)
 
             self.thread.start()
@@ -253,9 +209,7 @@ class DataManager:
         )
 
         if not root_path:
-            QMessageBox.warning(
-                self.gui, "Warning", "You must select a root directory."
-            )
+            QMessageBox.warning(self.gui, "Warning", "You must select a root directory.")
             logging.warning("No root directory selected. Import canceled.")
             return
 
@@ -273,11 +227,7 @@ class DataManager:
                     for subitem in os.listdir(item_path):
                         subitem_path = os.path.join(item_path, subitem)
                         if os.path.isdir(subitem_path):
-                            csv_files = [
-                                f
-                                for f in os.listdir(subitem_path)
-                                if f.endswith(".csv")
-                            ]
+                            csv_files = [f for f in os.listdir(subitem_path) if f.endswith(".csv")]
                             if csv_files:
                                 has_datasets = True
                                 break
@@ -317,7 +267,9 @@ class DataManager:
         dialog.resize(600, 400)
 
         layout = QVBoxLayout()
-        info_text = f"Found {len(potential_experiments)} potential experiments in:\n{root_path}\n\nSelect which experiments to import:"
+        info_text = (
+            f"Found {len(potential_experiments)} potential experiments in:\n{root_path}\n\nSelect which experiments to import:"
+        )
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -331,13 +283,7 @@ class DataManager:
         for exp_path in potential_experiments:
             exp_name = os.path.basename(exp_path)
             # Count datasets for preview
-            dataset_count = len(
-                [
-                    d
-                    for d in os.listdir(exp_path)
-                    if os.path.isdir(os.path.join(exp_path, d))
-                ]
-            )
+            dataset_count = len([d for d in os.listdir(exp_path) if os.path.isdir(os.path.join(exp_path, d))])
             checkbox = QCheckBox(f"{exp_name} ({dataset_count} datasets)")
             checkbox.setChecked(True)
             checkbox.setToolTip(f"Full path: {exp_path}")
@@ -366,12 +312,8 @@ class DataManager:
         dialog.setLayout(layout)
 
         # Connect buttons
-        select_all_btn.clicked.connect(
-            lambda: [cb.setChecked(True) for cb in checkboxes.values()]
-        )
-        select_none_btn.clicked.connect(
-            lambda: [cb.setChecked(False) for cb in checkboxes.values()]
-        )
+        select_all_btn.clicked.connect(lambda: [cb.setChecked(True) for cb in checkboxes.values()])
+        select_none_btn.clicked.connect(lambda: [cb.setChecked(False) for cb in checkboxes.values()])
         cancel_btn.clicked.connect(dialog.reject)
         import_btn.clicked.connect(dialog.accept)
 
@@ -379,9 +321,7 @@ class DataManager:
             return
 
         # Get selected experiments
-        selected_experiments = [
-            path for path, checkbox in checkboxes.items() if checkbox.isChecked()
-        ]
+        selected_experiments = [path for path, checkbox in checkboxes.items() if checkbox.isChecked()]
 
         if not selected_experiments:
             QMessageBox.warning(self.gui, "Warning", "No experiments selected.")
@@ -395,7 +335,9 @@ class DataManager:
                 conflicts.append(exp_name)
 
         if conflicts:
-            conflict_msg = f"The following experiments already exist:\n{', '.join(conflicts)}\n\nDo you want to overwrite them?"
+            conflict_msg = (
+                f"The following experiments already exist:\n{', '.join(conflicts)}\n\nDo you want to overwrite them?"
+            )
             overwrite = QMessageBox.question(
                 self.gui,
                 "Conflicts Found",
@@ -410,9 +352,7 @@ class DataManager:
 
                 # Create a progress dialog for deletion if there are conflicts
                 if conflicts:
-                    deletion_progress = QProgressDialog(
-                        "Preparing for import...", "Cancel", 0, len(conflicts), self.gui
-                    )
+                    deletion_progress = QProgressDialog("Preparing for import...", "Cancel", 0, len(conflicts), self.gui)
                     deletion_progress.setWindowTitle("Removing Existing Experiments")
                     deletion_progress.setWindowModality(Qt.WindowModality.WindowModal)
                     deletion_progress.setAutoClose(False)
@@ -423,17 +363,13 @@ class DataManager:
                 # Remove existing experiments with progress tracking
                 for i, exp_name in enumerate(conflicts):
                     if conflicts:  # Only update progress if we have the dialog
-                        deletion_progress.setLabelText(
-                            f"Removing existing experiment: {exp_name}"
-                        )
+                        deletion_progress.setLabelText(f"Removing existing experiment: {exp_name}")
                         deletion_progress.setValue(i)
                         QApplication.processEvents()
 
                         if deletion_progress.wasCanceled():
                             deletion_progress.close()
-                            QMessageBox.information(
-                                self.gui, "Cancelled", "Import operation was cancelled."
-                            )
+                            QMessageBox.information(self.gui, "Cancelled", "Import operation was cancelled.")
                             return
 
                     existing_path = os.path.join(self.gui.output_path, exp_name)
@@ -452,15 +388,11 @@ class DataManager:
                         for retry in range(max_retries):
                             try:
                                 shutil.rmtree(existing_path)
-                                logging.info(
-                                    f"Deleted existing experiment '{exp_name}' for overwrite."
-                                )
+                                logging.info(f"Deleted existing experiment '{exp_name}' for overwrite.")
                                 break
                             except (OSError, PermissionError) as e:
                                 if retry < max_retries - 1:
-                                    logging.warning(
-                                        f"Failed to delete '{exp_name}' on attempt {retry + 1}: {e}. Retrying..."
-                                    )
+                                    logging.warning(f"Failed to delete '{exp_name}' on attempt {retry + 1}: {e}. Retrying...")
                                     time.sleep(0.5)  # Brief pause before retry
                                 else:
                                     raise e
@@ -472,9 +404,7 @@ class DataManager:
                             "Error",
                             f"Failed to delete existing experiment '{exp_name}': {e}\n\nPlease close any applications that might be using these files and try again.",
                         )
-                        logging.error(
-                            f"Failed to delete existing experiment '{exp_name}': {e}"
-                        )
+                        logging.error(f"Failed to delete existing experiment '{exp_name}': {e}")
                         return
 
                 if conflicts:
@@ -488,9 +418,7 @@ class DataManager:
                     dataset_path = os.path.join(exp_path, dataset_dir)
                     if os.path.isdir(dataset_path):
                         self.validate_dataset_name(dataset_path)
-                        csv_files = [
-                            f for f in os.listdir(dataset_path) if f.endswith(".csv")
-                        ]
+                        csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
                         if not csv_files:
                             raise FileNotFoundError(
                                 f"Dataset directory '{dataset_dir}' in experiment '{os.path.basename(exp_path)}' does not contain any .csv files"
@@ -501,9 +429,7 @@ class DataManager:
                 "Error",
                 f"An error occurred while validating experiments: {e}.\n\nImportation was canceled.",
             )
-            logging.error(
-                f"An error occurred while validating experiments: {e}. Importation was canceled."
-            )
+            logging.error(f"An error occurred while validating experiments: {e}. Importation was canceled.")
             return
 
         # Start multi-experiment import
@@ -515,49 +441,27 @@ class DataManager:
         progress_dialog.show()
 
         max_workers = max(1, multiprocessing.cpu_count() - 1)
-        self.multi_thread = MultiExptImportingThread(
-            selected_experiments, self.gui.output_path, max_workers=max_workers
-        )
+        self.multi_thread = MultiExptImportingThread(selected_experiments, self.gui.output_path, max_workers=max_workers)
         self.multi_thread.progress.connect(progress_dialog.setValue)
-        self.multi_thread.status_update.connect(
-            lambda msg: progress_dialog.setLabelText(msg)
-        )
+        self.multi_thread.status_update.connect(lambda msg: progress_dialog.setLabelText(msg))
 
         self.multi_thread.finished.connect(progress_dialog.close)
         self.multi_thread.finished.connect(self.refresh_existing_experiments)
+        self.multi_thread.finished.connect(lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0))
+        self.multi_thread.finished.connect(lambda count: self._show_import_summary(count, len(selected_experiments)))
         self.multi_thread.finished.connect(
-            lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)
+            lambda count: self.gui.status_bar.showMessage(f"{count} experiments imported successfully.", 5000)
         )
-        self.multi_thread.finished.connect(
-            lambda count: self._show_import_summary(count, len(selected_experiments))
-        )
-        self.multi_thread.finished.connect(
-            lambda count: self.gui.status_bar.showMessage(
-                f"{count} experiments imported successfully.", 5000
-            )
-        )
-        self.multi_thread.finished.connect(
-            lambda count: logging.info(f"{count} experiments imported successfully.")
-        )
+        self.multi_thread.finished.connect(lambda count: logging.info(f"{count} experiments imported successfully."))
 
+        self.multi_thread.error.connect(lambda e: QMessageBox.critical(self.gui, "Error", f"An error occurred: {e}"))
         self.multi_thread.error.connect(
-            lambda e: QMessageBox.critical(self.gui, "Error", f"An error occurred: {e}")
-        )
-        self.multi_thread.error.connect(
-            lambda e: logging.error(
-                f"An error occurred while importing multiple experiments: {e}"
-            )
+            lambda e: logging.error(f"An error occurred while importing multiple experiments: {e}")
         )
 
         self.multi_thread.canceled.connect(progress_dialog.close)
-        self.multi_thread.canceled.connect(
-            lambda: self.gui.status_bar.showMessage(
-                "Multi-experiment import canceled.", 5000
-            )
-        )
-        self.multi_thread.canceled.connect(
-            lambda: logging.info("Multi-experiment import canceled.")
-        )
+        self.multi_thread.canceled.connect(lambda: self.gui.status_bar.showMessage("Multi-experiment import canceled.", 5000))
+        self.multi_thread.canceled.connect(lambda: logging.info("Multi-experiment import canceled."))
         self.multi_thread.canceled.connect(self.refresh_existing_experiments)
 
         self.multi_thread.start()
@@ -582,8 +486,7 @@ class DataManager:
             QMessageBox.critical(
                 self.gui,
                 "Import Failed",
-                f"Failed to import any of the {total_count} experiments.\n\n"
-                f"Check the log files for error details.",
+                f"Failed to import any of the {total_count} experiments.\n\n" f"Check the log files for error details.",
             )
 
     # ------------------------------------------------------------------
@@ -601,50 +504,36 @@ class DataManager:
                 try:
                     QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
                     self.gui.current_experiment.close()
-                    old_expt_path = os.path.join(
-                        self.gui.output_path, self.gui.current_experiment.id
-                    )
+                    old_expt_path = os.path.join(self.gui.output_path, self.gui.current_experiment.id)
                     new_expt_path = os.path.join(self.gui.output_path, new_name)
 
                     if not new_name or any(c in r'<>:"/\\|?*' for c in new_name):
-                        raise ValueError(
-                            "Experiment name contains invalid characters for a directory name."
-                        )
+                        raise ValueError("Experiment name contains invalid characters for a directory name.")
                     if old_expt_path == new_expt_path:
                         QMessageBox.warning(
                             self.gui,
                             "Warning",
                             "The new experiment name is the same as the current one. No changes made.",
                         )
-                        logging.info(
-                            "No changes made to experiment name as it is the same as the current one."
-                        )
+                        logging.info("No changes made to experiment name as it is the same as the current one.")
                         return
                     if os.path.exists(new_expt_path):
-                        raise FileExistsError(
-                            f"An experiment with the name '{new_name}' already exists."
-                        )
+                        raise FileExistsError(f"An experiment with the name '{new_name}' already exists.")
 
                     shutil.move(old_expt_path, new_expt_path)
 
                     self.gui.current_experiment.id = new_name
                     if self.gui.current_experiment.repo is not None:
-                        self.gui.current_experiment.repo.update_path(
-                            Path(new_expt_path)
-                        )
+                        self.gui.current_experiment.repo.update_path(Path(new_expt_path))
                     for ds in self.gui.current_experiment._all_datasets:
                         if ds.repo is not None:
                             ds.repo.update_path(Path(new_expt_path) / ds.id)
                         for sess in ds._all_sessions:
                             if sess.repo is not None:
-                                sess.repo.update_path(
-                                    Path(new_expt_path) / ds.id / sess.id
-                                )
+                                sess.repo.update_path(Path(new_expt_path) / ds.id / sess.id)
 
                 except ValueError as ve:
-                    QMessageBox.critical(
-                        self.gui, "Error", f"Invalid experiment name: {ve}"
-                    )
+                    QMessageBox.critical(self.gui, "Error", f"Invalid experiment name: {ve}")
                     logging.error(f"Invalid experiment name: {ve}")
                     return
                 except FileExistsError:
@@ -661,9 +550,7 @@ class DataManager:
                     QApplication.restoreOverrideCursor()
 
                 self.refresh_existing_experiments(select_expt_id=new_name)
-                self.gui.status_bar.showMessage(
-                    "Experiment renamed successfully.", 5000
-                )
+                self.gui.status_bar.showMessage("Experiment renamed successfully.", 5000)
 
     # ------------------------------------------------------------------
     def delete_experiment(self):
@@ -696,9 +583,7 @@ class DataManager:
                     for retry in range(max_retries):
                         try:
                             shutil.rmtree(current_expt_path)
-                            logging.info(
-                                f"Deleted experiment folder: {current_expt_path}."
-                            )
+                            logging.info(f"Deleted experiment folder: {current_expt_path}.")
                             break
                         except (OSError, PermissionError) as e:
                             if retry < max_retries - 1:
@@ -714,16 +599,12 @@ class DataManager:
                         "Error",
                         f"Failed to delete experiment '{current_expt_id}': {e}\n\nPlease close any applications that might be using these files and try again.",
                     )
-                    logging.error(
-                        f"Failed to delete experiment '{current_expt_id}': {e}"
-                    )
+                    logging.error(f"Failed to delete experiment '{current_expt_id}': {e}")
                     return
 
                 self.gui.data_selection_widget.update_experiment_combo()
                 self.refresh_existing_experiments()
-                self.gui.status_bar.showMessage(
-                    "Experiment deleted successfully.", 5000
-                )
+                self.gui.status_bar.showMessage("Experiment deleted successfully.", 5000)
 
     # ------------------------------------------------------------------
     def reload_current_session(self):
@@ -740,12 +621,8 @@ class DataManager:
                             "Warning",
                             f"Could not remove session cache file. Reload may not work as expected: {e}",
                         )
-                new_sess = self.gui.current_session.repo.load(
-                    config=self.gui.config_repo.read_config()
-                )
-                idx = self.gui.current_dataset._all_sessions.index(
-                    self.gui.current_session
-                )
+                new_sess = self.gui.current_session.repo.load(config=self.gui.config_repo.read_config())
+                idx = self.gui.current_dataset._all_sessions.index(self.gui.current_session)
                 self.gui.current_dataset._all_sessions[idx] = new_sess
                 self.gui.set_current_session(new_sess)
             self.gui.plot_widget.on_data_selection_changed()
@@ -778,30 +655,18 @@ class DataManager:
                         try:
                             sess.repo.session_js.unlink()
                         except (OSError, PermissionError) as e:
-                            logging.warning(
-                                f"Failed to unlink session JS file for {sess.id}: {e}"
-                            )
+                            logging.warning(f"Failed to unlink session JS file for {sess.id}: {e}")
                     else:
                         logging.warning(
                             f"Session JS file does not exist: {sess.repo.session_js if sess.repo else 'No repo'}. Cannot unlink."
                         )
 
-                new_ds = self.gui.current_dataset.repo.load(
-                    config=self.gui.config_repo.read_config()
-                )
+                new_ds = self.gui.current_dataset.repo.load(config=self.gui.config_repo.read_config())
                 if self.gui.current_dataset.parent_experiment is not None:
                     # Update the dataset in the parent experiment's list if it exists.
-                    logging.info(
-                        f"Reloading dataset in parent experiment: {self.gui.current_dataset.parent_experiment.id}."
-                    )
-                    idx = (
-                        self.gui.current_dataset.parent_experiment._all_datasets.index(
-                            self.gui.current_dataset
-                        )
-                    )
-                    self.gui.current_dataset.parent_experiment._all_datasets[idx] = (
-                        new_ds
-                    )
+                    logging.info(f"Reloading dataset in parent experiment: {self.gui.current_dataset.parent_experiment.id}.")
+                    idx = self.gui.current_dataset.parent_experiment._all_datasets.index(self.gui.current_dataset)
+                    self.gui.current_dataset.parent_experiment._all_datasets[idx] = new_ds
                 self.gui.set_current_dataset(new_ds)
 
             self.gui.data_selection_widget.update_session_combo()
@@ -813,13 +678,9 @@ class DataManager:
 
     def reload_current_experiment(self):
         # TODO: Fix pathing issues with reloading experiments.
-        current_experiment_combo_index = (
-            self.gui.data_selection_widget.experiment_combo.currentIndex()
-        )
+        current_experiment_combo_index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         if self.gui.current_experiment:
-            logging.info(
-                f"Reloading current experiment: {self.gui.current_experiment.id}."
-            )
+            logging.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")
             if self.gui.current_experiment.repo is not None:
                 if self.gui.current_experiment.repo.expt_js.exists():
                     try:
@@ -841,9 +702,7 @@ class DataManager:
                         try:
                             ds.repo.dataset_js.unlink()
                         except (OSError, PermissionError) as e:
-                            logging.warning(
-                                f"Failed to unlink dataset JS file for {ds.id}: {e}"
-                            )
+                            logging.warning(f"Failed to unlink dataset JS file for {ds.id}: {e}")
                     else:
                         logging.warning(
                             f"Dataset JS file does not exist: {ds.repo.dataset_js if ds.repo else 'No repo'}. Cannot unlink."
@@ -854,36 +713,26 @@ class DataManager:
                             try:
                                 sess.repo.session_js.unlink()
                             except (OSError, PermissionError) as e:
-                                logging.warning(
-                                    f"Failed to unlink session JS file for {sess.id}: {e}"
-                                )
+                                logging.warning(f"Failed to unlink session JS file for {sess.id}: {e}")
                         else:
                             logging.warning(
                                 f"Session JS file does not exist: {sess.repo.session_js if sess.repo else 'No repo'}. Cannot unlink."
                             )
 
                 # Reload the experiment from the repository.
-                logging.info(
-                    f"Reloading experiment from repository: {self.gui.current_experiment.repo.folder.name}."
-                )
-                new_expt = self.gui.current_experiment.repo.load(
-                    config=self.gui.config_repo.read_config()
-                )
+                logging.info(f"Reloading experiment from repository: {self.gui.current_experiment.repo.folder.name}.")
+                new_expt = self.gui.current_experiment.repo.load(config=self.gui.config_repo.read_config())
                 self.gui.set_current_experiment(new_expt)
             else:
                 self.gui.set_current_experiment(None)
-                logging.warning(
-                    "No repository found for the current experiment. Cannot reload."
-                )
+                logging.warning("No repository found for the current experiment. Cannot reload.")
             self.gui.set_current_dataset(None)
             self.gui.set_current_session(None)
 
             self.refresh_existing_experiments()
             # Adjust for placeholder: if we had a valid experiment selected (index > 0), maintain it
             if current_experiment_combo_index > 0:
-                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(
-                    current_experiment_combo_index
-                )
+                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
             else:
                 # If we were on placeholder, stay on placeholder
                 self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)
@@ -905,20 +754,13 @@ class DataManager:
         if select_expt_id is not None:
             # Find the experiment in the list and select it (accounting for placeholder at index 0)
             if select_expt_id in self.gui.expts_dict_keys:
-                index = (
-                    self.gui.expts_dict_keys.index(select_expt_id) + 1
-                )  # +1 for placeholder
+                index = self.gui.expts_dict_keys.index(select_expt_id) + 1  # +1 for placeholder
             else:
                 index = 0  # Select placeholder if not found
         else:
             # Check if we currently have an experiment loaded and try to maintain that selection
-            if (
-                self.gui.current_experiment
-                and self.gui.current_experiment.id in self.gui.expts_dict_keys
-            ):
-                index = (
-                    self.gui.expts_dict_keys.index(self.gui.current_experiment.id) + 1
-                )  # +1 for placeholder
+            if self.gui.current_experiment and self.gui.current_experiment.id in self.gui.expts_dict_keys:
+                index = self.gui.expts_dict_keys.index(self.gui.current_experiment.id) + 1  # +1 for placeholder
             else:
                 index = 0  # Default to placeholder (no selection)
 
@@ -957,9 +799,7 @@ class DataManager:
 
     def load_experiment(self, index):
         if index < 0 or index >= len(self.gui.expts_dict_keys):
-            logging.warning(
-                f"Invalid experiment index: {index}. Available experiments: {len(self.gui.expts_dict_keys)}"
-            )
+            logging.warning(f"Invalid experiment index: {index}. Available experiments: {len(self.gui.expts_dict_keys)}")
             return
 
         # Cancel any existing loading operation
@@ -980,9 +820,7 @@ class DataManager:
         logging.info(f"Loading experiment: '{experiment_name}'.")
 
         # Create and show progress dialog
-        progress_dialog = QProgressDialog(
-            "Loading experiment...", "Cancel", 0, 100, self.gui
-        )
+        progress_dialog = QProgressDialog("Loading experiment...", "Cancel", 0, 100, self.gui)
         progress_dialog.setWindowTitle(f"Loading: {experiment_name}")
         progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         progress_dialog.setAutoClose(False)
@@ -1034,27 +872,19 @@ class DataManager:
 
             # Save session state for restoration
             profile_name = (
-                self.gui.profile_selector_combo.currentText()
-                if hasattr(self.gui, "profile_selector_combo")
-                else None
+                self.gui.profile_selector_combo.currentText() if hasattr(self.gui, "profile_selector_combo") else None
             )
-            app_state.save_current_session_state(
-                experiment_id=experiment.id, profile_name=profile_name
-            )
+            app_state.save_current_session_state(experiment_id=experiment.id, profile_name=profile_name)
 
             self.gui.data_selection_widget.update_dataset_combo()
             # Re-enable dataset combo since an experiment is now loaded
             self.gui.data_selection_widget.dataset_combo.setEnabled(True)
             self.gui.plot_widget.on_data_selection_changed()
-            self.gui.status_bar.showMessage(
-                f"Experiment '{experiment.id}' loaded successfully.", 5000
-            )
+            self.gui.status_bar.showMessage(f"Experiment '{experiment.id}' loaded successfully.", 5000)
             logging.info(f"Experiment '{experiment.id}' loaded successfully.")
         except Exception as e:
             logging.error(f"Error setting loaded experiment: {e}")
-            QMessageBox.critical(
-                self.gui, "Error", f"Error setting loaded experiment: {e}"
-            )
+            QMessageBox.critical(self.gui, "Error", f"Error setting loaded experiment: {e}")
         finally:
             # Cleanup
             if hasattr(self, "loading_thread"):
@@ -1078,13 +908,8 @@ class DataManager:
     def _on_experiment_load_canceled(self):
         """Handle experiment loading cancellation."""
         # Check if loading actually completed successfully - if so, ignore this cancel signal
-        if (
-            hasattr(self, "loading_completed_successfully")
-            and self.loading_completed_successfully
-        ):
-            logging.debug(
-                "Ignoring cancel signal - experiment loading completed successfully"
-            )
+        if hasattr(self, "loading_completed_successfully") and self.loading_completed_successfully:
+            logging.debug("Ignoring cancel signal - experiment loading completed successfully")
             if hasattr(self, "current_progress_dialog"):
                 del self.current_progress_dialog
             return
@@ -1100,9 +925,7 @@ class DataManager:
 
         # Reset experiment combo to no selection
         self.gui.data_selection_widget.experiment_combo.blockSignals(True)
-        self.gui.data_selection_widget.experiment_combo.setCurrentIndex(
-            0
-        )  # Select placeholder
+        self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)  # Select placeholder
         self.gui.data_selection_widget.experiment_combo.blockSignals(False)
 
         if hasattr(self, "current_progress_dialog"):
@@ -1119,18 +942,12 @@ class DataManager:
             )
             return
 
-        logging.debug(
-            f"Loading dataset [{index}] from experiment '{self.gui.current_experiment.id}'."
-        )
+        logging.debug(f"Loading dataset [{index}] from experiment '{self.gui.current_experiment.id}'.")
         dataset = self.gui.current_experiment.datasets[index]
         self.gui.set_current_dataset(dataset)
 
         # Save session state for restoration
-        profile_name = (
-            self.gui.profile_selector_combo.currentText()
-            if hasattr(self.gui, "profile_selector_combo")
-            else None
-        )
+        profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, "profile_selector_combo") else None
         app_state.save_current_session_state(
             experiment_id=self.gui.current_experiment.id,
             dataset_id=dataset.id,
@@ -1159,22 +976,14 @@ class DataManager:
             )
             return
 
-        logging.debug(
-            f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'."
-        )
+        logging.debug(f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'.")
         session = self.gui.current_dataset.sessions[index]
         self.gui.set_current_session(session)
 
         # Save complete session state for restoration
-        profile_name = (
-            self.gui.profile_selector_combo.currentText()
-            if hasattr(self.gui, "profile_selector_combo")
-            else None
-        )
+        profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, "profile_selector_combo") else None
         app_state.save_current_session_state(
-            experiment_id=(
-                self.gui.current_experiment.id if self.gui.current_experiment else None
-            ),
+            experiment_id=(self.gui.current_experiment.id if self.gui.current_experiment else None),
             dataset_id=self.gui.current_dataset.id,
             session_id=session.id,
             profile_name=profile_name,
@@ -1219,9 +1028,7 @@ class DataManager:
                 if not validity_check_dict["Animal ID"]:
                     layout.addWidget(QLabel("- Animal ID (e.g., XX000.0)"))
                 if not validity_check_dict["Condition"]:
-                    layout.addWidget(
-                        QLabel("- Experimental Condition (Any string. Spaces allowed.)")
-                    )
+                    layout.addWidget(QLabel("- Experimental Condition (Any string. Spaces allowed.)"))
                 layout.addWidget(QLabel("\nRename your dataset:"))
                 line_edit = QLineEdit(dataset_name)
                 layout.addWidget(line_edit)
@@ -1235,9 +1042,7 @@ class DataManager:
                     return dataset_name
                 raise ValueError("User canceled dataset renaming.")
             else:
-                print(
-                    f'The dataset name "{dataset_name}" is not valid. Please confirm the following fields:'
-                )
+                print(f'The dataset name "{dataset_name}" is not valid. Please confirm the following fields:')
                 if not validity_check_dict["Date"]:
                     print("\t- Date (YYYYMMDD)")
                 if not validity_check_dict["Animal ID"]:
@@ -1293,16 +1098,10 @@ class DataManager:
 
         validated_dataset_name, name_changed = check_name(original_dataset_name)
         if name_changed:
-            logging.info(
-                f'Dataset name changed from "{original_dataset_name}" to "{validated_dataset_name}".'
-            )
-            validated_dataset_path = os.path.join(
-                dataset_basepath, validated_dataset_name
-            )
+            logging.info(f'Dataset name changed from "{original_dataset_name}" to "{validated_dataset_name}".')
+            validated_dataset_path = os.path.join(dataset_basepath, validated_dataset_name)
             os.rename(dataset_path, validated_dataset_path)
-            logging.info(
-                f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".'
-            )
+            logging.info(f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".')
         else:
             validated_dataset_path = dataset_path
         return validated_dataset_path
@@ -1323,9 +1122,7 @@ class DataManager:
             last_export_path = os.path.expanduser("~")
 
         default_name = os.path.join(last_export_path, "monstim_logs.zip")
-        file_path, _ = QFileDialog.getSaveFileName(
-            self.gui, "Save Error Report", default_name, "Zip Files (*.zip)"
-        )
+        file_path, _ = QFileDialog.getSaveFileName(self.gui, "Save Error Report", default_name, "Zip Files (*.zip)")
         if not file_path:
             return
 
@@ -1339,15 +1136,11 @@ class DataManager:
                     if os.path.isfile(f):
                         zf.write(f, arcname=os.path.basename(f))
             self.gui.status_bar.showMessage("Error report saved.", 5000)
-            QMessageBox.information(
-                self.gui, "Saved", f"Error report saved to:\n{file_path}"
-            )
+            QMessageBox.information(self.gui, "Saved", f"Error report saved to:\n{file_path}")
             logging.info(f"Saved error report to {file_path}")
         except Exception as e:
             logging.exception("Failed to save error report")
-            QMessageBox.critical(
-                self.gui, "Error", f"Could not save error report:\n{e}"
-            )
+            QMessageBox.critical(self.gui, "Error", f"Could not save error report:\n{e}")
         finally:
             QApplication.restoreOverrideCursor()
 

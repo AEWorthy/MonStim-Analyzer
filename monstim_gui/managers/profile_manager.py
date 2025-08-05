@@ -44,9 +44,7 @@ class ProfileManager:
     def save_profile(self, data, filename=None):
         if not filename:
             name = data.get("name", "profile")
-            filename = os.path.join(
-                self.profile_dir, f"{name.replace(' ', '_').lower()}.yml"
-            )
+            filename = os.path.join(self.profile_dir, f"{name.replace(' ', '_').lower()}.yml")
         # Use a regular dict for YAML dumping (insertion order is preserved in Python 3.7+)
         ordered = {}
         for key in [

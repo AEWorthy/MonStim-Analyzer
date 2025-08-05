@@ -23,36 +23,26 @@ class MenuBar(QMenuBar):
         import_action.triggered.connect(self.parent.data_manager.import_expt_data)
 
         import_multiple_action = file_menu.addAction("Import Multiple Experiments")
-        import_multiple_action.triggered.connect(
-            self.parent.data_manager.import_multiple_expt_data
-        )
+        import_multiple_action.triggered.connect(self.parent.data_manager.import_multiple_expt_data)
 
         rename_experiment_action = file_menu.addAction("Rename Current Experiment")
-        rename_experiment_action.triggered.connect(
-            self.parent.data_manager.rename_experiment
-        )
+        rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
 
         delete_experiment_action = file_menu.addAction("Delete Current Experiment")
-        delete_experiment_action.triggered.connect(
-            self.parent.data_manager.delete_experiment
-        )
+        delete_experiment_action.triggered.connect(self.parent.data_manager.delete_experiment)
 
         file_menu.addSeparator()
 
         # refresh existing datasets button
         refresh_datasets_action = file_menu.addAction("Refresh Experiments List")
-        refresh_datasets_action.triggered.connect(
-            self.parent.data_manager.refresh_existing_experiments
-        )
+        refresh_datasets_action.triggered.connect(self.parent.data_manager.refresh_existing_experiments)
         refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
 
         file_menu.addSeparator()
 
         # Preferences button
         preferences_action = file_menu.addAction("Preferences")
-        preferences_action.triggered.connect(
-            self.parent.data_manager.show_preferences_window
-        )
+        preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
 
         # UI Scaling Preferences button
         ui_scaling_action = file_menu.addAction("Display Preferences")
@@ -98,42 +88,24 @@ class MenuBar(QMenuBar):
 
         # Experiment level actions
         update_window_action = experiment_menu.addAction("Manage Latency Windows")
-        update_window_action.triggered.connect(
-            lambda: self.parent.manage_latency_windows("experiment")
-        )
+        update_window_action.triggered.connect(lambda: self.parent.manage_latency_windows("experiment"))
         invert_polarity_action = experiment_menu.addAction("Invert Channel Polarity")
-        invert_polarity_action.triggered.connect(
-            lambda: self.parent.invert_channel_polarity("experiment")
-        )
+        invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity("experiment"))
         change_names_action = experiment_menu.addAction("Change Channel Names")
-        change_names_action.triggered.connect(
-            lambda: self.parent.change_channel_names("experiment")
-        )
+        change_names_action.triggered.connect(lambda: self.parent.change_channel_names("experiment"))
         experiment_menu.addSeparator()
-        reload_experiment_action = experiment_menu.addAction(
-            "Reload Current Experiment"
-        )
+        reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
-        remove_experiment_action = experiment_menu.addAction(
-            "Remove Current Experiment"
-        )
-        remove_experiment_action.triggered.connect(
-            self.parent.data_manager.delete_experiment
-        )
+        remove_experiment_action = experiment_menu.addAction("Remove Current Experiment")
+        remove_experiment_action.triggered.connect(self.parent.data_manager.delete_experiment)
 
         # Dataset level actions
         update_window_action = dataset_menu.addAction("Manage Latency Windows")
-        update_window_action.triggered.connect(
-            lambda: self.parent.manage_latency_windows("dataset")
-        )
+        update_window_action.triggered.connect(lambda: self.parent.manage_latency_windows("dataset"))
         invert_polarity_action = dataset_menu.addAction("Invert Channel Polarity")
-        invert_polarity_action.triggered.connect(
-            lambda: self.parent.invert_channel_polarity("dataset")
-        )
+        invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity("dataset"))
         change_names_action = dataset_menu.addAction("Change Channel Names")
-        change_names_action.triggered.connect(
-            lambda: self.parent.change_channel_names("dataset")
-        )
+        change_names_action.triggered.connect(lambda: self.parent.change_channel_names("dataset"))
         dataset_menu.addSeparator()
         reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
@@ -144,17 +116,11 @@ class MenuBar(QMenuBar):
 
         # Session level actions
         update_window_action = session_menu.addAction("Manage Latency Windows")
-        update_window_action.triggered.connect(
-            lambda: self.parent.manage_latency_windows("session")
-        )
+        update_window_action.triggered.connect(lambda: self.parent.manage_latency_windows("session"))
         invert_polarity_action = session_menu.addAction("Invert Channel Polarity")
-        invert_polarity_action.triggered.connect(
-            lambda: self.parent.invert_channel_polarity("session")
-        )
+        invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity("session"))
         change_names_action = session_menu.addAction("Change Channel Names")
-        change_names_action.triggered.connect(
-            lambda: self.parent.change_channel_names("session")
-        )
+        change_names_action.triggered.connect(lambda: self.parent.change_channel_names("session"))
         session_menu.addSeparator()
         reload_session_action = session_menu.addAction("Reload Current Session")
         reload_session_action.triggered.connect(self.confirm_reload_session)
@@ -179,15 +145,11 @@ class MenuBar(QMenuBar):
 
         # Show EMG processing info button
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
-        processing_info_action.triggered.connect(
-            lambda: self.parent.show_help_dialog("Transform_EMG.md", latex=True)
-        )
+        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog("Transform_EMG.md", latex=True))
 
         # Show Experiment Import Info button
         data_import_action = help_menu.addAction("Show Experiment Import Info")
-        data_import_action.triggered.connect(
-            lambda: self.parent.show_help_dialog("multi_experiment_import.md")
-        )
+        data_import_action.triggered.connect(lambda: self.parent.show_help_dialog("multi_experiment_import.md"))
 
         help_menu.addSeparator()
 
@@ -284,9 +246,7 @@ class MenuBar(QMenuBar):
             dialog = ProgramPreferencesDialog(self.parent)
 
             # Connect the preferences changed signal to refresh any UI that might depend on it
-            dialog.preferences_changed.connect(
-                self.parent.refresh_preferences_dependent_ui
-            )
+            dialog.preferences_changed.connect(self.parent.refresh_preferences_dependent_ui)
 
             dialog.exec()
         except ImportError as e:

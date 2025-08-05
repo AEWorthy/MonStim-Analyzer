@@ -20,9 +20,7 @@ class PlotPane(QGroupBox):
 
         # Create the main graphics layout widget
         self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
-        self.graphics_layout.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.graphics_layout.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.graphics_layout.setMinimumSize(800, 400)
         self.graphics_layout.setAntialiasing(True)
         self.layout.addWidget(self.graphics_layout)

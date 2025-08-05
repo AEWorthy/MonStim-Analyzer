@@ -94,9 +94,7 @@ class UIConfig:
             # PyQt6 specific
             from PyQt6.QtCore import Qt
 
-            app.setHighDpiScaleFactorRoundingPolicy(
-                Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-            )
+            app.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     def get_responsive_size(self, base_size: int, size_type: str = "general") -> int:
         """Get a responsive size based on the configuration and scale factor."""

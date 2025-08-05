@@ -95,9 +95,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
-            raw_data_df.set_index(
-                ["channel_index", "window_name", "voltage"], inplace=True
-            )
+            raw_data_df.set_index(["channel_index", "window_name", "voltage"], inplace=True)
             return raw_data_df
 
         except Exception as e:
@@ -129,15 +127,11 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Normalize to M-max if needed
                 if relative_to_mmax and means is not None:
                     if manual_mmax is None:
-                        mmax = self.emg_object.get_avg_m_max(
-                            channel_index=channel_idx, method=method
-                        )
+                        mmax = self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
                     else:
                         mmax = manual_mmax
                     if mmax == 0:
-                        raise ValueError(
-                            "M-max cannot be zero when normalizing reflex curves."
-                        )
+                        raise ValueError("M-max cannot be zero when normalizing reflex curves.")
                     # Normalize means and stdevs by M-max
                     means = means / mmax
                     stdevs = stdevs / mmax
@@ -156,9 +150,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Plot the error bands
                 upper = means + stdevs
                 lower = means - stdevs
-                transparent_pen = pg.mkPen(
-                    color=pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine
-                )
+                transparent_pen = pg.mkPen(color=pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine)
                 upper_curve = plot_item.plot(voltages, upper, pen=transparent_pen)
                 lower_curve = plot_item.plot(voltages, lower, pen=transparent_pen)
                 if not hasattr(plot_item, "_fill_curves_refs"):
@@ -185,9 +177,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
 
         except Exception as e:
-            print(
-                f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}"
-            )
+            print(f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}")
 
     def plot_maxH(
         self,
@@ -232,9 +222,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 plot_item = plot_items[plot_idx]
 
                 # Get average H-wave amplitudes to find max H voltage
-                h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(
-                    method, channel_index
-                )
+                h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_index)
                 stimulus_voltages = self.emg_object.stimulus_voltages
 
                 # Filter out stimulus voltages greater than max_stim_value if specified
@@ -258,12 +246,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 m_wave_amplitudes = []
                 h_response_amplitudes = []
                 for voltage in marginal_voltages:
-                    m_waves = self.emg_object.get_m_wave_amplitudes_at_voltage(
-                        method, channel_index, voltage
-                    )
-                    h_responses = self.emg_object.get_h_wave_amplitudes_at_voltage(
-                        method, channel_index, voltage
-                    )
+                    m_waves = self.emg_object.get_m_wave_amplitudes_at_voltage(method, channel_index, voltage)
+                    h_responses = self.emg_object.get_h_wave_amplitudes_at_voltage(method, channel_index, voltage)
                     m_wave_amplitudes.extend(m_waves)
                     h_response_amplitudes.extend(h_responses)
                     stimulus_voltages_for_channel.extend([voltage] * len(m_waves))
@@ -271,28 +255,18 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
                 if relative_to_mmax:
                     if manual_mmax is not None:
-                        m_max = (
-                            manual_mmax[channel_index]
-                            if isinstance(manual_mmax, list)
-                            else manual_mmax
-                        )
+                        m_max = manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax
                     else:
-                        m_max = self.emg_object.get_avg_m_max(
-                            method=method, channel_index=channel_index
-                        )
+                        m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
 
                     if m_max and m_max != 0:
                         m_wave_amplitudes = m_wave_amplitudes / m_max
                         h_response_amplitudes = h_response_amplitudes / m_max
                     else:
-                        raise UnableToPlotError(
-                            f"M-max could not be calculated or is zero for channel {channel_index}."
-                        )
+                        raise UnableToPlotError(f"M-max could not be calculated or is zero for channel {channel_index}.")
 
                 # Append data to raw data dictionary
-                raw_data_dict["channel_index"].extend(
-                    [channel_index] * len(m_wave_amplitudes)
-                )
+                raw_data_dict["channel_index"].extend([channel_index] * len(m_wave_amplitudes))
                 raw_data_dict["stimulus_v"].extend(stimulus_voltages_for_channel)
                 raw_data_dict["m_wave_amplitudes"].extend(m_wave_amplitudes)
                 raw_data_dict["h_wave_amplitudes"].extend(h_response_amplitudes)
@@ -408,8 +382,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Set labels and formatting
                 channel_name = self.emg_object.channel_names[channel_index]
                 voltage_range = round(
-                    (self.emg_object.bin_size / 2)
-                    + (self.emg_object.bin_size * bin_margin),
+                    (self.emg_object.bin_size / 2) + (self.emg_object.bin_size * bin_margin),
                     2,
                 )
                 title = f"{channel_name} ({round(max_h_reflex_voltage, 2)} ± {voltage_range}V)"
@@ -418,14 +391,10 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if relative_to_mmax:
                     y_label = f"EMG Amp. (M-max, {method})"
 
-                self.set_labels(
-                    plot_item, title=title, x_label="Response Type", y_label=y_label
-                )
+                self.set_labels(plot_item, title=title, x_label="Response Type", y_label=y_label)
 
                 # Set x-axis ticks and labels
-                plot_item.getAxis("bottom").setTicks(
-                    [[(m_x, "M-response"), (h_x, "H-reflex")]]
-                )
+                plot_item.getAxis("bottom").setTicks([[(m_x, "M-response"), (h_x, "H-reflex")]])
                 plot_item.setXRange(m_x - 1, h_x + 1)
 
                 # Enable grid
@@ -506,12 +475,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     session_ids.append(session.id)
 
                 # Filter out NaN values for plotting
-                valid_amplitudes = [
-                    amp for amp in m_max_amplitudes if not np.isnan(amp)
-                ]
-                valid_thresholds = [
-                    thr for thr in m_max_thresholds if not np.isnan(thr)
-                ]
+                valid_amplitudes = [amp for amp in m_max_amplitudes if not np.isnan(amp)]
+                valid_thresholds = [thr for thr in m_max_thresholds if not np.isnan(thr)]
 
                 # Append to superlist for y-axis adjustment
                 all_m_max_amplitudes.extend(valid_amplitudes)

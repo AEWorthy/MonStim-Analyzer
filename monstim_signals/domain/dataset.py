@@ -54,9 +54,7 @@ class Dataset:
             self.stim_start = 0.0
 
         self.update_latency_window_parameters()
-        logging.info(
-            f"Dataset {self.id} initialized with {len(self.sessions)} sessions."
-        )
+        logging.info(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
 
     @property
     def is_completed(self) -> bool:
@@ -110,11 +108,7 @@ class Dataset:
         Returns the formatted name of the dataset.
         If the date, animal_id, or condition is not set, returns the dataset folder name.
         """
-        return (
-            f"{self.date} {self.animal_id} {self.condition}"
-            if self.date and self.animal_id and self.condition
-            else self.id
-        )
+        return f"{self.date} {self.animal_id} {self.condition}" if self.date and self.animal_id and self.condition else self.id
 
     @property
     def num_sessions(self) -> int:
@@ -127,9 +121,7 @@ class Dataset:
 
     @property
     def sessions(self) -> List[Session]:
-        return [
-            sess for sess in self._all_sessions if sess.id not in self.excluded_sessions
-        ]
+        return [sess for sess in self._all_sessions if sess.id not in self.excluded_sessions]
 
     @property
     def num_channels(self) -> int:
@@ -156,10 +148,7 @@ class Dataset:
             return np.array([])
         binned_voltages = set()
         for session in self.sessions:
-            vols = (
-                np.round(np.array(session.stimulus_voltages) / self.bin_size)
-                * self.bin_size
-            )
+            vols = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             binned_voltages.update(vols.tolist())
         return np.array(sorted(binned_voltages))
 
@@ -175,21 +164,15 @@ class Dataset:
         linestyle: str | None = None,
     ) -> None:
         if not self.sessions:
-            logging.warning(
-                f"No sessions available to add latency window '{name}' in dataset {self.id}."
-            )
+            logging.warning(f"No sessions available to add latency window '{name}' in dataset {self.id}.")
             return
         for session in self.sessions:
-            session.add_latency_window(
-                name, start_times, durations, color=color, linestyle=linestyle
-            )
+            session.add_latency_window(name, start_times, durations, color=color, linestyle=linestyle)
         self.update_latency_window_parameters()
 
     def remove_latency_window(self, name: str) -> None:
         if not self.sessions:
-            logging.warning(
-                f"No sessions available to remove latency window '{name}' in dataset {self.id}."
-            )
+            logging.warning(f"No sessions available to remove latency window '{name}' in dataset {self.id}.")
             return
         for session in self.sessions:
             session.remove_latency_window(name)
@@ -198,9 +181,7 @@ class Dataset:
     def apply_latency_window_preset(self, preset_name: str) -> None:
         """Apply a latency window preset to all sessions in the dataset."""
         if not self.sessions:
-            logging.warning(
-                f"No sessions available to apply preset '{preset_name}' in dataset {self.id}."
-            )
+            logging.warning(f"No sessions available to apply preset '{preset_name}' in dataset {self.id}.")
             return
         for session in self.sessions:
             session.apply_latency_window_preset(preset_name)
@@ -299,9 +280,7 @@ class Dataset:
             dataset.plot(plot_type='reflexCurves', mmax_report=True)
         """
         # Call the appropriate plotting method from the plotter object
-        raw_data = getattr(
-            self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}'
-        )(**kwargs)
+        raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
         return raw_data
 
     def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
@@ -320,17 +299,13 @@ class Dataset:
         m_max_thresholds = []
         for session in self.sessions:
             try:
-                m_max, mmax_low_stim, _ = session.get_m_max(
-                    method, channel_index, return_mmax_stim_range=True
-                )
+                m_max, mmax_low_stim, _ = session.get_m_max(method, channel_index, return_mmax_stim_range=True)
                 m_max_amplitudes.append(m_max)
                 m_max_thresholds.append(mmax_low_stim)
 
             except ValueError as e:
 
-                logging.warning(
-                    f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}"
-                )
+                logging.warning(f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}")
 
         if not m_max_amplitudes:
             if return_avg_mmax_thresholds:
@@ -346,76 +321,45 @@ class Dataset:
         """Average M-wave amplitudes for each stimulus bin across sessions."""
         m_wave_bins = {v: [] for v in self.stimulus_voltages}
         for session in self.sessions:
-            binned = (
-                np.round(np.array(session.stimulus_voltages) / self.bin_size)
-                * self.bin_size
-            )
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             m_wave = session.get_m_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, m_wave):
                 m_wave_bins[volt].append(amp)
-        avg = [
-            float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else np.nan
-            for v in self.stimulus_voltages
-        ]
+        avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         sem = [
-            (
-                float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v])))
-                if m_wave_bins[v]
-                else np.nan
-            )
+            (float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan)
             for v in self.stimulus_voltages
         ]
         return avg, sem
 
-    def get_m_wave_amplitudes_at_voltage(
-        self, method: str, channel_index: int, voltage: float
-    ) -> np.ndarray:
+    def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
         """
         Get M-wave amplitudes at a specific stimulus voltage across all sessions.
         """
         amps = []
         for session in self.sessions:
-            binned = (
-                np.round(np.array(session.stimulus_voltages) / self.bin_size)
-                * self.bin_size
-            )
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             if voltage in binned:
                 idx = np.where(binned == voltage)[0][0]
                 amps.append(session.get_m_wave_amplitudes(method, channel_index)[idx])
         return np.array(amps)
 
-    def get_avg_h_wave_amplitudes(
-        self, method: str, channel_index: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
         """Average H-reflex amplitudes for each stimulus bin across sessions."""
         h_wave_bins = {v: [] for v in self.stimulus_voltages}
         for session in self.sessions:
-            binned = (
-                np.round(np.array(session.stimulus_voltages) / self.bin_size)
-                * self.bin_size
-            )
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             h_wave = session.get_h_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, h_wave):
                 h_wave_bins[volt].append(amp)
-        avg = [
-            float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan
-            for v in self.stimulus_voltages
-        ]
-        std = [
-            float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan
-            for v in self.stimulus_voltages
-        ]
+        avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return np.array(avg), np.array(std)
 
-    def get_h_wave_amplitudes_at_voltage(
-        self, method: str, channel_index: int, voltage: float
-    ) -> np.ndarray:
+    def get_h_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
         amps = []
         for session in self.sessions:
-            binned = (
-                np.round(np.array(session.stimulus_voltages) / self.bin_size)
-                * self.bin_size
-            )
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             if voltage in binned:
                 idx = np.where(binned == voltage)[0][0]
                 amps.append(session.get_h_wave_amplitudes(method, channel_index)[idx])
@@ -431,16 +375,12 @@ class Dataset:
         if not isinstance(window, LatencyWindow):
             window = self.get_latency_window(window)
             if window is None:
-                logging.warning(
-                    f"Latency window '{window}' not found in dataset {self.id}."
-                )
+                logging.warning(f"Latency window '{window}' not found in dataset {self.id}.")
                 return {}
 
         result: dict[str, List[np.ndarray]] = {}
         for session in self.sessions:
-            result[session.id] = session.get_lw_reflex_amplitudes(
-                method, channel_index, window.name
-            )
+            result[session.id] = session.get_lw_reflex_amplitudes(method, channel_index, window.name)
         return result
 
     def get_average_lw_reflex_curve(
@@ -456,9 +396,7 @@ class Dataset:
         if not isinstance(window, LatencyWindow):
             window = self.get_latency_window(window)
             if window is None:
-                logging.warning(
-                    f"Latency window '{window}' not found in dataset {self.id}."
-                )
+                logging.warning(f"Latency window '{window}' not found in dataset {self.id}.")
                 return {"voltages": [], "means": [], "stdevs": []}
 
         # Get all reflex amplitudes for all sessions using the dataset-level method
@@ -472,23 +410,14 @@ class Dataset:
             session = next((s for s in self.sessions if s.id == session_id), None)
             if session is None:
                 continue
-            binned = (
-                np.round(np.array(session.stimulus_voltages) / self.bin_size)
-                * self.bin_size
-            )
+            binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             for v, amp in zip(binned, amps):
                 if v in bin_amplitudes:
                     bin_amplitudes[v].append(amp)
         # Compute the mean and standard deviation for each voltage bin
         voltages = sorted(bin_amplitudes.keys())
-        means = [
-            float(np.mean(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan
-            for v in voltages
-        ]
-        stdevs = [
-            float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan
-            for v in voltages
-        ]
+        means = [float(np.mean(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in voltages]
+        stdevs = [float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in voltages]
         return {
             "voltages": np.array(voltages),
             "means": np.array(means),
@@ -508,9 +437,7 @@ class Dataset:
         for session in self.sessions:
             session.invert_channel_polarity(channel_index)
         self.reset_all_caches()
-        logging.info(
-            f"Inverted polarity of channel {channel_index} in dataset {self.id}."
-        )
+        logging.info(f"Inverted polarity of channel {channel_index} in dataset {self.id}.")
 
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         m_window = self.get_latency_window("M-wave")
@@ -522,9 +449,7 @@ class Dataset:
             h_window.start_times = h_start
             h_window.durations = h_duration
         for session in self.sessions:
-            session.change_reflex_latency_windows(
-                m_start, m_duration, h_start, h_duration
-            )
+            session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
         self.update_latency_window_parameters()
         logging.info(
             f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}."
@@ -541,9 +466,7 @@ class Dataset:
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(
-                f"Session {session_id} already excluded in dataset {self.id}."
-            )
+            logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
 
         if self.sessions == []:
             logging.info(f"All sessions in dataset {self.id} have been excluded.")
@@ -551,9 +474,7 @@ class Dataset:
             if self.parent_experiment is not None:
                 self.parent_experiment.exclude_dataset(self.id)
             self.annot.excluded_sessions.clear()
-            logging.info(
-                f"Dataset {self.id} has no remaining sessions and is now excluded from the parent experiment."
-            )
+            logging.info(f"Dataset {self.id} has no remaining sessions and is now excluded from the parent experiment.")
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""
@@ -563,9 +484,7 @@ class Dataset:
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(
-                f"Session {session_id} is not excluded from dataset {self.id}."
-            )
+            logging.warning(f"Session {session_id} is not excluded from dataset {self.id}.")
 
     def rename_channels(self, new_names: dict[str, str]) -> None:
         """
@@ -576,9 +495,7 @@ class Dataset:
         """
         for session in self.sessions:
             session.rename_channels(new_names)
-        logging.info(
-            f"Renamed channels in dataset {self.id} according to mapping: {new_names}."
-        )
+        logging.info(f"Renamed channels in dataset {self.id} according to mapping: {new_names}.")
 
     # ──────────────────────────────────────────────────────────────────
     # Utility methods
@@ -621,9 +538,7 @@ class Dataset:
             if hasattr(sess, "close"):
                 sess.close()
             else:
-                raise NotImplementedError(
-                    f"Session {sess.id} does not have a close method."
-                )
+                raise NotImplementedError(f"Session {sess.id} does not have a close method.")
 
     # ──────────────────────────────────────────────────────────────────
     # 3) Object representation and reports

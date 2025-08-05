@@ -112,12 +112,8 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
         """Plot reflex curves data for a specific channel."""
         try:
             # Get M-wave and H-reflex data using the Experiment domain object API
-            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(
-                method, channel_idx
-            )
-            h_response_means, h_response_error = (
-                self.emg_object.get_avg_h_wave_amplitudes(method, channel_idx)
-            )
+            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(method, channel_idx)
+            h_response_means, h_response_error = self.emg_object.get_avg_h_wave_amplitudes(method, channel_idx)
 
             # Get stimulus voltages
             stimulus_voltages = self.emg_object.stimulus_voltages
@@ -134,9 +130,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     m_wave_error = m_wave_error / m_max_amplitude
 
             # Append data to raw data dictionary
-            raw_data_dict["channel_index"].extend(
-                [channel_idx] * len(stimulus_voltages)
-            )
+            raw_data_dict["channel_index"].extend([channel_idx] * len(stimulus_voltages))
             raw_data_dict["stimulus_v"].extend(stimulus_voltages)
             raw_data_dict["avg_m_wave"].extend(m_wave_means)
             raw_data_dict["stderr_m_wave"].extend(m_wave_error)
@@ -153,16 +147,12 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             m_upper_curve = plot_item.plot(
                 stimulus_voltages,
                 m_upper,
-                pen=pg.mkPen(
-                    color=m_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine
-                ),
+                pen=pg.mkPen(color=m_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
             )
             m_lower_curve = plot_item.plot(
                 stimulus_voltages,
                 m_lower,
-                pen=pg.mkPen(
-                    color=m_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine
-                ),
+                pen=pg.mkPen(color=m_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
             )
 
             # Create fill between curves for M-wave
@@ -197,16 +187,12 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             h_upper_curve = plot_item.plot(
                 stimulus_voltages,
                 h_upper,
-                pen=pg.mkPen(
-                    color=h_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine
-                ),
+                pen=pg.mkPen(color=h_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
             )
             h_lower_curve = plot_item.plot(
                 stimulus_voltages,
                 h_lower,
-                pen=pg.mkPen(
-                    color=h_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine
-                ),
+                pen=pg.mkPen(color=h_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
             )
 
             # Create fill between curves for H-reflex
@@ -230,9 +216,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             )
 
         except Exception as e:
-            logging.warning(
-                f"Could not plot reflex curves for channel {channel_idx}: {e}"
-            )
+            logging.warning(f"Could not plot reflex curves for channel {channel_idx}: {e}")
 
     def plot_maxH(
         self,
@@ -311,9 +295,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
         """Plot max H-reflex data for a specific channel."""
         try:
             # Get average H-wave amplitudes to find max H voltage
-            h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(
-                method, channel_idx
-            )
+            h_response_means, _ = self.emg_object.get_avg_h_wave_amplitudes(method, channel_idx)
             stimulus_voltages = self.emg_object.stimulus_voltages
 
             # Filter out stimulus voltages greater than max_stim_value if specified
@@ -337,19 +319,11 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             h_response_amplitudes = np.array([])
             stimulus_voltages_for_channel = np.array([])
             for voltage in marginal_voltages:
-                m_amplitudes = self.emg_object.get_m_wave_amplitude_avgs_at_voltage(
-                    method, channel_idx, voltage
-                )
-                h_amplitudes = self.emg_object.get_h_wave_amplitude_avgs_at_voltage(
-                    method, channel_idx, voltage
-                )
+                m_amplitudes = self.emg_object.get_m_wave_amplitude_avgs_at_voltage(method, channel_idx, voltage)
+                h_amplitudes = self.emg_object.get_h_wave_amplitude_avgs_at_voltage(method, channel_idx, voltage)
                 m_wave_amplitudes = np.concatenate((m_wave_amplitudes, m_amplitudes))
-                h_response_amplitudes = np.concatenate(
-                    (h_response_amplitudes, h_amplitudes)
-                )
-                stimulus_voltages_for_channel = np.concatenate(
-                    (stimulus_voltages_for_channel, [voltage] * len(m_amplitudes))
-                )
+                h_response_amplitudes = np.concatenate((h_response_amplitudes, h_amplitudes))
+                stimulus_voltages_for_channel = np.concatenate((stimulus_voltages_for_channel, [voltage] * len(m_amplitudes)))
 
             # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
             if relative_to_mmax:
@@ -363,9 +337,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     h_response_amplitudes = h_response_amplitudes / m_max_amplitude
 
             # Append data to raw data dictionary
-            raw_data_dict["channel_index"].extend(
-                [channel_idx] * len(m_wave_amplitudes)
-            )
+            raw_data_dict["channel_index"].extend([channel_idx] * len(m_wave_amplitudes))
             raw_data_dict["stimulus_v"].extend(stimulus_voltages_for_channel)
             raw_data_dict["avg_m_wave_amplitudes"].extend(m_wave_amplitudes)
             raw_data_dict["avg_h_wave_amplitudes"].extend(h_response_amplitudes)
@@ -481,8 +453,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Set labels and formatting
             voltage_range = (
                 round(
-                    (self.emg_object.bin_size / 2)
-                    + (self.emg_object.bin_size * bin_margin),
+                    (self.emg_object.bin_size / 2) + (self.emg_object.bin_size * bin_margin),
                     2,
                 )
                 if hasattr(self.emg_object, "bin_size")
@@ -494,14 +465,10 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             if relative_to_mmax:
                 y_label = f"EMG Amp. (M-max, {method})"
 
-            self.set_labels(
-                plot_item, title=title, x_label="Response Type", y_label=y_label
-            )
+            self.set_labels(plot_item, title=title, x_label="Response Type", y_label=y_label)
 
             # Set x-axis ticks and labels
-            plot_item.getAxis("bottom").setTicks(
-                [[(m_x, "M-response"), (h_x, "H-reflex")]]
-            )
+            plot_item.getAxis("bottom").setTicks([[(m_x, "M-response"), (h_x, "H-reflex")]])
             plot_item.setXRange(m_x - 1, h_x + 1)
 
         except Exception as e:
@@ -574,9 +541,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 animal_ids.append(dataset.id)
 
             # Filter out None/NaN values for plotting
-            valid_amplitudes = [
-                amp for amp in mmax_amplitudes if amp is not None and not np.isnan(amp)
-            ]
+            valid_amplitudes = [amp for amp in mmax_amplitudes if amp is not None and not np.isnan(amp)]
 
             # Calculate statistics
             mean_amp = np.mean(valid_amplitudes) if valid_amplitudes else np.nan
@@ -585,9 +550,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Append data to raw data dictionary
             raw_data_dict["channel_index"].extend([channel_idx] * len(mmax_amplitudes))
             raw_data_dict["animal_id"].extend(animal_ids)
-            raw_data_dict["avg_m_max_threshold"].extend(
-                [None] * len(mmax_amplitudes)
-            )  # Not available at experiment level
+            raw_data_dict["avg_m_max_threshold"].extend([None] * len(mmax_amplitudes))  # Not available at experiment level
             raw_data_dict["avg_m_max_amplitude"].extend(mmax_amplitudes)
 
             # Plot the data

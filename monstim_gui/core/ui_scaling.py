@@ -77,9 +77,7 @@ class UIScaling:
         font_scale = min(self.scale_factor, 1.5)
         return max(8, int(base_size * font_scale))
 
-    def get_optimal_panel_width(
-        self, min_width: int = 300, max_width: int = 600
-    ) -> int:
+    def get_optimal_panel_width(self, min_width: int = 300, max_width: int = 600) -> int:
         """Get optimal panel width based on screen size and content needs."""
         screen = QApplication.instance().primaryScreen()
         if not screen:
@@ -96,9 +94,7 @@ class UIScaling:
 
         return max(scaled_min, min(scaled_max, percentage_width))
 
-    def get_window_geometry(
-        self, base_width: int = 800, base_height: int = 770
-    ) -> Tuple[int, int]:
+    def get_window_geometry(self, base_width: int = 800, base_height: int = 770) -> Tuple[int, int]:
         """Get optimal window size based on screen resolution."""
         screen = QApplication.instance().primaryScreen()
         if not screen:

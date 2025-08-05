@@ -78,23 +78,17 @@ class ProgramPreferencesDialog(QDialog):
 
         # Analysis profiles tracking
         self.profile_tracking_checkbox = QCheckBox()
-        self.profile_tracking_checkbox.setToolTip(
-            "Remember the last selected analysis profile"
-        )
+        self.profile_tracking_checkbox.setToolTip("Remember the last selected analysis profile")
         layout.addRow("Track analysis profiles:", self.profile_tracking_checkbox)
 
         # Import/Export paths tracking
         self.path_tracking_checkbox = QCheckBox()
-        self.path_tracking_checkbox.setToolTip(
-            "Remember the last used folders for importing and exporting data"
-        )
+        self.path_tracking_checkbox.setToolTip("Remember the last used folders for importing and exporting data")
         layout.addRow("Track import/export paths:", self.path_tracking_checkbox)
 
         # Recent files tracking
         self.recent_files_checkbox = QCheckBox()
-        self.recent_files_checkbox.setToolTip(
-            "Maintain a list of recently accessed files"
-        )
+        self.recent_files_checkbox.setToolTip("Maintain a list of recently accessed files")
         layout.addRow("Track recent files:", self.recent_files_checkbox)
 
         return group
@@ -111,9 +105,7 @@ class ProgramPreferencesDialog(QDialog):
 
         # Clear all data button
         self.clear_data_button = QPushButton("Clear All Saved Data")
-        self.clear_data_button.setToolTip(
-            "Remove all saved session data, recent files, paths, and preferences"
-        )
+        self.clear_data_button.setToolTip("Remove all saved session data, recent files, paths, and preferences")
         self.clear_data_button.clicked.connect(self.clear_all_data)
         layout.addWidget(self.clear_data_button)
 
@@ -121,33 +113,17 @@ class ProgramPreferencesDialog(QDialog):
 
     def load_current_preferences(self):
         """Load current preference values into the UI."""
-        self.session_tracking_checkbox.setChecked(
-            self.app_state.should_track_session_restoration()
-        )
-        self.profile_tracking_checkbox.setChecked(
-            self.app_state.should_track_analysis_profiles()
-        )
-        self.path_tracking_checkbox.setChecked(
-            self.app_state.should_track_import_export_paths()
-        )
-        self.recent_files_checkbox.setChecked(
-            self.app_state.should_track_recent_files()
-        )
+        self.session_tracking_checkbox.setChecked(self.app_state.should_track_session_restoration())
+        self.profile_tracking_checkbox.setChecked(self.app_state.should_track_analysis_profiles())
+        self.path_tracking_checkbox.setChecked(self.app_state.should_track_import_export_paths())
+        self.recent_files_checkbox.setChecked(self.app_state.should_track_recent_files())
 
     def save_preferences(self):
         """Save the current preference settings."""
-        self.app_state.set_preference(
-            "track_session_restoration", self.session_tracking_checkbox.isChecked()
-        )
-        self.app_state.set_preference(
-            "track_analysis_profiles", self.profile_tracking_checkbox.isChecked()
-        )
-        self.app_state.set_preference(
-            "track_import_export_paths", self.path_tracking_checkbox.isChecked()
-        )
-        self.app_state.set_preference(
-            "track_recent_files", self.recent_files_checkbox.isChecked()
-        )
+        self.app_state.set_preference("track_session_restoration", self.session_tracking_checkbox.isChecked())
+        self.app_state.set_preference("track_analysis_profiles", self.profile_tracking_checkbox.isChecked())
+        self.app_state.set_preference("track_import_export_paths", self.path_tracking_checkbox.isChecked())
+        self.app_state.set_preference("track_recent_files", self.recent_files_checkbox.isChecked())
 
         logging.info("Program preferences saved")
         self.preferences_changed.emit()
@@ -198,9 +174,7 @@ class ProgramPreferencesDialog(QDialog):
                 )
                 logging.info("All tracked user data cleared via preferences dialog")
             except Exception as e:
-                QMessageBox.critical(
-                    self, "Error", f"An error occurred while clearing data:\n{str(e)}"
-                )
+                QMessageBox.critical(self, "Error", f"An error occurred while clearing data:\n{str(e)}")
                 logging.error(f"Error clearing tracked data: {e}")
 
     def accept(self):

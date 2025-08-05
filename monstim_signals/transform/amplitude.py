@@ -56,8 +56,6 @@ def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
         "average_unrectified": _calculate_average_amplitude_unrectified,
     }
     if method not in methods:
-        raise ValueError(
-            f"Invalid method '{method}'. Must be one of {', '.join(methods.keys())}"
-        )
+        raise ValueError(f"Invalid method '{method}'. Must be one of {', '.join(methods.keys())}")
     calculation_function = methods[method]
     return calculation_function(emg_data, start_ms, end_ms, scan_rate)

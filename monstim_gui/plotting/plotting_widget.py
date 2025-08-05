@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QButtonGroup,
-    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -17,7 +16,6 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
-from ..core.ui_scaling import ui_scaling
 from .plot_types import PLOT_OPTIONS_DICT
 
 if TYPE_CHECKING:
@@ -68,9 +66,7 @@ class PlotWidget(QGroupBox):
 
         # Dynamic Options Box with scroll area for long content
         self.options_box = QGroupBox("Options")
-        self.options_box.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding
-        )
+        self.options_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
         # Create scroll area for options content
         self.options_scroll = ResponsiveScrollArea()
@@ -118,9 +114,7 @@ class PlotWidget(QGroupBox):
         self.last_options = {
             "session": {plot_type: {} for plot_type in self.plot_options["session"]},
             "dataset": {plot_type: {} for plot_type in self.plot_options["dataset"]},
-            "experiment": {
-                plot_type: {} for plot_type in self.plot_options["experiment"]
-            },
+            "experiment": {plot_type: {} for plot_type in self.plot_options["experiment"]},
         }
 
         # Persistent channel selection that carries across view and plot type changes
@@ -136,18 +130,12 @@ class PlotWidget(QGroupBox):
 
     def save_current_channel_selection(self):
         """Save the current channel selection to persistent storage."""
-        if self.current_option_widget and hasattr(
-            self.current_option_widget, "channel_selector"
-        ):
-            self.persistent_channel_selection = (
-                self.current_option_widget.channel_selector.get_selected_channels()
-            )
+        if self.current_option_widget and hasattr(self.current_option_widget, "channel_selector"):
+            self.persistent_channel_selection = self.current_option_widget.channel_selector.get_selected_channels()
 
     def connect_channel_selection_updates(self):
         """Connect channel selector checkboxes to update persistent selection."""
-        if self.current_option_widget and hasattr(
-            self.current_option_widget, "channel_selector"
-        ):
+        if self.current_option_widget and hasattr(self.current_option_widget, "channel_selector"):
             for checkbox in self.current_option_widget.channel_selector.checkboxes:
                 checkbox.stateChanged.connect(self.save_current_channel_selection)
 
@@ -173,13 +161,9 @@ class PlotWidget(QGroupBox):
                 if current_plot_type:
                     current_options = self.current_option_widget.get_options()
                     # Deep copy to ensure no reference sharing
-                    self.last_options[self.view][current_plot_type] = copy.deepcopy(
-                        current_options
-                    )
+                    self.last_options[self.view][current_plot_type] = copy.deepcopy(current_options)
             except Exception as e:
-                logging.warning(
-                    f"Failed to save options for {self.view} - {current_plot_type}: {e}"
-                )
+                logging.warning(f"Failed to save options for {self.view} - {current_plot_type}: {e}")
 
         # Change to new view
         self.view = new_view
@@ -227,13 +211,9 @@ class PlotWidget(QGroupBox):
 
                 current_options = self.current_option_widget.get_options()
                 # Deep copy to ensure no reference sharing
-                self.last_options[self.view][previous_plot_type] = copy.deepcopy(
-                    current_options
-                )
+                self.last_options[self.view][previous_plot_type] = copy.deepcopy(current_options)
             except Exception as e:
-                logging.warning(
-                    f"Failed to save options for {self.view} - {previous_plot_type}: {e}"
-                )
+                logging.warning(f"Failed to save options for {self.view} - {previous_plot_type}: {e}")
 
         # Update the last plot type and refresh the options widget
         self.last_plot_type[self.view] = plot_type
@@ -254,40 +234,25 @@ class PlotWidget(QGroupBox):
 
                 # Create a new widget with the same plot type
                 if plot_type in self.plot_options[self.view]:
-                    self.current_option_widget = self.plot_options[self.view][
-                        plot_type
-                    ](self)
+                    self.current_option_widget = self.plot_options[self.view][plot_type](self)
                     self.options_layout.addWidget(self.current_option_widget)
 
                     # Restore the saved options for this view and plot type
-                    if (
-                        plot_type in self.last_options[self.view]
-                        and self.last_options[self.view][plot_type]
-                    ):
+                    if plot_type in self.last_options[self.view] and self.last_options[self.view][plot_type]:
                         try:
                             saved_options = self.last_options[self.view][plot_type]
 
                             # Filter options to only include those that are valid for this plot type
                             default_options = self.current_option_widget.get_options()
-                            filtered_options = {
-                                k: v
-                                for k, v in saved_options.items()
-                                if k in default_options
-                            }
+                            filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
 
                             # Use persistent channel selection instead of view-specific selection
-                            if "channel_indices" in filtered_options and hasattr(
-                                self, "persistent_channel_selection"
-                            ):
-                                filtered_options["channel_indices"] = (
-                                    self.persistent_channel_selection
-                                )
+                            if "channel_indices" in filtered_options and hasattr(self, "persistent_channel_selection"):
+                                filtered_options["channel_indices"] = self.persistent_channel_selection
 
                             self.current_option_widget.set_options(filtered_options)
                         except Exception as e:
-                            logging.warning(
-                                f"Failed to restore options for {self.view} - {plot_type}: {e}"
-                            )
+                            logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
                     else:
                         # Apply persistent channel selection even if no other saved options exist
                         if hasattr(self, "persistent_channel_selection") and hasattr(
@@ -335,41 +300,26 @@ class PlotWidget(QGroupBox):
             self.options_layout.addWidget(self.current_option_widget)
 
             # Restore saved options if they exist
-            if (
-                plot_type in self.last_options[self.view]
-                and self.last_options[self.view][plot_type]
-            ):
+            if plot_type in self.last_options[self.view] and self.last_options[self.view][plot_type]:
                 try:
                     saved_options = self.last_options[self.view][plot_type]
 
                     # Filter options to only include those that are valid for this plot type
                     # Get default options from the widget to see what keys are valid
                     default_options = self.current_option_widget.get_options()
-                    filtered_options = {
-                        k: v for k, v in saved_options.items() if k in default_options
-                    }
+                    filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
 
                     # Use persistent channel selection instead of view-specific selection
-                    if "channel_indices" in filtered_options and hasattr(
-                        self, "persistent_channel_selection"
-                    ):
-                        filtered_options["channel_indices"] = (
-                            self.persistent_channel_selection
-                        )
+                    if "channel_indices" in filtered_options and hasattr(self, "persistent_channel_selection"):
+                        filtered_options["channel_indices"] = self.persistent_channel_selection
 
                     self.current_option_widget.set_options(filtered_options)
                 except Exception as e:
-                    logging.warning(
-                        f"Failed to restore options for {self.view} - {plot_type}: {e}"
-                    )
+                    logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
             else:
                 # Apply persistent channel selection even if no other saved options exist
-                if hasattr(self, "persistent_channel_selection") and hasattr(
-                    self.current_option_widget, "channel_selector"
-                ):
-                    self.current_option_widget.channel_selector.set_selected_channels(
-                        self.persistent_channel_selection
-                    )
+                if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
+                    self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
             # Connect channel selection updates for real-time persistence
             self.connect_channel_selection_updates()

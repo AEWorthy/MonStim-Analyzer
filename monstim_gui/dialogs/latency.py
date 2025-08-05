@@ -43,9 +43,7 @@ COL_MIN_WIDTH = 200  # Minimum width for each column in the grid layout
 class LatencyWindowsDialog(QDialog):
     """Dialog for editing multiple latency windows."""
 
-    def __init__(
-        self, data: Experiment | Dataset | Session, parent=None, config_repo=None
-    ):
+    def __init__(self, data: Experiment | Dataset | Session, parent=None, config_repo=None):
         super().__init__(parent)
         self.data = data
         self.gui: MonstimGUI = parent
@@ -132,17 +130,11 @@ class LatencyWindowsDialog(QDialog):
         self.scroll: QScrollArea = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        self.scroll.setMinimumWidth(
-            MINIMUM_WIDTH
-        )  # Ensure scroll area can accommodate both columns
+        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.scroll.setMinimumWidth(MINIMUM_WIDTH)  # Ensure scroll area can accommodate both columns
 
         self.scroll_widget = QWidget()
-        self.scroll_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.scroll_layout = QGridLayout(self.scroll_widget)
         self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -174,9 +166,7 @@ class LatencyWindowsDialog(QDialog):
         )
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(
-            self.apply_changes
-        )
+        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
         layout.addWidget(button_box, 0)
         self.adjustSize()
 
@@ -245,9 +235,7 @@ class LatencyWindowsDialog(QDialog):
         global_radio = QRadioButton("Global")
         global_radio.setToolTip("Apply the same start time to all channels")
         per_channel_radio = QRadioButton("Per-channel")
-        per_channel_radio.setToolTip(
-            "Set window start times for each individual channel"
-        )
+        per_channel_radio.setToolTip("Set window start times for each individual channel")
 
         # Create button group to ensure mutual exclusivity
         radio_group = QButtonGroup()
@@ -275,20 +263,14 @@ class LatencyWindowsDialog(QDialog):
 
         # Per-channel start time controls
         per_channel_widget = QWidget()
-        per_channel_widget.setMaximumHeight(
-            200
-        )  # Limit height to prevent dialog from becoming too tall
+        per_channel_widget.setMaximumHeight(200)  # Limit height to prevent dialog from becoming too tall
 
         # Use scroll area if there are many channels
         if len(self.data.channel_names) > 6:
             per_channel_scroll = QScrollArea()
             per_channel_scroll.setWidgetResizable(True)
-            per_channel_scroll.setHorizontalScrollBarPolicy(
-                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-            )
-            per_channel_scroll.setVerticalScrollBarPolicy(
-                Qt.ScrollBarPolicy.ScrollBarAsNeeded
-            )
+            per_channel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            per_channel_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
             per_channel_content = QWidget()
             per_channel_layout = QVBoxLayout(per_channel_content)
@@ -302,9 +284,7 @@ class LatencyWindowsDialog(QDialog):
 
         per_channel_spins = []
 
-        for i, (channel_name, start_time) in enumerate(
-            zip(self.data.channel_names, window.start_times)
-        ):
+        for i, (channel_name, start_time) in enumerate(zip(self.data.channel_names, window.start_times)):
             row_layout = QHBoxLayout()
             row_layout.addWidget(QLabel(f"{channel_name}:"))
             spin = QDoubleSpinBox()
@@ -422,11 +402,7 @@ class LatencyWindowsDialog(QDialog):
                 self.updateGeometry(),
                 self.adjustSize(),
                 # Ensure minimum width is maintained
-                (
-                    self.resize(max(MINIMUM_WIDTH, self.width()), self.height())
-                    if self.width() < MINIMUM_WIDTH
-                    else None
-                ),
+                (self.resize(max(MINIMUM_WIDTH, self.width()), self.height()) if self.width() < MINIMUM_WIDTH else None),
             ],
         )
 
@@ -506,9 +482,7 @@ class LatencyWindowsDialog(QDialog):
 
         # Show status message in main window
         if self.gui and hasattr(self.gui, "status_bar"):
-            self.gui.status_bar.showMessage(
-                "Latency windows updated successfully.", 5000
-            )
+            self.gui.status_bar.showMessage("Latency windows updated successfully.", 5000)
 
         # Clean up reference in parent
         if hasattr(self.gui, "_latency_dialog"):

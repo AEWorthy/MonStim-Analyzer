@@ -8,17 +8,17 @@ Use `monstim_signals.plotting.session_plotter.SessionPlotter` instead.
 
 import matplotlib
 
-matplotlib.use("QtAgg")  # Use Qt backend for matplotlib
+matplotlib.use("QtAgg")
 
-import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 except ImportError:  # Fallback when Qt bindings are unavailable
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List  # noqa: E402
 
 if TYPE_CHECKING:
     from monstim_signals.domain.dataset import Dataset
@@ -105,9 +105,7 @@ class BasePlotter:
                     axes = fig.subplots(nrows=1, ncols=num_channels, sharey=True)
             except ValueError as e:
                 if e == "Number of columns must be a positive integer, not 0":
-                    raise UnableToPlotError(
-                        "Please select at least one channel to plot."
-                    )
+                    raise UnableToPlotError("Please select at least one channel to plot.")
                 else:
                     raise ValueError(e)
 
