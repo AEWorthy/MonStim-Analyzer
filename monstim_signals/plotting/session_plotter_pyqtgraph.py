@@ -1,13 +1,15 @@
+import logging
+from typing import TYPE_CHECKING, List, Tuple
+
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
-import logging
-from typing import TYPE_CHECKING, List, Tuple
+
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
-    from monstim_signals.domain.session import Session
     from monstim_gui.plotting import PlotPane
+    from monstim_signals.domain.session import Session
 
 
 class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):

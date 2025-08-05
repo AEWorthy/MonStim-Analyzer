@@ -8,7 +8,6 @@ from .plot_controller import PlotController, PlotControllerError
 from .profile_manager import ProfileManager
 from .report_manager import ReportManager
 
-
 __all__ = [
     "DataManager",
     "PlotController",

@@ -4,8 +4,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
-from PyQt6.QtWidgets import QApplication, QMessageBox
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from ..core.utils.dataframe_exporter import DataFrameDialog
 from ..plotting import PLOT_NAME_DICT

@@ -1,8 +1,8 @@
-from typing import TYPE_CHECKING
 import logging
-from PyQt6.QtWidgets import QGroupBox, QVBoxLayout, QSizePolicy
-import pyqtgraph as pg
+from typing import TYPE_CHECKING
 
+import pyqtgraph as pg
+from PyQt6.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI

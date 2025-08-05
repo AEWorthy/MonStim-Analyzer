@@ -4,18 +4,11 @@ Allows users to control application behavior and data tracking preferences.
 """
 
 import logging
-from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QFormLayout,
-    QGroupBox,
-    QCheckBox,
-    QPushButton,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-)
+
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (QCheckBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout,
+                             QLabel, QMessageBox, QPushButton, QVBoxLayout)
+
 from monstim_gui.core.application_state import ApplicationState
 
 

@@ -11,19 +11,19 @@ import matplotlib
 matplotlib.use("QtAgg")  # Use Qt backend for matplotlib
 
 import matplotlib.pyplot as plt
-
 import numpy as np
 
 try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 except ImportError:  # Fallback when Qt bindings are unavailable
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from monstim_signals.domain.session import Session
     from monstim_signals.domain.dataset import Dataset
     from monstim_signals.domain.experiment import Experiment
+    from monstim_signals.domain.session import Session
 
 
 class BasePlotter:

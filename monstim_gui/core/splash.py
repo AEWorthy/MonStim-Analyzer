@@ -3,9 +3,9 @@
 import logging
 import os
 
-from PyQt6.QtGui import QPixmap, QFont, QColor
-from PyQt6.QtWidgets import QSplashScreen, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QFont, QPixmap
+from PyQt6.QtWidgets import QLabel, QSplashScreen, QVBoxLayout
 
 if __name__ == "__main__":
     import sys
@@ -15,8 +15,8 @@ if __name__ == "__main__":
         print(f"Adding {top_level_dir} to sys.path.")
         sys.path.insert(0, top_level_dir)
 
-from monstim_signals.core import get_source_path
 from monstim_gui.version import VERSION
+from monstim_signals.core import get_source_path
 
 SPLASH_INFO = {
     "program_name": "MonStim EMG Analyzer",
@@ -84,6 +84,7 @@ class SplashScreen(QSplashScreen):
 
 if __name__ == "__main__":
     import sys
+
     from PyQt6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)

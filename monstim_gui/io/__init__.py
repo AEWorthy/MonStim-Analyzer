@@ -4,7 +4,7 @@ Imports all io classes for convenient access.
 """
 
 from .config_repository import ConfigRepository
-from .help_repository import HelpFileRepository
 from .experiment_loader import ExperimentLoadingThread
+from .help_repository import HelpFileRepository
 
 __all__ = ["ConfigRepository", "HelpFileRepository", "ExperimentLoadingThread"]

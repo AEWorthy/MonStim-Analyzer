@@ -1,11 +1,12 @@
 # monstim_signals/domain/experiment.py
-from typing import List, Any, TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING, Any, List
+
 import numpy as np
 
+from monstim_signals.core import ExperimentAnnot, LatencyWindow, load_config
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.plotting import ExperimentPlotterPyQtGraph
-from monstim_signals.core import ExperimentAnnot, LatencyWindow, load_config
 
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import ExperimentRepository

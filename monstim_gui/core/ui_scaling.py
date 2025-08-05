@@ -3,8 +3,9 @@ UI scaling utilities for handling different screen resolutions and DPI settings.
 """
 
 from typing import Tuple
-from PyQt6.QtWidgets import QApplication, QWidget
+
 from PyQt6.QtCore import QRect
+from PyQt6.QtWidgets import QApplication, QWidget
 
 
 class UIScaling:

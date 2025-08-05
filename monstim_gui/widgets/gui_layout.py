@@ -1,12 +1,12 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QStatusBar, QSizePolicy
-
-from .menu_bar import MenuBar
-from .data_selection_widget import DataSelectionWidget
-from .reports_widget import ReportsWidget
-from ..plotting import PlotWidget, PlotPane
-from ..core.ui_scaling import ui_scaling, get_responsive_margins, get_responsive_spacing
-
 from typing import TYPE_CHECKING
+
+from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QStatusBar, QVBoxLayout, QWidget
+
+from ..core.ui_scaling import get_responsive_margins, get_responsive_spacing, ui_scaling
+from ..plotting import PlotPane, PlotWidget
+from .data_selection_widget import DataSelectionWidget
+from .menu_bar import MenuBar
+from .reports_widget import ReportsWidget
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI

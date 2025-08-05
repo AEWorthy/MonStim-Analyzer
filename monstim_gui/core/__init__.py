@@ -2,13 +2,10 @@
 Core UI utilities for responsive design and scaling.
 """
 
-from .ui_scaling import ui_scaling, setup_dpi_awareness
+from .responsive_widgets import (CollapsibleGroupBox, ResponsiveComboBox,
+                                 ResponsiveScrollArea)
 from .ui_config import ui_config
-from .responsive_widgets import (
-    ResponsiveComboBox,
-    ResponsiveScrollArea,
-    CollapsibleGroupBox,
-)
+from .ui_scaling import setup_dpi_awareness, ui_scaling
 
 __all__ = [
     "ui_scaling",

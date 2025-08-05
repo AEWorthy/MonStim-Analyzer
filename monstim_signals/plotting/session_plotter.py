@@ -6,16 +6,17 @@ Use `monstim_signals.plotting.session_plotter.SessionPlotter` instead.
 
 """
 
+import logging
+from typing import TYPE_CHECKING, List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import logging
-from matplotlib.lines import Line2D
-from typing import TYPE_CHECKING, List
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.lines import Line2D
 
-from monstim_signals.plotting.base_plotter import BasePlotter, UnableToPlotError
 from monstim_signals import transform
+from monstim_signals.plotting.base_plotter import BasePlotter, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.session import Session

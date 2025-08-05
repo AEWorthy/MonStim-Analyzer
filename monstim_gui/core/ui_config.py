@@ -2,12 +2,11 @@
 Configuration file for UI scaling and responsive design settings.
 """
 
-from typing import Dict, Any
 import logging
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QSettings
+from typing import TYPE_CHECKING, Any, Dict
 
-from typing import TYPE_CHECKING
+from PyQt6.QtCore import QSettings
+from PyQt6.QtWidgets import QApplication
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI

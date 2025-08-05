@@ -8,13 +8,10 @@ import logging
 
 def test_csv_importer(overwrite_annot: bool = False):
     import os
-    from monstim_signals.io.csv_importer import (
-        discover_by_ext,
-        parse_session_rec,
-        infer_ds_ex,
-        csv_to_store,
-    )
     from pathlib import Path
+
+    from monstim_signals.io.csv_importer import (csv_to_store, discover_by_ext,
+                                                 infer_ds_ex, parse_session_rec)
 
     current_path = __file__
     base_path = Path.resolve(Path(current_path).parent.parent)
@@ -72,11 +69,10 @@ def test_domain_loading():
     """Load example Session, Dataset and Experiment and print summaries."""
     logging.info("Testing domain loading for Session, Dataset, and Experiment objects")
     from pathlib import Path
-    from monstim_signals.io.repositories import (
-        SessionRepository,
-        DatasetRepository,
-        ExperimentRepository,
-    )
+
+    from monstim_signals.io.repositories import (DatasetRepository,
+                                                 ExperimentRepository,
+                                                 SessionRepository)
 
     base = Path(__file__).resolve().parent.parent
     session_path = (
@@ -110,6 +106,7 @@ def test_session_object():
     """Thoroughly test Session loading and plotting capabilities."""
     logging.info("Testing Session object loading and plotting routines")
     from pathlib import Path
+
     from monstim_signals.io.repositories import SessionRepository
 
     base = Path(__file__).resolve().parent.parent
@@ -142,6 +139,7 @@ def test_dataset_object():
     """Load a Dataset, display parameters and test its plotting routines."""
     logging.info("Testing Dataset object loading and plotting routines")
     from pathlib import Path
+
     from monstim_signals.io.repositories import DatasetRepository
 
     base = Path(__file__).resolve().parent.parent
@@ -163,6 +161,7 @@ def test_experiment_object():
     """Load an Experiment, display parameters and test plotting routines."""
     logging.info("Testing Experiment object loading and plotting routines")
     from pathlib import Path
+
     from monstim_signals.io.repositories import ExperimentRepository
 
     base = Path(__file__).resolve().parent.parent

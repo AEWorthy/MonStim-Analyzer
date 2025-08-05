@@ -1,8 +1,10 @@
-import os
 import glob
-import yaml
-from monstim_gui.io.config_repository import ConfigRepository
 import logging
+import os
+
+import yaml
+
+from monstim_gui.io.config_repository import ConfigRepository
 
 PROFILE_DIR = os.path.join(os.path.dirname(__file__), "../../docs/analysis_profiles")
 PROFILE_DIR = os.path.abspath(PROFILE_DIR)

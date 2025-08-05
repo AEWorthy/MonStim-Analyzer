@@ -1,12 +1,13 @@
-import pyqtgraph as pg
-import numpy as np
 from typing import TYPE_CHECKING, List, Tuple
 
+import numpy as np
+import pyqtgraph as pg
+
 if TYPE_CHECKING:
-    from monstim_signals.domain.session import Session
+    from monstim_gui.plotting import PlotPane
     from monstim_signals.domain.dataset import Dataset
     from monstim_signals.domain.experiment import Experiment
-    from monstim_gui.plotting import PlotPane
+    from monstim_signals.domain.session import Session
 
 
 class BasePlotterPyQtGraph:
@@ -139,6 +140,7 @@ class BasePlotterPyQtGraph:
         4. Only shows text on demand (when stationary for a short time)
         """
         import time
+
         from pyqtgraph.Qt import QtCore
 
         v_lines = []

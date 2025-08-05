@@ -1,12 +1,6 @@
-from .plot_options import (
-    EMGOptions,
-    SessionReflexCurvesOptions,
-    SingleEMGRecordingOptions,
-    MMaxOptions,
-    AverageReflexCurvesOptions,
-    AverageSessionReflexOptions,
-    MaxHReflexOptions,
-)
+from .plot_options import (AverageReflexCurvesOptions, AverageSessionReflexOptions,
+                           EMGOptions, MaxHReflexOptions, MMaxOptions,
+                           SessionReflexCurvesOptions, SingleEMGRecordingOptions)
 
 PLOT_NAME_DICT = {
     "EMG": "emg",

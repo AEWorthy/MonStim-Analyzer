@@ -3,10 +3,11 @@ Application state management using QSettings.
 Handles UI state and user preferences that should persist across sessions.
 """
 
-from PyQt6.QtCore import QSettings
-from typing import Dict, List
-import os
 import logging
+import os
+from typing import Dict, List
+
+from PyQt6.QtCore import QSettings
 
 
 class ApplicationState:

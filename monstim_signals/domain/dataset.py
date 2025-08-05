@@ -1,15 +1,16 @@
 # monstim_signals/domain/dataset.py
-from typing import List, Any, TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING, Any, List
+
 import numpy as np
 
-from monstim_signals.plotting import DatasetPlotterPyQtGraph
-from monstim_signals.domain.session import Session
 from monstim_signals.core import DatasetAnnot, LatencyWindow, load_config
+from monstim_signals.domain.session import Session
+from monstim_signals.plotting import DatasetPlotterPyQtGraph
 
 if TYPE_CHECKING:
-    from monstim_signals.io.repositories import DatasetRepository
     from monstim_signals.domain.experiment import Experiment
+    from monstim_signals.io.repositories import DatasetRepository
 
 
 class Dataset:

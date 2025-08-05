@@ -1,6 +1,7 @@
-from PyQt6.QtWidgets import QMenuBar, QMessageBox
-from PyQt6.QtGui import QKeySequence, QFont
 from typing import TYPE_CHECKING
+
+from PyQt6.QtGui import QFont, QKeySequence
+from PyQt6.QtWidgets import QMenuBar, QMessageBox
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
@@ -262,9 +263,8 @@ class MenuBar(QMenuBar):
     def show_ui_scaling_preferences(self):
         """Show the UI scaling preferences dialog."""
         try:
-            from monstim_gui.dialogs.ui_scaling_preferences import (
-                UIScalingPreferencesDialog,
-            )
+            from monstim_gui.dialogs.ui_scaling_preferences import \
+                UIScalingPreferencesDialog
 
             dialog = UIScalingPreferencesDialog(self.parent)
             dialog.exec()

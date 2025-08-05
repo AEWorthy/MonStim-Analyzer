@@ -6,9 +6,10 @@ Use `monstim_signals.plotting.session_plotter.SessionPlotter` instead.
 
 """
 
+from typing import TYPE_CHECKING, List
+
 import numpy as np
 import pandas as pd
-from typing import TYPE_CHECKING, List
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from monstim_signals.plotting.base_plotter import BasePlotter, UnableToPlotError

@@ -3,36 +3,23 @@ import logging
 import multiprocessing
 import os
 import re
-import sys
 import shutil
+import sys
 import traceback
 from pathlib import Path
-from zipfile import ZipFile, ZIP_DEFLATED
+from typing import TYPE_CHECKING
+from zipfile import ZIP_DEFLATED, ZipFile
 
-from PyQt6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QFileDialog,
-    QInputDialog,
-    QMessageBox,
-    QProgressDialog,
-)
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtWidgets import (QApplication, QDialog, QFileDialog, QInputDialog,
+                             QMessageBox, QProgressDialog)
 
-from monstim_signals.io.csv_importer import (
-    GUIExptImportingThread,
-    MultiExptImportingThread,
-)
-from monstim_signals.core import (
-    get_data_path,
-    get_log_dir,
-    get_config_path,
-)
-from monstim_gui.io.experiment_loader import ExperimentLoadingThread
 from monstim_gui.core.application_state import app_state
-
-from typing import TYPE_CHECKING
+from monstim_gui.io.experiment_loader import ExperimentLoadingThread
+from monstim_signals.core import get_config_path, get_data_path, get_log_dir
+from monstim_signals.io.csv_importer import (GUIExptImportingThread,
+                                             MultiExptImportingThread)
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
@@ -306,15 +293,8 @@ class DataManager:
             return
 
         # Show selection dialog
-        from PyQt6.QtWidgets import (
-            QDialog,
-            QVBoxLayout,
-            QCheckBox,
-            QPushButton,
-            QLabel,
-            QScrollArea,
-            QWidget,
-        )
+        from PyQt6.QtWidgets import (QCheckBox, QDialog, QLabel, QPushButton,
+                                     QScrollArea, QVBoxLayout, QWidget)
 
         dialog = QDialog(self.gui)
         dialog.setWindowTitle("Select Experiments to Import")
@@ -1197,14 +1177,8 @@ class DataManager:
 
         def get_new_dataset_name(dataset_name, validity_check_dict):
             if "PyQt6" in sys.modules:
-                from PyQt6.QtWidgets import (
-                    QApplication,
-                    QDialog,
-                    QLabel,
-                    QLineEdit,
-                    QPushButton,
-                    QVBoxLayout,
-                )
+                from PyQt6.QtWidgets import (QApplication, QDialog, QLabel, QLineEdit,
+                                             QPushButton, QVBoxLayout)
 
                 app = QApplication.instance()
                 if app is None:

@@ -1,26 +1,19 @@
-from typing import TYPE_CHECKING
-import logging
 import copy
-from PyQt6.QtWidgets import (
-    QGroupBox,
-    QVBoxLayout,
-    QRadioButton,
-    QButtonGroup,
-    QFormLayout,
-    QComboBox,
-    QHBoxLayout,
-    QPushButton,
-    QSizePolicy,
-    QWidget,
-)
+import logging
+from typing import TYPE_CHECKING
+
 from PyQt6.QtCore import Qt
-from .plot_types import PLOT_OPTIONS_DICT
+from PyQt6.QtWidgets import (QButtonGroup, QComboBox, QFormLayout, QGroupBox,
+                             QHBoxLayout, QPushButton, QRadioButton, QSizePolicy,
+                             QVBoxLayout, QWidget)
+
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
 from ..core.ui_scaling import ui_scaling
-
+from .plot_types import PLOT_OPTIONS_DICT
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
+
     from .plot_options import BasePlotOptions
 
 

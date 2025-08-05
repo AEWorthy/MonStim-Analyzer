@@ -1,10 +1,11 @@
 # monstim_signals/domain/recording.py
 import logging
-import numpy as np
-import h5py
 from typing import Any
 
-from monstim_signals.core import RecordingMeta, RecordingAnnot, StimCluster
+import h5py
+import numpy as np
+
+from monstim_signals.core import RecordingAnnot, RecordingMeta, StimCluster
 
 
 class Recording:

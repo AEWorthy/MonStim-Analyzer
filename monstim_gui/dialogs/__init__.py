@@ -1,8 +1,8 @@
 from .channel import ChangeChannelNamesDialog, InvertChannelPolarityDialog
-from .reporting import CopyableReportDialog
-from .preferences import PreferencesDialog
-from .help_about import HelpWindow, LatexHelpWindow, AboutDialog
+from .help_about import AboutDialog, HelpWindow, LatexHelpWindow
 from .latency import LatencyWindowsDialog
+from .preferences import PreferencesDialog
+from .reporting import CopyableReportDialog
 from .ui_scaling_preferences import UIScalingPreferencesDialog
 
 __all__ = [

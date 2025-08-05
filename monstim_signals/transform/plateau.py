@@ -1,6 +1,7 @@
 """Utilities for plateau detection and M-max calculations."""
 
 import logging
+
 import numpy as np
 from scipy import signal
 

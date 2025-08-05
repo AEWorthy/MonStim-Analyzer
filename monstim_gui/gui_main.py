@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import sys
-import os
 import logging
+import os
+import sys
 import traceback
 from typing import TYPE_CHECKING
 
@@ -17,50 +17,29 @@ if TYPE_CHECKING:
     from PyQt6.QtWidgets import QStatusBar
 
 import markdown
-from PyQt6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QMessageBox,
-    QDialog,
-    QInputDialog,
-)
-from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (QApplication, QDialog, QInputDialog, QMainWindow,
+                             QMessageBox)
 
-from monstim_signals.domain.experiment import Experiment
-from monstim_signals.domain.dataset import Dataset
-from monstim_signals.domain.session import Session
-from monstim_signals.core import (
-    get_output_path,
-    get_source_path,
-    get_docs_path,
-    get_config_path,
-)
-
+from monstim_gui.commands import (ChangeChannelNamesCommand, CommandInvoker,
+                                  ExcludeDatasetCommand, ExcludeRecordingCommand,
+                                  ExcludeSessionCommand, InvertChannelPolarityCommand,
+                                  RestoreDatasetCommand, RestoreRecordingCommand,
+                                  RestoreSessionCommand)
 from monstim_gui.core.splash import SPLASH_INFO
-from monstim_gui.dialogs import (
-    ChangeChannelNamesDialog,
-    LatexHelpWindow,
-    AboutDialog,
-    HelpWindow,
-    InvertChannelPolarityDialog,
-    LatencyWindowsDialog,
-)
-from monstim_gui.commands import (
-    ExcludeSessionCommand,
-    ExcludeDatasetCommand,
-    RestoreSessionCommand,
-    RestoreDatasetCommand,
-    CommandInvoker,
-    ExcludeRecordingCommand,
-    RestoreRecordingCommand,
-    InvertChannelPolarityCommand,
-    ChangeChannelNamesCommand,
-)
-from monstim_gui.widgets.gui_layout import setup_main_layout
-from monstim_gui.managers import DataManager, ReportManager, PlotController
+from monstim_gui.dialogs import (AboutDialog, ChangeChannelNamesDialog, HelpWindow,
+                                 InvertChannelPolarityDialog, LatencyWindowsDialog,
+                                 LatexHelpWindow)
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
+from monstim_gui.managers import DataManager, PlotController, ReportManager
+from monstim_gui.widgets.gui_layout import setup_main_layout
+from monstim_signals.core import (get_config_path, get_docs_path, get_output_path,
+                                  get_source_path)
+from monstim_signals.domain.dataset import Dataset
+from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.session import Session
 
 
 class MonstimGUI(QMainWindow):
@@ -136,7 +115,7 @@ class MonstimGUI(QMainWindow):
         self.status_bar: "QStatusBar" = widgets["status_bar"]
 
         # --- Add Profile Selector to Main Window ---
-        from PyQt6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget
+        from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
 
         self.profile_selector_row = QWidget()
         self.profile_selector_layout = QHBoxLayout(self.profile_selector_row)

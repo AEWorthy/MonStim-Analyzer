@@ -1,7 +1,8 @@
 # monstim_signals/core/data_models.py
-from dataclasses import dataclass, field, fields
-from typing import List, Dict, Any
 import logging
+from dataclasses import dataclass, field, fields
+from typing import Any, Dict, List
+
 from monstim_signals.version import DATA_VERSION
 
 
@@ -327,8 +328,8 @@ class DatasetAnnot:
         Create a DatasetAnnot from a dataset name.
         This is useful for initializing an annotation object for a new dataset.
         """
-        from monstim_signals.io.string_parser import parse_dataset_name
         from monstim_signals.core import load_config
+        from monstim_signals.io.string_parser import parse_dataset_name
 
         cfg = load_config()
         preferred_format = cfg.get("preferred_date_format", "YYMMDD")

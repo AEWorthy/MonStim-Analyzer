@@ -1,6 +1,7 @@
 """Filtering utilities for MonStim signals."""
 
 from scipy import signal
+
 from .amplitude import _calculate_average_amplitude_unrectified
 
 

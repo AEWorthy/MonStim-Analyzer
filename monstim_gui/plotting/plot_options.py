@@ -1,26 +1,20 @@
+from typing import TYPE_CHECKING, List
+
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QComboBox,
-    QCheckBox,
-    QLineEdit,
-    QGridLayout,
-    QFormLayout,
-    QGroupBox,
-    QSizePolicy,
-)
 from PyQt6.QtGui import QIntValidator
-from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
+from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGridLayout, QGroupBox,
+                             QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QVBoxLayout,
+                             QWidget)
+
 from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
 from monstim_gui.core.ui_scaling import ui_scaling
+from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
+
 from .plotting_cycler import RecordingCyclerWidget
-from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
+
     from .plotting_widget import PlotWidget
 
 # TODO: "Reflex Amplitude Calculation Method" is too long to fit in the combo box.

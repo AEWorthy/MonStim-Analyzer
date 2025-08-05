@@ -1,8 +1,8 @@
 import logging
+
 from PyQt6.QtWidgets import QMessageBox
 
 from monstim_signals.core import format_report
-from ..dialogs import CopyableReportDialog
 
 
 class ReportManager:
@@ -14,6 +14,7 @@ class ReportManager:
     def show_session_report(self):
         logging.debug("Showing session parameters report.")
         if self.gui.current_session:
+            from ..dialogs import CopyableReportDialog
             report = self.gui.current_session.session_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Session Report", report, self.gui)
@@ -24,6 +25,7 @@ class ReportManager:
     def show_dataset_report(self):
         logging.debug("Showing dataset parameters report.")
         if self.gui.current_dataset:
+            from ..dialogs import CopyableReportDialog
             report = self.gui.current_dataset.dataset_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Dataset Report", report, self.gui)
@@ -34,6 +36,7 @@ class ReportManager:
     def show_experiment_report(self):
         logging.debug("Showing experiment parameters report.")
         if self.gui.current_experiment:
+            from ..dialogs import CopyableReportDialog
             report = self.gui.current_experiment.experiment_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Experiment Report", report, self.gui)
@@ -46,6 +49,7 @@ class ReportManager:
     def show_mmax_report(self):
         logging.debug("Showing M-max report.")
         if self.gui.current_session:
+            from ..dialogs import CopyableReportDialog
             report = self.gui.current_session.m_max_report()
             report = format_report(report)
             dialog = CopyableReportDialog(

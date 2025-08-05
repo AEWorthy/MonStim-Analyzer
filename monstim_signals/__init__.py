@@ -3,7 +3,6 @@
 # Version
 from .version import DATA_VERSION
 
-
 # Metadata
 __title__ = "monstim_signals"
 __description__ = "Main module for MonStim analysis tools"

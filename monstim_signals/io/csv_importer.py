@@ -1,19 +1,18 @@
 import json
-import h5py
-from pathlib import Path
-from dataclasses import asdict
-from typing import Any, Callable
 import logging
-import numpy as np
 import traceback
-
-
-from monstim_signals.io.csv_parser import parse
-from monstim_signals.core import RecordingAnnot
-from monstim_signals.version import DATA_VERSION
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
+from pathlib import Path
 from threading import Lock
+from typing import Any, Callable
+
+import h5py
+import numpy as np
+
+from monstim_signals.core import RecordingAnnot
+from monstim_signals.io.csv_parser import parse
+from monstim_signals.version import DATA_VERSION
 
 lock = Lock()
 

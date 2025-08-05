@@ -1,22 +1,18 @@
 # monstim_signals/io/repositories.py
 import json
-import h5py
 import logging
+from dataclasses import asdict
 from pathlib import Path
 from typing import Iterator
-from dataclasses import asdict
 
-from monstim_signals.core import (
-    RecordingMeta,
-    RecordingAnnot,
-    SessionAnnot,
-    DatasetAnnot,
-    ExperimentAnnot,
-)
-from monstim_signals.domain.recording import Recording
-from monstim_signals.domain.session import Session
+import h5py
+
+from monstim_signals.core import (DatasetAnnot, ExperimentAnnot, RecordingAnnot,
+                                  RecordingMeta, SessionAnnot)
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
+from monstim_signals.domain.recording import Recording
+from monstim_signals.domain.session import Session
 
 
 class RecordingRepository:

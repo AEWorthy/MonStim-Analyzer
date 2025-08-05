@@ -1,29 +1,24 @@
 # monstim_signals/domain/session.py
-import os
 import logging
-from typing import List, Any, TYPE_CHECKING
-from functools import cached_property
+import os
 from concurrent.futures import ThreadPoolExecutor
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, List
+
 import numpy as np
 
-
-from monstim_signals.core import SessionAnnot, LatencyWindow, StimCluster
-from monstim_signals.core import load_config
+from monstim_signals.core import LatencyWindow, SessionAnnot, StimCluster, load_config
 from monstim_signals.domain.recording import Recording
-from monstim_signals.transform import (
-    butter_bandpass_filter,
-    correct_emg_to_baseline,
-    calculate_emg_amplitude,
-    get_avg_mmax,
-    NoCalculableMmaxError,
-)
 from monstim_signals.plotting import SessionPlotterPyQtGraph
+from monstim_signals.transform import (NoCalculableMmaxError, butter_bandpass_filter,
+                                       calculate_emg_amplitude, correct_emg_to_baseline,
+                                       get_avg_mmax)
 
 if TYPE_CHECKING:
-    from monstim_signals.io.repositories import SessionRepository
     from monstim_signals.core import SessionAnnot
-    from monstim_signals.domain.recording import Recording
     from monstim_signals.domain.dataset import Dataset
+    from monstim_signals.domain.recording import Recording
+    from monstim_signals.io.repositories import SessionRepository
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -781,16 +776,10 @@ class Session:
 
         This function should only be used if you are working in a Jupyter notebook or an interactive Python environment. Do not call this function in any other GUI environment.
         """
-        from PyQt6.QtWidgets import (
-            QApplication,
-            QWidget,
-            QVBoxLayout,
-            QHBoxLayout,
-            QLabel,
-            QLineEdit,
-            QPushButton,
-        )
         import sys
+
+        from PyQt6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit,
+                                     QPushButton, QVBoxLayout, QWidget)
 
         class ReflexSettingsDialog(QWidget):
             def __init__(self, parent: Session):

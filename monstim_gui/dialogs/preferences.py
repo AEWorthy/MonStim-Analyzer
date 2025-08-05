@@ -1,31 +1,16 @@
-from PyQt6.QtWidgets import (
-    QWidget,
-    QDialog,
-    QComboBox,
-    QVBoxLayout,
-    QHBoxLayout,
-    QGroupBox,
-    QLineEdit,
-    QDoubleSpinBox,
-    QPushButton,
-    QScrollArea,
-    QFormLayout,
-    QMessageBox,
-    QTabWidget,
-    QLabel,
-    QSizePolicy,
-    QInputDialog,
-    QTextEdit,
-    QCheckBox,
-)
-from PyQt6.QtCore import Qt
-from monstim_gui.io.config_repository import ConfigRepository
-from monstim_gui.dialogs.base import LatencyWindow, COLOR_OPTIONS, TAB_COLOR_NAMES
-from monstim_gui.managers.profile_manager import ProfileManager
+import ast
 import copy
 import logging
-import ast
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout,
+                             QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+                             QMessageBox, QPushButton, QScrollArea, QSizePolicy,
+                             QTabWidget, QTextEdit, QVBoxLayout, QWidget)
+
+from monstim_gui.dialogs.base import COLOR_OPTIONS, TAB_COLOR_NAMES, LatencyWindow
+from monstim_gui.io.config_repository import ConfigRepository
+from monstim_gui.managers.profile_manager import ProfileManager
 
 STIMULUS_OPTIONS = ["Force", "Length", "Electrical", "Optical"]
 

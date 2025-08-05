@@ -1,9 +1,11 @@
 import logging
+from typing import TYPE_CHECKING, List
+
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
-from typing import TYPE_CHECKING, List
+
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:

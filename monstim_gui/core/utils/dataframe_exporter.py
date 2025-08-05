@@ -1,19 +1,13 @@
-import sys
 import os
-import pandas as pd
-from PyQt6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QVBoxLayout,
-    QTableView,
-    QDialogButtonBox,
-    QFileDialog,
-    QSizePolicy,
-)
-from PyQt6.QtCore import Qt, QAbstractTableModel
+import sys
 
-from monstim_signals.core import get_base_path
+import pandas as pd
+from PyQt6.QtCore import QAbstractTableModel, Qt
+from PyQt6.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFileDialog,
+                             QSizePolicy, QTableView, QVBoxLayout)
+
 from monstim_gui.core.application_state import app_state
+from monstim_signals.core import get_base_path
 
 
 class PandasModel(QAbstractTableModel):
