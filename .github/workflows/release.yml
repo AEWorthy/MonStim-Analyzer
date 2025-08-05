@@ -51,7 +51,7 @@ jobs:
           - [Ask Questions](https://github.com/AEWorthy/MonStim-Analyzer/discussions)
           - Email: aeworthy@emory.edu
         draft: false
-        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, 'rc') }}
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'rc') }}
 
   build-windows:
     needs: create-release
@@ -100,6 +100,7 @@ jobs:
         # Create zip file
         Compress-Archive -Path "package\$packageName" -DestinationPath "$packageName.zip"
 
+    # Need to also add the Example_Experiments.zip file to the release
     - name: Upload Windows Release Asset
       uses: actions/upload-release-asset@v1
       env:
