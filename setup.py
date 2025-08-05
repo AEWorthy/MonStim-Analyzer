@@ -25,7 +25,7 @@ setup(
         "pandas==2.3.0",
         "packaging==25.0",
         "python_markdown_math==0.8",
-        "pytest==8.4.0",
+        "pytest==8.4.1",
         "scipy==1.15.3",
         "setuptools==72.2.0",
         "traitlets==5.14.3",
