@@ -7,14 +7,23 @@ from markdown.extensions.tables import TableExtension
 from mdx_math import MathExtension
 from PyQt6.QtCore import Qt, QUrl, pyqtSlot
 from PyQt6.QtGui import QDesktopServices, QFont, QIcon, QPixmap
-from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtWebEngineCore import QWebEngineScript
-from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
+
+# Conditional imports for WebEngine (not available in all PyQt6 installations)
+try:
+    from PyQt6.QtWebChannel import QWebChannel
+    from PyQt6.QtWebEngineCore import QWebEngineScript
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    WEB_ENGINE_AVAILABLE = True
+except ImportError:
+    # Fallback for environments without PyQt6-WebEngine
+    QWebChannel = None
+    QWebEngineScript = None
+    QWebEngineView = None
+    WEB_ENGINE_AVAILABLE = False
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
-
 from .base import WebEnginePage
 
 
@@ -40,6 +49,14 @@ class LatexHelpWindow(QWidget):
         self.resize(600, 400)
 
         layout = QVBoxLayout(self)
+        
+        if not WEB_ENGINE_AVAILABLE:
+            # Fallback to simple text browser if WebEngine is not available
+            self.text_browser = QTextBrowser()
+            self.text_browser.setHtml(self.markdown_to_html(markdown_content))
+            layout.addWidget(self.text_browser)
+            return
+
         self.web_view = QWebEngineView()
         layout.addWidget(self.web_view)
 
@@ -51,6 +68,9 @@ class LatexHelpWindow(QWidget):
         self.process_content(markdown_content)
 
     def process_content(self, markdown_content):
+        if not WEB_ENGINE_AVAILABLE:
+            return
+            
         # Convert markdown to HTML
         html_content = self.markdown_to_html(markdown_content)
 
@@ -171,7 +191,8 @@ class LatexHelpWindow(QWidget):
 
     @pyqtSlot(str)
     def linkClicked(self, url):
-        QDesktopServices.openUrl(QUrl(url))
+        if WEB_ENGINE_AVAILABLE:
+            QDesktopServices.openUrl(QUrl(url))
 
     def markdown_to_html(self, markdown_content):
         md = markdown.Markdown(
