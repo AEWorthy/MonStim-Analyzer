@@ -14,6 +14,5 @@ __all__ = [
     "PlotController",
     "ProfileManager",
     "ReportManager",
-
-    "PlotControllerError"
+    "PlotControllerError",
 ]

@@ -5,14 +5,14 @@ from .version import VERSION
 __version__ = VERSION
 
 # Metadata
-__title__ = 'monstim_gui'
-__description__ = 'Main module for MonStim GUI'
-__author__ = 'Andrew Worthy'
-__email__ = 'aeworth@emory.edu'
+__title__ = "monstim_gui"
+__description__ = "Main module for MonStim GUI"
+__author__ = "Andrew Worthy"
+__email__ = "aeworth@emory.edu"
 
 # Import functions
 from .gui_main import MonstimGUI
 from .core.splash import SplashScreen
 
 # Define __all__ for module
-__all__ = ['MonstimGUI', 'SplashScreen']
+__all__ = ["MonstimGUI", "SplashScreen"]

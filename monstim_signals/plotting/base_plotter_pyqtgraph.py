@@ -12,36 +12,46 @@ if TYPE_CHECKING:
 class BasePlotterPyQtGraph:
     """
     A base class for plotting EMG data using PyQtGraph.
-    
+
     This class provides interactive plotting capabilities with features like:
     - Real-time zooming and panning
     - Interactive region selection for latency windows
     - Crosshair cursor for precise measurements
     - Multi-channel plotting support
     """
-    
+
     def __init__(self, emg_object):
-        self.emg_object: 'Session'|'Dataset'|'Experiment' = emg_object
+        self.emg_object: "Session" | "Dataset" | "Experiment" = emg_object
         self.current_plot_items: List[pg.PlotItem] = []
         self.current_regions: List[pg.LinearRegionItem] = []
-        
+
         # Set up default colors
         self.default_colors = [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
         ]
-        
-    def create_plot_layout(self, canvas: 'PlotPane', channel_indices: List[int] = None) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
+
+    def create_plot_layout(
+        self, canvas: "PlotPane", channel_indices: List[int] = None
+    ) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
         """
         Create plot layout with subplots for multiple channels.
-        
+
         Parameters
         ----------
         canvas : PlotPane
             The plot pane to draw on
         channel_indices : List[int], optional
             List of channel indices to plot
-            
+
         Returns
         -------
         tuple
@@ -49,58 +59,58 @@ class BasePlotterPyQtGraph:
         """
         if channel_indices is None:
             channel_indices = list(range(self.emg_object.num_channels))
-            
+
         num_channels = len(channel_indices)
-        
+
         # Clear existing plots
         self.clear_current_plots(canvas)
-        
+
         plot_items = []
-        
+
         if num_channels == 1:
             # Single plot
-            plot_item : pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
+            plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
             plot_items.append(plot_item)
         elif num_channels == 0:
             raise UnableToPlotError("No channels to plot. Select at least one channel.")
         else:
             # Multiple plots in a row
             for i, channel_index in enumerate(channel_indices):
-                plot_item : pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
+                plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
                 plot_items.append(plot_item)
-                
+
                 # Share axes for all plots
                 if i > 0:
                     plot_item.setYLink(plot_items[0])
                     plot_item.setXLink(plot_items[0])
-        
+
         # Store reference to current plots
         canvas.current_plots = plot_items
         canvas.current_plot_items = plot_items
-        
+
         return plot_items, canvas.graphics_layout
-    
+
     def add_crosshair(self, plot_item: pg.PlotItem) -> tuple:
         """
         Add crosshair cursor to a plot.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
             The plot item to add crosshair to
-            
+
         Returns
         -------
         tuple
             (v_line, h_line) - vertical and horizontal line objects
         """
         # Create crosshair lines
-        v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=1))
-        h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('w', width=1))
-        
+        v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen("w", width=1))
+        h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("w", width=1))
+
         plot_item.addItem(v_line, ignoreBounds=True)
         plot_item.addItem(h_line, ignoreBounds=True)
-        
+
         # Connect mouse move events
         def mouse_moved(evt):
             # Handle different event formats
@@ -108,20 +118,20 @@ class BasePlotterPyQtGraph:
                 pos = evt[0]
             else:
                 pos = evt
-            
+
             if plot_item.sceneBoundingRect().contains(pos):
                 mouse_point = plot_item.vb.mapSceneToView(pos)
                 v_line.setPos(mouse_point.x())
                 h_line.setPos(mouse_point.y())
-        
+
         plot_item.scene().sigMouseMoved.connect(mouse_moved)
-        
+
         return v_line, h_line
-    
+
     def add_synchronized_crosshairs(self, plot_items):
         """
         Add synchronized crosshairs and a cursor indicator to all plot_items. Only the active plot shows a horizontal crosshair and indicator.
-        
+
         This is an optimized version that:
         1. Uses throttling to limit cursor updates (16ms = ~60fps)
         2. Only updates the text when the position changes significantly
@@ -130,25 +140,29 @@ class BasePlotterPyQtGraph:
         """
         import time
         from pyqtgraph.Qt import QtCore
-        
+
         v_lines = []
         h_lines = []
         cursor_texts = []
-        
+
         # Create crosshair lines and text items once
         for plot_item in plot_items:
-            v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('w', width=1))
-            h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('w', width=1))
+            v_line = pg.InfiniteLine(
+                angle=90, movable=False, pen=pg.mkPen("w", width=1)
+            )
+            h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("w", width=1))
             plot_item.addItem(v_line, ignoreBounds=True)
             plot_item.addItem(h_line, ignoreBounds=True)
             v_lines.append(v_line)
             h_lines.append(h_line)
             # Add a cursor indicator (TextItem) to each plot
-            cursor_text = pg.TextItem("", anchor=(0, 1), color='k', fill=pg.mkBrush(255, 255, 255, 180))
+            cursor_text = pg.TextItem(
+                "", anchor=(0, 1), color="k", fill=pg.mkBrush(255, 255, 255, 180)
+            )
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
-        
+
         # State variables for optimizations
         last_update_time = time.time()
         update_interval = 0.016  # 16ms (~60fps)
@@ -159,30 +173,34 @@ class BasePlotterPyQtGraph:
         mouse_idle_timer.setSingleShot(True)
         mouse_idle_timer.setInterval(300)  # 300ms of idle time before showing text
         show_text = False
-        
+
         # Function to show text indicators (called when mouse is idle)
         def enable_text_display():
             nonlocal show_text
             show_text = True
             # Only update if we have a valid position
-            if last_active_plot_idx is not None and last_x is not None and last_y is not None:
+            if (
+                last_active_plot_idx is not None
+                and last_x is not None
+                and last_y is not None
+            ):
                 update_cursor_display(last_active_plot_idx, last_x, last_y)
-        
+
         mouse_idle_timer.timeout.connect(enable_text_display)
-        
+
         # Function to update the cursor display with minimal recomputation
         def update_cursor_display(active_plot_idx, x, y):
             # Update all vertical crosshairs to this x
             for v in v_lines:
                 v.setPos(x)
-            
+
             # Only show horizontal crosshair and indicator on the active plot
             for idx in range(len(plot_items)):
                 if idx == active_plot_idx:
                     h_lines[idx].setPos(y)
                     h_lines[idx].show()
                     v_lines[idx].show()
-                    
+
                     # Only update text if it's visible
                     if show_text:
                         # Show and update the cursor indicator - position in view coordinates
@@ -200,56 +218,58 @@ class BasePlotterPyQtGraph:
                 else:
                     h_lines[idx].hide()
                     cursor_texts[idx].hide()
-        
+
         # Hide all lines and text
         def hide_all_indicators():
             for h, v, t in zip(h_lines, v_lines, cursor_texts):
                 h.hide()
                 v.hide()
                 t.hide()
-        
+
         # Throttled mouse move event handler
         def mouse_moved(evt):
             nonlocal last_update_time, last_active_plot_idx, last_x, last_y, show_text
-            
+
             # Throttle updates for performance
             current_time = time.time()
             if current_time - last_update_time < update_interval:
                 return
-            
+
             last_update_time = current_time
-            
+
             # Reset idle timer and hide text temporarily during movement
             mouse_idle_timer.start()
             show_text = False
-            
+
             # Extract position from event
             if isinstance(evt, (list, tuple)):
                 pos = evt[0]
             else:
                 pos = evt
-            
+
             # Find which plot contains the cursor
             active_plot_idx = None
             for idx, plot_item in enumerate(plot_items):
                 if plot_item.sceneBoundingRect().contains(pos):
                     active_plot_idx = idx
                     break
-            
+
             # Update cursor position if over a plot
             if active_plot_idx is not None:
                 active_plot = plot_items[active_plot_idx]
                 mouse_point = active_plot.vb.mapSceneToView(pos)
                 x = mouse_point.x()
                 y = mouse_point.y()
-                
+
                 # Only update if position changed significantly
                 position_changed = (
-                    last_active_plot_idx != active_plot_idx or
-                    last_x is None or last_y is None or
-                    abs(x - last_x) > 0.01 or abs(y - last_y) > 0.01
+                    last_active_plot_idx != active_plot_idx
+                    or last_x is None
+                    or last_y is None
+                    or abs(x - last_x) > 0.01
+                    or abs(y - last_y) > 0.01
                 )
-                
+
                 if position_changed:
                     last_active_plot_idx = active_plot_idx
                     last_x = x
@@ -261,18 +281,24 @@ class BasePlotterPyQtGraph:
                 last_active_plot_idx = None
                 last_x = None
                 last_y = None
-        
+
         # Connect to the scene of the first plot (all plots share the same scene)
         if plot_items:
             plot_items[0].scene().sigMouseMoved.connect(mouse_moved)
-        
+
         return v_lines, h_lines, cursor_texts
 
-    def add_latency_region(self, plot_item: pg.PlotItem, start_time: float, end_time: float, 
-                          color: str = '#ff000030', label: str = '') -> pg.LinearRegionItem:
+    def add_latency_region(
+        self,
+        plot_item: pg.PlotItem,
+        start_time: float,
+        end_time: float,
+        color: str = "#ff000030",
+        label: str = "",
+    ) -> pg.LinearRegionItem:
         """
         Add a latency window region to a plot.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
@@ -285,7 +311,7 @@ class BasePlotterPyQtGraph:
             Color of the region (default: semi-transparent red)
         label : str, optional
             Label for the region
-            
+
         Returns
         -------
         pg.LinearRegionItem
@@ -295,26 +321,34 @@ class BasePlotterPyQtGraph:
             [start_time, end_time],
             brush=pg.mkBrush(color),
             movable=True,
-            bounds=[start_time - 50, end_time + 50]  # Allow some movement
+            bounds=[start_time - 50, end_time + 50],  # Allow some movement
         )
-        
+
         plot_item.addItem(region)
         self.current_regions.append(region)
-        
+
         if label:
             # Add text label for the region
-            text_item = pg.TextItem(label, anchor=(0.5, 0), color='white')
-            text_item.setPos((start_time + end_time) / 2, plot_item.viewRange()[1][1] * 0.9)
+            text_item = pg.TextItem(label, anchor=(0.5, 0), color="white")
+            text_item.setPos(
+                (start_time + end_time) / 2, plot_item.viewRange()[1][1] * 0.9
+            )
             plot_item.addItem(text_item)
-        
+
         return region
-    
-    def plot_time_series(self, plot_item: pg.PlotItem, time_axis: np.ndarray, 
-                        data: np.ndarray, color: str = None, label: str = None,
-                        line_width: float = 1.0) -> pg.PlotDataItem:
+
+    def plot_time_series(
+        self,
+        plot_item: pg.PlotItem,
+        time_axis: np.ndarray,
+        data: np.ndarray,
+        color: str = None,
+        label: str = None,
+        line_width: float = 1.0,
+    ) -> pg.PlotDataItem:
         """
         Plot time series data on a plot item.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
@@ -329,28 +363,37 @@ class BasePlotterPyQtGraph:
             Label for the line
         line_width : float, optional
             Width of the line (default: 1.0)
-            
+
         Returns
         -------
         pg.PlotDataItem
             The created plot data item
         """
         if color is None:
-            color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
-        
+            color = self.default_colors[
+                len(self.current_plot_items) % len(self.default_colors)
+            ]
+
         pen = pg.mkPen(color, width=line_width)
-        
+
         curve = plot_item.plot(time_axis, data, pen=pen, name=label)
         self.current_plot_items.append(curve)
-        
+
         return curve
-    
-    def plot_scatter(self, plot_item: pg.PlotItem, x_data: np.ndarray, 
-                    y_data: np.ndarray, color: str = None, size: float = 5.0,
-                    symbol: str = 'o', label: str = None) -> pg.ScatterPlotItem:
+
+    def plot_scatter(
+        self,
+        plot_item: pg.PlotItem,
+        x_data: np.ndarray,
+        y_data: np.ndarray,
+        color: str = None,
+        size: float = 5.0,
+        symbol: str = "o",
+        label: str = None,
+    ) -> pg.ScatterPlotItem:
         """
         Plot scatter data on a plot item.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
@@ -367,34 +410,42 @@ class BasePlotterPyQtGraph:
             Symbol type (default: 'o')
         label : str, optional
             Label for the scatter plot
-            
+
         Returns
         -------
         pg.ScatterPlotItem
             The created scatter plot item
         """
         if color is None:
-            color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
-        
+            color = self.default_colors[
+                len(self.current_plot_items) % len(self.default_colors)
+            ]
+
         scatter = pg.ScatterPlotItem(
-            x=x_data, y=y_data,
+            x=x_data,
+            y=y_data,
             pen=pg.mkPen(color),
             brush=pg.mkBrush(color),
             size=size,
-            symbol=symbol
+            symbol=symbol,
         )
-        
+
         plot_item.addItem(scatter)
         self.current_plot_items.append(scatter)
-        
+
         return scatter
-    
-    def add_error_bars(self, plot_item: pg.PlotItem, x_data: np.ndarray, 
-                      y_data: np.ndarray, y_error: np.ndarray, 
-                      color: str = None) -> pg.ErrorBarItem:
+
+    def add_error_bars(
+        self,
+        plot_item: pg.PlotItem,
+        x_data: np.ndarray,
+        y_data: np.ndarray,
+        y_error: np.ndarray,
+        color: str = None,
+    ) -> pg.ErrorBarItem:
         """
         Add error bars to a plot.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
@@ -407,31 +458,36 @@ class BasePlotterPyQtGraph:
             Y-axis error values
         color : str, optional
             Color of the error bars
-            
+
         Returns
         -------
         pg.ErrorBarItem
             The created error bar item
         """
         if color is None:
-            color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
-        
+            color = self.default_colors[
+                len(self.current_plot_items) % len(self.default_colors)
+            ]
+
         error_bars = pg.ErrorBarItem(
-            x=x_data, y=y_data, 
-            top=y_error, bottom=y_error,
-            pen=pg.mkPen(color)
+            x=x_data, y=y_data, top=y_error, bottom=y_error, pen=pg.mkPen(color)
         )
-        
+
         plot_item.addItem(error_bars)
         self.current_plot_items.append(error_bars)
-        
+
         return error_bars
-    
-    def set_labels(self, plot_item: pg.PlotItem, title: str = None, 
-                  x_label: str = None, y_label: str = None):
+
+    def set_labels(
+        self,
+        plot_item: pg.PlotItem,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+    ):
         """
         Set labels for a plot.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
@@ -446,14 +502,14 @@ class BasePlotterPyQtGraph:
         if title:
             plot_item.setTitle(title)
         if x_label:
-            plot_item.setLabel('bottom', x_label)
+            plot_item.setLabel("bottom", x_label)
         if y_label:
-            plot_item.setLabel('left', y_label)
-    
+            plot_item.setLabel("left", y_label)
+
     def add_legend(self, plot_item: pg.PlotItem):
         """
         Add a legend to a plot.
-        
+
         Parameters
         ----------
         plot_item : pg.PlotItem
@@ -461,11 +517,11 @@ class BasePlotterPyQtGraph:
         """
         legend = plot_item.addLegend()
         return legend
-    
-    def display_plot(self, canvas: 'PlotPane'):
+
+    def display_plot(self, canvas: "PlotPane"):
         """
         Display the plot (equivalent to matplotlib's show()).
-        
+
         Parameters
         ----------
         canvas : PlotPane
@@ -474,7 +530,7 @@ class BasePlotterPyQtGraph:
         # PyQtGraph updates automatically, so we just need to process events
         canvas.graphics_layout.update()
 
-    def clear_current_plots(self, canvas: 'PlotPane'):
+    def clear_current_plots(self, canvas: "PlotPane"):
         """Clear all current plot items and regions."""
         self.current_plot_items = []
         self.current_regions = []
@@ -483,48 +539,50 @@ class BasePlotterPyQtGraph:
     def _convert_matplotlib_color(self, mpl_color):
         """Convert matplotlib color names to PyQtGraph-compatible colors."""
         color_map = {
-            'tab:red': '#d62728',
-            'tab:blue': '#1f77b4',
-            'tab:orange': '#ff7f0e',
-            'tab:green': '#2ca02c',
-            'tab:purple': '#9467bd',
-            'tab:brown': '#8c564b',
-            'tab:pink': '#e377c2',
-            'tab:gray': '#7f7f7f',
-            'tab:olive': '#bcbd22',
-            'tab:cyan': '#17becf',
-            'red': '#ff0000',
-            'blue': '#0000ff',
-            'green': '#00ff00',
-            'black': '#000000',
-            'white': '#ffffff',
-            'yellow': '#ffff00',
-            'cyan': '#00ffff',
-            'magenta': '#ff00ff'
+            "tab:red": "#d62728",
+            "tab:blue": "#1f77b4",
+            "tab:orange": "#ff7f0e",
+            "tab:green": "#2ca02c",
+            "tab:purple": "#9467bd",
+            "tab:brown": "#8c564b",
+            "tab:pink": "#e377c2",
+            "tab:gray": "#7f7f7f",
+            "tab:olive": "#bcbd22",
+            "tab:cyan": "#17becf",
+            "red": "#ff0000",
+            "blue": "#0000ff",
+            "green": "#00ff00",
+            "black": "#000000",
+            "white": "#ffffff",
+            "yellow": "#ffff00",
+            "cyan": "#00ffff",
+            "magenta": "#ff00ff",
         }
         return color_map.get(mpl_color, mpl_color)
 
     def _pale_color(self, color, blend=0.8):
         """Return a pale version of the given RGB color by blending with white."""
-        
+
         def _hex_to_rgb(hex_color):
             """Convert hex color string to RGB tuple."""
-            hex_color = hex_color.lstrip('#')
-            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        
-        if isinstance(color, str) and color.startswith('#'):
+            hex_color = hex_color.lstrip("#")
+            return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+
+        if isinstance(color, str) and color.startswith("#"):
             r, g, b = _hex_to_rgb(color)
         else:
             r, g, b = color[:3]
         pale = (
             int(r * (1 - blend) + 255 * blend),
             int(g * (1 - blend) + 255 * blend),
-            int(b * (1 - blend) + 255 * blend)
+            int(b * (1 - blend) + 255 * blend),
         )
         return pale
 
+
 class UnableToPlotError(Exception):
     """Exception raised when plotting is not possible."""
+
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)

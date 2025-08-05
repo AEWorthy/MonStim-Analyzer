@@ -1,4 +1,5 @@
 """Amplitude calculation utilities."""
+
 import numpy as np
 
 
@@ -49,10 +50,10 @@ def _calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_ra
 def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
     """Calculate the EMG amplitude using the specified *method*."""
     methods = {
-        'average_rectified': _calculate_average_amplitude_rectified,
-        'peak_to_trough': _calculate_peak_to_trough_amplitude,
-        'rms': _calculate_rms_amplitude,
-        'average_unrectified': _calculate_average_amplitude_unrectified,
+        "average_rectified": _calculate_average_amplitude_rectified,
+        "peak_to_trough": _calculate_peak_to_trough_amplitude,
+        "rms": _calculate_rms_amplitude,
+        "average_unrectified": _calculate_average_amplitude_unrectified,
     }
     if method not in methods:
         raise ValueError(

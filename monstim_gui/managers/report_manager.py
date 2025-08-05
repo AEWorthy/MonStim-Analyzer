@@ -39,14 +39,18 @@ class ReportManager:
             dialog = CopyableReportDialog("Experiment Report", report, self.gui)
             dialog.exec()
         else:
-            QMessageBox.warning(self.gui, "Warning", "Please select an experiment first.")
+            QMessageBox.warning(
+                self.gui, "Warning", "Please select an experiment first."
+            )
 
     def show_mmax_report(self):
         logging.debug("Showing M-max report.")
         if self.gui.current_session:
             report = self.gui.current_session.m_max_report()
             report = format_report(report)
-            dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self.gui)
+            dialog = CopyableReportDialog(
+                "M-max Report (method = RMS)", report, self.gui
+            )
             dialog.exec()
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")

@@ -10,17 +10,24 @@ from monstim_signals.core import ExperimentAnnot, LatencyWindow, load_config
 if TYPE_CHECKING:
     from monstim_signals.io.repositories import ExperimentRepository
 
+
 class Experiment:
     """A collection of :class:`Dataset` objects."""
 
-    def __init__(self, expt_id: str, datasets: List[Dataset],
-                 annot: ExperimentAnnot | None = None, repo: Any = None, config: dict = None):
+    def __init__(
+        self,
+        expt_id: str,
+        datasets: List[Dataset],
+        annot: ExperimentAnnot | None = None,
+        repo: Any = None,
+        config: dict = None,
+    ):
         self.id = expt_id
         self._all_datasets: List[Dataset] = datasets
         for ds in self._all_datasets:
             ds.parent_experiment = self
         self.annot: ExperimentAnnot = annot or ExperimentAnnot.create_empty()
-        self.repo : 'ExperimentRepository' = repo
+        self.repo: "ExperimentRepository" = repo
         self._config = config
 
         self._load_config_settings()
@@ -41,7 +48,7 @@ class Experiment:
         self.annot.is_completed = bool(value)
         if self.repo is not None:
             self.repo.save(self)
-            
+
     def __check_dataset_consistency(self) -> None:
         if not self.datasets:
             return
@@ -52,14 +59,20 @@ class Experiment:
         warnings = []
         for ds in self.datasets[1:]:
             if ds.scan_rate != ref_rate:
-                warnings.append(f"Inconsistent scan_rate for '{ds.id}': {ds.scan_rate} != {ref_rate}.")
+                warnings.append(
+                    f"Inconsistent scan_rate for '{ds.id}': {ds.scan_rate} != {ref_rate}."
+                )
             if ds.num_channels != ref_channels:
-                warnings.append(f"Inconsistent num_channels for '{ds.id}': {ds.num_channels} != {ref_channels}.")
+                warnings.append(
+                    f"Inconsistent num_channels for '{ds.id}': {ds.num_channels} != {ref_channels}."
+                )
             if ds.stim_start != ref_stim:
-                warnings.append(f"Inconsistent stim_start for '{ds.id}': {ds.stim_start} != {ref_stim}.")
+                warnings.append(
+                    f"Inconsistent stim_start for '{ds.id}': {ds.stim_start} != {ref_stim}."
+                )
         for w in warnings:
             logging.warning(w)
-    
+
     def _load_config_settings(self) -> None:
         _config = self._config if self._config is not None else load_config()
         self.bin_size = _config["bin_size"]
@@ -112,7 +125,9 @@ class Experiment:
         # Collect all unique stimulus voltages across datasets, rounded to the bin size
         binned_voltages = set()
         for ds in self.datasets:
-            volts = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            volts = (
+                np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            )
             binned_voltages.update(volts.tolist())
         return np.array(sorted(binned_voltages))
 
@@ -121,21 +136,25 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # Example: gather session “H‐reflex curves” for every dataset & session:
     #    Returns a nested dict: { "Animal_A": { "Session_01": [ … ], … }, … }
-    # ──────────────────────────────────────────────────────────────────    
+    # ──────────────────────────────────────────────────────────────────
     def plot(self, plot_type: str = None, **kwargs):
-        raw_data = getattr(self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}")(**kwargs)
+        raw_data = getattr(
+            self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}"
+        )(**kwargs)
         return raw_data
 
     def invert_channel_polarity(self, channel_index: int) -> None:
         for ds in self.datasets:
             ds.invert_channel_polarity(channel_index)
-        logging.info(f"Channel {channel_index} polarity inverted for all datasets in experiment '{self.id}'.")
-        
+        logging.info(
+            f"Channel {channel_index} polarity inverted for all datasets in experiment '{self.id}'."
+        )
+
     def add_dataset(self, dataset: Dataset) -> None:
         if dataset.id not in [ds.id for ds in self._all_datasets]:
             self._all_datasets.append(dataset)
             self.reset_all_caches()
-            
+
     def remove_dataset(self, dataset_id: str) -> None:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
         self.reset_all_caches()
@@ -157,12 +176,16 @@ class Experiment:
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(f"Dataset {dataset_id} already excluded in experiment {self.id}.")
+            logging.warning(
+                f"Dataset {dataset_id} already excluded in experiment {self.id}."
+            )
 
         # Reset the exclusion list if all datasets are excluded
         if not self.datasets:
             self.annot.excluded_datasets.clear()
-            logging.warning(f"All datasets excluded from experiment {self.id}. Resetting exclusion list.")
+            logging.warning(
+                f"All datasets excluded from experiment {self.id}. Resetting exclusion list."
+            )
             if self.repo is not None:
                 self.repo.save(self)
 
@@ -179,38 +202,66 @@ class Experiment:
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(f"Dataset {dataset_id} is not excluded from experiment {self.id}.")
+            logging.warning(
+                f"Dataset {dataset_id} is not excluded from experiment {self.id}."
+            )
 
-    def get_avg_m_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
+    def get_avg_m_wave_amplitudes(
+        self, method: str, channel_index: int
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Average M-wave amplitudes for each stimulus bin across datasets."""
         m_wave_bins = {v: [] for v in self.stimulus_voltages}
         for ds in self.datasets:
-            binned_voltages = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            binned_voltages = (
+                np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            )
             m_wave, _ = ds.get_avg_m_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned_voltages, m_wave):
                 m_wave_bins[volt].append(amp)
 
-        avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else 0.0 for v in self.stimulus_voltages]
-        sem = [float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else 0.0
-               for v in self.stimulus_voltages]
+        avg = [
+            float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else 0.0
+            for v in self.stimulus_voltages
+        ]
+        sem = [
+            (
+                float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v])))
+                if m_wave_bins[v]
+                else 0.0
+            )
+            for v in self.stimulus_voltages
+        ]
         return np.array(avg), np.array(sem)
 
-    def _aggregate_wave_amplitudes(self, method: str, channel_index: int, amplitude_func):
+    def _aggregate_wave_amplitudes(
+        self, method: str, channel_index: int, amplitude_func
+    ):
         """Aggregate wave amplitudes across datasets."""
         wave_bins = {v: [] for v in self.stimulus_voltages}
         for ds in self.datasets:
-            binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            binned = (
+                np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            )
             avg_vals, _ = amplitude_func(ds)
             for volt, amp in zip(binned, avg_vals):
                 wave_bins[volt].append(amp)
-        avg = [float(np.mean(wave_bins[v])) if wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        avg = [
+            float(np.mean(wave_bins[v])) if wave_bins[v] else np.nan
+            for v in self.stimulus_voltages
+        ]
         sem = [
-            float(np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v]))) if wave_bins[v] else np.nan
+            (
+                float(np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v])))
+                if wave_bins[v]
+                else np.nan
+            )
             for v in self.stimulus_voltages
         ]
         return avg, sem
 
-    def get_m_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
+    def get_m_wave_amplitude_avgs_at_voltage(
+        self, method: str, channel_index: int, voltage: float
+    ) -> np.ndarray:
         """Get average M-wave amplitudes at a specific voltage across datasets."""
         amps = []
         for ds in self.datasets:
@@ -220,18 +271,30 @@ class Experiment:
                 amps.append(avg[idx])
         return np.array(amps)
 
-    def get_avg_h_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
+    def get_avg_h_wave_amplitudes(
+        self, method: str, channel_index: int
+    ) -> tuple[np.ndarray, np.ndarray]:
         h_wave_bins = {v: [] for v in self.stimulus_voltages}
         for ds in self.datasets:
-            binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            binned = (
+                np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
+            )
             h_wave, _ = ds.get_avg_h_wave_amplitudes(method, channel_index)
             for volt, amp in zip(binned, h_wave):
                 h_wave_bins[volt].append(amp)
-        avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
-        std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
+        avg = [
+            float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan
+            for v in self.stimulus_voltages
+        ]
+        std = [
+            float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan
+            for v in self.stimulus_voltages
+        ]
         return np.array(avg), np.array(std)
 
-    def get_h_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
+    def get_h_wave_amplitude_avgs_at_voltage(
+        self, method: str, channel_index: int, voltage: float
+    ) -> np.ndarray:
         amps = []
         for ds in self.datasets:
             if voltage in ds.stimulus_voltages:
@@ -240,7 +303,9 @@ class Experiment:
                 amps.append(avg[idx])
         return np.array(amps)
 
-    def get_avg_m_max(self, method: str, channel_index: int, return_avg_mmax_thresholds: bool = False):
+    def get_avg_m_max(
+        self, method: str, channel_index: int, return_avg_mmax_thresholds: bool = False
+    ):
         m_max_list = []
         m_thresh_list = []
         for ds in self.datasets:
@@ -289,11 +354,13 @@ class Experiment:
         """
         self._config = config
         for ds in self._all_datasets:
-            if hasattr(ds, 'set_config'):
+            if hasattr(ds, "set_config"):
                 ds.set_config(config)
             else:
-                logging.warning(f"Dataset {ds.id} does not support set_config method. Skipping.")
-        
+                logging.warning(
+                    f"Dataset {ds.id} does not support set_config method. Skipping."
+                )
+
         self.apply_config(reset_caches=True)
 
     # ──────────────────────────────────────────────────────────────────
@@ -317,7 +384,9 @@ class Experiment:
         """
         for ds in self.datasets:
             ds.rename_channels(new_names)
-        logging.info(f"Channels renamed in experiment '{self.id}' according to provided mapping.")
+        logging.info(
+            f"Channels renamed in experiment '{self.id}' according to provided mapping."
+        )
 
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
@@ -330,8 +399,10 @@ class Experiment:
         if self.repo is not None:
             self.repo.save(self)
         else:
-            raise NotImplementedError("No repository defined for saving the experiment.")
-    
+            raise NotImplementedError(
+                "No repository defined for saving the experiment."
+            )
+
     def close(self) -> None:
         """
         Close all datasets in the experiment.
@@ -344,16 +415,20 @@ class Experiment:
     # 3) Object representation and reports
     # ──────────────────────────────────────────────────────────────────
     def experiment_parameters(self):
-        report = [f" Experiment Parameters for Experiment '{self.id}':",
-                  "===============================",
-                  f"Datasets ({len(self.datasets)}): {[ds.id for ds in self.datasets]}."]
+        report = [
+            f" Experiment Parameters for Experiment '{self.id}':",
+            "===============================",
+            f"Datasets ({len(self.datasets)}): {[ds.id for ds in self.datasets]}.",
+        ]
         for line in report:
             logging.info(line)
         return report
+
     def __repr__(self) -> str:
         return f"Experiment(expt_id={self.id}, num_datasets={self.num_datasets})"
+
     def __str__(self) -> str:
         return f"Experiment: '{self.id}' with {self.num_datasets} datasets"
+
     def __len__(self) -> int:
         return self.num_datasets
-

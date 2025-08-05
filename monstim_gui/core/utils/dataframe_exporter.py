@@ -2,8 +2,13 @@ import sys
 import os
 import pandas as pd
 from PyQt6.QtWidgets import (
-    QApplication, QDialog, QVBoxLayout, QTableView,
-    QDialogButtonBox, QFileDialog, QSizePolicy
+    QApplication,
+    QDialog,
+    QVBoxLayout,
+    QTableView,
+    QDialogButtonBox,
+    QFileDialog,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QAbstractTableModel
 
@@ -36,12 +41,13 @@ class PandasModel(QAbstractTableModel):
                 idx = self._data.index
                 if isinstance(idx, pd.MultiIndex):
                     names = [f"{n}:{v}" for n, v in zip(idx.names, idx[section]) if n]
-                    return ' | '.join(names)
+                    return " | ".join(names)
                 else:
-                    name = idx.name or ''
+                    name = idx.name or ""
                     val = idx[section]
                     return f"{name}:{val}" if name else str(val)
         return None
+
 
 class DataFrameDialog(QDialog):
     def __init__(self, df: pd.DataFrame, parent=None):
@@ -55,8 +61,9 @@ class DataFrameDialog(QDialog):
         # Table view
         self.table_view = QTableView(self)
         self.table_view.setModel(PandasModel(self.df, self))
-        self.table_view.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                      QSizePolicy.Policy.Expanding)
+        self.table_view.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         self.table_view.setAlternatingRowColors(True)
         self.table_view.setSortingEnabled(True)
         self.table_view.resizeColumnsToContents()
@@ -64,9 +71,12 @@ class DataFrameDialog(QDialog):
         layout.addWidget(self.table_view)
 
         # Button box: Export and Close
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save |
-                                      QDialogButtonBox.StandardButton.Close,
-                                      Qt.Orientation.Horizontal, self)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Close,
+            Qt.Orientation.Horizontal,
+            self,
+        )
         # Rename Save to Export CSV...
         save_btn = button_box.button(QDialogButtonBox.StandardButton.Save)
         save_btn.setText("Export CSV...")
@@ -79,11 +89,10 @@ class DataFrameDialog(QDialog):
         last_export_path = app_state.get_last_export_path()
         if not last_export_path or not os.path.isdir(last_export_path):
             last_export_path = str(get_base_path())
-        
+
         default_name = os.path.join(last_export_path, "exported_data.csv")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export DataFrame", default_name,
-            "CSV Files (*.csv);;All Files (*)"
+            self, "Export DataFrame", default_name, "CSV Files (*.csv);;All Files (*)"
         )
         if path:
             # Save the directory for next time
@@ -93,6 +102,6 @@ class DataFrameDialog(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6], 'C': [7, 8, 9]})
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6], "C": [7, 8, 9]})
     dlg = DataFrameDialog(df)
     dlg.exec()

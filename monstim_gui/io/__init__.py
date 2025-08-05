@@ -7,8 +7,4 @@ from .config_repository import ConfigRepository
 from .help_repository import HelpFileRepository
 from .experiment_loader import ExperimentLoadingThread
 
-__all__ = [
-    "ConfigRepository",
-    "HelpFileRepository", 
-    "ExperimentLoadingThread"
-]
+__all__ = ["ConfigRepository", "HelpFileRepository", "ExperimentLoadingThread"]

@@ -1,9 +1,10 @@
 from .base import *
 
-'''LEGACY DIALOG: This dialog is used to update the reflex window settings for an Experiment, Dataset, or Session.
+"""LEGACY DIALOG: This dialog is used to update the reflex window settings for an Experiment, Dataset, or Session.
 It allows users to set global or per-channel start times and durations for the reflex windows.
 This dialog is no longer used in the main application, but is kept for reference and potential future use.
-It is recommended to use the new ReflexWindowSettingsDialog in 'latency.py' instead, which provides a more flexible interface.'''
+It is recommended to use the new ReflexWindowSettingsDialog in 'latency.py' instead, which provides a more flexible interface."""
+
 
 class ReflexSettingsDialog(QDialog):
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
@@ -11,7 +12,9 @@ class ReflexSettingsDialog(QDialog):
         self.data = data
 
         self.setModal(True)
-        self.setWindowTitle(f"Update Reflex Window Settings: Dataset {self.data.formatted_name}")
+        self.setWindowTitle(
+            f"Update Reflex Window Settings: Dataset {self.data.formatted_name}"
+        )
 
         self.init_ui()
 
@@ -83,7 +86,9 @@ class ReflexSettingsDialog(QDialog):
         layout.addLayout(self.per_channel_layout)
 
         # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
@@ -126,19 +131,39 @@ class ReflexSettingsDialog(QDialog):
 
     def save_settings(self):
         try:
-            m_duration = [float(self.global_m_duration_entry.text()) for _ in range(len(self.data.m_start))]
-            h_duration = [float(self.global_h_duration_entry.text()) for _ in range(len(self.data.m_start))]
+            m_duration = [
+                float(self.global_m_duration_entry.text())
+                for _ in range(len(self.data.m_start))
+            ]
+            h_duration = [
+                float(self.global_h_duration_entry.text())
+                for _ in range(len(self.data.m_start))
+            ]
         except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Invalid input for durations. Please enter valid numbers.")
+            QMessageBox.warning(
+                self,
+                "Invalid Input",
+                "Invalid input for durations. Please enter valid numbers.",
+            )
             return
 
         if self.toggle_button.isChecked():
             # Global start times
             try:
-                m_start = [float(self.global_m_start_entry.text()) for _ in range(len(self.data.m_start))]
-                h_start = [float(self.global_h_start_entry.text()) for _ in range(len(self.data.m_start))]
+                m_start = [
+                    float(self.global_m_start_entry.text())
+                    for _ in range(len(self.data.m_start))
+                ]
+                h_start = [
+                    float(self.global_h_start_entry.text())
+                    for _ in range(len(self.data.m_start))
+                ]
             except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Invalid input for global start times. Please enter valid numbers.")
+                QMessageBox.warning(
+                    self,
+                    "Invalid Input",
+                    "Invalid input for global start times. Please enter valid numbers.",
+                )
                 return
         else:
             # Per-channel start times
@@ -149,11 +174,17 @@ class ReflexSettingsDialog(QDialog):
                     m_start.append(float(m_start_entry.text()))
                     h_start.append(float(h_start_entry.text()))
                 except ValueError:
-                    QMessageBox.warning(self, "Invalid Input", f"Invalid input for channel {i}. Skipping.")
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Input",
+                        f"Invalid input for channel {i}. Skipping.",
+                    )
                     return
 
         try:
-            self.data.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
+            self.data.change_reflex_latency_windows(
+                m_start, m_duration, h_start, h_duration
+            )
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Error saving settings: {str(e)}")
             logging.error(

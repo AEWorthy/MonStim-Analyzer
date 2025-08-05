@@ -7,11 +7,12 @@ from ..plotting import PlotWidget, PlotPane
 from ..core.ui_scaling import ui_scaling, get_responsive_margins, get_responsive_spacing
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
 
-def setup_main_layout(parent: 'MonstimGUI') -> dict:
+def setup_main_layout(parent: "MonstimGUI") -> dict:
     """Create and apply the main window layout.
 
     Parameters
@@ -28,7 +29,7 @@ def setup_main_layout(parent: 'MonstimGUI') -> dict:
     central_widget = QWidget()
     parent.setCentralWidget(central_widget)
     main_layout = QHBoxLayout(central_widget)
-    
+
     # Apply responsive spacing and margins
     spacing = get_responsive_spacing(10)
     margins = get_responsive_margins(20)
@@ -47,7 +48,7 @@ def setup_main_layout(parent: 'MonstimGUI') -> dict:
     optimal_width = ui_scaling.get_optimal_panel_width(300, 600)
     left_panel.setMinimumWidth(optimal_width)
     left_panel.setMaximumWidth(int(optimal_width * 1.5))  # Allow some expansion
-    
+
     left_layout = QVBoxLayout(left_panel)
     left_spacing = get_responsive_spacing(10)
     left_layout.setSpacing(left_spacing)

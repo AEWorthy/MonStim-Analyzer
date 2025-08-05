@@ -1,6 +1,7 @@
 import logging
 import traceback
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
 from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -12,15 +13,17 @@ from ..plotting import PLOT_NAME_DICT
 
 class PlotControllerError(Exception):
     """Custom exception for PlotController errors."""
+
     pass
+
 
 class PlotController:
     """Handle plotting and returning raw data."""
 
-    def __init__(self, gui : 'MonstimGUI'):
-        self.gui : 'MonstimGUI' = gui
+    def __init__(self, gui: "MonstimGUI"):
+        self.gui: "MonstimGUI" = gui
         self._validated = False
-        
+
         # Hook system for extensibility
         self._pre_plot_hooks = []
         self._post_plot_hooks = []
@@ -30,46 +33,48 @@ class PlotController:
         """Validate that the GUI has all required components for plotting."""
         if self._validated:
             return
-            
+
         required_components = [
-            ('plot_widget', 'PlotWidget for plot controls'),
-            ('plot_pane', 'PlotPane for displaying plots'),
+            ("plot_widget", "PlotWidget for plot controls"),
+            ("plot_pane", "PlotPane for displaying plots"),
         ]
-        
+
         for component, description in required_components:
             if not hasattr(self.gui, component):
-                raise AttributeError(f"GUI missing required component: {component} ({description})")
-        
+                raise AttributeError(
+                    f"GUI missing required component: {component} ({description})"
+                )
+
         self._validated = True
-    
+
     def initialize(self):
         """Initialize the plot controller after GUI components are ready."""
         self._validate_gui_components()
         logging.debug("PlotController initialized successfully")
-    
+
     def get_plot_configuration(self):
         """Get current plot configuration from GUI in a robust way."""
         self._validate_gui_components()  # Ensure components exist before accessing them
-        
-        if not hasattr(self.gui.plot_widget, 'plot_type_combo'):
+
+        if not hasattr(self.gui.plot_widget, "plot_type_combo"):
             raise AttributeError("PlotWidget missing plot_type_combo")
-        
+
         plot_type_raw = self.gui.plot_widget.plot_type_combo.currentText()
         plot_type = PLOT_NAME_DICT.get(plot_type_raw)
         plot_options = self.gui.plot_widget.get_plot_options()
-        
+
         return {
-            'plot_type_raw': plot_type_raw,
-            'plot_type': plot_type,
-            'plot_options': plot_options
+            "plot_type_raw": plot_type_raw,
+            "plot_type": plot_type,
+            "plot_options": plot_options,
         }
-    
+
     def get_plot_level_and_object(self):
         """Get the current plot level (session/dataset/experiment) and corresponding data object."""
         self._validate_gui_components()  # Ensure components exist before accessing them
-        
+
         plot_widget = self.gui.plot_widget
-        
+
         if plot_widget.session_radio.isChecked():
             return "session", self.gui.current_session
         elif plot_widget.dataset_radio.isChecked():
@@ -85,39 +90,41 @@ class PlotController:
             self.gui.plot_pane.show()
             config_data = self.get_plot_configuration()
         except AttributeError as e:
-            QMessageBox.critical(self.gui, "Configuration Error", 
-                               f"Plot configuration error: {e}")
+            QMessageBox.critical(
+                self.gui, "Configuration Error", f"Plot configuration error: {e}"
+            )
             logging.error(f"Plot configuration error: {e}")
             return None
-        
-        plot_type_raw = config_data['plot_type_raw']
-        plot_type = config_data['plot_type']
-        plot_options = config_data['plot_options']
+
+        plot_type_raw = config_data["plot_type_raw"]
+        plot_type = config_data["plot_type"]
+        plot_options = config_data["plot_options"]
         raw_data = None
 
         # Only inject stimuli_to_plot for session-level EMG plots
         config = None
-        if self.gui.current_session and hasattr(self.gui.current_session, '_config'):
+        if self.gui.current_session and hasattr(self.gui.current_session, "_config"):
             config = self.gui.current_session._config
 
         is_session_emg_plot = (
-            self.gui.plot_widget.session_radio.isChecked() and
-            plot_type_raw == 'EMG'
+            self.gui.plot_widget.session_radio.isChecked() and plot_type_raw == "EMG"
         )
 
         # Determine if the default profile is selected
         default_profile_selected = False
-        if hasattr(self.gui, 'profile_selector_combo'):
-            default_profile_selected = self.gui.profile_selector_combo.currentIndex() == 0
+        if hasattr(self.gui, "profile_selector_combo"):
+            default_profile_selected = (
+                self.gui.profile_selector_combo.currentIndex() == 0
+            )
 
         if is_session_emg_plot:
-            if config and 'stimuli_to_plot' in config:
-                plot_options['stimuli_to_plot'] = config['stimuli_to_plot']
+            if config and "stimuli_to_plot" in config:
+                plot_options["stimuli_to_plot"] = config["stimuli_to_plot"]
             elif default_profile_selected:
-                plot_options['stimuli_to_plot'] = ['Electrical']
+                plot_options["stimuli_to_plot"] = ["Electrical"]
 
         level, level_object = self.get_plot_level_and_object()
-        
+
         if level is None:
             QMessageBox.warning(
                 self.gui,
@@ -136,13 +143,13 @@ class PlotController:
 
         # Call pre-plot hooks
         plot_context = {
-            'level': level,
-            'level_object': level_object,
-            'plot_type': plot_type,
-            'plot_type_raw': plot_type_raw,
-            'plot_options': plot_options
+            "level": level,
+            "level_object": level_object,
+            "plot_type": plot_type,
+            "plot_type_raw": plot_type_raw,
+            "plot_options": plot_options,
         }
-        
+
         for hook in self._pre_plot_hooks:
             try:
                 hook(plot_context)
@@ -165,7 +172,7 @@ class PlotController:
         logging.info(
             f"Plot Created. level: {level} type: {plot_type}, return_raw_data: {return_raw_data}."
         )
-        
+
         # Update plot pane with error handling
         try:
             self.gui.plot_pane.layout.update()
@@ -174,12 +181,12 @@ class PlotController:
 
         # Call post-plot hooks
         plot_result = {
-            'level': level,
-            'plot_type': plot_type,
-            'raw_data': raw_data,
-            'return_raw_data': return_raw_data
+            "level": level,
+            "plot_type": plot_type,
+            "raw_data": raw_data,
+            "return_raw_data": return_raw_data,
         }
-        
+
         for hook in self._post_plot_hooks:
             try:
                 hook(plot_result)
@@ -189,17 +196,18 @@ class PlotController:
         if return_raw_data:
             return raw_data
         return None
-    
+
     def get_raw_data(self):
         """Get raw data from plotting and display it in a dialog."""
         try:
             raw_data = self.plot_data(return_raw_data=True)
         except AttributeError as e:
-            QMessageBox.critical(self.gui, "Configuration Error", 
-                               f"Cannot get raw data: {e}")
+            QMessageBox.critical(
+                self.gui, "Configuration Error", f"Cannot get raw data: {e}"
+            )
             logging.error(f"Configuration error in get_raw_data: {e}")
             return
-        
+
         if raw_data is not None:
             dialog = DataFrameDialog(raw_data, self.gui)
             dialog.exec()
@@ -209,11 +217,17 @@ class PlotController:
     def validate_plot_request(self, level, level_object, plot_type):
         """Validate that the plot request is feasible."""
         if level_object is None:
-            return False, f"No {level} data exists to plot. Please try importing experiment data first."
-        
+            return (
+                False,
+                f"No {level} data exists to plot. Please try importing experiment data first.",
+            )
+
         if plot_type is None:
-            return False, f"Invalid plot type selected: level={level}, plot_type={plot_type}."
-        
+            return (
+                False,
+                f"Invalid plot type selected: level={level}, plot_type={plot_type}.",
+            )
+
         # Add more specific validations as needed
         return True, None
 
@@ -221,12 +235,14 @@ class PlotController:
         """Centralized error handling for plot operations."""
         error_msg = f"An error occurred while plotting: {e}"
         QMessageBox.critical(self.gui, "Error", error_msg)
-        
+
         logging.error(error_msg)
         logging.error(f"Plot type: {plot_type}, options: {plot_options}")
-        logging.error(f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}")
+        logging.error(
+            f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}"
+        )
         logging.error(traceback.format_exc())
-        
+
         # Call error hooks
         for hook in self._error_hooks:
             try:
@@ -237,17 +253,21 @@ class PlotController:
     def add_pre_plot_hook(self, hook_func):
         """Add a function to be called before plotting."""
         self._pre_plot_hooks.append(hook_func)
-    
+
     def add_post_plot_hook(self, hook_func):
         """Add a function to be called after successful plotting."""
         self._post_plot_hooks.append(hook_func)
-    
+
     def add_error_hook(self, hook_func):
         """Add a function to be called when plotting errors occur."""
         self._error_hooks.append(hook_func)
-    
+
     def remove_hook(self, hook_func):
         """Remove a hook function from all hook lists."""
-        for hook_list in [self._pre_plot_hooks, self._post_plot_hooks, self._error_hooks]:
+        for hook_list in [
+            self._pre_plot_hooks,
+            self._post_plot_hooks,
+            self._error_hooks,
+        ]:
             if hook_func in hook_list:
                 hook_list.remove(hook_func)

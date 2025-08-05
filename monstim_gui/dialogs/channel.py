@@ -14,13 +14,16 @@ class ChangeChannelNamesDialog(QDialog):
             self.channel_inputs[channel_name] = QLineEdit(channel_name)
             layout.addWidget(self.channel_inputs[channel_name], i, 1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons, len(channel_names), 0, 1, 2)
 
     def get_new_names(self):
         return {old: input.text() for old, input in self.channel_inputs.items()}
+
 
 class InvertChannelPolarityDialog(QDialog):
     def __init__(self, data: Experiment | Dataset | Session, parent=None):
@@ -40,7 +43,9 @@ class InvertChannelPolarityDialog(QDialog):
 
         # Add checkbox header
         header_layout = QVBoxLayout()
-        header_layout.addWidget(QLabel(f"Invert selected channel polarities for\n'{self.data.id}'"))
+        header_layout.addWidget(
+            QLabel(f"Invert selected channel polarities for\n'{self.data.id}'")
+        )
         header_layout.addWidget(QLabel("\nSelect channels to invert:"))
         layout.addLayout(header_layout)
 
@@ -52,7 +57,10 @@ class InvertChannelPolarityDialog(QDialog):
             layout.addWidget(checkbox)
 
         # Add button box (OK and Cancel buttons)
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
         layout.addWidget(button_box)
 
         # Connect signals

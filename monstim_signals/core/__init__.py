@@ -54,5 +54,5 @@ from .utils import (
     get_main_window,
     deep_equal,
     load_config,
-    CustomYAMLLoader
+    CustomYAMLLoader,
 )

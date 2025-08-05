@@ -13,16 +13,16 @@ from .plot_options import (
 from .plotting_cycler import RecordingCyclerWidget
 
 __all__ = [
-    'PlotWidget',
-    'PLOT_NAME_DICT',
-    'PLOT_OPTIONS_DICT',
-    'PlotPane',
-    'BasePlotOptions',
-    'EMGOptions',
-    'SessionReflexCurvesOptions',
-    'SingleEMGRecordingOptions',
-    'MMaxOptions',
-    'AverageReflexCurvesOptions',
-    'MaxHReflexOptions',
-    'RecordingCyclerWidget',
+    "PlotWidget",
+    "PLOT_NAME_DICT",
+    "PLOT_OPTIONS_DICT",
+    "PlotPane",
+    "BasePlotOptions",
+    "EMGOptions",
+    "SessionReflexCurvesOptions",
+    "SingleEMGRecordingOptions",
+    "MMaxOptions",
+    "AverageReflexCurvesOptions",
+    "MaxHReflexOptions",
+    "RecordingCyclerWidget",
 ]
