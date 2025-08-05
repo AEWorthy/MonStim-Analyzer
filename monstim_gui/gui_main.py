@@ -19,24 +19,44 @@ if TYPE_CHECKING:
 import markdown
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import (QApplication, QDialog, QInputDialog, QMainWindow,
-                             QMessageBox)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QInputDialog,
+    QMainWindow,
+    QMessageBox,
+)
 
-from monstim_gui.commands import (ChangeChannelNamesCommand, CommandInvoker,
-                                  ExcludeDatasetCommand, ExcludeRecordingCommand,
-                                  ExcludeSessionCommand, InvertChannelPolarityCommand,
-                                  RestoreDatasetCommand, RestoreRecordingCommand,
-                                  RestoreSessionCommand)
+from monstim_gui.commands import (
+    ChangeChannelNamesCommand,
+    CommandInvoker,
+    ExcludeDatasetCommand,
+    ExcludeRecordingCommand,
+    ExcludeSessionCommand,
+    InvertChannelPolarityCommand,
+    RestoreDatasetCommand,
+    RestoreRecordingCommand,
+    RestoreSessionCommand,
+)
 from monstim_gui.core.splash import SPLASH_INFO
-from monstim_gui.dialogs import (AboutDialog, ChangeChannelNamesDialog, HelpWindow,
-                                 InvertChannelPolarityDialog, LatencyWindowsDialog,
-                                 LatexHelpWindow)
+from monstim_gui.dialogs import (
+    AboutDialog,
+    ChangeChannelNamesDialog,
+    HelpWindow,
+    InvertChannelPolarityDialog,
+    LatencyWindowsDialog,
+    LatexHelpWindow,
+)
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
 from monstim_gui.managers import DataManager, PlotController, ReportManager
 from monstim_gui.widgets.gui_layout import setup_main_layout
-from monstim_signals.core import (get_config_path, get_docs_path, get_output_path,
-                                  get_source_path)
+from monstim_signals.core import (
+    get_config_path,
+    get_docs_path,
+    get_output_path,
+    get_source_path,
+)
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.session import Session

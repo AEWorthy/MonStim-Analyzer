@@ -3,8 +3,14 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QRect, Qt
 from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import (QComboBox, QFormLayout, QGroupBox, QMenu,
-                             QStyledItemDelegate, QStyleOptionViewItem)
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QMenu,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI

@@ -7,8 +7,13 @@ from typing import Iterator
 
 import h5py
 
-from monstim_signals.core import (DatasetAnnot, ExperimentAnnot, RecordingAnnot,
-                                  RecordingMeta, SessionAnnot)
+from monstim_signals.core import (
+    DatasetAnnot,
+    ExperimentAnnot,
+    RecordingAnnot,
+    RecordingMeta,
+    SessionAnnot,
+)
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.recording import Recording

@@ -2,9 +2,19 @@ from typing import TYPE_CHECKING, List
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIntValidator
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QGridLayout, QGroupBox,
-                             QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
 from monstim_gui.core.ui_scaling import ui_scaling

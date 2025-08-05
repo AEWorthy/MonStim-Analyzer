@@ -11,6 +11,7 @@ __author__ = "Andrew Worthy"
 __email__ = "aeworth@emory.edu"
 
 from .core.splash import SplashScreen
+
 # Import functions
 from .gui_main import MonstimGUI
 

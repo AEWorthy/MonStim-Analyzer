@@ -15,6 +15,7 @@ class ReportManager:
         logging.debug("Showing session parameters report.")
         if self.gui.current_session:
             from ..dialogs import CopyableReportDialog
+
             report = self.gui.current_session.session_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Session Report", report, self.gui)
@@ -26,6 +27,7 @@ class ReportManager:
         logging.debug("Showing dataset parameters report.")
         if self.gui.current_dataset:
             from ..dialogs import CopyableReportDialog
+
             report = self.gui.current_dataset.dataset_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Dataset Report", report, self.gui)
@@ -37,6 +39,7 @@ class ReportManager:
         logging.debug("Showing experiment parameters report.")
         if self.gui.current_experiment:
             from ..dialogs import CopyableReportDialog
+
             report = self.gui.current_experiment.experiment_parameters()
             report = format_report(report)
             dialog = CopyableReportDialog("Experiment Report", report, self.gui)
@@ -50,6 +53,7 @@ class ReportManager:
         logging.debug("Showing M-max report.")
         if self.gui.current_session:
             from ..dialogs import CopyableReportDialog
+
             try:
                 report = self.gui.current_session.m_max_report()
                 report = format_report(report)

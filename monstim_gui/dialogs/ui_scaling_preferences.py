@@ -2,9 +2,19 @@
 UI scaling preferences dialog.
 """
 
-from PyQt6.QtWidgets import (QCheckBox, QDialog, QDoubleSpinBox, QFormLayout, QGroupBox,
-                             QHBoxLayout, QLabel, QMessageBox, QPushButton, QSpinBox,
-                             QVBoxLayout)
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+)
 
 from ..core.ui_config import ui_config
 from ..core.ui_scaling import ui_scaling

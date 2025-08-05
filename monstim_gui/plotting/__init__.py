@@ -1,6 +1,12 @@
-from .plot_options import (AverageReflexCurvesOptions, BasePlotOptions, EMGOptions,
-                           MaxHReflexOptions, MMaxOptions, SessionReflexCurvesOptions,
-                           SingleEMGRecordingOptions)
+from .plot_options import (
+    AverageReflexCurvesOptions,
+    BasePlotOptions,
+    EMGOptions,
+    MaxHReflexOptions,
+    MMaxOptions,
+    SessionReflexCurvesOptions,
+    SingleEMGRecordingOptions,
+)
 from .plot_pane import PlotPane
 from .plot_types import PLOT_NAME_DICT, PLOT_OPTIONS_DICT
 from .plotting_cycler import RecordingCyclerWidget

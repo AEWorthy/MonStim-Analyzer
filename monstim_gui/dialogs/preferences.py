@@ -3,10 +3,26 @@ import copy
 import logging
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout,
-                             QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
-                             QMessageBox, QPushButton, QScrollArea, QSizePolicy,
-                             QTabWidget, QTextEdit, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from monstim_gui.dialogs.base import COLOR_OPTIONS, TAB_COLOR_NAMES, LatencyWindow
 from monstim_gui.io.config_repository import ConfigRepository

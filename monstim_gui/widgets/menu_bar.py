@@ -263,8 +263,9 @@ class MenuBar(QMenuBar):
     def show_ui_scaling_preferences(self):
         """Show the UI scaling preferences dialog."""
         try:
-            from monstim_gui.dialogs.ui_scaling_preferences import \
-                UIScalingPreferencesDialog
+            from monstim_gui.dialogs.ui_scaling_preferences import (
+                UIScalingPreferencesDialog,
+            )
 
             dialog = UIScalingPreferencesDialog(self.parent)
             dialog.exec()

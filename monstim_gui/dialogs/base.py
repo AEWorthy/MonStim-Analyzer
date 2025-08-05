@@ -17,12 +17,32 @@ from PyQt6.QtGui import QDesktopServices, QFont, QIcon, QPixmap
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog,
-                             QDialogButtonBox, QDoubleSpinBox, QFormLayout, QGridLayout,
-                             QGroupBox, QHBoxLayout, QLabel, QLayout, QLineEdit,
-                             QMessageBox, QPushButton, QRadioButton, QScrollArea,
-                             QSizePolicy, QTabWidget, QTextBrowser, QTextEdit,
-                             QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSizePolicy,
+    QTabWidget,
+    QTextBrowser,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from monstim_gui.commands import SetLatencyWindowsCommand
 from monstim_gui.core.splash import SPLASH_INFO

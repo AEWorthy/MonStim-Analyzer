@@ -10,8 +10,12 @@ def test_csv_importer(overwrite_annot: bool = False):
     import os
     from pathlib import Path
 
-    from monstim_signals.io.csv_importer import (csv_to_store, discover_by_ext,
-                                                 infer_ds_ex, parse_session_rec)
+    from monstim_signals.io.csv_importer import (
+        csv_to_store,
+        discover_by_ext,
+        infer_ds_ex,
+        parse_session_rec,
+    )
 
     current_path = __file__
     base_path = Path.resolve(Path(current_path).parent.parent)
@@ -70,9 +74,11 @@ def test_domain_loading():
     logging.info("Testing domain loading for Session, Dataset, and Experiment objects")
     from pathlib import Path
 
-    from monstim_signals.io.repositories import (DatasetRepository,
-                                                 ExperimentRepository,
-                                                 SessionRepository)
+    from monstim_signals.io.repositories import (
+        DatasetRepository,
+        ExperimentRepository,
+        SessionRepository,
+    )
 
     base = Path(__file__).resolve().parent.parent
     session_path = (

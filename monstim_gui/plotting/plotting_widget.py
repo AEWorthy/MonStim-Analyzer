@@ -3,9 +3,18 @@ import logging
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QButtonGroup, QComboBox, QFormLayout, QGroupBox,
-                             QHBoxLayout, QPushButton, QRadioButton, QSizePolicy,
-                             QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QPushButton,
+    QRadioButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
 from ..core.ui_scaling import ui_scaling

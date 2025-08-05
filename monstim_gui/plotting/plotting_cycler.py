@@ -1,8 +1,17 @@
 from typing import TYPE_CHECKING
 
 from PyQt6.QtGui import QValidator
-from PyQt6.QtWidgets import (QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
-                             QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 from monstim_signals.core import get_main_window
 
