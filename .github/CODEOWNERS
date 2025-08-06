@@ -1,0 +1,10 @@
+# Global code owners
+* @AEWorthy
+
+# Python dependencies
+requirements.txt @AEWorthy
+pyproject.toml @AEWorthy
+setup.py @AEWorthy
+
+# GitHub workflows and configuration
+.github/ @AEWorthy
