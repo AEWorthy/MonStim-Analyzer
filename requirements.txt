@@ -1,4 +1,3 @@
-bzip2==1.0.8
 ca-certificates==2025.2.25
 contourpy==1.3.2
 cycler==0.12.1
