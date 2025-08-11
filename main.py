@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import QApplication
 
 from monstim_gui.core.splash import SPLASH_INFO
 
+# TODO Remove forced name validation on import (dataset name). Add button to optionally force name or input date/animal separately.
+
 LOG_FILE = "app.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 IS_FROZEN = getattr(sys, "frozen", False)
