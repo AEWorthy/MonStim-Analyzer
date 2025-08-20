@@ -1297,8 +1297,31 @@ class DataManager:
 
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 # The dialog handles folder renaming and updates dataset ID if needed
-                # Refresh the UI to show updated display names and folder changes
+                updated_dataset_id = self.gui.current_dataset.id
+                
+                # Refresh the dataset combo to show updated display names
                 self.gui.data_selection_widget.update_dataset_combo()
+                
+                # Find and select the updated dataset in the combo box
+                if self.gui.current_experiment:
+                    for index, dataset in enumerate(self.gui.current_experiment.datasets):
+                        if dataset.id == updated_dataset_id:
+                            self.gui.data_selection_widget.dataset_combo.setCurrentIndex(index)
+                            logging.info(f"Reselected dataset '{updated_dataset_id}' at index {index} after metadata update")
+                            break
+                    else:
+                        # Fallback: if we can't find the dataset by ID, try to find it by reference
+                        for index, dataset in enumerate(self.gui.current_experiment.datasets):
+                            if dataset is self.gui.current_dataset:
+                                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(index)
+                                logging.info(f"Reselected dataset by reference at index {index} after metadata update")
+                                break
+                        else:
+                            logging.warning(f"Could not find dataset '{updated_dataset_id}' in experiment after metadata update")
+                
+                # Update session combo box as well to ensure consistency
+                self.gui.data_selection_widget.update_session_combo()
+                
                 self.gui.status_bar.showMessage("Dataset metadata updated successfully.", 5000)
                 logging.info(f"Dataset metadata updated for '{self.gui.current_dataset.id}'")
 
