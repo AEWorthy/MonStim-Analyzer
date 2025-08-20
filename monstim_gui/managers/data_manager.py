@@ -30,7 +30,7 @@ from monstim_signals.io.csv_importer import (
 )
 
 if TYPE_CHECKING:
-    from monstim_gui import MonstimGUI
+    from ..gui_main import MonstimGUI
 
 
 class DataManager:
@@ -137,10 +137,12 @@ class DataManager:
                 for dataset_dir in os.listdir(expt_path):
                     dataset_path = os.path.join(expt_path, dataset_dir)
                     if os.path.isdir(dataset_path):
-                        self.validate_dataset_name(dataset_path)
+                        validated_path, metadata = self.validate_dataset_name(dataset_path)
+                        # Update the dataset_path to the validated path (in case it was renamed)
+                        dataset_path = validated_path
                         csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
                         if not csv_files:
-                            dataset_dirs_without_csv.append(dataset_dir)
+                            dataset_dirs_without_csv.append(os.path.basename(dataset_path))
                 if dataset_dirs_without_csv:
                     raise FileNotFoundError(
                         f"The following dataset directories do not contain any .csv files: {dataset_dirs_without_csv}"
@@ -417,11 +419,13 @@ class DataManager:
                 for dataset_dir in os.listdir(exp_path):
                     dataset_path = os.path.join(exp_path, dataset_dir)
                     if os.path.isdir(dataset_path):
-                        self.validate_dataset_name(dataset_path)
+                        validated_path, metadata = self.validate_dataset_name(dataset_path)
+                        # Update the dataset_path to the validated path (in case it was renamed)
+                        dataset_path = validated_path
                         csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
                         if not csv_files:
                             raise FileNotFoundError(
-                                f"Dataset directory '{dataset_dir}' in experiment '{os.path.basename(exp_path)}' does not contain any .csv files"
+                                f"Dataset directory '{os.path.basename(dataset_path)}' in experiment '{os.path.basename(exp_path)}' does not contain any .csv files"
                             )
         except Exception as e:
             QMessageBox.critical(
@@ -602,7 +606,6 @@ class DataManager:
                     logging.error(f"Failed to delete experiment '{current_expt_id}': {e}")
                     return
 
-                self.gui.data_selection_widget.update_experiment_combo()
                 self.refresh_existing_experiments()
                 self.gui.status_bar.showMessage("Experiment deleted successfully.", 5000)
 
@@ -961,8 +964,7 @@ class DataManager:
             logging.warning("No dataset selected. Channel names will not be updated.")
 
         self.gui.data_selection_widget.update_session_combo()
-        # Enable session combo since a dataset is now loaded
-        self.gui.data_selection_widget.session_combo.setEnabled(True)
+        self.gui.data_selection_widget.session_combo.setEnabled(True)  # Enable session combo since a dataset is now loaded
         self.gui.plot_widget.on_data_selection_changed()
 
     def load_session(self, index):
@@ -996,10 +998,30 @@ class DataManager:
     # ------------------------------------------------------------------
     @staticmethod
     def validate_dataset_name(dataset_path):
+        """
+        Validate and optionally correct dataset names, with flexible handling for non-standard formats.
+        Returns the validated dataset path and extracted metadata.
+        """
         original_dataset_name = os.path.basename(dataset_path)
         dataset_basepath = os.path.dirname(dataset_path)
 
-        def get_new_dataset_name(dataset_name, validity_check_dict):
+        def extract_metadata_from_name(dataset_name):
+            """Extract date, animal_id, and condition from dataset name if possible."""
+            metadata = {"date": None, "animal_id": None, "condition": None}
+
+            # Try standard format: "YYMMDD AnimalID Condition" or "YYYYMMDD AnimalID Condition"
+            # Note: requires exactly one space between components
+            pattern = r"^(\d{6,8})\s([a-zA-Z0-9.]+)\s(.+)$"
+            match = re.match(pattern, dataset_name)
+            if match:
+                metadata["date"] = match.group(1)
+                metadata["animal_id"] = match.group(2)
+                metadata["condition"] = match.group(3)
+
+            return metadata
+
+        def get_user_choice_for_invalid_name(dataset_name, metadata):
+            """Show dialog allowing user to rename, keep as-is, or cancel."""
             if "PyQt6" in sys.modules:
                 from PyQt6.QtWidgets import (
                     QApplication,
@@ -1008,103 +1030,219 @@ class DataManager:
                     QLineEdit,
                     QPushButton,
                     QVBoxLayout,
+                    QHBoxLayout,
+                    QMessageBox,
                 )
 
                 app = QApplication.instance()
                 if app is None:
                     app = QApplication([])
+
                 dialog = QDialog()
-                dialog.setWindowTitle("Rename Dataset")
+                dialog.setWindowTitle("Dataset Name Format")
                 dialog.setModal(True)
-                dialog.resize(500, 200)
+                dialog.resize(600, 350)
                 layout = QVBoxLayout()
+
+                # Main explanation
                 main_text = QLabel(
-                    f'The dataset name "{dataset_name}" is not valid. Dataset folder names should be formatted like "[YYMMDD] [Animal ID] [Experimental Condition]". Please confirm the following fields, and that they are separated by single spaces:'
+                    f'The dataset name "{dataset_name}" does not follow the recommended format:\n'
+                    f'"[YYMMDD or YYYYMMDD] [Animal ID] [Experimental Condition]"\n\n'
+                    f"Missing or invalid components:"
                 )
                 main_text.setWordWrap(True)
                 layout.addWidget(main_text)
-                if not validity_check_dict["Date"]:
-                    layout.addWidget(QLabel("- Date (YYYYMMDD)"))
-                if not validity_check_dict["Animal ID"]:
-                    layout.addWidget(QLabel("- Animal ID (e.g., XX000.0)"))
-                if not validity_check_dict["Condition"]:
-                    layout.addWidget(QLabel("- Experimental Condition (Any string. Spaces allowed.)"))
-                layout.addWidget(QLabel("\nRename your dataset:"))
-                line_edit = QLineEdit(dataset_name)
-                layout.addWidget(line_edit)
-                button = QPushButton("Rename")
-                button.clicked.connect(dialog.accept)
-                layout.addWidget(button)
-                dialog.setLayout(layout)
-                result = dialog.exec()
-                if result == QDialog.DialogCode.Accepted:
-                    dataset_name = line_edit.text()
-                    return dataset_name
-                raise ValueError("User canceled dataset renaming.")
-            else:
-                print(f'The dataset name "{dataset_name}" is not valid. Please confirm the following fields:')
-                if not validity_check_dict["Date"]:
-                    print("\t- Date (YYYYMMDD)")
-                if not validity_check_dict["Animal ID"]:
-                    print("\t- Animal ID (e.g., XX000.0)")
-                if not validity_check_dict["Condition"]:
-                    print("\t- Experimental Condition (Any string. Spaces allowed.)")
-                dataset_name = input("Rename your dataset: > ")
-                if not dataset_name:
-                    raise ValueError("User canceled dataset renaming.")
-                return dataset_name
 
-        def check_name(dataset_name, name_changed=None):
-            date_valid = animal_id_valid = condition_valid = False
-            if not name_changed:
-                name_changed = False
-            try:
-                pattern = r"^(\d+)\s([a-zA-Z0-9.]+)\s(.+)$"
-                match = re.match(pattern, dataset_name)
-                if match:
-                    date_string = match.group(1)
-                    animal_id = match.group(2)
-                    condition = match.group(3)
-                else:
-                    raise AttributeError
-            except AttributeError:
-                new_dataset_name = get_new_dataset_name(
-                    dataset_name,
-                    validity_check_dict={
-                        "Date": date_valid,
-                        "Animal ID": animal_id_valid,
-                        "Condition": condition_valid,
-                    },
+                # Show what's missing
+                missing_items = []
+                if not metadata["date"]:
+                    missing_items.append("• Date (YYMMDD or YYYYMMDD)")
+                if not metadata["animal_id"]:
+                    missing_items.append("• Animal ID (e.g., XX000.0)")
+                if not metadata["condition"]:
+                    missing_items.append("• Experimental Condition")
+
+                if missing_items:
+                    missing_label = QLabel("\n".join(missing_items))
+                    layout.addWidget(missing_label)
+
+                # Explanation of options
+                options_text = QLabel(
+                    "\nYou can:\n"
+                    "• Rename the dataset to follow the standard format\n"
+                    "• Keep the current name (will be displayed as-is in the interface)\n"
+                    "• Cancel the import"
                 )
-                return check_name(new_dataset_name, name_changed=True)
+                options_text.setWordWrap(True)
+                layout.addWidget(options_text)
 
-            if len(date_string) == 6 or len(date_string) == 8:
-                date_valid = True
-            if len(animal_id) > 0:
-                animal_id_valid = True
-            if len(condition) > 0:
-                condition_valid = True
-            if date_valid and animal_id_valid and condition_valid:
-                return dataset_name, name_changed
-            new_dataset_name = get_new_dataset_name(
-                dataset_name,
-                validity_check_dict={
-                    "Date": date_valid,
-                    "Animal ID": animal_id_valid,
-                    "Condition": condition_valid,
-                },
-            )
-            return check_name(new_dataset_name, name_changed=True)
+                # Rename section
+                layout.addWidget(QLabel("\nRename dataset (optional):"))
+                line_edit = QLineEdit(dataset_name)
+                line_edit.setPlaceholderText("Example: 240815 BEM3 test condition")
+                line_edit.setToolTip(
+                    "Format: [YYMMDD or YYYYMMDD] [Animal ID] [Experimental Condition]\nUse single spaces between components"
+                )
+                layout.addWidget(line_edit)
 
-        validated_dataset_name, name_changed = check_name(original_dataset_name)
-        if name_changed:
-            logging.info(f'Dataset name changed from "{original_dataset_name}" to "{validated_dataset_name}".')
-            validated_dataset_path = os.path.join(dataset_basepath, validated_dataset_name)
-            os.rename(dataset_path, validated_dataset_path)
-            logging.info(f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}".')
+                # Buttons
+                button_layout = QHBoxLayout()
+                rename_button = QPushButton("Rename and Continue")
+                keep_button = QPushButton("Keep Current Name")
+                cancel_button = QPushButton("Cancel Import")
+
+                button_layout.addWidget(rename_button)
+                button_layout.addWidget(keep_button)
+                button_layout.addWidget(cancel_button)
+                layout.addLayout(button_layout)
+
+                dialog.setLayout(layout)
+
+                # Store the result
+                result = {"action": None, "new_name": None}
+
+                def on_rename():
+                    result["action"] = "rename"
+                    result["new_name"] = line_edit.text().strip()
+                    if not result["new_name"]:
+                        QMessageBox.warning(dialog, "Warning", "Please enter a valid dataset name.")
+                        return
+
+                    # Validate the new name follows the correct format
+                    new_metadata = extract_metadata_from_name(result["new_name"])
+                    is_valid_format = all(new_metadata.values())
+
+                    if not is_valid_format:
+                        # Show which components are still missing
+                        missing_items = []
+                        if not new_metadata["date"]:
+                            missing_items.append("• Date (YYMMDD or YYYYMMDD)")
+                        if not new_metadata["animal_id"]:
+                            missing_items.append("• Animal ID (e.g., XX000.0)")
+                        if not new_metadata["condition"]:
+                            missing_items.append("• Experimental Condition")
+
+                        missing_text = "\n".join(missing_items)
+                        QMessageBox.warning(
+                            dialog,
+                            "Invalid Format",
+                            f'The name "{result["new_name"]}" still does not follow the required format.\n\n'
+                            f"Missing components:\n{missing_text}\n\n"
+                            f'Required format: "[YYMMDD or YYYYMMDD] [Animal ID] [Experimental Condition]"\n'
+                            f'Example: "240815 BEM3 test condition"\n\n'
+                            f"Please use single spaces between components.",
+                        )
+                        return
+
+                    dialog.accept()
+
+                def on_keep():
+                    result["action"] = "keep"
+                    dialog.accept()
+
+                def on_cancel():
+                    result["action"] = "cancel"
+                    dialog.reject()
+
+                rename_button.clicked.connect(on_rename)
+                keep_button.clicked.connect(on_keep)
+                cancel_button.clicked.connect(on_cancel)
+
+                dialog_result = dialog.exec()
+                if dialog_result == QDialog.DialogCode.Rejected or result["action"] == "cancel":
+                    raise ValueError("User canceled dataset import.")
+
+                return result
+            else:
+                # Command line interface
+                print(f'The dataset name "{dataset_name}" does not follow the recommended format.')
+                print("Missing or invalid components:")
+                if not metadata["date"]:
+                    print("\t- Date (YYMMDD or YYYYMMDD)")
+                if not metadata["animal_id"]:
+                    print("\t- Animal ID (e.g., XX000.0)")
+                if not metadata["condition"]:
+                    print("\t- Experimental Condition")
+
+                print("\nOptions:")
+                print("1. Rename the dataset")
+                print("2. Keep current name (will be displayed as-is)")
+                print("3. Cancel import")
+
+                choice = input("Enter choice (1/2/3): ").strip()
+                if choice == "1":
+                    while True:
+                        new_name = input(f"Enter new name (current: {dataset_name}): ").strip()
+                        if not new_name:
+                            raise ValueError("Invalid dataset name provided.")
+
+                        # Validate the new name follows the correct format
+                        new_metadata = extract_metadata_from_name(new_name)
+                        is_valid_format = all(new_metadata.values())
+
+                        if is_valid_format:
+                            return {"action": "rename", "new_name": new_name}
+                        else:
+                            print(f"\nThe name '{new_name}' still does not follow the required format.")
+                            print("Missing components:")
+                            if not new_metadata["date"]:
+                                print("\t- Date (YYMMDD or YYYYMMDD)")
+                            if not new_metadata["animal_id"]:
+                                print("\t- Animal ID (e.g., XX000.0)")
+                            if not new_metadata["condition"]:
+                                print("\t- Experimental Condition")
+                            print("\nPlease try again or press Ctrl+C to cancel.")
+                elif choice == "2":
+                    return {"action": "keep"}
+                else:
+                    raise ValueError("User canceled dataset import.")
+
+        # Extract metadata from the original name
+        metadata = extract_metadata_from_name(original_dataset_name)
+
+        # Check if the name follows the standard format
+        is_valid_format = all(metadata.values())
+
+        if is_valid_format:
+            # Name is already in correct format
+            logging.info(f"Dataset name '{original_dataset_name}' follows standard format.")
+            return dataset_path, metadata
         else:
-            validated_dataset_path = dataset_path
-        return validated_dataset_path
+            # Name doesn't follow standard format - give user options
+            logging.info(f"Dataset name '{original_dataset_name}' does not follow standard format.")
+            user_choice = get_user_choice_for_invalid_name(original_dataset_name, metadata)
+
+            if user_choice["action"] == "rename":
+                new_name = user_choice["new_name"]
+                new_metadata = extract_metadata_from_name(new_name)
+                validated_dataset_path = os.path.join(dataset_basepath, new_name)
+
+                # Rename the folder using repository API if possible
+                try:
+                    # Try to map the dataset_path to a DatasetRepository and use its rename method
+                    from monstim_signals.io.repositories import DatasetRepository
+
+                    ds_repo = DatasetRepository(Path(dataset_path))
+                    ds_repo.rename(Path(validated_dataset_path))
+                    logging.info(
+                        f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}" via DatasetRepository.rename().'
+                    )
+                except Exception:
+                    # Fallback to os.rename if repository rename failed or repo not available
+                    os.rename(dataset_path, validated_dataset_path)
+                    logging.info(
+                        f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}" using os.rename().'
+                    )
+
+                return validated_dataset_path, new_metadata
+
+            elif user_choice["action"] == "keep":
+                # Keep original name, use extracted metadata (may have None values)
+                logging.info(f"Keeping original dataset name '{original_dataset_name}'. Display name will use folder name.")
+                return dataset_path, metadata
+
+            else:
+                raise ValueError("Unexpected user choice result.")
 
     # ------------------------------------------------------------------
     def open_log_directory(self):
@@ -1143,6 +1281,30 @@ class DataManager:
             QMessageBox.critical(self.gui, "Error", f"Could not save error report:\n{e}")
         finally:
             QApplication.restoreOverrideCursor()
+
+    # ------------------------------------------------------------------
+    def edit_dataset_metadata(self):
+        """Show the dataset metadata editor dialog."""
+        if not self.gui.current_dataset:
+            QMessageBox.warning(self.gui, "No Dataset Selected", "Please select a dataset first to edit its metadata.")
+            return
+
+        try:
+            from monstim_gui.dialogs.dataset_metadata_editor import DatasetMetadataEditor
+
+            # Show editor dialog with the current dataset
+            dialog = DatasetMetadataEditor(self.gui.current_dataset, parent=self.gui)
+
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                # The dialog handles folder renaming and updates dataset ID if needed
+                # Refresh the UI to show updated display names and folder changes
+                self.gui.data_selection_widget.update_dataset_combo()
+                self.gui.status_bar.showMessage("Dataset metadata updated successfully.", 5000)
+                logging.info(f"Dataset metadata updated for '{self.gui.current_dataset.id}'")
+
+        except Exception as e:
+            logging.error(f"Error opening dataset metadata editor: {e}")
+            QMessageBox.critical(self.gui, "Error", f"Failed to open dataset metadata editor:\n{e}")
 
     # ------------------------------------------------------------------
     def close_all_data(self):

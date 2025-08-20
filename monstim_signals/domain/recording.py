@@ -74,12 +74,58 @@ class Recording:
     # ──────────────────────────────────────────────────────────────────
     # 2) Raw vs. Filtered views of signal data
     # ──────────────────────────────────────────────────────────────────
+    def _ensure_raw_open(self) -> None:
+        """Ensure the underlying HDF5 dataset is open.
+
+        If the recording was previously closed (self._raw is None) and we have a
+        repository pointing to the files, reopen the HDF5 file in read mode and
+        patch self._raw to the 'raw' dataset. This makes the object usable after
+        a close/rename cycle without requiring a full application restart.
+        """
+        if self._raw is not None:
+            return
+        if self.repo is None:
+            logging.debug(f"Recording '{getattr(self, 'id', '<unknown>')}' has no repo to reopen raw data.")
+            return
+        try:
+            raw_path = getattr(self.repo, 'raw_h5', None)
+            if raw_path is None:
+                logging.debug(f"Recording '{getattr(self, 'id', '<unknown>')}' repo has no raw_h5 attribute.")
+                return
+            raw_path_str = str(raw_path)
+            # Check file exists before attempting to open
+            try:
+                from pathlib import Path
+                if not Path(raw_path_str).exists():
+                    logging.warning(f"Raw HDF5 not found for recording '{getattr(self, 'id', '<unknown>')}': {raw_path_str}")
+                    return
+            except Exception:
+                pass
+
+            h5file = h5py.File(raw_path_str, "r")
+            self._raw = h5file["raw"]  # type: ignore
+            # Update num_samples in metadata in case it changed
+            try:
+                self.meta.num_samples = int(self._raw.shape[0])
+            except Exception:
+                pass
+            logging.info(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
+        except Exception as err:
+            logging.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
+
     def raw_view(self, ch: int | slice | list[int] = slice(None), t: slice = slice(None)) -> np.ndarray:
         """
         Return a NumPy view (or slice) of raw data [time, channels].
-        If self._raw is an h5py.Dataset, this will not load the entire array,
-        only the requested slice.
+        If the underlying dataset was closed (self._raw is None), attempt to
+        lazily reopen it from the repository path.
         """
+        # Lazily reopen HDF5 dataset if it was previously closed
+        if self._raw is None:
+            self._ensure_raw_open()
+
+        if self._raw is None:
+            raise RuntimeError(f"Raw data for recording '{getattr(self, 'id', '<unknown>')}' is not available.")
+
         return self._raw[t, ch]
 
     # ──────────────────────────────────────────────────────────────────
@@ -97,10 +143,18 @@ class Recording:
     def close(self) -> None:
         if isinstance(self._raw, h5py.Dataset):
             try:
+                # Close the underlying HDF5 file
                 self._raw.file.close()
             except Exception as exception:
                 logging.exception(f"Failed to close HDF5 file for recording '{self.id}': {exception}")
                 pass
+            finally:
+                # Release the reference so the h5py objects can be garbage collected
+                try:
+                    self._raw = None
+                except Exception:
+                    # Ensure we don't raise while cleaning up
+                    pass
 
     # ──────────────────────────────────────────────────────────────────
     # 5) Object representation

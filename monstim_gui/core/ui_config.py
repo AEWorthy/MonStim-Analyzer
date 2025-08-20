@@ -130,7 +130,7 @@ class UIConfig:
 
     def save_window_state(self, window: "MonstimGUI", key: str = "main_window"):
         """Save window geometry and state."""
-        logging.info(
+        logging.debug(
             f"Saving window state for {key}"
             f" QSettings org={QApplication.instance().organizationName()}, app={QApplication.instance().applicationName()}"
         )
