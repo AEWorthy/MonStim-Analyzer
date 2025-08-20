@@ -109,7 +109,7 @@ class Recording:
                 self.meta.num_samples = int(self._raw.shape[0])
             except Exception:
                 pass
-            logging.info(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
+            logging.debug(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
         except Exception as err:
             logging.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
 
