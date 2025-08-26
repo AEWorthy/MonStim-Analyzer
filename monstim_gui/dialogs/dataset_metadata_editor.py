@@ -344,6 +344,7 @@ class DatasetMetadataEditor(QDialog):
                     self.dataset.id = new_folder_name
 
                     # Update all session repository paths
+                    # TODO: Make repository path update function and replace all hidden variable calls.
                     for session in self.dataset._all_sessions:
                         if session.repo:
                             new_session_path = new_folder_path / session.repo.folder.name
