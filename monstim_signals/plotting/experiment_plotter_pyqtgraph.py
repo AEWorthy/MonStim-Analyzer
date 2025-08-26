@@ -82,6 +82,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
 
             # Add legend if requested
+            # TODO: Fix legend--does not currently plot
             if plot_legend and plot_items:
                 self.add_legend(plot_items[0])
 
@@ -117,7 +118,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Get stimulus voltages
             stimulus_voltages = self.emg_object.stimulus_voltages
 
-            # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
+            # Make the M-wave and H-reflex amplitudes relative to the maximum M-wave amplitude if specified
             if relative_to_mmax:
                 if manual_mmax is not None:
                     m_max_amplitude = manual_mmax
@@ -127,6 +128,8 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if m_max_amplitude and m_max_amplitude > 0:
                     m_wave_means = m_wave_means / m_max_amplitude
                     m_wave_error = m_wave_error / m_max_amplitude
+                    h_response_means = h_response_means / m_max_amplitude
+                    h_response_error = h_response_error / m_max_amplitude
 
             # Append data to raw data dictionary
             raw_data_dict["channel_index"].extend([channel_idx] * len(stimulus_voltages))
