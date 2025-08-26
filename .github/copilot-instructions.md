@@ -21,6 +21,13 @@
 - Use `session.recordings_filtered` (cached property) for processed data, not raw arrays
 - Data state is managed through annotation objects (`SessionAnnot`, `DatasetAnnot`, etc.)
 
+### M-max Algorithm
+- **Individual Level**: Advanced multi-approach plateau detection in `plateau.py` (`get_avg_mmax()`)
+- **Aggregation Levels**: Mean-based aggregation in `dataset.py` and `experiment.py` for population-level normalization
+- **Key Principle**: Use mean M-max from all sessions/datasets to provide proper H/M ratio normalization
+- **Selection Logic**: Prefer maximum approach, fall back through 95th percentile → top 20% mean → corrected mean
+- **Validation**: Selected M-max should be ≤ validation_tolerance of plateau mean (configurable, default 105%)
+
 ### Manager Architecture
 - `DataManager`: Handles import/export and data loading workflows
 - `PlotController`: Orchestrates plotting with hook system for extensibility

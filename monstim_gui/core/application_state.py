@@ -363,7 +363,7 @@ class ApplicationState:
         """Get a program preference setting."""
         return self.settings.value(f"ProgramPreferences/{key}", default_value, type=bool)
 
-    def set_preference(self, key: str, value: bool):
+    def set_setting(self, key: str, value: bool):
         """Set a program preference setting."""
         self.settings.setValue(f"ProgramPreferences/{key}", value)
         self.settings.sync()

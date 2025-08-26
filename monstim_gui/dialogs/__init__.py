@@ -3,8 +3,8 @@ from .dataset_metadata_editor import DatasetMetadataEditor
 from .help_about import AboutDialog, HelpWindow, LatexHelpWindow
 from .latency import LatencyWindowsDialog
 from .preferences import PreferencesDialog
+from .program_settings import ProgramSettingsDialog
 from .reporting import CopyableReportDialog
-from .ui_scaling_preferences import UIScalingPreferencesDialog
 
 __all__ = [
     "ChangeChannelNamesDialog",
@@ -16,5 +16,5 @@ __all__ = [
     "LatexHelpWindow",
     "AboutDialog",
     "LatencyWindowsDialog",
-    "UIScalingPreferencesDialog",
+    "ProgramSettingsDialog",
 ]

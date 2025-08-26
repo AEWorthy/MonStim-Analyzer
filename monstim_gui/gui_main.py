@@ -116,6 +116,9 @@ class MonstimGUI(QMainWindow):
 
         self.plot_widget.initialize_plot_widget()
 
+        # Re-center window after UI is fully initialized to account for final size
+        self._recenter_window()
+
         # Restore last session state (profile, experiment, dataset, session)
         self._restore_last_session()
 
@@ -250,6 +253,30 @@ class MonstimGUI(QMainWindow):
         # Currently no specific UI updates are needed, but this is a hook
         # for future functionality that might depend on preference settings
         pass
+
+    def _recenter_window(self):
+        """Re-center the window after UI initialization to account for actual final size."""
+        from monstim_gui.core.ui_config import ui_config
+
+        # Only recenter if centering is enabled and we're not restoring saved window state
+        if not ui_config.get("center_windows", True):
+            return
+
+        # Let the window adjust to its final size based on layout constraints
+        self.adjustSize()
+
+        # Get the actual final size
+        current_size = self.size()
+        width = current_size.width()
+        height = current_size.height()
+
+        # Calculate centered position for the actual final size
+        from monstim_gui.core.ui_scaling import ui_scaling
+
+        centered_geometry = ui_scaling.get_centered_geometry(width, height)
+
+        # Move to centered position (preserving the current size)
+        self.move(centered_geometry.x(), centered_geometry.y())
 
     def restore_last_profile_selection(self):
         """Restore the last selected analysis profile."""

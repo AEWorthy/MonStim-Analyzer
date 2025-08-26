@@ -253,6 +253,7 @@ class Experiment:
     def get_avg_m_max(self, method: str, channel_index: int, return_avg_mmax_thresholds: bool = False):
         m_max_list = []
         m_thresh_list = []
+
         for ds in self.datasets:
             mmax, mthresh = ds.get_avg_m_max(method, channel_index, return_avg_mmax_thresholds=True)
             if mmax is not None:
@@ -264,10 +265,25 @@ class Experiment:
                 return None, None
             return None
 
-        if return_avg_mmax_thresholds:
-            return float(np.mean(m_max_list)), float(np.mean(m_thresh_list))
+        # Calculate M-max for experiment level - use mean of all datasets
+        if len(m_max_list) == 1:
+            # Only one dataset, use its M-max
+            final_mmax = float(m_max_list[0])
+            final_mthresh = float(m_thresh_list[0])
         else:
-            return float(np.mean(m_max_list))
+            # Multiple datasets: use mean M-max from all datasets
+            # This provides proper population-level normalization across mice
+            final_mmax = float(np.mean(m_max_list))
+            final_mthresh = float(np.mean(m_thresh_list))
+
+            logging.debug(f"Experiment M-max: Using mean from {len(m_max_list)} datasets")
+            logging.debug(f"  M-max values: {m_max_list}")
+            logging.debug(f"  Mean M-max: {final_mmax}")
+
+        if return_avg_mmax_thresholds:
+            return final_mmax, final_mthresh
+        else:
+            return final_mmax
 
     def reset_all_caches(self):
         for ds in self.datasets:

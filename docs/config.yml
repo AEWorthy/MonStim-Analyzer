@@ -20,7 +20,8 @@ butter_filter_args: # dict for butter_bandpass_filter() function. default is bel
 m_max_args: # dict for get_avg_mmax() function. default is below.
   max_window_size: 15 # (int) maximum floating window size for M-max detection (in datapoints).
   min_window_size: 2 # (int) minimum floating window size for M-max detection (in datapoints).
-  threshold: 0.2  # (float) standard deviation threshold for M-max detection, default is 0.2.
+  threshold: 0.3  # (float) standard deviation threshold for M-max detection, default is 0.3.
+  validation_tolerance: 1.05  # (float) tolerance factor for plateau validation (e.g., 1.05 = 5% above plateau mean), default is 1.05.
 
 # Plot Style Parameters.
 title_font_size : 16 # (int) font size of the plot title.

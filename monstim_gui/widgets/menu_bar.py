@@ -41,15 +41,11 @@ class MenuBar(QMenuBar):
         file_menu.addSeparator()
 
         # Preferences button
-        preferences_action = file_menu.addAction("Preferences")
+        preferences_action = file_menu.addAction("Analysis Preferences")
         preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
 
-        # UI Scaling Preferences button
-        ui_scaling_action = file_menu.addAction("Display Preferences")
-        ui_scaling_action.triggered.connect(self.show_ui_scaling_preferences)
-
-        # Program Preferences button
-        program_prefs_action = file_menu.addAction("Program Preferences")
+        # Program Settings button (includes Display and UI Scaling preferences)
+        program_prefs_action = file_menu.addAction("Settings")
         program_prefs_action.triggered.connect(self.show_program_preferences)
 
         file_menu.addSeparator()
@@ -58,10 +54,6 @@ class MenuBar(QMenuBar):
         save_action = file_menu.addAction("Save Current Experiment")
         save_action.triggered.connect(self.parent.data_manager.save_experiment)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
-
-        # Save As button
-        # save_as_action = file_menu.addAction("Save Current Experiment As")
-        # save_as_action.triggered.connect(self.parent.save_experiment_as)
 
         # Exit button
         exit_action = file_menu.addAction("Exit")
@@ -232,31 +224,15 @@ class MenuBar(QMenuBar):
         self.undo_action.setFont(hint_font)
         self.redo_action.setFont(hint_font)
 
-    def show_ui_scaling_preferences(self):
-        """Show the UI scaling preferences dialog."""
-        try:
-            from monstim_gui.dialogs.ui_scaling_preferences import (
-                UIScalingPreferencesDialog,
-            )
-
-            dialog = UIScalingPreferencesDialog(self.parent)
-            dialog.exec()
-        except ImportError as e:
-            QMessageBox.warning(
-                self.parent,
-                "UI Scaling Preferences",
-                f"UI scaling preferences dialog is not available: {e}",
-            )
-
     def show_program_preferences(self):
         """Show the program preferences dialog."""
         try:
-            from monstim_gui.dialogs.program_preferences import ProgramPreferencesDialog
+            from monstim_gui.dialogs import ProgramSettingsDialog
 
-            dialog = ProgramPreferencesDialog(self.parent)
+            dialog = ProgramSettingsDialog(self.parent)
 
             # Connect the preferences changed signal to refresh any UI that might depend on it
-            dialog.preferences_changed.connect(self.parent.refresh_preferences_dependent_ui)
+            dialog.settings_changed.connect(self.parent.refresh_preferences_dependent_ui)
 
             dialog.exec()
         except ImportError as e:

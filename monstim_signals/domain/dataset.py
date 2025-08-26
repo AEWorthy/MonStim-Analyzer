@@ -303,6 +303,7 @@ class Dataset:
         """
         m_max_amplitudes = []
         m_max_thresholds = []
+
         for session in self.sessions:
             try:
                 m_max, mmax_low_stim, _ = session.get_m_max(method, channel_index, return_mmax_stim_range=True)
@@ -310,7 +311,6 @@ class Dataset:
                 m_max_thresholds.append(mmax_low_stim)
 
             except ValueError as e:
-
                 logging.warning(f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}")
 
         if not m_max_amplitudes:
@@ -318,10 +318,25 @@ class Dataset:
                 return None, None
             return None
 
-        if return_avg_mmax_thresholds:
-            return float(np.mean(m_max_amplitudes)), float(np.mean(m_max_thresholds))
+        # Calculate M-max for dataset level - use mean of all valid sessions
+        if len(m_max_amplitudes) == 1:
+            # Only one session, use its M-max
+            final_mmax = float(m_max_amplitudes[0])
+            final_mthresh = float(m_max_thresholds[0])
         else:
-            return float(np.mean(m_max_amplitudes))
+            # Multiple sessions: use mean M-max from all sessions
+            # This provides proper population-level normalization
+            final_mmax = float(np.mean(m_max_amplitudes))
+            final_mthresh = float(np.mean(m_max_thresholds))
+
+            logging.debug(f"Dataset M-max: Using mean from {len(m_max_amplitudes)} sessions")
+            logging.debug(f"  M-max values: {m_max_amplitudes}")
+            logging.debug(f"  Mean M-max: {final_mmax}")
+
+        if return_avg_mmax_thresholds:
+            return final_mmax, final_mthresh
+        else:
+            return final_mmax
 
     def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
         """Average M-wave amplitudes for each stimulus bin across sessions."""

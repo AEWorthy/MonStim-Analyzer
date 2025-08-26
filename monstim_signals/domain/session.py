@@ -508,6 +508,7 @@ class Session:
             float: The M-wave amplitude for the specified channel.
         """
         m_wave_amplitudes = self.get_m_wave_amplitudes(method, channel_index)
+
         if return_mmax_stim_range:
             return get_avg_mmax(
                 self.stimulus_voltages,

@@ -67,27 +67,90 @@ Various methods are employed to calculate EMG amplitude, depending on the specif
 Where $T_1$ and $T_2$ represent the start and end times of the analysis window, respectively. The default method is RMS amplitude.
 
 ### M-max Determination
-To determine the maximum M-wave amplitude (M-max), an adaptive algorithm is employed that identifies the plateau region in the stimulus-response curve:
 
+#### Individual Recording M-max Algorithm
+The maximum M-wave amplitude (M-max) for individual recordings is determined using a multi-approach algorithm that identifies the plateau region in the stimulus-response curve and selects the most appropriate calculation method:
+
+**Step 1: Plateau Detection**
 1. The stimulus-response curve is smoothed using a Savitzky-Golay filter with a window length of 25% of the total data points and a polynomial order of 3.
 
-2. A sliding window approach is used to detect the plateau region. The window size starts at 15 data points (configurable) and decreases to a minimum of 2 points if no plateau is detected.
+2. A sliding window approach detects the plateau region. The window size starts at 20 data points (configurable) and decreases to a minimum of 3 points if no plateau is detected.
 
-3. For each window, the standard deviation of the M-wave amplitudes is calculated. A plateau is identified when the standard deviation falls below a threshold of 0.2 times the overall standard deviation of the data (configurable).
+3. For each window, the standard deviation of M-wave amplitudes is calculated. A plateau is identified when the standard deviation falls below a threshold of 0.3 times the overall standard deviation (configurable).
 
-4. The M-max is calculated as the mean amplitude within the detected plateau region:
+**Step 2: Multi-Approach M-max Calculation**
+Once a plateau is detected, four different approaches are calculated:
 
-   $$M_{max} = \frac{1}{n} \sum_{i=1}^{n} A_i$$
+1. **Mean Corrected Approach:**
+   $$M_{max\_mean} = \frac{1}{n} \sum_{i=1}^{n} A_i + correction$$
+   
+   where the correction factor accounts for outliers above the plateau mean:
+   $$correction = \overline{A_{outliers}} - \overline{A_{plateau\_below\_max}}$$
 
-   where $A_i$ are the M-wave amplitudes within the plateau region and $n$ is the number of points in the plateau.
+2. **95th Percentile Approach:**
+   $$M_{max\_p95} = P_{95}(A_{plateau})$$
 
-5. If the calculated M-max is lower than the maximum recorded M-wave amplitude, a correction is applied:
+3. **Maximum Approach:**
+   $$M_{max\_max} = \max(A_{plateau})$$
 
-   $$M_{max_{corrected}} = M_{max} + (\overline{A_{outliers}} - \overline{A_{plateau_{below\_max}}})$$
+4. **Top 20% Mean Approach:**
+   $$M_{max\_top20} = \frac{1}{k} \sum_{i=1}^{k} A_{top20\%}$$
+   
+   where $A_{top20\%}$ are amplitudes ≥ 80th percentile of the plateau region.
 
-   where $\overline{A_{outliers}}$ is the mean amplitude of M-waves exceeding the initial M-max, and $\overline{A_{plateau_{below\_max}}}$ is the mean amplitude of the plateau region excluding its maximum value.
+**Step 3: Selection Logic**
+The algorithm selects the most appropriate approach using improved validation criteria:
 
-This adaptive approach ensures robust M-max determination across varying stimulus-response curve shapes and noise levels. The algorithm parameters (window sizes, threshold) can be adjusted in the configuration settings.
+- **Primary choice**: Maximum approach if ≤ validation_tolerance of plateau mean (default: 105%)
+- **Secondary choice**: 95th percentile if ≤ validation_tolerance of plateau mean  
+- **Tertiary choice**: Top 20% mean if ≤ validation_tolerance of plateau mean
+- **Fallback**: Mean corrected approach
+
+**Validation Improvement**: The algorithm now compares each approach against the plateau mean rather than the global maximum. This provides much tighter validation since the plateau region should be relatively flat, and prevents movement artifacts or stimulus artifacts (which might be the global maximum) from influencing the selection criteria.
+
+The validation tolerance is configurable via the `validation_tolerance` parameter (default: 1.05 = 5% tolerance).
+
+**Step 4: Fallback for No Plateau**
+If no plateau is detected, the algorithm applies the same multi-approach methodology to the high-stimulus region (top 25% of stimulus intensities):
+
+1. **Mean Approach:** $M_{max\_mean} = \frac{1}{n} \sum_{i=1}^{n} A_{high\_stim}$
+
+2. **95th Percentile Approach:** $M_{max\_p95} = P_{95}(A_{high\_stim})$
+
+3. **Maximum Approach:** $M_{max\_max} = \max(A_{high\_stim})$
+
+**Selection Logic for Fallback:** Same validation as main algorithm - maximum approach preferred if ≤ validation_tolerance of high-stimulus region mean, otherwise 95th percentile, with mean as final fallback.
+
+This ensures consistent methodology whether or not a plateau is detected, providing more robust and reliable M-max estimates even in challenging data conditions.
+
+#### Dataset and Experiment Level M-max Aggregation
+
+**Dataset Level Aggregation:**
+Dataset M-max is calculated as the mean of all constituent session M-max values:
+
+$$M_{max\_dataset} = \frac{1}{n} \sum_{i=1}^{n} M_{max\_session_i}$$
+
+where $n$ is the number of sessions in the dataset.
+
+**Experiment Level Aggregation:**
+Experiment M-max is calculated as the mean of all constituent dataset M-max values:
+
+$$M_{max\_experiment} = \frac{1}{m} \sum_{j=1}^{m} M_{max\_dataset_j}$$
+
+where $m$ is the number of datasets in the experiment.
+
+**Rationale for Mean-Based Aggregation:**
+This approach provides proper population-level normalization for M/H ratio calculations:
+
+- **Population Representation**: Mean M-max represents the average muscle response capacity across the population
+- **Proper Normalization**: H-reflex values normalized by mean M-max give true population-level H/M ratios
+- **Inclusivity**: All sessions and datasets contribute to the aggregate, regardless of stimulus range achieved
+- **Statistical Validity**: Mean aggregation is appropriate for population-level parameters
+
+This approach ensures that:
+- **H-reflex Normalization**: Provides accurate population-level "Relative to M-max" calculations
+- **Cross-session Comparisons**: Maintains proper scaling across different experimental sessions
+- **Population Studies**: Enables meaningful comparisons across different subjects/conditions
 
 ## Configuration Parameters
 
@@ -99,9 +162,10 @@ All processing parameters can be customized through the application's configurat
 - **order**: Filter order (default: 4)
 
 ### M-max Detection Parameters
-- **max_window_size**: Maximum sliding window size for plateau detection (default: 15 data points)
-- **min_window_size**: Minimum sliding window size for plateau detection (default: 2 data points)
-- **threshold**: Standard deviation threshold for plateau identification (default: 0.2)
+- **max_window_size**: Maximum sliding window size for plateau detection (default: 20 data points)
+- **min_window_size**: Minimum sliding window size for plateau detection (default: 3 data points)  
+- **threshold**: Standard deviation threshold for plateau identification (default: 0.3)
+- **validation_tolerance**: Tolerance factor for plateau validation (default: 1.05 = 5% above plateau mean)
 
 ### Analysis Parameters
 - **default_method**: Default amplitude calculation method (default: 'rms')
