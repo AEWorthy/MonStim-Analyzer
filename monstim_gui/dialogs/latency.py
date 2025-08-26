@@ -1,4 +1,5 @@
 import copy
+import logging
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QPoint, Qt, QTimer
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PyQt6.QtWidgets import QMessageBox
 
 from monstim_gui.commands import SetLatencyWindowsCommand
 from monstim_gui.io.config_repository import ConfigRepository
@@ -242,7 +244,7 @@ class LatencyWindowsDialog(QDialog):
         radio_group.addButton(global_radio)
         radio_group.addButton(per_channel_radio)
 
-        global_radio.setChecked(True)  # Default to global
+    # Don't set checked state yet; decide after building widgets based on data
         mode_layout.addWidget(global_radio)
         mode_layout.addWidget(per_channel_radio)
         start_layout.addLayout(mode_layout)
@@ -299,6 +301,21 @@ class LatencyWindowsDialog(QDialog):
         start_layout.addWidget(per_channel_widget)
         per_channel_widget.setVisible(False)  # Hidden by default
 
+        # Determine default editing mode based on whether channels differ
+        def _values_differ(vals: list[float], tol: float = 1e-9) -> bool:
+            if not vals:
+                return False
+            return (max(vals) - min(vals)) > tol
+
+        if _values_differ(window.start_times):
+            # Default to per-channel if existing values differ to avoid accidental overwrite
+            per_channel_radio.setChecked(True)
+            per_channel_widget.setVisible(True)
+            global_widget.setVisible(False)
+        else:
+            # Default to global when all values are equal
+            global_radio.setChecked(True)
+
         layout.addWidget(start_group)
 
         # Action buttons
@@ -312,6 +329,28 @@ class LatencyWindowsDialog(QDialog):
         # Connect signals for mode switching
         def on_mode_changed():
             is_global = global_radio.isChecked()
+
+            # If switching to global and per-channel values differ, confirm to avoid accidental overwrite
+            if is_global:
+                channel_vals = [spin.value() for spin in per_channel_spins]
+                def _vals_differ(vs: list[float], tol: float = 1e-9) -> bool:
+                    if not vs:
+                        return False
+                    return (max(vs) - min(vs)) > tol
+
+                if _vals_differ(channel_vals):
+                    resp = QMessageBox.question(
+                        self,
+                        "Switch to Global?",
+                        "Per-channel start times differ for this window. Switching to Global will overwrite them with a single value. Continue?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if resp != QMessageBox.StandardButton.Yes:
+                        # Revert selection to per-channel and exit
+                        per_channel_radio.setChecked(True)
+                        return
+
             global_widget.setVisible(is_global)
             per_channel_widget.setVisible(not is_global)
 
@@ -324,6 +363,9 @@ class LatencyWindowsDialog(QDialog):
             else:
                 # When switching to per-channel, update window with current per-channel values
                 window.start_times = [spin.value() for spin in per_channel_spins]
+                # Keep global spin in sync with first channel for consistency
+                if per_channel_spins:
+                    global_start_spin.setValue(per_channel_spins[0].value())
 
             # Force layout update and resize with a slight delay to allow visibility changes to process
             QTimer.singleShot(
@@ -477,6 +519,7 @@ class LatencyWindowsDialog(QDialog):
         else:
             level = "session"
 
+        logging.info(f"Setting latency windows for {level}: {self.data.id}")
         command = SetLatencyWindowsCommand(self.gui, level, new_windows)
         self.gui.command_invoker.execute(command)
 
@@ -542,6 +585,7 @@ class LatencyWindowsDialog(QDialog):
         else:
             level = "session"
 
+        logging.info(f"Setting latency windows for {level}: {self.data.id}")
         command = SetLatencyWindowsCommand(self.gui, level, new_windows)
         self.gui.command_invoker.execute(command)
 
