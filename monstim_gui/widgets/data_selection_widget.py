@@ -172,7 +172,7 @@ class DataSelectionWidget(QGroupBox):
 
     def _on_experiment_combo_changed(self, index):
         # Skip if selecting the placeholder item (index 0)
-        if index == 0:
+        if index <= 0:
             # Clear current experiment if placeholder is selected
             if self.parent.current_experiment:
                 self.parent.current_experiment = None
@@ -180,13 +180,14 @@ class DataSelectionWidget(QGroupBox):
                 self.parent.current_session = None
 
                 # Block signals to prevent recursive calls
+                self.experiment_combo.blockSignals(True)
                 self.dataset_combo.blockSignals(True)
                 self.session_combo.blockSignals(True)
 
-                self.update_dataset_combo()
-                self.update_session_combo()
+                self.update_all_data_combos()
 
                 # Re-enable signals
+                self.experiment_combo.blockSignals(False)
                 self.dataset_combo.blockSignals(False)
                 self.session_combo.blockSignals(False)
 

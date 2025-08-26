@@ -83,6 +83,39 @@ class RecordingRepository:
         """
         self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
 
+    def rename(self, new_stem: Path, attempts: int = 3, wait: float = 0.5) -> None:
+        """Rename recording files to a new stem atomically with retries on Windows locks.
+
+        Args:
+            new_stem: Path to new stem (no suffix).
+        """
+        import errno
+        import gc
+        import time
+
+        if new_stem.exists():
+            raise FileExistsError(f"Target recording stem already exists: {new_stem}")
+
+        for attempt in range(attempts):
+            try:
+                # Rename file-by-file if they exist
+                if self.raw_h5.exists():
+                    self.raw_h5.rename(new_stem.with_suffix(".raw.h5"))
+                if self.meta_js.exists():
+                    self.meta_js.rename(new_stem.with_suffix(".meta.json"))
+                if self.annot_js.exists():
+                    self.annot_js.rename(new_stem.with_suffix(".annot.json"))
+                # Update in-memory paths
+                self.update_path(new_stem)
+                return
+            except OSError as e:
+                if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
+                    logging.warning(f"Access denied renaming recording (attempt {attempt+1}), retrying...")
+                    time.sleep(wait)
+                    gc.collect()
+                    continue
+                raise
+
     @staticmethod
     def discover_in_folder(folder: Path) -> Iterator["RecordingRepository"]:
         """
@@ -120,6 +153,8 @@ class SessionRepository:
         """
         self.folder = new_folder
         self.session_js = new_folder / "session.annot.json"
+        # Ensure the session_id reflects the new folder name
+        self.session_id = new_folder.name
 
     def load(self, config=None) -> "Session":
         # 1) Discover all recordings in this folder
@@ -158,6 +193,28 @@ class SessionRepository:
         self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
         for rec in session.recordings:
             rec.repo.save(rec)
+
+    def rename(self, new_folder: Path, attempts: int = 3, wait: float = 0.5) -> None:
+        """Rename the session folder, retrying on transient Windows locks."""
+        import errno
+        import gc
+        import time
+
+        if new_folder.exists():
+            raise FileExistsError(f"Target session folder already exists: {new_folder}")
+
+        for attempt in range(attempts):
+            try:
+                self.folder.rename(new_folder)
+                self.update_path(new_folder)
+                return
+            except OSError as e:
+                if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
+                    logging.warning(f"Access denied renaming session (attempt {attempt+1}), retrying...")
+                    time.sleep(wait)
+                    gc.collect()
+                    continue
+                raise
 
     def discover_in_folder(folder: Path) -> Iterator["SessionRepository"]:
         """
@@ -237,6 +294,58 @@ class DatasetRepository:
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
         for session in dataset.sessions:
             session.repo.save(session)
+
+    def rename(self, new_folder: Path, dataset=None, attempts: int = 3, wait: float = 0.5) -> None:
+        """Rename the dataset folder, retrying on transient Windows locks.
+
+        If `dataset` (a Dataset domain object) is provided, update its child session and
+        recording repository objects in-memory so callers do not need to update them.
+        """
+        import errno
+        import gc
+        import time
+
+        if new_folder.exists():
+            raise FileExistsError(f"Target dataset folder already exists: {new_folder}")
+
+        for attempt in range(attempts):
+            try:
+                self.folder.rename(new_folder)
+                # Update repo internals
+                self.update_path(new_folder)
+                # Update dataset id
+                self.dataset_id = new_folder.name
+
+                # If a Dataset domain object was provided, update its child repos
+                if dataset is not None:
+                    try:
+                        dataset.id = new_folder.name
+                        # For each session in the dataset, update the session repo paths
+                        for session in dataset._all_sessions:
+                            if session.repo:
+                                # New session folder path under the renamed dataset
+                                new_session_path = self.folder / session.repo.folder.name
+                                session.repo.update_path(new_session_path)
+
+                                # Update recordings within the session
+                                for recording in session.recordings:
+                                    if recording.repo:
+                                        # recording.repo.stem is a Path to the stem (filename without suffix)
+                                        old_stem = recording.repo.stem
+                                        new_stem = new_session_path / old_stem.name
+                                        recording.repo.update_path(new_stem)
+                    except Exception:
+                        # If in-memory updates fail, log but do not prevent the rename (filesystem succeeded)
+                        logging.exception("Failed to update in-memory child repo objects after dataset rename.")
+
+                return
+            except OSError as e:
+                if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
+                    logging.warning(f"Access denied renaming dataset (attempt {attempt+1}), retrying...")
+                    time.sleep(wait)
+                    gc.collect()
+                    continue
+                raise
 
 
 class ExperimentRepository:

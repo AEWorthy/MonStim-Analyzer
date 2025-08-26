@@ -105,7 +105,7 @@ def main(is_frozen: bool) -> int:
             QTimer.singleShot(3000, splash.close)
         gui = MonstimGUI()
         gui.show()
-        logging.info("Application started successfully.")
+        logging.debug("Application launched successfully.")
         return app.exec()
 
     except Exception as e:

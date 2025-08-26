@@ -54,7 +54,7 @@ class Dataset:
             self.stim_start = 0.0
 
         self.update_latency_window_parameters()
-        logging.info(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
+        logging.debug(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
 
     @property
     def is_completed(self) -> bool:
@@ -84,7 +84,7 @@ class Dataset:
         Returns the date of the dataset in 'YYYY-MM-DD' format.
         If the date is not set, returns an empty string.
         """
-        return self.annot.date if self.annot.date else "Undefined"
+        return self.annot.date if self.annot.date else "UNDEFINED"
 
     @property
     def animal_id(self) -> str:
@@ -92,7 +92,7 @@ class Dataset:
         Returns the animal ID of the dataset.
         If the animal ID is not set, returns an empty string.
         """
-        return self.annot.animal_id if self.annot.animal_id else "Undefined"
+        return self.annot.animal_id if self.annot.animal_id else "UNDEFINED"
 
     @property
     def condition(self) -> str:
@@ -100,15 +100,21 @@ class Dataset:
         Returns the condition of the dataset.
         If the condition is not set, returns an empty string.
         """
-        return self.annot.condition if self.annot.condition else "Undefined"
+        return self.annot.condition if self.annot.condition else "UNDEFINED"
 
     @property
     def formatted_name(self) -> str:
         """
         Returns the formatted name of the dataset.
-        If the date, animal_id, or condition is not set, returns the dataset folder name.
+        If all metadata components (date, animal_id, condition) are available, returns formatted metadata.
+        If some or all metadata is missing, returns the original dataset folder name.
         """
-        return f"{self.date} {self.animal_id} {self.condition}" if self.date and self.animal_id and self.condition else self.id
+        # Only use formatted metadata if all components are present and valid
+        if self.annot.date and self.annot.animal_id and self.annot.condition:
+            return f"{self.annot.date} {self.annot.animal_id} {self.annot.condition}"
+        else:
+            # Fall back to original folder name if any metadata is missing
+            return self.id
 
     @property
     def num_sessions(self) -> int:

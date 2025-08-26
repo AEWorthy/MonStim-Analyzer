@@ -15,8 +15,9 @@ class ApplicationState:
 
     def __init__(self):
         self._settings = None
+        self._is_restoring_session = False  # Flag to suppress saves during restoration
 
-        logging.info(
+        logging.debug(
             "Initializing ApplicationState"
             f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
         )
@@ -89,30 +90,65 @@ class ApplicationState:
         profile_name: str = None,
     ):
         """Save the current complete session state for restoration on startup."""
-        logging.info(
-            f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
-            f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
-        )
+
+        # Skip saving if we're currently restoring a session (to avoid redundant saves)
+        if self._is_restoring_session:
+            logging.debug(
+                f"Skipping session state save during restoration: experiment={experiment_id}, dataset={dataset_id}, session={session_id}"
+            )
+            return
+
+        # Debug: log existing persisted state before modification
+        try:
+            existing = {
+                "experiment": self.settings.value("SessionRestore/experiment", "", type=str),
+                "dataset": self.settings.value("SessionRestore/dataset", "", type=str),
+                "session": self.settings.value("SessionRestore/session", "", type=str),
+                "profile": self.settings.value("SessionRestore/profile", "", type=str),
+            }
+            logging.debug(f"save_current_session_state: existing SessionRestore={existing}")
+        except Exception:
+            logging.debug("save_current_session_state: could not read existing SessionRestore")
 
         # Always save profile information if provided (independent of session restoration setting)
         if profile_name is not None:
             self.save_last_profile(profile_name)
 
         if not self.should_track_session_restoration():
-            logging.info("save_current_session_state: Session restoration tracking is disabled")
+            logging.debug("save_current_session_state: Session restoration tracking is disabled")
             return
 
         # Only save session state if we have at least an experiment
         if experiment_id is not None:
             logging.info(
                 f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
+                f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
             )
 
-            # Clear existing session state first
-            self.settings.remove("SessionRestore")
+            # Determine whether the experiment changed compared to what's already saved
+            previous_experiment = self.settings.value("SessionRestore/experiment", "", type=str)
 
-            # Save individual values instead of a dictionary
+            # If experiment differs from previously saved experiment, clear dataset/session
+            # unless the caller explicitly provided dataset_id/session_id. This prevents
+            # the situation where a dataset from a different experiment is preserved and
+            # later restored incorrectly.
+            if previous_experiment and previous_experiment != experiment_id:
+                # Clear cross-experiment dataset/session unless explicitly provided
+                if dataset_id is None:
+                    try:
+                        self.settings.remove("SessionRestore/dataset")
+                    except Exception:
+                        logging.debug("Could not remove stale SessionRestore/dataset key")
+                if session_id is None:
+                    try:
+                        self.settings.remove("SessionRestore/session")
+                    except Exception:
+                        logging.debug("Could not remove stale SessionRestore/session key")
+
+            # Save experiment id
             self.settings.setValue("SessionRestore/experiment", experiment_id)
+
+            # Only update dataset/session/profile if explicitly provided (non-None)
             if dataset_id is not None:
                 self.settings.setValue("SessionRestore/dataset", dataset_id)
             if session_id is not None:
@@ -121,13 +157,8 @@ class ApplicationState:
                 self.settings.setValue("SessionRestore/profile", profile_name)
 
             self.settings.sync()
-
-            # Debug: Verify what was actually saved
-            saved_exp = self.settings.value("SessionRestore/experiment", "", type=str)
-            saved_profile = self.settings.value("SessionRestore/profile", "", type=str)
-            logging.info(f"save_current_session_state: Verified saved experiment={saved_exp}, profile={saved_profile}")
         else:
-            logging.info("save_current_session_state: No experiment_id provided, not saving session state")
+            logging.debug("save_current_session_state: No experiment_id provided, not saving session state")
 
     def get_last_session_state(self) -> Dict[str, str]:
         """Get the last saved session state."""
@@ -191,19 +222,19 @@ class ApplicationState:
     def save_last_profile(self, profile_name: str):
         """Save the last selected analysis profile."""
         if not self.should_track_analysis_profiles():
-            logging.info(f"Profile tracking is disabled - not saving profile '{profile_name}'")
+            logging.debug(f"Profile tracking is disabled - not saving profile '{profile_name}'")
             return
-        logging.info(f"Saving last profile selection: '{profile_name}'")
+        logging.debug(f"Saving last profile selection: '{profile_name}'")
         self.settings.setValue("LastSelection/profile", profile_name)
         self.settings.sync()
 
     def get_last_profile(self) -> str:
         """Get the last selected analysis profile."""
         if not self.should_track_analysis_profiles():
-            logging.info("Profile tracking is disabled - returning default profile")
+            logging.debug("Profile tracking is disabled - returning default profile")
             return "(default)"
         result = self.settings.value("LastSelection/profile", "(default)", type=str)
-        logging.info(f"Retrieved last profile selection: '{result}'")
+        logging.debug(f"Retrieved last profile selection: '{result}'")
         return result
 
     # === SESSION RESTORATION METHODS ===
@@ -234,6 +265,9 @@ class ApplicationState:
                 self.clear_session_state()
                 return False
 
+            # Set flag to suppress session state saves during restoration (including experiment loading)
+            self._is_restoring_session = True
+
             # Restore experiment
             exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
             gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
@@ -251,6 +285,7 @@ class ApplicationState:
                                 dataset_names = [ds.id for ds in gui.current_experiment.datasets]
                                 if dataset_id in dataset_names:
                                     ds_index = dataset_names.index(dataset_id)
+                                    logging.info(f"Session restoration: Restoring dataset '{dataset_id}' at index {ds_index}")
                                     gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
 
                                     # Restore session
@@ -258,23 +293,70 @@ class ApplicationState:
                                         session_names = [sess.id for sess in gui.current_dataset.sessions]
                                         if session_id in session_names:
                                             sess_index = session_names.index(session_id)
+                                            logging.info(
+                                                f"Session restoration: Restoring session '{session_id}' at index {sess_index}"
+                                            )
                                             gui.data_selection_widget.session_combo.setCurrentIndex(sess_index)
+                                        else:
+                                            logging.warning(
+                                                f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'"
+                                            )
+                                    elif session_id:
+                                        logging.warning(
+                                            f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded"
+                                        )
+                                else:
+                                    logging.warning(
+                                        f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'"
+                                    )
                         except Exception as e:
                             logging.error(f"Error restoring dataset/session: {e}")
+                            import traceback
+
+                            logging.error(traceback.format_exc())
+                        finally:
+                            # Always clear the restoration flag when done
+                            self._is_restoring_session = False
+                            # Save the final restored state
+                            self.save_current_session_state(
+                                experiment_id=experiment_id,
+                                dataset_id=dataset_id,
+                                session_id=session_id,
+                                profile_name=profile_name,
+                            )
+                    else:
+                        # Experiment not ready yet, try again in 500ms (but only up to 10 attempts = 5 seconds total)
+                        if not hasattr(restore_nested, "attempt_count"):
+                            restore_nested.attempt_count = 0
+
+                        restore_nested.attempt_count += 1
+                        if restore_nested.attempt_count < 20:
+                            logging.debug(
+                                f"Session restoration: Waiting for experiment to load (attempt {restore_nested.attempt_count}/10)"
+                            )
+                            QTimer.singleShot(500, restore_nested)
+                        else:
+                            logging.warning("Session restoration: Gave up waiting for experiment to load after 5 seconds")
+                            # Clear the restoration flag if we give up
+                            self._is_restoring_session = False
 
                 QTimer.singleShot(1000, restore_nested)  # Give experiment time to load
 
-            logging.info(f"Session restoration initiated: {experiment_id}")
+            logging.info(
+                f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}."
+            )
             return True
 
         except Exception as e:
             logging.error(f"Error during session restoration: {e}")
             self.clear_session_state()
+            # Make sure to clear the flag on error
+            self._is_restoring_session = False
             return False
 
     # === PROGRAM PREFERENCES ===
     def get_preference(self, key: str, default_value=True) -> bool:
-        logging.info(
+        logging.debug(
             f"Getting preference '{key}' with default={default_value}"
             f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
         )

@@ -106,6 +106,8 @@ class MenuBar(QMenuBar):
         invert_polarity_action.triggered.connect(lambda: self.parent.invert_channel_polarity("dataset"))
         change_names_action = dataset_menu.addAction("Change Channel Names")
         change_names_action.triggered.connect(lambda: self.parent.change_channel_names("dataset"))
+        edit_metadata_action = dataset_menu.addAction("Edit Metadata")
+        edit_metadata_action.triggered.connect(self.parent.data_manager.edit_dataset_metadata)
         dataset_menu.addSeparator()
         reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)

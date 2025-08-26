@@ -257,11 +257,11 @@ class MonstimGUI(QMainWindow):
 
         # Check if profile tracking is enabled
         if not app_state.should_track_analysis_profiles():
-            logging.info("Profile tracking is disabled - not restoring profile selection")
+            logging.debug("Profile tracking is disabled - not restoring profile selection")
             return False
 
         last_profile = app_state.get_last_profile()
-        logging.info(f"Attempting to restore last profile selection: '{last_profile}'")
+        logging.debug(f"Attempting to restore last profile selection: '{last_profile}'")
 
         if last_profile:
             idx = self.profile_selector_combo.findText(last_profile)
@@ -275,12 +275,12 @@ class MonstimGUI(QMainWindow):
                 self._set_profile_selector_tooltip(idx)
                 self._apply_profile_configuration(idx, last_profile)
 
-                logging.info(f"Successfully restored profile selection: {last_profile}")
+                logging.debug(f"Successfully restored last profile selection: {last_profile}")
                 return True
             else:
                 logging.warning(f"Profile '{last_profile}' not found in available profiles")
 
-        logging.info("No valid profile to restore, using default")
+        logging.info("No valid analysis profile to restore, using default")
         return False
 
     def _apply_profile_configuration(self, idx: int, profile_name: str):
@@ -320,11 +320,11 @@ class MonstimGUI(QMainWindow):
                 success = app_state.restore_last_session(self)
                 if success:
                     self.status_bar.showMessage("Previous session state restored", 5000)
-                    logging.info("Session restoration completed successfully")
+                    logging.debug("Session restoration completed successfully")
                 else:
-                    logging.info("Session restoration was not possible")
+                    logging.warning("Session restoration was attempted, but not possible")
             else:
-                logging.info("Session restoration is disabled - not restoring experiment/dataset/session")
+                logging.debug("Session restoration is disabled - not restoring experiment/dataset/session")
 
         except Exception as e:
             logging.error(f"Error during session restoration: {e}")
