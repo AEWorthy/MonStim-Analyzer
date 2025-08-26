@@ -2,10 +2,9 @@
 # Usage: Run from an Anaconda Prompt or a PowerShell session where conda is available
 
 param(
-    [string]$envName = "alv_lab"
+    [string]$envName = "alv_lab" # Update this to your environment name
 )
 
-# Skipping 'conda activate' in scripts; using 'conda run -n $envName' for all commands.
 
 Write-Host "Backing up current environment package lists..."
 conda run -n $envName conda list --export | Out-File -Encoding utf8 old_requirements.txt
