@@ -88,9 +88,6 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
 
-            # Display the plot
-            self.display_plot(canvas)
-
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index", "stimulus_v"], inplace=True)
@@ -270,9 +267,6 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
-
-            # Display the plot
-            self.display_plot(canvas)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
@@ -520,9 +514,6 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
-
-            # Display the plot
-            self.display_plot(canvas)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)

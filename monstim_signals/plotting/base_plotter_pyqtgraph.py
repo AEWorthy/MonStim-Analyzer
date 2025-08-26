@@ -502,18 +502,6 @@ class BasePlotterPyQtGraph:
         legend = plot_item.addLegend()
         return legend
 
-    def display_plot(self, canvas: "PlotPane"):
-        """
-        Display the plot (equivalent to matplotlib's show()).
-
-        Parameters
-        ----------
-        canvas : PlotPane
-            The plot pane containing the plots
-        """
-        # PyQtGraph updates automatically, so we just need to process events
-        canvas.graphics_layout.update()
-
     def clear_current_plots(self, canvas: "PlotPane"):
         """Clear all current plot items and regions."""
         self.current_plot_items = []

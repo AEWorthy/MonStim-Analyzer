@@ -393,9 +393,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Auto-range Y-axis for all linked plots
         self.auto_range_y_axis_linked_plots(plot_items)
 
-        # Display the plot
-        self.display_plot(canvas)
-
         # Create DataFrame with multi-level index (matching matplotlib version exactly)
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(
@@ -569,9 +566,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
 
-        # Display the plot
-        self.display_plot(canvas)
-
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(["channel_index", "stimulus_V", "time_point"], inplace=True)
@@ -697,9 +691,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Remove link y-axes to the first plot item
             plot_item.setYLink(None)
             plot_item.enableAutoRange(axis="y", enable=True)
-
-        # Display the plot
-        self.display_plot(canvas)
 
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
@@ -860,9 +851,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Set y-axis limits (matching dataset plotter)
         if all_m_max_amplitudes:
             y_max = np.nanmax(all_m_max_amplitudes)
-            if not np.isnan(y_max):
-                for plot_item in plot_items:
-                    plot_item.setYRange(0, 1.1 * y_max)
+            if not np.isnan(y_max) and plot_items:
+                # Set range on first plot only since they're Y-linked
+                plot_items[0].setYRange(0, 1.1 * y_max)
 
         # Display the plot
         self.display_plot(canvas)
@@ -1138,9 +1129,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             plot_item.setYLink(None)
             plot_item.enableAutoRange(axis="y", enable=True)
 
-        # Display the plot
-        self.display_plot(canvas)
-
         # Create DataFrame with appropriate index
         raw_data_df = pd.DataFrame(raw_data_dict)
         if not raw_data_df.empty:
@@ -1347,9 +1335,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Remove link y-axes to the first plot item
             plot_item.setYLink(None)
             plot_item.enableAutoRange(axis="y", enable=True)
-
-        # Display the plot
-        self.display_plot(canvas)
 
         # Create DataFrame with appropriate index
         raw_data_df = pd.DataFrame(raw_data_dict)

@@ -34,6 +34,11 @@ class PlotPane(QGroupBox):
 
     def clear_plots(self):
         """Clear all current plots"""
-        self.graphics_layout.clear()
+        try:
+            if self.graphics_layout:
+                self.graphics_layout.clear()
+        except RuntimeError:
+            # Widget may have been destroyed
+            pass
         self.current_plots = []
         self.current_plot_items = []
