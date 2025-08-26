@@ -103,8 +103,8 @@ class Recording:
             except Exception:
                 pass
 
-            h5file = h5py.File(raw_path_str, "r")
-            self._raw = h5file["raw"]  # type: ignore
+            with h5py.File(raw_path_str, "r") as h5file:
+                self._raw = h5file["raw"][:]  # type: ignore
             # Update num_samples in metadata in case it changed
             try:
                 self.meta.num_samples = int(self._raw.shape[0])
