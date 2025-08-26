@@ -90,19 +90,21 @@ class ApplicationState:
         profile_name: str = None,
     ):
         """Save the current complete session state for restoration on startup."""
-        
+
         # Skip saving if we're currently restoring a session (to avoid redundant saves)
         if self._is_restoring_session:
-            logging.debug(f"Skipping session state save during restoration: experiment={experiment_id}, dataset={dataset_id}, session={session_id}")
+            logging.debug(
+                f"Skipping session state save during restoration: experiment={experiment_id}, dataset={dataset_id}, session={session_id}"
+            )
             return
 
         # Debug: log existing persisted state before modification
         try:
             existing = {
-                'experiment': self.settings.value('SessionRestore/experiment', '', type=str),
-                'dataset': self.settings.value('SessionRestore/dataset', '', type=str),
-                'session': self.settings.value('SessionRestore/session', '', type=str),
-                'profile': self.settings.value('SessionRestore/profile', '', type=str),
+                "experiment": self.settings.value("SessionRestore/experiment", "", type=str),
+                "dataset": self.settings.value("SessionRestore/dataset", "", type=str),
+                "session": self.settings.value("SessionRestore/session", "", type=str),
+                "profile": self.settings.value("SessionRestore/profile", "", type=str),
             }
             logging.debug(f"save_current_session_state: existing SessionRestore={existing}")
         except Exception:
@@ -119,8 +121,8 @@ class ApplicationState:
         # Only save session state if we have at least an experiment
         if experiment_id is not None:
             logging.info(
-            f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
-            f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
+                f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
+                f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
             )
 
             # Determine whether the experiment changed compared to what's already saved
@@ -291,17 +293,26 @@ class ApplicationState:
                                         session_names = [sess.id for sess in gui.current_dataset.sessions]
                                         if session_id in session_names:
                                             sess_index = session_names.index(session_id)
-                                            logging.info(f"Session restoration: Restoring session '{session_id}' at index {sess_index}")
+                                            logging.info(
+                                                f"Session restoration: Restoring session '{session_id}' at index {sess_index}"
+                                            )
                                             gui.data_selection_widget.session_combo.setCurrentIndex(sess_index)
                                         else:
-                                            logging.warning(f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'")
+                                            logging.warning(
+                                                f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'"
+                                            )
                                     elif session_id:
-                                        logging.warning(f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded")
+                                        logging.warning(
+                                            f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded"
+                                        )
                                 else:
-                                    logging.warning(f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'")
+                                    logging.warning(
+                                        f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'"
+                                    )
                         except Exception as e:
                             logging.error(f"Error restoring dataset/session: {e}")
                             import traceback
+
                             logging.error(traceback.format_exc())
                         finally:
                             # Always clear the restoration flag when done
@@ -311,16 +322,18 @@ class ApplicationState:
                                 experiment_id=experiment_id,
                                 dataset_id=dataset_id,
                                 session_id=session_id,
-                                profile_name=profile_name
+                                profile_name=profile_name,
                             )
                     else:
                         # Experiment not ready yet, try again in 500ms (but only up to 10 attempts = 5 seconds total)
-                        if not hasattr(restore_nested, 'attempt_count'):
+                        if not hasattr(restore_nested, "attempt_count"):
                             restore_nested.attempt_count = 0
-                        
+
                         restore_nested.attempt_count += 1
                         if restore_nested.attempt_count < 20:
-                            logging.debug(f"Session restoration: Waiting for experiment to load (attempt {restore_nested.attempt_count}/10)")
+                            logging.debug(
+                                f"Session restoration: Waiting for experiment to load (attempt {restore_nested.attempt_count}/10)"
+                            )
                             QTimer.singleShot(500, restore_nested)
                         else:
                             logging.warning("Session restoration: Gave up waiting for experiment to load after 5 seconds")
@@ -329,7 +342,9 @@ class ApplicationState:
 
                 QTimer.singleShot(1000, restore_nested)  # Give experiment time to load
 
-            logging.info(f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}.")
+            logging.info(
+                f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}."
+            )
             return True
 
         except Exception as e:

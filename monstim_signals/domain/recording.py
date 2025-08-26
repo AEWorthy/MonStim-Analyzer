@@ -88,7 +88,7 @@ class Recording:
             logging.debug(f"Recording '{getattr(self, 'id', '<unknown>')}' has no repo to reopen raw data.")
             return
         try:
-            raw_path = getattr(self.repo, 'raw_h5', None)
+            raw_path = getattr(self.repo, "raw_h5", None)
             if raw_path is None:
                 logging.debug(f"Recording '{getattr(self, 'id', '<unknown>')}' repo has no raw_h5 attribute.")
                 return
@@ -96,6 +96,7 @@ class Recording:
             # Check file exists before attempting to open
             try:
                 from pathlib import Path
+
                 if not Path(raw_path_str).exists():
                     logging.warning(f"Raw HDF5 not found for recording '{getattr(self, 'id', '<unknown>')}': {raw_path_str}")
                     return
