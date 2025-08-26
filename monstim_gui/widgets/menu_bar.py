@@ -85,7 +85,7 @@ class MenuBar(QMenuBar):
         experiment_menu = edit_menu.addMenu("Experiment")
         dataset_menu = edit_menu.addMenu("Dataset")
         session_menu = edit_menu.addMenu("Session")
-        
+
         # Data curation submenu
         curation_menu = edit_menu.addMenu("Data Curation")
 
@@ -133,7 +133,7 @@ class MenuBar(QMenuBar):
         exclude_session_action.triggered.connect(self.parent.exclude_session)
         restore_session_action = session_menu.addAction("Restore Excluded Session")
         restore_session_action.triggered.connect(self.parent.prompt_restore_session)
-        
+
         # Data curation actions
         exclude_recordings_action = curation_menu.addAction("Recording Exclusion Editor...")
         exclude_recordings_action.triggered.connect(self.show_recording_exclusion_editor)

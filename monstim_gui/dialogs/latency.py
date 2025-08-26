@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLayout,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -23,7 +24,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtWidgets import QMessageBox
 
 from monstim_gui.commands import SetLatencyWindowsCommand
 from monstim_gui.io.config_repository import ConfigRepository
@@ -244,7 +244,7 @@ class LatencyWindowsDialog(QDialog):
         radio_group.addButton(global_radio)
         radio_group.addButton(per_channel_radio)
 
-    # Don't set checked state yet; decide after building widgets based on data
+        # Don't set checked state yet; decide after building widgets based on data
         mode_layout.addWidget(global_radio)
         mode_layout.addWidget(per_channel_radio)
         start_layout.addLayout(mode_layout)
@@ -333,6 +333,7 @@ class LatencyWindowsDialog(QDialog):
             # If switching to global and per-channel values differ, confirm to avoid accidental overwrite
             if is_global:
                 channel_vals = [spin.value() for spin in per_channel_spins]
+
                 def _vals_differ(vs: list[float], tol: float = 1e-9) -> bool:
                     if not vs:
                         return False

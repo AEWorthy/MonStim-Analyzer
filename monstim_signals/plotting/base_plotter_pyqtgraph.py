@@ -563,6 +563,58 @@ class BasePlotterPyQtGraph:
         )
         return pale
 
+    def auto_range_y_axis_linked_plots(self, plot_items: List[pg.PlotItem], padding: float = 0.05):
+        """
+        Auto-range Y-axis for linked plots by calculating the optimal range across all plots.
+
+        This solves the issue where individual auto-ranging on linked plots causes the last
+        plot's range to override all others, potentially cutting off data from earlier plots.
+
+        Parameters
+        ----------
+        plot_items : List[pg.PlotItem]
+            List of plot items that are Y-linked
+        padding : float, optional
+            Fraction of padding to add above and below the data range (default: 0.05 = 5%)
+        """
+        if not plot_items:
+            return
+
+        # Calculate the overall data range across all plots
+        overall_y_min = float("inf")
+        overall_y_max = float("-inf")
+
+        for plot_item in plot_items:
+            # Get the data range for this plot
+            data_bounds = plot_item.vb.childrenBounds()
+            if data_bounds is not None and len(data_bounds) == 2:
+                y_bounds = data_bounds[1]  # y-bounds are the second element
+                if y_bounds is not None and len(y_bounds) == 2:
+                    y_min, y_max = y_bounds
+                    if not (np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max)):
+                        overall_y_min = min(overall_y_min, y_min)
+                        overall_y_max = max(overall_y_max, y_max)
+
+        # Check if we found valid bounds
+        if overall_y_min == float("inf") or overall_y_max == float("-inf"):
+            # Fallback: use individual auto-range on the first plot only
+            if plot_items:
+                plot_items[0].enableAutoRange(axis="y", enable=True)
+            return
+
+        # Add padding to the range
+        y_range = overall_y_max - overall_y_min
+        if y_range == 0:
+            y_range = max(abs(overall_y_max), 1.0) * 0.1  # Fallback for zero range
+
+        padded_y_min = overall_y_min - (y_range * padding)
+        padded_y_max = overall_y_max + (y_range * padding)
+
+        # Apply the calculated range to all plots
+        # We only need to set it on the first plot since they're Y-linked
+        if plot_items:
+            plot_items[0].setYRange(padded_y_min, padded_y_max, padding=0)
+
 
 class UnableToPlotError(Exception):
     """Exception raised when plotting is not possible."""

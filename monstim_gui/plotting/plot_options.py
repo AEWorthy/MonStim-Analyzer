@@ -139,7 +139,7 @@ class EMGOptions(BasePlotOptions):
         self.plot_colormap_checkbox.setChecked(True)
         self.interactive_cursor_checkbox = QCheckBox()
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
-        self.interactive_cursor_checkbox.setChecked(True)
+        self.interactive_cursor_checkbox.setChecked(False)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
 
         # Create the channel selector
@@ -223,7 +223,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.fixed_y_axis_checkbox.setChecked(True)  # Set the initial state to True
 
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
-        self.interactive_cursor_checkbox.setChecked(True)
+        self.interactive_cursor_checkbox.setChecked(False)
 
         # Create the recording cycler widget and add it to the form
         self.recording_cycler = RecordingCyclerWidget(self)

@@ -390,8 +390,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             )
             self.add_colormap_scalebar(layout, plot_items, value_range)
 
-        for plot_item in plot_items:
-            plot_item.enableAutoRange(axis="y", enable=True)
+        # Auto-range Y-axis for all linked plots
+        self.auto_range_y_axis_linked_plots(plot_items)
 
         # Display the plot
         self.display_plot(canvas)
@@ -566,8 +566,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             self.add_colormap_scalebar(layout, plot_items, value_range)
 
         if not fixed_y_axis:
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
         # Display the plot
         self.display_plot(canvas)

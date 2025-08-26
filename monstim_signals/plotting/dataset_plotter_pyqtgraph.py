@@ -87,8 +87,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             if plot_legend and plot_items:
                 self.add_legend(plot_items[0])
 
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Display the plot
             self.display_plot(canvas)
@@ -98,6 +98,9 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             raw_data_df.set_index(["channel_index", "window_name", "voltage"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
 
@@ -400,8 +403,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Enable grid
                 plot_item.showGrid(True, True)
 
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Display the plot
             self.display_plot(canvas)
@@ -411,6 +414,9 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             raw_data_df.set_index(["channel_index", "stimulus_v"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting max H-reflex: {str(e)}")
 
@@ -572,5 +578,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             raw_data_df.set_index(["channel_index"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting M-max: {str(e)}")

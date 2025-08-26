@@ -8,6 +8,8 @@ if TYPE_CHECKING:
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
+from monstim_signals.plotting import UnableToPlotError
+
 from ..core.utils.dataframe_exporter import DataFrameDialog
 from ..plotting import PLOT_NAME_DICT
 
@@ -156,6 +158,9 @@ class PlotController:
                 **plot_options,
                 canvas=self.gui.plot_pane,
             )
+        except UnableToPlotError as e:
+            self.handle_unable_to_plot_error(e, plot_type, plot_options)
+            return None
         except Exception as e:
             self.handle_plot_error(e, plot_type, plot_options)
             return None
@@ -219,6 +224,30 @@ class PlotController:
 
         # Add more specific validations as needed
         return True, None
+
+    def handle_unable_to_plot_error(self, e, plot_type, plot_options):
+        """Handle UnableToPlotError with user-friendly messages."""
+        error_msg = str(e)
+
+        # Provide user-friendly guidance based on the error message
+        if "No channels to plot" in error_msg:
+            user_msg = (
+                "No channels are currently selected for plotting.\n\n"
+                "Please select at least one channel in the channel selection area "
+                "and try plotting again."
+            )
+            title = "No Channels Selected"
+        else:
+            user_msg = f"Unable to create plot: {error_msg}"
+            title = "Plot Error"
+
+        # Show user-friendly message (no stack trace)
+        QMessageBox.warning(self.gui, title, user_msg)
+
+        # Log the error for debugging purposes
+        logging.warning(f"Unable to plot: {error_msg}")
+        logging.info(f"Plot type: {plot_type}, options: {plot_options}")
+        logging.info(f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}")
 
     def handle_plot_error(self, e, plot_type, plot_options):
         """Centralized error handling for plot operations."""
