@@ -49,9 +49,13 @@ from monstim_signals.testing import test_session_object, test_dataset_object
 ```
 
 ### Building Release
-```bash
+```powershell
+# Update version numbers first in monstim_gui/version.py
+# Delete config-user.yml file if it exists
 pyinstaller --clean win-main.spec  # Creates executable with PyInstaller
 ```
+
+The PyInstaller spec file is configured with debug/release toggles - check comments in `win-main.spec` for build configuration options.
 
 ## Essential File Patterns
 
