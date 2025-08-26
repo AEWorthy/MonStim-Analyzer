@@ -18,6 +18,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 - **Data Visualization**: Plot various types of hierarchical EMG data including raw EMG signals, reflex curves, M-max, max H-reflex, and average reflex curves.
 - **Report Generation**: Generate and display detailed M-max reports, and session or dataset parameters.
 - **Hierarchical Data Management**: Load and manage multiple EMG recording sessions as a dataset, and store multiple datasets as experiments. Exclude unwanted recordings/sessions/datasets at runtime and reload from the originals if desired.
+- **Recording Exclusion Editor**: Advanced tool for excluding recordings based on stimulus amplitude and other criteria, with support for bulk operations across sessions, datasets, or entire experiments.
 - **Undo/Redo System**: Comprehensive undo/redo functionality for data modifications.
 - **Responsive UI**: Automatically adapts to different screen sizes and DPI settings.
 
@@ -76,6 +77,7 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
     - Right-click on datasets or sessions in the dropdown menus to access context-specific actions.
     - Use "Edit" > "Experiment/Dataset/Session" submenus to manage latency windows, change channel names, invert polarity, exclude/restore items, or reload data.
     - To exclude individual recordings, use the Single Session plot type called "Single EMG Recordings" and exclude unwanted recordings directly from the plot interface.
+    - For bulk recording exclusion based on criteria like stimulus amplitude, use "Edit" > "Data Curation" > "Recording Exclusion Editor..." to exclude multiple recordings at once across sessions, datasets, or entire experiments.
 
 8. **Special Notes**
     - Changes made to experiments (channel names, latency windows, exclusions) are automatically saved.

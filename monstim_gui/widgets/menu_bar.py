@@ -85,6 +85,9 @@ class MenuBar(QMenuBar):
         experiment_menu = edit_menu.addMenu("Experiment")
         dataset_menu = edit_menu.addMenu("Dataset")
         session_menu = edit_menu.addMenu("Session")
+        
+        # Data curation submenu
+        curation_menu = edit_menu.addMenu("Data Curation")
 
         # Experiment level actions
         update_window_action = experiment_menu.addAction("Manage Latency Windows")
@@ -130,6 +133,11 @@ class MenuBar(QMenuBar):
         exclude_session_action.triggered.connect(self.parent.exclude_session)
         restore_session_action = session_menu.addAction("Restore Excluded Session")
         restore_session_action.triggered.connect(self.parent.prompt_restore_session)
+        
+        # Data curation actions
+        exclude_recordings_action = curation_menu.addAction("Recording Exclusion Editor...")
+        exclude_recordings_action.triggered.connect(self.show_recording_exclusion_editor)
+        exclude_recordings_action.setToolTip("Exclude recordings based on stimulus amplitude and other criteria")
 
     def create_help_menu(self):
         # Help menu
@@ -256,4 +264,36 @@ class MenuBar(QMenuBar):
                 self.parent,
                 "Program Preferences",
                 f"Program preferences dialog is not available: {e}",
+            )
+
+    def show_recording_exclusion_editor(self):
+        """Show the recording exclusion editor dialog."""
+        if not self.parent.current_session:
+            QMessageBox.warning(
+                self.parent,
+                "No Session Selected",
+                "Please select a session first to exclude recordings.",
+            )
+            return
+
+        try:
+            from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+
+            dialog = RecordingExclusionEditor(self.parent)
+
+            # Connect the exclusions applied signal to refresh the UI
+            dialog.exclusions_applied.connect(self.parent.plot_controller.plot_data)
+
+            dialog.exec()
+        except ImportError as e:
+            QMessageBox.warning(
+                self.parent,
+                "Recording Exclusion Editor",
+                f"Recording exclusion editor is not available: {e}",
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.parent,
+                "Error",
+                f"Failed to open recording exclusion editor:\n{str(e)}",
             )
