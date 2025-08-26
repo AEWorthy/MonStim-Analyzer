@@ -179,7 +179,12 @@ class DatasetMetadataEditor(QDialog):
 
         # Check for YYMMDD format (6 digits)
         if len(clean_input) == 6 and clean_input.isdigit():
-            year = int("20" + clean_input[:2])  # Assume 20xx for YY format
+            yy = int(clean_input[:2])
+            # Pivot year logic: years 00-69 -> 2000-2069, 70-99 -> 1970-1999
+            if yy <= 69:
+                year = 2000 + yy
+            else:
+                year = 1900 + yy
             month = int(clean_input[2:4])
             day = int(clean_input[4:6])
             if 1 <= month <= 12 and 1 <= day <= 31:

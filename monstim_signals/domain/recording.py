@@ -85,12 +85,12 @@ class Recording:
         if self._raw is not None:
             return
         if self.repo is None:
-            logging.debug(f"Recording '{getattr(self, 'id', '<unknown>')}' has no repo to reopen raw data.")
+            logging.debug(f"Recording '{self.id}' has no repo to reopen raw data.")
             return
         try:
             raw_path = getattr(self.repo, "raw_h5", None)
             if raw_path is None:
-                logging.debug(f"Recording '{getattr(self, 'id', '<unknown>')}' repo has no raw_h5 attribute.")
+                logging.debug(f"Recording '{self.id}' repo has no raw_h5 attribute.")
                 return
             raw_path_str = str(raw_path)
             # Check file exists before attempting to open
@@ -103,8 +103,8 @@ class Recording:
             except Exception:
                 pass
 
-            h5file = h5py.File(raw_path_str, "r")
-            self._raw = h5file["raw"]  # type: ignore
+            with h5py.File(raw_path_str, "r") as h5file:
+                self._raw = h5file["raw"][:]  # type: ignore
             # Update num_samples in metadata in case it changed
             try:
                 self.meta.num_samples = int(self._raw.shape[0])
