@@ -3,22 +3,23 @@ Dataset metadata editor dialog for MonStim Analyzer.
 Allows users to edit dataset date, animal ID, and experimental condition.
 """
 
-import logging
-import re
-import os
 import errno
+import logging
+import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
     QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QMessageBox,
-    QGroupBox,
+    QPushButton,
+    QVBoxLayout,
 )
 
 if TYPE_CHECKING:

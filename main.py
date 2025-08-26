@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import QApplication
 
 from monstim_gui.core.splash import SPLASH_INFO
 
-
 LOG_FILE = "app.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 IS_FROZEN = getattr(sys, "frozen", False)

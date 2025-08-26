@@ -90,8 +90,8 @@ class RecordingRepository:
             new_stem: Path to new stem (no suffix).
         """
         import errno
-        import time
         import gc
+        import time
 
         if new_stem.exists():
             raise FileExistsError(f"Target recording stem already exists: {new_stem}")
@@ -197,8 +197,8 @@ class SessionRepository:
     def rename(self, new_folder: Path, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename the session folder, retrying on transient Windows locks."""
         import errno
-        import time
         import gc
+        import time
 
         if new_folder.exists():
             raise FileExistsError(f"Target session folder already exists: {new_folder}")
@@ -302,8 +302,8 @@ class DatasetRepository:
         recording repository objects in-memory so callers do not need to update them.
         """
         import errno
-        import time
         import gc
+        import time
 
         if new_folder.exists():
             raise FileExistsError(f"Target dataset folder already exists: {new_folder}")

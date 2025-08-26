@@ -1026,12 +1026,12 @@ class DataManager:
                 from PyQt6.QtWidgets import (
                     QApplication,
                     QDialog,
+                    QHBoxLayout,
                     QLabel,
                     QLineEdit,
+                    QMessageBox,
                     QPushButton,
                     QVBoxLayout,
-                    QHBoxLayout,
-                    QMessageBox,
                 )
 
                 app = QApplication.instance()

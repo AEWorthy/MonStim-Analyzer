@@ -11,7 +11,7 @@ __author__ = "Andrew Worthy"
 __email__ = "aeworth@emory.edu"
 
 # Import functions
-from .domain import Session, Dataset, Experiment
+from .domain import Dataset, Experiment, Session
 
 # Define __all__ for module
 __all__ = ["Session", "Dataset", "Experiment"]
