@@ -384,6 +384,10 @@ class ApplicationState:
         """Check if analysis profile tracking is enabled."""
         return self.get_preference("track_analysis_profiles", True)
 
+    def should_use_opengl_acceleration(self) -> bool:
+        """Check if OpenGL acceleration should be used."""
+        return self.get_preference("use_opengl_acceleration", True)
+
     def clear_all_tracked_data(self):
         """Clear all tracked user data."""
         # Clear session restoration data

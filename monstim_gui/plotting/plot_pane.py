@@ -4,22 +4,38 @@ from typing import TYPE_CHECKING
 import pyqtgraph as pg
 from PyQt6.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout
 
+from monstim_gui.core.application_state import app_state
+
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
 
 
 class PlotPane(QGroupBox):
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: "MonstimGUI", use_opengl: bool = None):
         super().__init__("Plot Pane", parent)
         self.parent = parent
         self.layout = QVBoxLayout()
 
-        # Set the default background color for pyqtgraph to white and text to black
-        # pg.setConfigOption('background', 'w')
-        # pg.setConfigOption('foreground', 'k')
+        # Use application state setting if use_opengl not explicitly provided
+        if use_opengl is None:
+            use_opengl = app_state.should_use_opengl_acceleration()
 
-        # Create the main graphics layout widget
-        self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
+        # Create the main graphics layout widget with optional OpenGL acceleration
+        if use_opengl:
+            try:
+                # Try to enable OpenGL acceleration using PyQtGraph's global configuration
+                pg.setConfigOption("useOpenGL", True)
+                self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
+                logging.info("OpenGL acceleration enabled for plot rendering")
+            except Exception as e:
+                logging.warning(f"Failed to enable OpenGL acceleration: {e}. Falling back to software rendering.")
+                pg.setConfigOption("useOpenGL", False)
+                self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
+        else:
+            pg.setConfigOption("useOpenGL", False)
+            self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
+            logging.info("OpenGL acceleration disabled (software rendering)")
+
         self.graphics_layout.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.graphics_layout.setMinimumSize(800, 400)
         self.graphics_layout.setAntialiasing(True)

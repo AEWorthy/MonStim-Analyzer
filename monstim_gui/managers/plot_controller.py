@@ -171,7 +171,7 @@ class PlotController:
 
         # Update plot pane with error handling
         try:
-            if hasattr(self.gui.plot_pane, 'layout') and self.gui.plot_pane.layout:
+            if hasattr(self.gui.plot_pane, "layout") and self.gui.plot_pane.layout:
                 self.gui.plot_pane.layout.update()
         except (AttributeError, RuntimeError) as e:
             logging.warning(f"Could not update plot pane layout: {e}")

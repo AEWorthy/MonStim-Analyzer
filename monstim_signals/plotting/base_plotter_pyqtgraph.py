@@ -44,7 +44,7 @@ class BasePlotterPyQtGraph:
         self, canvas: "PlotPane", channel_indices: List[int] = None
     ) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
         """
-        Create plot layout with subplots for multiple channels.
+        Create plot layout with subplots for multiple channels with performance optimizations.
 
         Parameters
         ----------
@@ -71,6 +71,9 @@ class BasePlotterPyQtGraph:
         if num_channels == 1:
             # Single plot
             plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
+            # Enable performance optimizations
+            plot_item.setClipToView(True)
+            plot_item.setDownsampling(auto=True)
             plot_items.append(plot_item)
         elif num_channels == 0:
             raise UnableToPlotError("No channels to plot. Select at least one channel.")
@@ -78,6 +81,9 @@ class BasePlotterPyQtGraph:
             # Multiple plots in a row
             for i, channel_index in enumerate(channel_indices):
                 plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
+                # Enable performance optimizations for each plot
+                plot_item.setClipToView(True)
+                plot_item.setDownsampling(auto=True)
                 plot_items.append(plot_item)
 
                 # Share axes for all plots
@@ -339,7 +345,7 @@ class BasePlotterPyQtGraph:
         line_width: float = 1.0,
     ) -> pg.PlotDataItem:
         """
-        Plot time series data on a plot item.
+        Plot time series data on a plot item with performance optimizations.
 
         Parameters
         ----------
@@ -367,6 +373,11 @@ class BasePlotterPyQtGraph:
         pen = pg.mkPen(color, width=line_width)
 
         curve = plot_item.plot(time_axis, data, pen=pen, name=label)
+
+        # Enable performance optimizations
+        curve.setClipToView(True)  # Only render visible portions
+        curve.setDownsampling(auto=True)  # Auto-downsample when zoomed out
+
         self.current_plot_items.append(curve)
 
         return curve

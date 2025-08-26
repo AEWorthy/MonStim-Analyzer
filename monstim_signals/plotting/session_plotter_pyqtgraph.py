@@ -115,15 +115,15 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         stimulus_v: float,
         channel_index: int,
         norm=None,
-        downsample: int = None,
     ):
         """
-        Plot channel data with stimulus voltage-based coloring.
+        Plot channel data with stimulus voltage-based coloring and PyQtGraph optimizations.
 
         Parameters match the original matplotlib plotter interface.
         """
         # Get data segment
         data_segment = channel_data[start:end]
+        time_segment = time_axis.copy()
 
         # Create color based on stimulus voltage using shared colormap
         if norm is not None:
@@ -133,8 +133,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Use default color cycling
             color = self.default_colors[channel_index % len(self.default_colors)]
 
-        # Plot the data
-        curve = plot_item.plot(time_axis, data_segment, pen=pg.mkPen(color=color, width=1.5))
+        # Plot the data with PyQtGraph built-in performance optimizations
+        curve = plot_item.plot(time_segment, data_segment, pen=pg.mkPen(color=color, width=1.5))
+
+        # Enable PyQtGraph's built-in performance optimizations
+        curve.setClipToView(True)  # Only render visible portions
+        curve.setDownsampling(auto=True)  # Auto-downsample when zoomed out
 
         # Store curve reference for dynamic colormap updates
         if norm is not None:
@@ -277,7 +281,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         canvas: "PlotPane" = None,
     ):
         """
-        Plot EMG data with interactive features.
+        Plot EMG data with interactive features and performance optimizations.
 
         Parameters
         ----------
@@ -350,7 +354,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 plot_idx = channel_indices.index(channel_index)
                 current_plot = plot_items[plot_idx]
 
-                # Plot EMG data
+                # Plot EMG data with PyQtGraph built-in optimizations
                 self.plot_channel_data(
                     current_plot,
                     time_axis,
@@ -366,6 +370,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 self.plot_latency_windows(current_plot, all_flags, channel_index)
 
                 # Collect raw data with hierarchical index structure (matching matplotlib)
+                # Note: We store the original (non-downsampled) data for export
                 num_points = len(time_axis)
                 raw_data_dict["recording_index"].extend([recording_idx] * num_points)
                 raw_data_dict["channel_index"].extend([channel_index] * num_points)

@@ -27,6 +27,7 @@ class ProgramPreferencesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.app_state = ApplicationState()
+        self._original_opengl_setting = None  # Track original OpenGL setting for restart warning
         self.setup_ui()
         self.load_current_preferences()
 
@@ -41,6 +42,7 @@ class ProgramPreferencesDialog(QDialog):
 
         # Create preference groups
         main_layout.addWidget(self.create_tracking_group())
+        main_layout.addWidget(self.create_performance_group())
         main_layout.addWidget(self.create_data_management_group())
 
         # Button layout
@@ -93,6 +95,22 @@ class ProgramPreferencesDialog(QDialog):
 
         return group
 
+    def create_performance_group(self):
+        """Create the performance preferences group."""
+        group = QGroupBox("Performance Settings")
+        layout = QFormLayout(group)
+
+        # OpenGL acceleration
+        self.opengl_checkbox = QCheckBox()
+        self.opengl_checkbox.setToolTip(
+            "Use OpenGL hardware acceleration for plot rendering. "
+            "This can improve performance but may cause issues on some graphics cards. "
+            "Restart required for changes to take effect."
+        )
+        layout.addRow("Use OpenGL acceleration:", self.opengl_checkbox)
+
+        return group
+
     def create_data_management_group(self):
         """Create the data management group."""
         group = QGroupBox("Data Management")
@@ -118,12 +136,27 @@ class ProgramPreferencesDialog(QDialog):
         self.path_tracking_checkbox.setChecked(self.app_state.should_track_import_export_paths())
         self.recent_files_checkbox.setChecked(self.app_state.should_track_recent_files())
 
+        # Load OpenGL setting and remember original value for restart warning
+        opengl_enabled = self.app_state.should_use_opengl_acceleration()
+        self.opengl_checkbox.setChecked(opengl_enabled)
+        self._original_opengl_setting = opengl_enabled
+
     def save_preferences(self):
         """Save the current preference settings."""
         self.app_state.set_preference("track_session_restoration", self.session_tracking_checkbox.isChecked())
         self.app_state.set_preference("track_analysis_profiles", self.profile_tracking_checkbox.isChecked())
         self.app_state.set_preference("track_import_export_paths", self.path_tracking_checkbox.isChecked())
         self.app_state.set_preference("track_recent_files", self.recent_files_checkbox.isChecked())
+        self.app_state.set_preference("use_opengl_acceleration", self.opengl_checkbox.isChecked())
+
+        # Check if OpenGL setting changed and show restart notification
+        if self._original_opengl_setting != self.opengl_checkbox.isChecked():
+            QMessageBox.information(
+                self,
+                "Restart Required",
+                "The OpenGL acceleration setting has been changed.\n\n"
+                "Please restart the application for this change to take effect.",
+            )
 
         logging.info("Program preferences saved")
         self.preferences_changed.emit()
@@ -145,6 +178,7 @@ class ProgramPreferencesDialog(QDialog):
             self.profile_tracking_checkbox.setChecked(True)
             self.path_tracking_checkbox.setChecked(True)
             self.recent_files_checkbox.setChecked(True)
+            self.opengl_checkbox.setChecked(True)
 
             logging.info("Program preferences reset to defaults")
 
