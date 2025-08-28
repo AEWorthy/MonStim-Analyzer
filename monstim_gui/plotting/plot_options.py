@@ -30,8 +30,8 @@ class BasePlotOptions(QWidget):
         super().__init__(parent)
         self.gui_main = parent.parent
         self.layout: QVBoxLayout = QVBoxLayout(self)
-        self.layout.setSpacing(0)  # No spacing between widgets
-        self.layout.setContentsMargins(4, 4, 4, 4)  # Set smaller margins
+        self.layout.setSpacing(2)  # Minimal spacing between widgets
+        self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins to reduce blank space
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.create_options()
 
@@ -78,13 +78,19 @@ class ChannelSelectorWidget(QGroupBox):
 
         # Set up a grid layout with proper spacing and margins
         grid = QGridLayout()
-        grid.setSpacing(6)  # Increased spacing between checkboxes
-        grid.setContentsMargins(8, 8, 8, 8)  # Better padding to prevent border clipping
+        grid.setSpacing(3)  # Reduced spacing between checkboxes
+        grid.setContentsMargins(4, 4, 4, 4)  # Reduced padding to minimize space
 
         # Set size policy to make it as compact as possible
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.checkboxes: List[QCheckBox] = []
+
+        # Hide the widget if there are no channels to avoid taking up space
+        if max_ch == 0:
+            self.hide()
+            return
+
         total = (max_ch + 5) // 6 * 6  # Round up to the nearest multiple of 6
         for idx in range(total):
             cb = QCheckBox(f"{idx}")
@@ -147,7 +153,6 @@ class EMGOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
@@ -203,6 +208,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         # Add checkboxes to form
+        # Optional TODO: Add ability to set which flags to display
         form.addRow("Show Flags:", self.all_windows_checkbox)
         self.all_windows_checkbox.setChecked(True)
         self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
@@ -234,7 +240,6 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.recording_cycler)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
@@ -313,7 +318,6 @@ class SessionReflexCurvesOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -371,7 +375,6 @@ class AverageReflexCurvesOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -431,7 +434,6 @@ class AverageSessionReflexOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -483,7 +485,6 @@ class MMaxOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -548,7 +549,6 @@ class MaxHReflexOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
