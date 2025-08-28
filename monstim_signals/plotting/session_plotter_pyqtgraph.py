@@ -26,8 +26,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     whether crosshair cursors are enabled (True by default).
     """
 
-    # TODO: ensure only one latency window plotted per channel on EMG plots.
-
     def __init__(self, emg_object: "Session"):
         super().__init__(emg_object)
         self.emg_object: "Session" = emg_object
@@ -326,6 +324,11 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if interactive_cursor:
             self.add_synchronized_crosshairs(plot_items)
 
+        # Plot latency windows once per channel (not per recording)
+        for plot_idx, channel_index in enumerate(channel_indices):
+            current_plot = plot_items[plot_idx]
+            self.plot_latency_windows(current_plot, all_flags, channel_index)
+
         # Get EMG recordings
         emg_recordings = self.get_emg_recordings(data_type)
 
@@ -365,9 +368,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     channel_index,
                     norm=norm,
                 )
-
-                # Plot latency windows
-                self.plot_latency_windows(current_plot, all_flags, channel_index)
 
                 # Collect raw data with hierarchical index structure (matching matplotlib)
                 # Note: We store the original (non-downsampled) data for export
@@ -463,6 +463,11 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if interactive_cursor:
             self.add_synchronized_crosshairs(plot_items)
 
+        # Plot latency windows once per channel
+        for plot_idx, channel_index in enumerate(channel_indices):
+            current_plot = plot_items[plot_idx]
+            self.plot_latency_windows(current_plot, all_flags, channel_index)
+
         # Get EMG recordings
         emg_recordings = self.get_emg_recordings(data_type)
 
@@ -517,9 +522,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Show grid by default
             current_plot.showGrid(x=True, y=True)
-
-            # Plot latency windows
-            self.plot_latency_windows(current_plot, all_flags, channel_index)
 
             # Get channel data
             data_segment = channel_data[window_start_sample:window_end_sample]
