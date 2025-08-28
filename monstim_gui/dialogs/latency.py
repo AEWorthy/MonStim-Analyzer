@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -37,9 +36,23 @@ from .base import COLOR_OPTIONS
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
-# TODO: Fix widths and layout to be less janky.
-MINIMUM_WIDTH = 600  # Minimum width for the dialog to accommodate two columns
 COL_MIN_WIDTH = 200  # Minimum width for each column in the grid layout
+
+
+class NoScrollComboBox(QComboBox):
+    """ComboBox that ignores scroll wheel events to prevent accidental value changes."""
+
+    def wheelEvent(self, event):
+        """Ignore wheel events to prevent accidental value changes."""
+        event.ignore()
+
+
+class NoScrollDoubleSpinBox(QDoubleSpinBox):
+    """DoubleSpinBox that ignores scroll wheel events to prevent accidental value changes."""
+
+    def wheelEvent(self, event):
+        """Ignore wheel events to prevent accidental value changes."""
+        event.ignore()
 
 
 class LatencyWindowsDialog(QDialog):
@@ -62,13 +75,6 @@ class LatencyWindowsDialog(QDialog):
         self._reposition_to_left_middle_of_parent()
 
     def _reposition_to_left_middle_of_parent(self):
-        # ensure it's sized correctly first
-        self.adjustSize()
-
-        # Ensure minimum width for two columns
-        if self.width() < MINIMUM_WIDTH:
-            self.resize(MINIMUM_WIDTH, self.height())
-
         # parent should be your main window
         w = self.parentWidget() or self.window()
         # get its top-left in global coords
@@ -77,53 +83,46 @@ class LatencyWindowsDialog(QDialog):
 
         # compute center of the *left half* of that parent
         cx = top_left.x() + pw // 4
-        cy = top_left.y() + ph // 2
+        cy = top_left.y() + ph // 3
 
         # move this dialog so its center sits there
         x = cx - (self.width() // 2)
-        y = cy - (self.height() // 2)  # Center vertically instead of top-aligning
+        y = cy - (self.height() // 2)
 
-        # Ensure dialog doesn't go off screen
-        x = max(0, x)
-        y = max(0, y)
+        # Get screen geometry to ensure dialog stays on screen
+        screen = self.screen()
+        if screen:
+            screen_rect = screen.availableGeometry()
 
-        self.move(x, y)
-        # ensure it’s sized correctly
-        self.adjustSize()
+            # Ensure dialog doesn't go off the edges
+            x = max(screen_rect.left(), min(x, screen_rect.right() - self.width()))
+            y = max(screen_rect.top(), min(y, screen_rect.bottom() - self.height()))
 
-        # parent should be your main window
-        w = self.parentWidget() or self.window()
-        # get its top-left in global coords
-        top_left: QPoint = w.mapToGlobal(QPoint(0, 0))
-        pw, ph = w.width(), w.height()
-
-        # compute center of the *left half* of that parent
-        cx = top_left.x() + pw // 4
-        cy = top_left.y() + ph // 2
-
-        # move this dialog so its center sits there
-        x = cx - (self.width() // 2)
-        y = cy - (self.height())
         self.move(x, y)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-        self.setMaximumHeight(800)
-        self.setMinimumWidth(MINIMUM_WIDTH)  # Increased to accommodate two columns
-        self.setMaximumWidth(1000)  # Set a reasonable maximum width
+
+        # Set minimum size but allow user to resize larger
+        self.setMinimumSize(450, 200)  # Minimum size to ensure usability
+        self.resize(550, 450)  # Default size that's comfortable but can be adjusted
 
         cfg = self.config_repo.read_config()
         self.presets = cfg.get("latency_window_presets", {})
 
         if self.presets:
             preset_row = QHBoxLayout()
+            preset_row.setSpacing(5)  # Tight spacing between elements
             preset_label = QLabel("Preset:")
-            self.preset_combo = QComboBox()
+            self.preset_combo = NoScrollComboBox()
+            self.preset_combo.setToolTip("Select a preset configuration to quickly apply predefined latency windows")
+            self.preset_combo.setMinimumWidth(200)  # Make combo box wider for longer preset names
             for name in self.presets.keys():
                 self.preset_combo.addItem(name)
             apply_btn = QPushButton("Apply Preset")
+            apply_btn.setToolTip("Replace all current windows with the selected preset configuration")
             apply_btn.clicked.connect(self._apply_preset)
+            preset_row.addStretch()  # Push everything to the right
             preset_row.addWidget(preset_label)
             preset_row.addWidget(self.preset_combo)
             preset_row.addWidget(apply_btn)
@@ -132,8 +131,8 @@ class LatencyWindowsDialog(QDialog):
         self.scroll: QScrollArea = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.scroll.setMinimumWidth(MINIMUM_WIDTH)  # Ensure scroll area can accommodate both columns
 
         self.scroll_widget = QWidget()
         self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -151,14 +150,15 @@ class LatencyWindowsDialog(QDialog):
         self.scroll_layout.setColumnMinimumWidth(1, COL_MIN_WIDTH)
 
         self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll, 1)
+        layout.addWidget(self.scroll, 1)  # Give the scroll area stretch factor of 1 to take up available space
 
         for window in self.data.latency_windows:
             self._add_window_group(window)
 
         add_button = QPushButton("Add Window")
+        add_button.setToolTip("Create a new latency window with default settings")
         add_button.clicked.connect(lambda: self._add_window_group())
-        layout.addWidget(add_button, 0)
+        layout.addWidget(add_button, 0)  # No stretch for the button
 
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -166,11 +166,15 @@ class LatencyWindowsDialog(QDialog):
             | QDialogButtonBox.StandardButton.Apply,
             self,
         )
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setToolTip("Save all changes and close the dialog")
+        button_box.button(QDialogButtonBox.StandardButton.Cancel).setToolTip("Discard all changes and close the dialog")
+        button_box.button(QDialogButtonBox.StandardButton.Apply).setToolTip(
+            "Save changes and update plots, but keep dialog open"
+        )
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
         button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
-        layout.addWidget(button_box, 0)
-        self.adjustSize()
+        layout.addWidget(button_box, 0)  # No stretch for the button box
 
     def _add_window_group(self, window: LatencyWindow | None = None):
         num_channels = len(self.data.channel_names)
@@ -206,17 +210,19 @@ class LatencyWindowsDialog(QDialog):
         # Basic form layout for name, duration, and color
         basic_form = QFormLayout()
         name_edit = QLineEdit(window.name)
+        name_edit.setToolTip("Enter a descriptive name for this latency window")
 
         # Duration (always global)
-        dur_spin = QDoubleSpinBox()
+        dur_spin = NoScrollDoubleSpinBox()
         dur_spin.setDecimals(2)
         dur_spin.setRange(0.0, 1000.0)
         dur_spin.setSingleStep(0.05)
         dur_spin.setValue(window.durations[0])
-        dur_spin.setToolTip("Duration is applied globally to all channels")
+        dur_spin.setToolTip("Duration is applied globally to all channels (in milliseconds)")
 
         # Color
-        color_combo = QComboBox()
+        color_combo = NoScrollComboBox()
+        color_combo.setToolTip("Select the color for this window when displayed on plots")
         for color in COLOR_OPTIONS:
             display = color.replace("tab:", "")
             color_combo.addItem(display, userData=color)
@@ -230,6 +236,7 @@ class LatencyWindowsDialog(QDialog):
 
         # Start times section
         start_group = QGroupBox("Start Times")
+        start_group.setToolTip("Configure when the latency windows begin relative to stimulus")
         start_layout = QVBoxLayout(start_group)
 
         # Global/Per-channel toggle
@@ -254,11 +261,12 @@ class LatencyWindowsDialog(QDialog):
         global_layout = QHBoxLayout(global_widget)
         global_layout.setContentsMargins(0, 0, 0, 0)
         global_layout.addWidget(QLabel("Start time:"))
-        global_start_spin = QDoubleSpinBox()
+        global_start_spin = NoScrollDoubleSpinBox()
         global_start_spin.setDecimals(2)
         global_start_spin.setRange(-1000.0, 1000.0)
         global_start_spin.setSingleStep(0.05)
         global_start_spin.setValue(window.start_times[0])
+        global_start_spin.setToolTip("Start time in milliseconds (applied to all channels when Global mode is selected)")
         global_layout.addWidget(global_start_spin)
         global_layout.addStretch()
         start_layout.addWidget(global_widget)
@@ -289,11 +297,12 @@ class LatencyWindowsDialog(QDialog):
         for i, (channel_name, start_time) in enumerate(zip(self.data.channel_names, window.start_times)):
             row_layout = QHBoxLayout()
             row_layout.addWidget(QLabel(f"{channel_name}:"))
-            spin = QDoubleSpinBox()
+            spin = NoScrollDoubleSpinBox()
             spin.setDecimals(2)
             spin.setRange(-1000.0, 1000.0)
             spin.setSingleStep(0.05)
             spin.setValue(start_time)
+            spin.setToolTip(f"Start time in milliseconds for channel {channel_name}")
             per_channel_spins.append(spin)
             row_layout.addWidget(spin)
             per_channel_layout.addLayout(row_layout)
@@ -321,6 +330,7 @@ class LatencyWindowsDialog(QDialog):
         # Action buttons
         button_layout = QHBoxLayout()
         remove_btn = QPushButton("Remove")
+        remove_btn.setToolTip("Delete this latency window permanently")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
         button_layout.addWidget(remove_btn)
         button_layout.addStretch()
@@ -368,15 +378,8 @@ class LatencyWindowsDialog(QDialog):
                 if per_channel_spins:
                     global_start_spin.setValue(per_channel_spins[0].value())
 
-            # Force layout update and resize with a slight delay to allow visibility changes to process
-            QTimer.singleShot(
-                10,
-                lambda: [
-                    self.updateGeometry(),
-                    self.adjustSize(),
-                    self.resize(self.sizeHint()),
-                ],
-            )
+            # Force layout update with a slight delay to allow visibility changes to process
+            QTimer.singleShot(10, self.updateGeometry)
 
         def on_global_value_changed():
             if global_radio.isChecked():
@@ -417,13 +420,6 @@ class LatencyWindowsDialog(QDialog):
             )
         )
 
-        # Adjust layout and ensure proper sizing
-        self.updateGeometry()
-        self.adjustSize()
-        # Ensure minimum width is maintained
-        if self.width() < MINIMUM_WIDTH:
-            self.resize(MINIMUM_WIDTH, self.height())
-
     def _remove_window_group(self, group: QGroupBox):
         for i, (grp, *_) in enumerate(self.window_entries):
             if grp is group:
@@ -437,17 +433,6 @@ class LatencyWindowsDialog(QDialog):
 
         # Reorganize remaining groups in grid layout
         self._reorganize_grid_layout()
-
-        # Trigger resize after reorganization
-        QTimer.singleShot(
-            10,
-            lambda: [
-                self.updateGeometry(),
-                self.adjustSize(),
-                # Ensure minimum width is maintained
-                (self.resize(max(MINIMUM_WIDTH, self.width()), self.height()) if self.width() < MINIMUM_WIDTH else None),
-            ],
-        )
 
     def _reorganize_grid_layout(self):
         """Reorganize all window groups in a 2-column grid layout."""
