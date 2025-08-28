@@ -71,6 +71,10 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
                 plot_item.showGrid(True, True)
 
+                # Add legend for this plot if requested (before plotting named curves)
+                if plot_legend:
+                    plot_item.addLegend()
+
                 # Plot reflex curves data and collect raw data
                 self._plot_reflex_curves_data(
                     plot_item,
@@ -80,11 +84,6 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     manual_mmax,
                     raw_data_dict,
                 )
-
-            # Add legend if requested
-            # TODO: Fix legend--does not currently plot
-            if plot_legend and plot_items:
-                self.add_legend(plot_items[0])
 
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)

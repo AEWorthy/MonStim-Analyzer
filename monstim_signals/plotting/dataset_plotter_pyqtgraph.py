@@ -83,10 +83,6 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             if interactive_cursor:
                 self.add_synchronized_crosshairs(plot_items)
 
-            # Add legend if requested, after all plotting is done
-            if plot_legend and plot_items:
-                self.add_legend(plot_items[0])
-
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
 
@@ -564,9 +560,6 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if not np.isnan(y_max):
                     # Set range on first plot only since they're Y-linked
                     plot_items[0].setYRange(0, 1.1 * y_max)
-
-            # Display the plot
-            self.display_plot(canvas)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)

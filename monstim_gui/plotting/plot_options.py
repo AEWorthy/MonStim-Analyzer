@@ -417,7 +417,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(False)  # Default to False
+        self.relative_to_mmax_checkbox.setChecked(True)  # Default to True
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)

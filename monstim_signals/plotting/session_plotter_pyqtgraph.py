@@ -751,7 +751,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             "m_max_amplitudes": [],
         }
 
-        # Collect all amplitudes for y-axis scaling (matching dataset plotter)
+        # Collect all amplitudes for y-axis scaling
         all_m_max_amplitudes = []
 
         # Plot each channel
@@ -770,13 +770,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 logging.error(f"Error getting M-max for channel {channel_index}: {e}")
                 continue
 
-            # Filter out NaN values for plotting (matching dataset plotter)
+            # Filter out NaN values for plotting
             valid_amplitudes = [amp for amp in m_max_amplitudes if not np.isnan(amp)]
 
-            # Append to superlist for y-axis adjustment (matching dataset plotter)
+            # Append to superlist for y-axis adjustment
             all_m_max_amplitudes.extend(valid_amplitudes)
 
-            # Plot M-max values as scatter with white edge (matching dataset plotter)
+            # Plot M-max values as scatter with white edge
             x_pos = 0  # Single position on x-axis
             m_color = (
                 self._convert_matplotlib_color(self.emg_object.m_color) if hasattr(self.emg_object, "m_color") else "#ff3333"
@@ -786,7 +786,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 mean_amp = np.mean(valid_amplitudes)
                 std_amp = np.std(valid_amplitudes)
 
-                # Add error bars (white, matching dataset plotter)
+                # Add error bars (white)
                 error_bars = pg.ErrorBarItem(
                     x=np.array([x_pos]),
                     y=np.array([mean_amp]),
@@ -797,7 +797,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
                 current_plot.addItem(error_bars)
 
-                # Add mean marker (white, matching dataset plotter)
+                # Add mean marker (white)
                 mean_marker = pg.ScatterPlotItem(
                     x=np.array([x_pos]),
                     y=np.array([mean_amp]),
@@ -808,7 +808,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
                 current_plot.addItem(mean_marker)
 
-                # Plot the scatter points (smaller size, white pen, matching dataset plotter)
+                # Plot the scatter points (smaller size, white pen)
                 scatter = pg.ScatterPlotItem(
                     x=np.array([x_pos] * len(valid_amplitudes)),
                     y=np.array(valid_amplitudes),
@@ -835,10 +835,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Set x-axis ticks and center the plot visually
             current_plot.getAxis("bottom").setTicks([[(x_pos, "M-response")]])
-            # Center the data by setting x-axis range (matching dataset plotter)
+            # Center the data by setting x-axis range
             current_plot.setXRange(x_pos - 1, x_pos + 1.5)
 
-            # Add annotation text (simplified positioning, matching dataset plotter)
+            # Add annotation text
             if len(valid_amplitudes) > 0:
                 text_item = pg.TextItem(
                     f"n={len(valid_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nStdev. M-Max: {std_amp:.2f}mV\nAvg. Stim.: above {mmax_low_stim:.2f}V",
@@ -850,10 +850,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 text_item.setPos(x_pos + 0.2, mean_amp)
                 current_plot.addItem(text_item)
 
-            # Enable grid (matching dataset plotter)
+            # Enable grid
             current_plot.showGrid(True, True)
 
-        # Set y-axis limits (matching dataset plotter)
+        # Set y-axis limits
         if all_m_max_amplitudes:
             y_max = np.nanmax(all_m_max_amplitudes)
             if not np.isnan(y_max) and plot_items:
@@ -1025,7 +1025,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 logging.warning(f"No valid data found for channel {channel_index}")
                 continue
 
-            # Plot scatter points with error bars for each window (matching dataset M-max style)
+            # Plot scatter points with error bars for each window
             for i, ((mean_amp, std_amp, n_rec), x_pos, label, color) in enumerate(
                 zip(window_data, x_positions, window_labels, window_colors)
             ):
@@ -1046,7 +1046,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     if m_max != 0:
                         valid_amps = [amp / m_max for amp in valid_amps]
 
-                # Plot individual data points as scatter (matching dataset plotter)
+                # Plot individual data points as scatter
                 if len(valid_amps) > 0:
                     scatter = pg.ScatterPlotItem(
                         x=np.array([x_pos] * len(valid_amps)),
@@ -1058,7 +1058,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     )
                     current_plot.addItem(scatter)
 
-                # Add error bars (white, matching dataset plotter)
+                # Add error bars (white)
                 error_bars = pg.ErrorBarItem(
                     x=np.array([x_pos]),
                     y=np.array([mean_amp]),
@@ -1069,7 +1069,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
                 current_plot.addItem(error_bars)
 
-                # Add mean marker (white cross, matching dataset plotter)
+                # Add mean marker (white cross)
                 mean_marker = pg.ScatterPlotItem(
                     x=np.array([x_pos]),
                     y=np.array([mean_amp]),
@@ -1080,7 +1080,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
                 current_plot.addItem(mean_marker)
 
-                # Add annotation text (matching dataset plotter format and positioning)
+                # Add annotation text
                 text_item = pg.TextItem(
                     f"n={n_rec}\nAvg. Ampl.: {mean_amp:.2f}mV\nStdev. Ampl.: {std_amp:.2f}mV",
                     anchor=(0, 0.5),
@@ -1208,13 +1208,18 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         for plot_idx, channel_index in enumerate(channel_indices):
             current_plot = plot_items[plot_idx]
 
-            # Get stimulus voltages and apply binning like in the dataset classes
+            # Add legend for this plot if requested (before plotting named curves)
+            if plot_legend:
+                current_plot.addLegend()
+
+            # Get stimulus voltages and apply binning
             stimulus_voltages = self.emg_object.stimulus_voltages
             binned_voltages = np.round(stimulus_voltages / self.emg_object.bin_size) * self.emg_object.bin_size
             unique_voltages = np.array(sorted(set(binned_voltages)))
 
             # Plot each latency window
             for window in self.emg_object.latency_windows:
+                window_label = window.label if hasattr(window, "label") else str(window)
                 # Get all amplitudes for this window
                 all_amps = self.emg_object.get_lw_reflex_amplitudes(method=method, channel_index=channel_index, window=window)
 
@@ -1251,7 +1256,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                         # Collect raw data
                         raw_data_dict["channel_index"].append(channel_index)
-                        raw_data_dict["window_label"].append(window.label if hasattr(window, "label") else str(window))
+                        raw_data_dict["window_label"].append(window_label)
                         raw_data_dict["stimulus_voltage"].append(voltage)
                         raw_data_dict["mean_amplitude"].append(mean_amp)
                         raw_data_dict["std_amplitude"].append(std_amp)
@@ -1267,81 +1272,63 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Convert matplotlib color to PyQtGraph compatible color
                 window_color = self._convert_matplotlib_color(window.color)
+                pale_color = self._pale_color(window_color, blend=0.25)
 
-                # Convert hex color to RGB values for fill brush
-                if isinstance(window_color, str) and window_color.startswith("#"):
-                    # Convert hex to RGB
-                    hex_color = window_color.lstrip("#")
-                    rgb = [int(hex_color[i : i + 2], 16) for i in (0, 2, 4)]
-                else:
-                    # Already RGB values
-                    rgb = window_color[:3] if hasattr(window_color, "__len__") else [128, 128, 128]
-
-                # Plot shadowed trend line (like dataset plotter)
-                # Calculate upper and lower bounds for the fill
+                # Plot error bands with dotted boundary lines
                 upper_bound = plot_means + plot_stds
                 lower_bound = plot_means - plot_stds
 
-                # Create standard deviation band using FillBetweenItem
-                upper_curve = pg.PlotCurveItem(plot_voltages, upper_bound, pen=None)
-                lower_curve = pg.PlotCurveItem(plot_voltages, lower_bound, pen=None)
+                # Create dotted boundary lines
+                transparent_pen = pg.mkPen(color=pale_color, width=1, style=pg.QtCore.Qt.PenStyle.DotLine)
+                upper_curve = current_plot.plot(plot_voltages, upper_bound, pen=transparent_pen)
+                lower_curve = current_plot.plot(plot_voltages, lower_bound, pen=transparent_pen)
+
+                # Store curve references if needed for cleanup
+                if not hasattr(current_plot, "_fill_curves_refs"):
+                    current_plot._fill_curves_refs = []
+                current_plot._fill_curves_refs.extend([upper_curve, lower_curve])
+
+                # Create fill between curves
                 fill_item = pg.FillBetweenItem(
-                    upper_curve,
-                    lower_curve,
-                    brush=pg.mkBrush(*rgb, 50),  # Semi-transparent fill with RGB values
+                    curve1=upper_curve,
+                    curve2=lower_curve,
+                    brush=pg.mkBrush(color=pale_color, alpha=50),
                 )
                 current_plot.addItem(fill_item)
 
-                # Plot the mean trend line
-                mean_curve = pg.PlotCurveItem(
+                # Plot mean line with symbols on top
+                current_plot.plot(
                     plot_voltages,
                     plot_means,
-                    pen=pg.mkPen(window_color, width=2),
-                    name=window.label if hasattr(window, "label") else str(window),
+                    pen=pg.mkPen(color=window_color, width=2),
+                    symbol="o",
+                    symbolSize=6,
+                    symbolBrush=window_color,
+                    name=window_label,
                 )
-                current_plot.addItem(mean_curve)
 
                 logging.info(f"Channel {channel_index}, Window {window.label}: " f"plotted {len(plot_voltages)} voltage bins")
 
             # Set labels and formatting
             channel_name = self.emg_object.channel_names[channel_index]
-            y_label = f"Reflex Ampl. (mV, {method})" if method else "Reflex Ampl. (mV)"
+            y_label = f"Average Reflex Ampl. (mV{', ' + method if method else ''})"
             if relative_to_mmax:
-                y_label = f"Reflex Ampl. (M-max, {method})" if method else "Reflex Ampl. (M-max)"
+                y_label = f"Average Reflex Ampl. (mV{', rel. to M-max' if relative_to_mmax else ''})"
 
             self.set_labels(
                 current_plot,
                 title=f"{channel_name}",
-                x_label="Conditioning Stimulus Amplitude (V)",
+                x_label="Stimulus Intensity (V)",
                 y_label=y_label,
             )
 
             # Enable grid
             current_plot.showGrid(True, True)
 
-            # Add legend if requested
-            if plot_legend:
-                legend = current_plot.addLegend(offset=(10, 10))
-                for window in self.emg_object.latency_windows:
-                    window_color = self._convert_matplotlib_color(window.color)
-                    # Create dummy curve item for legend
-                    dummy_curve = pg.PlotCurveItem(
-                        x=np.array([0]),
-                        y=np.array([0]),
-                        pen=pg.mkPen(window_color, width=2),
-                    )
-                    legend.addItem(
-                        dummy_curve,
-                        window.label if hasattr(window, "label") else str(window),
-                    )
-
         # Auto-range both axes
-        for plot_item in plot_items:
-            # Remove link y-axes to the first plot item
-            plot_item.setYLink(None)
-            plot_item.enableAutoRange(axis="y", enable=True)
+        self.auto_range_y_axis_linked_plots(plot_items)
 
-        # Create DataFrame with appropriate index
+        # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
         if not raw_data_df.empty:
             raw_data_df.set_index(["channel_index", "window_label", "stimulus_voltage"], inplace=True)
