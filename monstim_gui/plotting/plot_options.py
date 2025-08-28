@@ -25,9 +25,6 @@ if TYPE_CHECKING:
 
     from .plotting_widget import PlotWidget
 
-# TODO: "Reflex Amplitude Calculation Method" is too long to fit in the combo box.
-# Consider abbreviating or using a tooltip.
-
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
@@ -287,7 +284,8 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -350,7 +348,8 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -404,7 +403,8 @@ class AverageSessionReflexOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -466,7 +466,8 @@ class MMaxOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.interactive_cursor_checkbox = QCheckBox()
@@ -511,7 +512,8 @@ class MaxHReflexOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -572,59 +574,3 @@ class MaxHReflexOptions(BasePlotOptions):
             self.max_stim_value.set_value(float(options["max_stim_value"]))
         if "bin_margin" in options:
             self.bin_margin_input.setText(str(int(options["bin_margin"])))
-
-
-# No longer used, but kept for backwards compatibility
-class SuspectedHReflexesOptions(BasePlotOptions):
-    """Deprecated plot type, kept for backwards compatibility"""
-
-    def create_options(self):
-        # H threshold option
-        h_threshold_layout = QHBoxLayout()
-        self.h_threshold_label = QLabel("H Threshold:")
-        self.h_threshold_input = FloatLineEdit(default_value=0.5)
-        self.h_threshold_input.setPlaceholderText("H-relex Threshold (mV):")
-        h_threshold_layout.addWidget(self.h_threshold_label)
-        h_threshold_layout.addWidget(self.h_threshold_input)
-        self.layout.addLayout(h_threshold_layout)
-
-        # H-reflex calculation method option
-        h_method_layout = QHBoxLayout()
-        self.h_method_label = QLabel("H-reflex Calculation Method:")
-        self.h_method_combo = ResponsiveComboBox()
-        self.h_method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
-        self.h_method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        h_method_layout.addWidget(self.h_method_label)
-        h_method_layout.addWidget(self.h_method_combo)
-        self.layout.addLayout(h_method_layout)
-
-        # plot_legend option (checkbox)
-        self.plot_legend_label = QLabel("Show Plot Legend:")
-        self.plot_legend_checkbox = QCheckBox()
-        self.plot_legend_checkbox.setChecked(True)  # Set the initial state to True
-        self.layout.addWidget(self.plot_legend_label)
-        self.layout.addWidget(self.plot_legend_checkbox)
-
-        # Channel selection
-        self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
-        self.layout.addWidget(self.channel_selector)
-
-    def get_options(self):
-        return {
-            "channel_indices": self.channel_selector.get_selected_channels(),
-            "h_threshold": self.h_threshold_input.get_value(),
-            "method": self.h_method_combo.currentText(),
-            "plot_legend": self.plot_legend_checkbox.isChecked(),
-        }
-
-    def set_options(self, options):
-        if "channel_indices" in options:
-            self.channel_selector.set_selected_channels(options["channel_indices"])
-        if "h_threshold" in options:
-            self.h_threshold_input.set_value(options["h_threshold"])
-        if "method" in options:
-            index = self.h_method_combo.findText(options["method"])
-            if index >= 0:
-                self.h_method_combo.setCurrentIndex(index)
-        if "plot_legend" in options:
-            self.plot_legend_checkbox.setChecked(options["plot_legend"])
