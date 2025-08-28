@@ -96,7 +96,7 @@ class BasePlotterPyQtGraph:
         canvas.current_plot_items = plot_items
 
         return plot_items, canvas.graphics_layout
-    
+
     def add_synchronized_crosshairs(self, plot_items):
         """
         Add synchronized crosshairs and a cursor indicator to all plot_items. Only the active plot shows a horizontal crosshair and indicator.
@@ -125,9 +125,9 @@ class BasePlotterPyQtGraph:
             v_lines.append(v_line)
             h_lines.append(h_line)
             # Add a cursor indicator (TextItem) to each plot
-            cursor_text = pg.TextItem("", anchor=(1, 0), color="black", 
-                                    fill=pg.mkBrush(255, 255, 255, 200),
-                                    border=pg.mkPen(color='black', width=1))
+            cursor_text = pg.TextItem(
+                "", anchor=(1, 0), color="black", fill=pg.mkBrush(255, 255, 255, 200), border=pg.mkPen(color="black", width=1)
+            )
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
@@ -173,16 +173,16 @@ class BasePlotterPyQtGraph:
                             view_range = plot_items[idx].vb.viewRange()
                             x_min, x_max = view_range[0]
                             y_min, y_max = view_range[1]
-                            
+
                             # Fixed position: top-left corner with small offset
                             x_range = x_max - x_min
                             y_range = y_max - y_min
-                            
+
                             # Ensure we have valid ranges
                             if x_range > 0 and y_range > 0:
                                 tooltip_x = x_max - 0.08 * x_range  # 8% from right edge (more padding)
                                 tooltip_y = y_max - 0.05 * y_range  # 5% from top edge
-                                
+
                                 cursor_texts[idx].setText(f" x: {x:.3f}, y: {y:.3f} ")
                                 cursor_texts[idx].setPos(tooltip_x, tooltip_y)
                                 cursor_texts[idx].setZValue(1000)
