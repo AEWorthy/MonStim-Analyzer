@@ -7,8 +7,6 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
-    QLabel,
     QLineEdit,
     QSizePolicy,
     QVBoxLayout,
