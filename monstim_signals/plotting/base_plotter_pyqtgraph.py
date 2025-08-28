@@ -96,45 +96,7 @@ class BasePlotterPyQtGraph:
         canvas.current_plot_items = plot_items
 
         return plot_items, canvas.graphics_layout
-
-    def add_crosshair(self, plot_item: pg.PlotItem) -> tuple:
-        """
-        Add crosshair cursor to a plot.
-
-        Parameters
-        ----------
-        plot_item : pg.PlotItem
-            The plot item to add crosshair to
-
-        Returns
-        -------
-        tuple
-            (v_line, h_line) - vertical and horizontal line objects
-        """
-        # Create crosshair lines
-        v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen("w", width=1))
-        h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("w", width=1))
-
-        plot_item.addItem(v_line, ignoreBounds=True)
-        plot_item.addItem(h_line, ignoreBounds=True)
-
-        # Connect mouse move events
-        def mouse_moved(evt):
-            # Handle different event formats
-            if isinstance(evt, (list, tuple)):
-                pos = evt[0]
-            else:
-                pos = evt
-
-            if plot_item.sceneBoundingRect().contains(pos):
-                mouse_point = plot_item.vb.mapSceneToView(pos)
-                v_line.setPos(mouse_point.x())
-                h_line.setPos(mouse_point.y())
-
-        plot_item.scene().sigMouseMoved.connect(mouse_moved)
-
-        return v_line, h_line
-
+    
     def add_synchronized_crosshairs(self, plot_items):
         """
         Add synchronized crosshairs and a cursor indicator to all plot_items. Only the active plot shows a horizontal crosshair and indicator.
@@ -144,6 +106,7 @@ class BasePlotterPyQtGraph:
         2. Only updates the text when the position changes significantly
         3. Caches calculations where possible
         4. Only shows text on demand (when stationary for a short time)
+        5. Positions tooltip at top-right corner of active plot (avoids legend overlap)
         """
         import time
 
@@ -162,7 +125,9 @@ class BasePlotterPyQtGraph:
             v_lines.append(v_line)
             h_lines.append(h_line)
             # Add a cursor indicator (TextItem) to each plot
-            cursor_text = pg.TextItem("", anchor=(0, 1), color="k", fill=pg.mkBrush(255, 255, 255, 180))
+            cursor_text = pg.TextItem("", anchor=(1, 0), color="black", 
+                                    fill=pg.mkBrush(255, 255, 255, 200),
+                                    border=pg.mkPen(color='black', width=1))
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
@@ -203,16 +168,30 @@ class BasePlotterPyQtGraph:
 
                     # Only update text if it's visible
                     if show_text:
-                        # Show and update the cursor indicator - position in view coordinates
-                        view_range = plot_items[idx].vb.viewRange()
-                        x_min, x_max = view_range[0][0], view_range[0][1] * 0.55
-                        y_min, y_max = view_range[1]
-                        x_clamped = min(max(x, x_min), x_max)
-                        y_top = y_max - 0.05 * (y_max - y_min)  # 5% below the top
-                        cursor_texts[idx].setText(f"x={x:.2f}, y={y:.2f}")
-                        cursor_texts[idx].setPos(x_clamped, y_top)
-                        cursor_texts[idx].setZValue(1000)
-                        cursor_texts[idx].show()
+                        # Position tooltip at top-left corner of the plot view
+                        try:
+                            view_range = plot_items[idx].vb.viewRange()
+                            x_min, x_max = view_range[0]
+                            y_min, y_max = view_range[1]
+                            
+                            # Fixed position: top-left corner with small offset
+                            x_range = x_max - x_min
+                            y_range = y_max - y_min
+                            
+                            # Ensure we have valid ranges
+                            if x_range > 0 and y_range > 0:
+                                tooltip_x = x_max - 0.08 * x_range  # 8% from right edge (more padding)
+                                tooltip_y = y_max - 0.05 * y_range  # 5% from top edge
+                                
+                                cursor_texts[idx].setText(f" x: {x:.3f}, y: {y:.3f} ")
+                                cursor_texts[idx].setPos(tooltip_x, tooltip_y)
+                                cursor_texts[idx].setZValue(1000)
+                                cursor_texts[idx].show()
+                            else:
+                                cursor_texts[idx].hide()
+                        except (IndexError, TypeError, AttributeError):
+                            # Fallback: hide text if positioning fails
+                            cursor_texts[idx].hide()
                     else:
                         cursor_texts[idx].hide()
                 else:
