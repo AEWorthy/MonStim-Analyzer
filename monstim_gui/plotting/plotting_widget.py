@@ -55,7 +55,7 @@ class PlotWidget(QGroupBox):
         self.view = "session"
         self.session_radio.toggled.connect(self.on_view_changed)
         self.dataset_radio.toggled.connect(self.on_view_changed)
-        form.addRow("Select Data Level to Plot:", level_widget)
+        form.addRow("Data Level:", level_widget)
 
         # Plot Type Selection Box
         self.plot_type_combo = ResponsiveComboBox()
@@ -66,14 +66,16 @@ class PlotWidget(QGroupBox):
 
         # Dynamic Options Box with scroll area for long content
         self.options_box = QGroupBox("Options")
-        self.options_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+        self.options_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Create scroll area for options content
         self.options_scroll = ResponsiveScrollArea()
+        self.options_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.options_scroll.setMinimumHeight(50)  # Override the ResponsiveScrollArea default minimum height
         self.options_content = QWidget()
         self.options_layout = QVBoxLayout(self.options_content)
-        self.options_layout.setContentsMargins(6, 6, 6, 6)
-        self.options_layout.setSpacing(6)
+        self.options_layout.setContentsMargins(2, 2, 2, 2)  # Reduced margins to minimize blank space
+        self.options_layout.setSpacing(2)  # Reduced spacing between widgets
 
         self.options_scroll.setWidget(self.options_content)
 
@@ -82,7 +84,7 @@ class PlotWidget(QGroupBox):
         options_box_layout.setContentsMargins(4, 4, 4, 4)
         options_box_layout.addWidget(self.options_scroll)
 
-        self.layout.addWidget(self.options_box)
+        self.layout.addWidget(self.options_box, 1)  # Give it stretch factor to expand
 
         # Create the buttons for plotting and extracting data
         btn_row = QHBoxLayout()
