@@ -62,7 +62,9 @@ def get_avg_mmax(
 
     try:
         plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
+
     except Exception as e:
+        logging.exception(f"Exception during plateau detection: {e}")
         logging.exception("Exception during plateau detection. Proceeding to fallback methods.")
         plateau_start_idx, plateau_end_idx = None, None
 
