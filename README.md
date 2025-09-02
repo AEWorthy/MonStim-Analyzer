@@ -3,7 +3,7 @@
 This repository contains the source code for the MonStim EMG Analyzer GUI
 application and the supporting signal processing library. The tool provides
 utilities for importing, processing and visualizing electromyography (EMG) data
-collected with LabView MonStim experiments.
+collected with the custom 'MonStim-V3' LabView program created by William Goolsby for the Alvarez Lab at Emory.
 
 ## Documentation
 
