@@ -68,6 +68,7 @@ class MonstimGUI(QMainWindow):
         self.has_unsaved_changes = False
         self.setWindowTitle(f"MonStim Analyzer {SPLASH_INFO['version']}")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), "icon.png")))
+        self.handle_qt_error_logs()
 
         # Use responsive window sizing with state restoration
         # from monstim_gui.core.ui_scaling import ui_scaling
@@ -166,6 +167,37 @@ class MonstimGUI(QMainWindow):
         self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
 
         self.status_bar.showMessage(f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000)
+
+    @staticmethod
+    def handle_qt_error_logs():
+            # Install Qt message handler to suppress QPainter warnings during resize operations
+            from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
+            
+            def qt_message_handler(mode, context, message):
+                # Suppress specific QPainter warnings that occur during window resize/fullscreen operations
+                if any(warning in message for warning in [
+                    "QPainter::begin: Paint device returned engine == 0",
+                    "QPainter::setCompositionMode: Painter not active",
+                    "QPainter::fillRect: Painter not active", 
+                    "QPainter::setBrush: Painter not active",
+                    "QPainter::setPen: Painter not active",
+                    "QPainter::drawPath: Painter not active",
+                    "QPainter::setFont: Painter not active",
+                    "QPainter::end: Painter not active"
+                ]):
+                    return  # Suppress these messages
+                
+                # Let other messages through to normal logging
+                if mode == QtMsgType.QtWarningMsg:
+                    logging.warning(f"Qt: {message}")
+                elif mode == QtMsgType.QtCriticalMsg:
+                    logging.error(f"Qt: {message}")
+                elif mode == QtMsgType.QtFatalMsg:
+                    logging.critical(f"Qt: {message}")
+                elif mode == QtMsgType.QtDebugMsg:
+                    logging.debug(f"Qt: {message}")
+            
+            qInstallMessageHandler(qt_message_handler)
 
     def _populate_profile_selector(self):
         self.profile_selector_combo.blockSignals(True)
