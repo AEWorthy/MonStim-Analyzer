@@ -298,7 +298,7 @@ class RecordingExclusionEditor(QDialog):
         # Collect all recordings and their exclusion status
         recordings_data = []
         for session in sessions:
-            for recording in session._all_recordings:  # Include all recordings, even excluded ones
+            for recording in session.get_recordings(include_excluded=True):  # Include all recordings, even excluded ones
                 will_exclude = self.should_exclude_recording(recording)
                 current_status = recording.id in session.excluded_recordings
 
@@ -382,7 +382,7 @@ class RecordingExclusionEditor(QDialog):
         total_inclusions = 0
 
         for session in sessions:
-            for recording in session._all_recordings:
+            for recording in session.get_recordings(include_excluded=True):
                 should_exclude = self.should_exclude_recording(recording)
                 currently_excluded = recording.id in session.excluded_recordings
 
@@ -421,7 +421,7 @@ class RecordingExclusionEditor(QDialog):
             changes = []
             for session in sessions:
                 session_changes = []
-                for recording in session._all_recordings:
+                for recording in session.get_recordings(include_excluded=True):
                     should_exclude = self.should_exclude_recording(recording)
                     currently_excluded = recording.id in session.excluded_recordings
 
@@ -447,7 +447,7 @@ class RecordingExclusionEditor(QDialog):
             logging.warning("BulkRecordingExclusionCommand not available, applying changes directly")
 
             for session in sessions:
-                for recording in session._all_recordings:
+                for recording in session.get_recordings(include_excluded=True):
                     should_exclude = self.should_exclude_recording(recording)
                     currently_excluded = recording.id in session.excluded_recordings
 

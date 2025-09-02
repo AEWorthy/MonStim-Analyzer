@@ -247,7 +247,23 @@ class Session:
         Return a list of active recordings in the session.
         This filters out any recordings that are marked as excluded in the session annotations.
         """
-        return [rec for rec in self._all_recordings if rec.id not in self.excluded_recordings]
+        return self.get_all_recordings(include_excluded=False)
+
+    def get_all_recordings(self, include_excluded: bool = False) -> List[Recording]:
+        """
+        Return a list of recordings in the session.
+
+        Args:
+            include_excluded (bool): If True, returns all recordings including excluded ones.
+                                   If False, returns only active (non-excluded) recordings.
+
+        Returns:
+            List[Recording]: The list of recordings based on the include_excluded parameter.
+        """
+        if include_excluded:
+            return self._all_recordings
+        else:
+            return [rec for rec in self._all_recordings if rec.id not in self.excluded_recordings]
 
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
@@ -641,7 +657,7 @@ class Session:
         If the recording is not found, log a warning.
         """
         if recording_id in self.excluded_recordings:
-            for rec in self._all_recordings:
+            for rec in self.get_all_recordings(include_excluded=True):
                 if rec.id == recording_id:
                     self.annot.excluded_recordings.remove(recording_id)
                     break
@@ -665,7 +681,7 @@ class Session:
         """
         if recording_id not in self.excluded_recordings:
             # Find the recording and set its exclude flag
-            for rec in self._all_recordings:
+            for rec in self.get_all_recordings(include_excluded=True):
                 if rec.id == recording_id:
                     self.annot.excluded_recordings.append(recording_id)
                     break
@@ -700,7 +716,7 @@ class Session:
         Exclude the entire session by marking all recordings as excluded.
         This is a user action that modifies the session's exclude flags.
         """
-        self.annot.excluded_recordings = [rec.id for rec in self._all_recordings]
+        self.annot.excluded_recordings = [rec.id for rec in self.get_all_recordings(include_excluded=True)]
         if self.recordings == []:
             # If no recordings remain, mark the session as excluded
             self.parent_dataset.exclude_session(self.id)
@@ -886,7 +902,7 @@ class Session:
         Update the configuration for this session.
         """
         self._config = config
-        for rec in self._all_recordings:
+        for rec in self.get_all_recordings(include_excluded=True):
             if hasattr(rec, "set_config"):
                 rec.set_config(config)
 
