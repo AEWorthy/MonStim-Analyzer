@@ -121,7 +121,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         """
         # Get data segment
         data_segment = channel_data[start:end]
-        time_segment = time_axis.copy()
+        time_segment = time_axis
 
         # Create color based on stimulus voltage using shared colormap
         if norm is not None:
