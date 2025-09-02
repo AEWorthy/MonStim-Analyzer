@@ -83,21 +83,17 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             if interactive_cursor:
                 self.add_synchronized_crosshairs(plot_items)
 
-            # Add legend if requested, after all plotting is done
-            if plot_legend and plot_items:
-                self.add_legend(plot_items[0])
-
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
-
-            # Display the plot
-            self.display_plot(canvas)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index", "window_name", "voltage"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
 
@@ -400,17 +396,17 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Enable grid
                 plot_item.showGrid(True, True)
 
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
-
-            # Display the plot
-            self.display_plot(canvas)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index", "stimulus_v"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting max H-reflex: {str(e)}")
 
@@ -548,12 +544,6 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 plot_item.getAxis("bottom").setTicks([[(m_x, "M-response")]])
                 plot_item.setXRange(m_x - 1, m_x + 1.5)
 
-                # Set y-axis limits
-                if all_m_max_amplitudes:
-                    y_max = np.nanmax(all_m_max_amplitudes)
-                    if not np.isnan(y_max):
-                        plot_item.setYRange(0, 1.1 * y_max)
-
                 # Enable grid
                 plot_item.showGrid(True, True)
 
@@ -564,13 +554,20 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 raw_data_dict["m_max_threshold"].extend(m_max_thresholds)
                 raw_data_dict["m_max_amplitude"].extend(m_max_amplitudes)
 
-            # Display the plot
-            self.display_plot(canvas)
+            # Set y-axis limits for all linked plots
+            if all_m_max_amplitudes and plot_items:
+                y_max = np.nanmax(all_m_max_amplitudes)
+                if not np.isnan(y_max):
+                    # Set range on first plot only since they're Y-linked
+                    plot_items[0].setYRange(0, 1.1 * y_max)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting M-max: {str(e)}")

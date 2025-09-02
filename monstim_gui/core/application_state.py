@@ -363,7 +363,7 @@ class ApplicationState:
         """Get a program preference setting."""
         return self.settings.value(f"ProgramPreferences/{key}", default_value, type=bool)
 
-    def set_preference(self, key: str, value: bool):
+    def set_setting(self, key: str, value: bool):
         """Set a program preference setting."""
         self.settings.setValue(f"ProgramPreferences/{key}", value)
         self.settings.sync()
@@ -383,6 +383,10 @@ class ApplicationState:
     def should_track_analysis_profiles(self) -> bool:
         """Check if analysis profile tracking is enabled."""
         return self.get_preference("track_analysis_profiles", True)
+
+    def should_use_opengl_acceleration(self) -> bool:
+        """Check if OpenGL acceleration should be used."""
+        return self.get_preference("use_opengl_acceleration", True)
 
     def clear_all_tracked_data(self):
         """Clear all tracked user data."""

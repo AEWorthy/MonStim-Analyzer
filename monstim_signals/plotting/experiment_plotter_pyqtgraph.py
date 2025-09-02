@@ -71,6 +71,10 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
                 plot_item.showGrid(True, True)
 
+                # Add legend for this plot if requested (before plotting named curves)
+                if plot_legend:
+                    plot_item.addLegend()
+
                 # Plot reflex curves data and collect raw data
                 self._plot_reflex_curves_data(
                     plot_item,
@@ -81,22 +85,17 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     raw_data_dict,
                 )
 
-            # Add legend if requested
-            if plot_legend and plot_items:
-                self.add_legend(plot_items[0])
-
-            # Enable auto-range for all plots
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
-
-            # Display the plot
-            self.display_plot(canvas)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index", "stimulus_v"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
 
@@ -118,7 +117,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Get stimulus voltages
             stimulus_voltages = self.emg_object.stimulus_voltages
 
-            # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
+            # Make the M-wave and H-reflex amplitudes relative to the maximum M-wave amplitude if specified
             if relative_to_mmax:
                 if manual_mmax is not None:
                     m_max_amplitude = manual_mmax
@@ -128,6 +127,8 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if m_max_amplitude and m_max_amplitude > 0:
                     m_wave_means = m_wave_means / m_max_amplitude
                     m_wave_error = m_wave_error / m_max_amplitude
+                    h_response_means = h_response_means / m_max_amplitude
+                    h_response_error = h_response_error / m_max_amplitude
 
             # Append data to raw data dictionary
             raw_data_dict["channel_index"].extend([channel_idx] * len(stimulus_voltages))
@@ -266,18 +267,17 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     raw_data_dict,
                 )
 
-            # Enable auto-range for all plots
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
-
-            # Display the plot
-            self.display_plot(canvas)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index", "stimulus_v"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting max H-reflex: {str(e)}")
 
@@ -514,18 +514,17 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             if interactive_cursor:
                 self.add_synchronized_crosshairs(plot_items)
 
-            # Enable auto-range for all plots
-            for plot_item in plot_items:
-                plot_item.enableAutoRange(axis="y", enable=True)
-
-            # Display the plot
-            self.display_plot(canvas)
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
 
             # Create DataFrame with multi-level index
             raw_data_df = pd.DataFrame(raw_data_dict)
             raw_data_df.set_index(["channel_index"], inplace=True)
             return raw_data_df
 
+        except UnableToPlotError:
+            # Re-raise UnableToPlotError without wrapping to preserve the original error
+            raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting M-max: {str(e)}")
 

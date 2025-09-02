@@ -371,3 +371,71 @@ class ChangeChannelNamesCommand(Command):
 
     def undo(self):
         self.level.rename_channels(self.old_names)
+
+
+class BulkRecordingExclusionCommand(Command):
+    """Apply bulk recording exclusions/inclusions across multiple sessions."""
+
+    def __init__(self, gui, changes: list):
+        """
+        Initialize bulk recording exclusion command.
+
+        Args:
+            gui: The main GUI instance
+            changes: List of dicts with format:
+                [
+                    {
+                        'session': session_object,
+                        'changes': [
+                            {'recording_id': str, 'exclude': bool},
+                            ...
+                        ]
+                    },
+                    ...
+                ]
+        """
+        self.command_name = "Bulk Recording Exclusion"
+        self.gui: "MonstimGUI" = gui
+        self.changes = changes
+
+    def execute(self):
+        """Apply all recording exclusions/inclusions."""
+        try:
+            for session_change in self.changes:
+                session = session_change["session"]
+                for change in session_change["changes"]:
+                    recording_id = change["recording_id"]
+                    should_exclude = change["exclude"]
+
+                    if should_exclude:
+                        session.exclude_recording(recording_id)
+                    else:
+                        session.restore_recording(recording_id)
+
+            # Update UI to reflect changes
+            self.gui.data_selection_widget.sync_combo_selections()
+
+        except Exception as e:
+            QMessageBox.critical(self.gui, "Error", f"Failed to apply bulk exclusions: {str(e)}")
+
+    def undo(self):
+        """Reverse all recording exclusions/inclusions."""
+        try:
+            # Apply changes in reverse
+            for session_change in reversed(self.changes):
+                session = session_change["session"]
+                for change in reversed(session_change["changes"]):
+                    recording_id = change["recording_id"]
+                    should_exclude = change["exclude"]
+
+                    # Do the opposite of what was done
+                    if should_exclude:
+                        session.restore_recording(recording_id)
+                    else:
+                        session.exclude_recording(recording_id)
+
+            # Update UI to reflect changes
+            self.gui.data_selection_widget.sync_combo_selections()
+
+        except Exception as e:
+            QMessageBox.critical(self.gui, "Error", f"Failed to undo bulk exclusions: {str(e)}")

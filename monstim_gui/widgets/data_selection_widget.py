@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QGroupBox,
+    QLabel,
     QMenu,
     QStyledItemDelegate,
     QStyleOptionViewItem,
@@ -36,6 +37,10 @@ class CircleDelegate(QStyledItemDelegate):
 
     def paint(self, painter: QPainter, option, index):
         """Draw the item text and a completion circle."""
+        # Check if painter is active before proceeding
+        if not painter.isActive():
+            return
+
         # Reserve space on the right for the status circle
         option_no_circle = QStyleOptionViewItem(option)
         option_no_circle.rect = option.rect.adjusted(0, 0, -self.CIRCLE_PADDING, 0)
@@ -72,18 +77,34 @@ class DataSelectionWidget(QGroupBox):
 
         self.experiment_combo = QComboBox()
         self.experiment_combo.currentIndexChanged.connect(self._on_experiment_combo_changed)
+        self.experiment_combo.setToolTip("Select an experiment")
+        self.experiment_combo.wheelEvent = lambda event: None  # Disable scroll wheel
 
         self.dataset_combo = QComboBox()
         self.dataset_combo.currentIndexChanged.connect(self._on_dataset_combo_changed)
         self.dataset_combo.setEnabled(False)  # Start disabled until experiment is loaded
+        self.dataset_combo.setToolTip("Select a dataset")
+        self.dataset_combo.wheelEvent = lambda event: None  # Disable scroll wheel
 
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
         self.session_combo.setEnabled(False)  # Start disabled until dataset is loaded
+        self.session_combo.setToolTip("Select a session")
+        self.session_combo.wheelEvent = lambda event: None  # Disable scroll wheel
 
-        form.addRow("Experiment:", self.experiment_combo)
-        form.addRow("Dataset:", self.dataset_combo)
-        form.addRow("Session:", self.session_combo)
+        # Create labels with tooltips
+        experiment_label = QLabel("Experiment:")
+        experiment_label.setToolTip("Experiment")
+
+        dataset_label = QLabel("Dataset:")
+        dataset_label.setToolTip("Dataset")
+
+        session_label = QLabel("Session:")
+        session_label.setToolTip("Session")
+
+        form.addRow(experiment_label, self.experiment_combo)
+        form.addRow(dataset_label, self.dataset_combo)
+        form.addRow(session_label, self.session_combo)
 
         self.setLayout(form)
         self.setup_context_menus()

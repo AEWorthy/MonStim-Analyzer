@@ -2,12 +2,13 @@ import copy
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QLabel,
     QPushButton,
     QRadioButton,
     QSizePolicy,
@@ -46,8 +47,11 @@ class PlotWidget(QGroupBox):
         level_h.setContentsMargins(0, 0, 0, 0)
         self.view_group = QButtonGroup(self)
         self.session_radio = QRadioButton("Session")
+        self.session_radio.setToolTip("Select/Plot Session")
         self.dataset_radio = QRadioButton("Dataset")
+        self.dataset_radio.setToolTip("Select/Plot Dataset")
         self.experiment_radio = QRadioButton("Experiment")
+        self.experiment_radio.setToolTip("Select/Plot Experiment")
         for rb in (self.session_radio, self.dataset_radio, self.experiment_radio):
             self.view_group.addButton(rb)
             level_h.addWidget(rb)
@@ -55,40 +59,49 @@ class PlotWidget(QGroupBox):
         self.view = "session"
         self.session_radio.toggled.connect(self.on_view_changed)
         self.dataset_radio.toggled.connect(self.on_view_changed)
-        form.addRow("Select Data Level to Plot:", level_widget)
+        form.addRow("Data Level:", level_widget)
 
         # Plot Type Selection Box
         self.plot_type_combo = ResponsiveComboBox()
-        form.addRow("Plot Type:", self.plot_type_combo)
+        self.plot_type_label = QLabel("Plot Type:")
+        self.plot_type_label.setToolTip("Select the type of plot to generate")
+        form.addRow(self.plot_type_label, self.plot_type_combo)
         self.plot_type_combo.currentTextChanged.connect(self.on_plot_type_changed)
 
         self.layout.addLayout(form)
 
         # Dynamic Options Box with scroll area for long content
         self.options_box = QGroupBox("Options")
-        self.options_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+        self.options_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Create scroll area for options content
         self.options_scroll = ResponsiveScrollArea()
+        self.options_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.options_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.options_content = QWidget()
         self.options_layout = QVBoxLayout(self.options_content)
-        self.options_layout.setContentsMargins(6, 6, 6, 6)
-        self.options_layout.setSpacing(6)
+        self.options_layout.setContentsMargins(4, 4, 4, 4)  # Small margins for better appearance
+        self.options_layout.setSpacing(2)  # Minimal spacing between widgets
+        self.options_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align content to top
 
         self.options_scroll.setWidget(self.options_content)
 
         # Layout for the group box
         options_box_layout = QVBoxLayout(self.options_box)
-        options_box_layout.setContentsMargins(4, 4, 4, 4)
+        options_box_layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins
         options_box_layout.addWidget(self.options_scroll)
 
-        self.layout.addWidget(self.options_box)
+        self.layout.addWidget(self.options_box, 0)  # No stretch - size to content only
+
+        # Add a stretch spacer to push buttons to bottom
+        self.layout.addStretch(1)
 
         # Create the buttons for plotting and extracting data
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.plot_button = QPushButton("Plot")
-        self.get_data_button = QPushButton("Plot & Extract Data")
+        self.get_data_button = QPushButton("Plot && Extract Data")
         for btn in (self.plot_button, self.get_data_button):
             btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             btn_row.addWidget(btn)
@@ -324,10 +337,58 @@ class PlotWidget(QGroupBox):
             # Connect channel selection updates for real-time persistence
             self.connect_channel_selection_updates()
 
+            # Recalculate size after options are initialized with a slight delay
+            # to ensure all widgets are properly laid out
+            QTimer.singleShot(50, self.recalculate_options_size)
+
         self.options_layout.update()
 
         if plot_type == "Single EMG Recordings" and self.current_option_widget:
             self.current_option_widget.recording_cycler.reset_max_recordings()
+
+    def recalculate_options_size(self):
+        """Recalculate and adjust the options area size after options are initialized"""
+        if self.current_option_widget:
+            # Force the widget to update its size hint first
+            self.current_option_widget.adjustSize()
+            self.options_content.adjustSize()
+
+            # Get the actual size needed for the content
+            content_size = self.options_content.sizeHint()
+            needed_height = content_size.height() + 10
+
+            # Get the available space in the parent widget
+            # We need to account for other widgets in the layout
+            parent_height = self.parent.height() if self.parent else 600  # fallback height
+
+            # Calculate approximate available space for options
+            # Account for form layout, buttons, margins, etc.
+            form_height = 120  # Approximate height of form elements above options
+            button_height = 40  # Approximate height of buttons below
+            margins = 40  # Various margins and spacing
+            available_height = parent_height - form_height - button_height - margins
+
+            # Always limit to available space to prevent window expansion
+            max_allowed_height = max(150, min(needed_height, available_height))
+
+            # Set size constraints
+            self.options_scroll.setMinimumHeight(max_allowed_height)
+            self.options_scroll.setMaximumHeight(max_allowed_height)
+
+            # Enable scrollbar if content exceeds available space
+            if needed_height > max_allowed_height:
+                self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            else:
+                self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+            # Update all geometries to apply the changes
+            self.options_scroll.updateGeometry()
+            self.options_box.updateGeometry()
+            self.updateGeometry()
+
+            # Force layout recalculation
+            self.layout.invalidate()
+            self.layout.update()
 
     def get_plot_options(self):
         if self.current_option_widget:

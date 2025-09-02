@@ -41,15 +41,11 @@ class MenuBar(QMenuBar):
         file_menu.addSeparator()
 
         # Preferences button
-        preferences_action = file_menu.addAction("Preferences")
+        preferences_action = file_menu.addAction("Analysis Preferences")
         preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
 
-        # UI Scaling Preferences button
-        ui_scaling_action = file_menu.addAction("Display Preferences")
-        ui_scaling_action.triggered.connect(self.show_ui_scaling_preferences)
-
-        # Program Preferences button
-        program_prefs_action = file_menu.addAction("Program Preferences")
+        # Program Settings button (includes Display and UI Scaling preferences)
+        program_prefs_action = file_menu.addAction("Settings")
         program_prefs_action.triggered.connect(self.show_program_preferences)
 
         file_menu.addSeparator()
@@ -58,10 +54,6 @@ class MenuBar(QMenuBar):
         save_action = file_menu.addAction("Save Current Experiment")
         save_action.triggered.connect(self.parent.data_manager.save_experiment)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
-
-        # Save As button
-        # save_as_action = file_menu.addAction("Save Current Experiment As")
-        # save_as_action.triggered.connect(self.parent.save_experiment_as)
 
         # Exit button
         exit_action = file_menu.addAction("Exit")
@@ -85,6 +77,9 @@ class MenuBar(QMenuBar):
         experiment_menu = edit_menu.addMenu("Experiment")
         dataset_menu = edit_menu.addMenu("Dataset")
         session_menu = edit_menu.addMenu("Session")
+
+        # Data curation submenu
+        curation_menu = edit_menu.addMenu("Data Curation")
 
         # Experiment level actions
         update_window_action = experiment_menu.addAction("Manage Latency Windows")
@@ -130,6 +125,11 @@ class MenuBar(QMenuBar):
         exclude_session_action.triggered.connect(self.parent.exclude_session)
         restore_session_action = session_menu.addAction("Restore Excluded Session")
         restore_session_action.triggered.connect(self.parent.prompt_restore_session)
+
+        # Data curation actions
+        exclude_recordings_action = curation_menu.addAction("Recording Exclusion Editor...")
+        exclude_recordings_action.triggered.connect(self.show_recording_exclusion_editor)
+        exclude_recordings_action.setToolTip("Exclude recordings based on stimulus amplitude and other criteria")
 
     def create_help_menu(self):
         # Help menu
@@ -224,31 +224,15 @@ class MenuBar(QMenuBar):
         self.undo_action.setFont(hint_font)
         self.redo_action.setFont(hint_font)
 
-    def show_ui_scaling_preferences(self):
-        """Show the UI scaling preferences dialog."""
-        try:
-            from monstim_gui.dialogs.ui_scaling_preferences import (
-                UIScalingPreferencesDialog,
-            )
-
-            dialog = UIScalingPreferencesDialog(self.parent)
-            dialog.exec()
-        except ImportError as e:
-            QMessageBox.warning(
-                self.parent,
-                "UI Scaling Preferences",
-                f"UI scaling preferences dialog is not available: {e}",
-            )
-
     def show_program_preferences(self):
         """Show the program preferences dialog."""
         try:
-            from monstim_gui.dialogs.program_preferences import ProgramPreferencesDialog
+            from monstim_gui.dialogs import ProgramSettingsDialog
 
-            dialog = ProgramPreferencesDialog(self.parent)
+            dialog = ProgramSettingsDialog(self.parent)
 
             # Connect the preferences changed signal to refresh any UI that might depend on it
-            dialog.preferences_changed.connect(self.parent.refresh_preferences_dependent_ui)
+            dialog.settings_changed.connect(self.parent.refresh_preferences_dependent_ui)
 
             dialog.exec()
         except ImportError as e:
@@ -256,4 +240,36 @@ class MenuBar(QMenuBar):
                 self.parent,
                 "Program Preferences",
                 f"Program preferences dialog is not available: {e}",
+            )
+
+    def show_recording_exclusion_editor(self):
+        """Show the recording exclusion editor dialog."""
+        if not self.parent.current_session:
+            QMessageBox.warning(
+                self.parent,
+                "No Session Selected",
+                "Please select a session first to exclude recordings.",
+            )
+            return
+
+        try:
+            from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+
+            dialog = RecordingExclusionEditor(self.parent)
+
+            # Connect the exclusions applied signal to refresh the UI
+            dialog.exclusions_applied.connect(self.parent.plot_controller.plot_data)
+
+            dialog.exec()
+        except ImportError as e:
+            QMessageBox.warning(
+                self.parent,
+                "Recording Exclusion Editor",
+                f"Recording exclusion editor is not available: {e}",
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.parent,
+                "Error",
+                f"Failed to open recording exclusion editor:\n{str(e)}",
             )

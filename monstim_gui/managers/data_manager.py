@@ -680,7 +680,6 @@ class DataManager:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
-        # TODO: Fix pathing issues with reloading experiments.
         current_experiment_combo_index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         if self.gui.current_experiment:
             logging.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")

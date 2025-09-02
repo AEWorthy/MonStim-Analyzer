@@ -7,8 +7,6 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
-    QLabel,
     QLineEdit,
     QSizePolicy,
     QVBoxLayout,
@@ -25,9 +23,6 @@ if TYPE_CHECKING:
 
     from .plotting_widget import PlotWidget
 
-# TODO: "Reflex Amplitude Calculation Method" is too long to fit in the combo box.
-# Consider abbreviating or using a tooltip.
-
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
@@ -35,8 +30,8 @@ class BasePlotOptions(QWidget):
         super().__init__(parent)
         self.gui_main = parent.parent
         self.layout: QVBoxLayout = QVBoxLayout(self)
-        self.layout.setSpacing(0)  # No spacing between widgets
-        self.layout.setContentsMargins(4, 4, 4, 4)  # Set smaller margins
+        self.layout.setSpacing(2)  # Minimal spacing between widgets
+        self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins to reduce blank space
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.create_options()
 
@@ -47,8 +42,9 @@ class BasePlotOptions(QWidget):
         form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)  # Slightly increased vertical spacing for better readability
+        form.setVerticalSpacing(2)  # Reduced vertical spacing for tighter layout
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)  # Keep everything on one row
+        form.setContentsMargins(2, 2, 2, 2)  # No margins for tight layout
         return form
 
     def create_options(self):
@@ -83,13 +79,19 @@ class ChannelSelectorWidget(QGroupBox):
 
         # Set up a grid layout with proper spacing and margins
         grid = QGridLayout()
-        grid.setSpacing(6)  # Increased spacing between checkboxes
-        grid.setContentsMargins(8, 8, 8, 8)  # Better padding to prevent border clipping
+        grid.setSpacing(2)  # Minimal spacing between checkboxes
+        grid.setContentsMargins(2, 2, 2, 2)  # Minimal padding to minimize space
 
         # Set size policy to make it as compact as possible
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.checkboxes: List[QCheckBox] = []
+
+        # Hide the widget if there are no channels to avoid taking up space
+        if max_ch == 0:
+            self.hide()
+            return
+
         total = (max_ch + 5) // 6 * 6  # Round up to the nearest multiple of 6
         for idx in range(total):
             cb = QCheckBox(f"{idx}")
@@ -139,7 +141,7 @@ class EMGOptions(BasePlotOptions):
         self.plot_colormap_checkbox.setChecked(True)
         self.interactive_cursor_checkbox = QCheckBox()
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
-        self.interactive_cursor_checkbox.setChecked(True)
+        self.interactive_cursor_checkbox.setChecked(False)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
 
         # Create the channel selector
@@ -152,7 +154,6 @@ class EMGOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
@@ -208,6 +209,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         # Add checkboxes to form
+        # Optional TODO: Add ability to set which flags to display
         form.addRow("Show Flags:", self.all_windows_checkbox)
         self.all_windows_checkbox.setChecked(True)
         self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
@@ -223,7 +225,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.fixed_y_axis_checkbox.setChecked(True)  # Set the initial state to True
 
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
-        self.interactive_cursor_checkbox.setChecked(True)
+        self.interactive_cursor_checkbox.setChecked(False)
 
         # Create the recording cycler widget and add it to the form
         self.recording_cycler = RecordingCyclerWidget(self)
@@ -239,7 +241,6 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.recording_cycler)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
@@ -287,7 +288,8 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -317,7 +319,6 @@ class SessionReflexCurvesOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -350,7 +351,8 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -374,7 +376,6 @@ class AverageReflexCurvesOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -404,7 +405,8 @@ class AverageSessionReflexOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -417,7 +419,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(False)  # Default to False
+        self.relative_to_mmax_checkbox.setChecked(True)  # Default to True
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
@@ -433,7 +435,6 @@ class AverageSessionReflexOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -466,7 +467,8 @@ class MMaxOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.interactive_cursor_checkbox = QCheckBox()
@@ -484,7 +486,6 @@ class MMaxOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -511,7 +512,8 @@ class MaxHReflexOptions(BasePlotOptions):
         self.method_combo = ResponsiveComboBox()
         self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        form.addRow("Reflex Amplitude Calculation Method:", self.method_combo)
+        self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
+        form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
@@ -548,7 +550,6 @@ class MaxHReflexOptions(BasePlotOptions):
 
         self.layout.addWidget(options_widget)
         self.layout.addWidget(self.channel_selector)
-        self.layout.addStretch(1)
 
     def get_options(self):
         return {
@@ -572,59 +573,3 @@ class MaxHReflexOptions(BasePlotOptions):
             self.max_stim_value.set_value(float(options["max_stim_value"]))
         if "bin_margin" in options:
             self.bin_margin_input.setText(str(int(options["bin_margin"])))
-
-
-# No longer used, but kept for backwards compatibility
-class SuspectedHReflexesOptions(BasePlotOptions):
-    """Deprecated plot type, kept for backwards compatibility"""
-
-    def create_options(self):
-        # H threshold option
-        h_threshold_layout = QHBoxLayout()
-        self.h_threshold_label = QLabel("H Threshold:")
-        self.h_threshold_input = FloatLineEdit(default_value=0.5)
-        self.h_threshold_input.setPlaceholderText("H-relex Threshold (mV):")
-        h_threshold_layout.addWidget(self.h_threshold_label)
-        h_threshold_layout.addWidget(self.h_threshold_input)
-        self.layout.addLayout(h_threshold_layout)
-
-        # H-reflex calculation method option
-        h_method_layout = QHBoxLayout()
-        self.h_method_label = QLabel("H-reflex Calculation Method:")
-        self.h_method_combo = ResponsiveComboBox()
-        self.h_method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
-        self.h_method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
-        h_method_layout.addWidget(self.h_method_label)
-        h_method_layout.addWidget(self.h_method_combo)
-        self.layout.addLayout(h_method_layout)
-
-        # plot_legend option (checkbox)
-        self.plot_legend_label = QLabel("Show Plot Legend:")
-        self.plot_legend_checkbox = QCheckBox()
-        self.plot_legend_checkbox.setChecked(True)  # Set the initial state to True
-        self.layout.addWidget(self.plot_legend_label)
-        self.layout.addWidget(self.plot_legend_checkbox)
-
-        # Channel selection
-        self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
-        self.layout.addWidget(self.channel_selector)
-
-    def get_options(self):
-        return {
-            "channel_indices": self.channel_selector.get_selected_channels(),
-            "h_threshold": self.h_threshold_input.get_value(),
-            "method": self.h_method_combo.currentText(),
-            "plot_legend": self.plot_legend_checkbox.isChecked(),
-        }
-
-    def set_options(self, options):
-        if "channel_indices" in options:
-            self.channel_selector.set_selected_channels(options["channel_indices"])
-        if "h_threshold" in options:
-            self.h_threshold_input.set_value(options["h_threshold"])
-        if "method" in options:
-            index = self.h_method_combo.findText(options["method"])
-            if index >= 0:
-                self.h_method_combo.setCurrentIndex(index)
-        if "plot_legend" in options:
-            self.plot_legend_checkbox.setChecked(options["plot_legend"])

@@ -44,7 +44,7 @@ class BasePlotterPyQtGraph:
         self, canvas: "PlotPane", channel_indices: List[int] = None
     ) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
         """
-        Create plot layout with subplots for multiple channels.
+        Create plot layout with subplots for multiple channels with performance optimizations.
 
         Parameters
         ----------
@@ -71,6 +71,9 @@ class BasePlotterPyQtGraph:
         if num_channels == 1:
             # Single plot
             plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
+            # Enable performance optimizations
+            plot_item.setClipToView(True)
+            plot_item.setDownsampling(auto=True)
             plot_items.append(plot_item)
         elif num_channels == 0:
             raise UnableToPlotError("No channels to plot. Select at least one channel.")
@@ -78,6 +81,9 @@ class BasePlotterPyQtGraph:
             # Multiple plots in a row
             for i, channel_index in enumerate(channel_indices):
                 plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
+                # Enable performance optimizations for each plot
+                plot_item.setClipToView(True)
+                plot_item.setDownsampling(auto=True)
                 plot_items.append(plot_item)
 
                 # Share axes for all plots
@@ -91,44 +97,6 @@ class BasePlotterPyQtGraph:
 
         return plot_items, canvas.graphics_layout
 
-    def add_crosshair(self, plot_item: pg.PlotItem) -> tuple:
-        """
-        Add crosshair cursor to a plot.
-
-        Parameters
-        ----------
-        plot_item : pg.PlotItem
-            The plot item to add crosshair to
-
-        Returns
-        -------
-        tuple
-            (v_line, h_line) - vertical and horizontal line objects
-        """
-        # Create crosshair lines
-        v_line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen("w", width=1))
-        h_line = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("w", width=1))
-
-        plot_item.addItem(v_line, ignoreBounds=True)
-        plot_item.addItem(h_line, ignoreBounds=True)
-
-        # Connect mouse move events
-        def mouse_moved(evt):
-            # Handle different event formats
-            if isinstance(evt, (list, tuple)):
-                pos = evt[0]
-            else:
-                pos = evt
-
-            if plot_item.sceneBoundingRect().contains(pos):
-                mouse_point = plot_item.vb.mapSceneToView(pos)
-                v_line.setPos(mouse_point.x())
-                h_line.setPos(mouse_point.y())
-
-        plot_item.scene().sigMouseMoved.connect(mouse_moved)
-
-        return v_line, h_line
-
     def add_synchronized_crosshairs(self, plot_items):
         """
         Add synchronized crosshairs and a cursor indicator to all plot_items. Only the active plot shows a horizontal crosshair and indicator.
@@ -138,6 +106,7 @@ class BasePlotterPyQtGraph:
         2. Only updates the text when the position changes significantly
         3. Caches calculations where possible
         4. Only shows text on demand (when stationary for a short time)
+        5. Positions tooltip at top-right corner of active plot (avoids legend overlap)
         """
         import time
 
@@ -156,7 +125,9 @@ class BasePlotterPyQtGraph:
             v_lines.append(v_line)
             h_lines.append(h_line)
             # Add a cursor indicator (TextItem) to each plot
-            cursor_text = pg.TextItem("", anchor=(0, 1), color="k", fill=pg.mkBrush(255, 255, 255, 180))
+            cursor_text = pg.TextItem(
+                "", anchor=(1, 0), color="black", fill=pg.mkBrush(255, 255, 255, 200), border=pg.mkPen(color="black", width=1)
+            )
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
@@ -197,16 +168,30 @@ class BasePlotterPyQtGraph:
 
                     # Only update text if it's visible
                     if show_text:
-                        # Show and update the cursor indicator - position in view coordinates
-                        view_range = plot_items[idx].vb.viewRange()
-                        x_min, x_max = view_range[0][0], view_range[0][1] * 0.55
-                        y_min, y_max = view_range[1]
-                        x_clamped = min(max(x, x_min), x_max)
-                        y_top = y_max - 0.05 * (y_max - y_min)  # 5% below the top
-                        cursor_texts[idx].setText(f"x={x:.2f}, y={y:.2f}")
-                        cursor_texts[idx].setPos(x_clamped, y_top)
-                        cursor_texts[idx].setZValue(1000)
-                        cursor_texts[idx].show()
+                        # Position tooltip at top-left corner of the plot view
+                        try:
+                            view_range = plot_items[idx].vb.viewRange()
+                            x_min, x_max = view_range[0]
+                            y_min, y_max = view_range[1]
+
+                            # Fixed position: top-left corner with small offset
+                            x_range = x_max - x_min
+                            y_range = y_max - y_min
+
+                            # Ensure we have valid ranges
+                            if x_range > 0 and y_range > 0:
+                                tooltip_x = x_max - 0.08 * x_range  # 8% from right edge (more padding)
+                                tooltip_y = y_max - 0.05 * y_range  # 5% from top edge
+
+                                cursor_texts[idx].setText(f" x: {x:.3f}, y: {y:.3f} ")
+                                cursor_texts[idx].setPos(tooltip_x, tooltip_y)
+                                cursor_texts[idx].setZValue(1000)
+                                cursor_texts[idx].show()
+                            else:
+                                cursor_texts[idx].hide()
+                        except (IndexError, TypeError, AttributeError):
+                            # Fallback: hide text if positioning fails
+                            cursor_texts[idx].hide()
                     else:
                         cursor_texts[idx].hide()
                 else:
@@ -339,7 +324,7 @@ class BasePlotterPyQtGraph:
         line_width: float = 1.0,
     ) -> pg.PlotDataItem:
         """
-        Plot time series data on a plot item.
+        Plot time series data on a plot item with performance optimizations.
 
         Parameters
         ----------
@@ -367,6 +352,11 @@ class BasePlotterPyQtGraph:
         pen = pg.mkPen(color, width=line_width)
 
         curve = plot_item.plot(time_axis, data, pen=pen, name=label)
+
+        # Enable performance optimizations
+        curve.setClipToView(True)  # Only render visible portions
+        curve.setDownsampling(auto=True)  # Auto-downsample when zoomed out
+
         self.current_plot_items.append(curve)
 
         return curve
@@ -502,18 +492,6 @@ class BasePlotterPyQtGraph:
         legend = plot_item.addLegend()
         return legend
 
-    def display_plot(self, canvas: "PlotPane"):
-        """
-        Display the plot (equivalent to matplotlib's show()).
-
-        Parameters
-        ----------
-        canvas : PlotPane
-            The plot pane containing the plots
-        """
-        # PyQtGraph updates automatically, so we just need to process events
-        canvas.graphics_layout.update()
-
     def clear_current_plots(self, canvas: "PlotPane"):
         """Clear all current plot items and regions."""
         self.current_plot_items = []
@@ -562,6 +540,58 @@ class BasePlotterPyQtGraph:
             int(b * (1 - blend) + 255 * blend),
         )
         return pale
+
+    def auto_range_y_axis_linked_plots(self, plot_items: List[pg.PlotItem], padding: float = 0.05):
+        """
+        Auto-range Y-axis for linked plots by calculating the optimal range across all plots.
+
+        This solves the issue where individual auto-ranging on linked plots causes the last
+        plot's range to override all others, potentially cutting off data from earlier plots.
+
+        Parameters
+        ----------
+        plot_items : List[pg.PlotItem]
+            List of plot items that are Y-linked
+        padding : float, optional
+            Fraction of padding to add above and below the data range (default: 0.05 = 5%)
+        """
+        if not plot_items:
+            return
+
+        # Calculate the overall data range across all plots
+        overall_y_min = float("inf")
+        overall_y_max = float("-inf")
+
+        for plot_item in plot_items:
+            # Get the data range for this plot
+            data_bounds = plot_item.vb.childrenBounds()
+            if data_bounds is not None and len(data_bounds) == 2:
+                y_bounds = data_bounds[1]  # y-bounds are the second element
+                if y_bounds is not None and len(y_bounds) == 2:
+                    y_min, y_max = y_bounds
+                    if not (np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max)):
+                        overall_y_min = min(overall_y_min, y_min)
+                        overall_y_max = max(overall_y_max, y_max)
+
+        # Check if we found valid bounds
+        if overall_y_min == float("inf") or overall_y_max == float("-inf"):
+            # Fallback: use individual auto-range on the first plot only
+            if plot_items:
+                plot_items[0].enableAutoRange(axis="y", enable=True)
+            return
+
+        # Add padding to the range
+        y_range = overall_y_max - overall_y_min
+        if y_range == 0:
+            y_range = max(abs(overall_y_max), 1.0) * 0.1  # Fallback for zero range
+
+        padded_y_min = overall_y_min - (y_range * padding)
+        padded_y_max = overall_y_max + (y_range * padding)
+
+        # Apply the calculated range to all plots
+        # We only need to set it on the first plot since they're Y-linked
+        if plot_items:
+            plot_items[0].setYRange(padded_y_min, padded_y_max, padding=0)
 
 
 class UnableToPlotError(Exception):
