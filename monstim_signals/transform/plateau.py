@@ -60,8 +60,11 @@ def get_avg_mmax(
     m_wave_amplitudes = np.array(m_wave_amplitudes)
     stimulus_voltages = np.array(stimulus_voltages)
 
-    # Try traditional plateau detection first
-    plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
+    try:
+        plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
+    except Exception as e:
+        logging.exception("Exception during plateau detection. Proceeding to fallback methods.")
+        plateau_start_idx, plateau_end_idx = None, None
 
     if plateau_start_idx is not None and plateau_end_idx is not None:
         plateau_data = np.array(m_wave_amplitudes[plateau_start_idx:plateau_end_idx])
