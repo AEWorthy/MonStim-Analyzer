@@ -46,7 +46,7 @@ class PlotPane(QGroupBox):
         self.graphics_layout.setMinimumSize(800, 400)
         self.graphics_layout.setAntialiasing(True)
         self.graphics_layout.setUpdatesEnabled(True)
-        
+
         self.layout.addWidget(self.graphics_layout)
 
         # Store references to current plots

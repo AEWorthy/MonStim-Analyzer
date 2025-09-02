@@ -5,12 +5,12 @@ Get up and running with MonStim EMG Analyzer in minutes!
 ## 📥 Installation
 
 1. **Download** the latest release from [GitHub Releases](https://github.com/AEWorthy/MonStim-Analyzer/releases)
-   - Windows: `MonStim-Analyzer-v0.4.1-WIN.zip`
+   - Windows: `MonStim-Analyzer-v0.4.2-WIN.zip`
    - Mac: Currently unavailable
 
 2. **Extract** the zip file to your desired location
 
-3. **Run** `MonStim Analyzer v0.4.1.exe` from the extracted folder
+3. **Run** `MonStim Analyzer v0.4.2.exe` from the extracted folder
    - ⚠️ Keep all files in the extracted directory
    - ⚠️ First launch may take longer and trigger security warnings (unsigned software)
 

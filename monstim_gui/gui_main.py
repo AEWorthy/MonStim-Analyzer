@@ -170,34 +170,37 @@ class MonstimGUI(QMainWindow):
 
     @staticmethod
     def handle_qt_error_logs():
-            # Install Qt message handler to suppress QPainter warnings during resize operations
-            from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
-            
-            def qt_message_handler(mode, context, message):
-                # Suppress specific QPainter warnings that occur during window resize/fullscreen operations
-                if any(warning in message for warning in [
+        # Install Qt message handler to suppress QPainter warnings during resize operations
+        from PyQt6.QtCore import QtMsgType, qInstallMessageHandler
+
+        def qt_message_handler(mode, context, message):
+            # Suppress specific QPainter warnings that occur during window resize/fullscreen operations
+            if any(
+                warning in message
+                for warning in [
                     "QPainter::begin: Paint device returned engine == 0",
                     "QPainter::setCompositionMode: Painter not active",
-                    "QPainter::fillRect: Painter not active", 
+                    "QPainter::fillRect: Painter not active",
                     "QPainter::setBrush: Painter not active",
                     "QPainter::setPen: Painter not active",
                     "QPainter::drawPath: Painter not active",
                     "QPainter::setFont: Painter not active",
-                    "QPainter::end: Painter not active"
-                ]):
-                    return  # Suppress these messages
-                
-                # Let other messages through to normal logging
-                if mode == QtMsgType.QtWarningMsg:
-                    logging.warning(f"Qt: {message}")
-                elif mode == QtMsgType.QtCriticalMsg:
-                    logging.error(f"Qt: {message}")
-                elif mode == QtMsgType.QtFatalMsg:
-                    logging.critical(f"Qt: {message}")
-                elif mode == QtMsgType.QtDebugMsg:
-                    logging.debug(f"Qt: {message}")
-            
-            qInstallMessageHandler(qt_message_handler)
+                    "QPainter::end: Painter not active",
+                ]
+            ):
+                return  # Suppress these messages
+
+            # Let other messages through to normal logging
+            if mode == QtMsgType.QtWarningMsg:
+                logging.warning(f"Qt: {message}")
+            elif mode == QtMsgType.QtCriticalMsg:
+                logging.error(f"Qt: {message}")
+            elif mode == QtMsgType.QtFatalMsg:
+                logging.critical(f"Qt: {message}")
+            elif mode == QtMsgType.QtDebugMsg:
+                logging.debug(f"Qt: {message}")
+
+        qInstallMessageHandler(qt_message_handler)
 
     def _populate_profile_selector(self):
         self.profile_selector_combo.blockSignals(True)

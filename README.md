@@ -8,6 +8,8 @@ collected with LabView MonStim experiments.
 ## Documentation
 
 - **[User Guide](docs/readme.md)** - Complete usage instructions and installation details
+- **[Quickstart Guide](QUICKSTART.md)** - Express installation and overview
+- **[Changelog](CHANGELOG.md)** - Version history and release notes
 - **[EMG Processing](docs/Transform_EMG.md)** - Signal processing algorithms and analysis methods
 - **[M-max Algorithm](docs/mmax_algorithm.md)** - Detailed technical documentation of M-max detection
 - **[Recording Exclusion](docs/recording_exclusion_editor.md)** - Managing data quality and exclusions

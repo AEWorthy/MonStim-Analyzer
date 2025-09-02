@@ -1,9 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-# Before you package with Pyinstaller, be sure to do the following:
-    #1: delete the config-user.yml file
-    #2: update all version numbers (monstim_gui.__init__ and monstim_gui.splash, and numbers below)
-
 # Run the following command to package the application:
 # pyinstaller --clean win-main.spec
 
@@ -13,11 +9,16 @@ import sys
 import shutil
 from PyInstaller.config import CONF
 
+# Set project root
 project_root = os.path.abspath(os.getcwd())
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-from monstim_gui.version import VERSION
 
+# Delete 'config-user.yml' in ./docs/
+shutil.rmtree(os.path.join(project_root, 'docs', 'config-user.yml'), ignore_errors=True)
+
+# Set dist name with version
+from monstim_gui.version import VERSION
 EXE_NAME = f'MonStim Analyzer v{VERSION}'
 DIST_NAME = f'MonStim_Analyzer_v{VERSION}-WIN'
 
@@ -65,6 +66,8 @@ coll = COLLECT( # type: ignore
     name=DIST_NAME
 )
 
-# Ensure the dist directory exists and copy the readme.md file to it
+# Ensure the dist directory exists, and copy the readme.md and QUICKSTART.md files to it
 os.makedirs(CONF['distpath'], exist_ok=True)
 shutil.copy2('docs/readme.md', os.path.join(CONF['distpath'], DIST_NAME))
+shutil.copy2('QUICKSTART.md', os.path.join(CONF['distpath'], DIST_NAME))
+
