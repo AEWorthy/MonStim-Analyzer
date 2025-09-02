@@ -15,7 +15,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Delete 'config-user.yml' in ./docs/
-shutil.rmtree(os.path.join(project_root, 'docs', 'config-user.yml'), ignore_errors=True)
+config_user_path = os.path.join(project_root, 'docs', 'config-user.yml')
+try:
+    os.remove(config_user_path)
+except FileNotFoundError:
+    pass
 
 # Set dist name with version
 from monstim_gui.version import VERSION
