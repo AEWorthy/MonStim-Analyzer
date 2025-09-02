@@ -20,15 +20,28 @@ class ReportsWidget(QGroupBox):
 
     def create_report_buttons(self):
         buttons = [
-            ("Session Info. Report", self.parent.report_manager.show_session_report),
-            ("Dataset Info. Report", self.parent.report_manager.show_dataset_report),
+            (
+                "Session Info. Report",
+                self.parent.report_manager.show_session_report,
+                "Generate a report for the currently selected session including recording statistics and analysis parameters",
+            ),
+            (
+                "Dataset Info. Report",
+                self.parent.report_manager.show_dataset_report,
+                "Generate a report for the currently selected dataset including all sessions and their summary statistics",
+            ),
             (
                 "Experiment Info. Report",
                 self.parent.report_manager.show_experiment_report,
+                "Generate a report for the currently selected experiment including all datasets, sessions, and overall analysis summary",
             ),
-            ("M-max Report (RMS)", self.parent.report_manager.show_mmax_report),
+            (
+                "M-max Report (RMS)",
+                self.parent.report_manager.show_mmax_report,
+                "Generate a report for the currently selected data level's M-max analysis including RMS values, plateau detection results, and normalization data",
+            ),
             # Add new buttons here as tuples in the format:
-            # ("Button Label", callback_function).
+            # ("Button Label", callback_function, "Tooltip text").
             # Ensure the callback_function is a method of the parent class
             # (EMGAnalysisGUI) and is properly defined.
         ]
@@ -37,9 +50,17 @@ class ReportsWidget(QGroupBox):
         N_COLS = 2
 
         # 1) add each button
-        for idx, (text, callback) in enumerate(buttons):
+        for idx, button_data in enumerate(buttons):
+            # Handle both old format (text, callback) and new format (text, callback, tooltip)
+            if len(button_data) == 3:
+                text, callback, tooltip = button_data
+            else:
+                text, callback = button_data
+                tooltip = f"Generate {text.lower()}"  # Fallback tooltip
+
             btn = QPushButton(text)
             btn.clicked.connect(callback)
+            btn.setToolTip(tooltip)
 
             # 1) make it expand to fill whatever cell size you're given
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)

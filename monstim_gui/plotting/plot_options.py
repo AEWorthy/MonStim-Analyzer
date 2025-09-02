@@ -42,8 +42,9 @@ class BasePlotOptions(QWidget):
         form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(4)  # Slightly increased vertical spacing for better readability
+        form.setVerticalSpacing(2)  # Reduced vertical spacing for tighter layout
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)  # Keep everything on one row
+        form.setContentsMargins(2, 2, 2, 2)  # No margins for tight layout
         return form
 
     def create_options(self):
@@ -78,8 +79,8 @@ class ChannelSelectorWidget(QGroupBox):
 
         # Set up a grid layout with proper spacing and margins
         grid = QGridLayout()
-        grid.setSpacing(3)  # Reduced spacing between checkboxes
-        grid.setContentsMargins(4, 4, 4, 4)  # Reduced padding to minimize space
+        grid.setSpacing(2)  # Minimal spacing between checkboxes
+        grid.setContentsMargins(2, 2, 2, 2)  # Minimal padding to minimize space
 
         # Set size policy to make it as compact as possible
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
