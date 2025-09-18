@@ -347,6 +347,60 @@ class DatasetRepository:
                     continue
                 raise
 
+    def get_metadata(self) -> dict:
+        """
+        Get lightweight metadata about the dataset without loading heavy session/recording data.
+        Returns basic info like session count, names, completion status, etc.
+        """
+        try:
+            # Get dataset annotation
+            if self.dataset_js.exists():
+                annot_dict = json.loads(self.dataset_js.read_text())
+                dataset_annot = DatasetAnnot.from_dict(annot_dict)
+            else:
+                dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+
+            # Get session folders without loading them
+            session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            session_names = [folder.name for folder in session_folders]
+
+            # Construct formatted name like the Dataset domain object does
+            if dataset_annot.date and dataset_annot.animal_id and dataset_annot.condition:
+                formatted_name = f"{dataset_annot.date} {dataset_annot.animal_id} {dataset_annot.condition}"
+            else:
+                formatted_name = self.dataset_id
+
+            return {
+                "id": self.dataset_id,
+                "path": str(self.folder),
+                "formatted_name": formatted_name,
+                "session_count": len(session_folders),
+                "session_names": session_names,
+                "is_completed": dataset_annot.is_completed,
+                "excluded_sessions": dataset_annot.excluded_sessions,
+                "data_version": dataset_annot.data_version,
+                "animal_id": dataset_annot.animal_id,
+                "date": dataset_annot.date,
+                "condition": dataset_annot.condition,
+            }
+
+        except Exception as e:
+            logging.error(f"Failed to get metadata for dataset {self.dataset_id}: {e}")
+            return {
+                "id": self.dataset_id,
+                "path": str(self.folder),
+                "formatted_name": self.dataset_id,
+                "session_count": 0,
+                "session_names": [],
+                "is_completed": False,
+                "excluded_sessions": [],
+                "data_version": "unknown",
+                "animal_id": "unknown",
+                "date": "unknown",
+                "condition": "unknown",
+                "error": str(e),
+            }
+
 
 class ExperimentRepository:
     """
@@ -382,6 +436,52 @@ class ExperimentRepository:
             self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
         expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
         return expt
+
+    def get_metadata(self) -> dict:
+        """
+        Get lightweight metadata about the experiment without loading heavy data.
+        Returns basic info like dataset count, names, etc.
+        """
+        try:
+            # Get experiment annotation
+            if self.expt_js.exists():
+                annot_dict = json.loads(self.expt_js.read_text())
+                annot = ExperimentAnnot.from_dict(annot_dict)
+            else:
+                annot = ExperimentAnnot.create_empty()
+
+            # Get dataset folders without loading them
+            dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            dataset_metadata = []
+
+            for ds_folder in dataset_folders:
+                # Get basic dataset info without loading sessions/recordings
+                ds_repo = DatasetRepository(ds_folder)
+                ds_meta = ds_repo.get_metadata()
+                dataset_metadata.append(ds_meta)
+
+            return {
+                "id": self.folder.name,
+                "path": str(self.folder),
+                "dataset_count": len(dataset_folders),
+                "datasets": dataset_metadata,
+                "is_completed": annot.is_completed,
+                "excluded_datasets": annot.excluded_datasets,
+                "data_version": annot.data_version,
+            }
+
+        except Exception as e:
+            logging.error(f"Failed to get metadata for experiment {self.folder.name}: {e}")
+            return {
+                "id": self.folder.name,
+                "path": str(self.folder),
+                "dataset_count": 0,
+                "datasets": [],
+                "is_completed": False,
+                "excluded_datasets": [],
+                "data_version": "unknown",
+                "error": str(e),
+            }
 
     def save(self, expt: Experiment) -> None:
         """
