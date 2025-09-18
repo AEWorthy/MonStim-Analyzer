@@ -31,8 +31,8 @@ def setup_main_layout(parent: "MonstimGUI") -> dict:
     main_layout = QHBoxLayout(central_widget)
 
     # Apply responsive spacing and margins
-    spacing = get_responsive_spacing(10)
-    margins = get_responsive_margins(20)
+    spacing = get_responsive_spacing(8)
+    margins = get_responsive_margins(10)
     main_layout.setSpacing(spacing)
     main_layout.setContentsMargins(*margins)
 

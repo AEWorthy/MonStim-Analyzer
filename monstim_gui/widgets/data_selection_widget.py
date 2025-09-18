@@ -73,7 +73,7 @@ class DataSelectionWidget(QGroupBox):
         form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setHorizontalSpacing(6)  # tighten the space between label & field
         form.setVerticalSpacing(4)  # vertical spacing between rows
-        form.setContentsMargins(8, 8, 8, 8)  # outer margins of the groupbox
+        form.setContentsMargins(4, 4, 4, 4)  # outer margins of the groupbox
 
         self.experiment_combo = QComboBox()
         self.experiment_combo.currentIndexChanged.connect(self._on_experiment_combo_changed)
@@ -92,15 +92,33 @@ class DataSelectionWidget(QGroupBox):
         self.session_combo.setToolTip("Select a session")
         self.session_combo.wheelEvent = lambda event: None  # Disable scroll wheel
 
-        # Create labels with tooltips
+        # Create labels with tooltips and ensure they don't get elided/truncated
         experiment_label = QLabel("Experiment:")
         experiment_label.setToolTip("Experiment")
+        experiment_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        experiment_label.setSizePolicy(
+            experiment_label.sizePolicy().horizontalPolicy(), experiment_label.sizePolicy().verticalPolicy()
+        )
 
         dataset_label = QLabel("Dataset:")
         dataset_label.setToolTip("Dataset")
+        dataset_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        dataset_label.setSizePolicy(dataset_label.sizePolicy().horizontalPolicy(), dataset_label.sizePolicy().verticalPolicy())
 
         session_label = QLabel("Session:")
         session_label.setToolTip("Session")
+        session_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        session_label.setSizePolicy(session_label.sizePolicy().horizontalPolicy(), session_label.sizePolicy().verticalPolicy())
+
+        # Compute a safe minimum label width so short labels like "Experiment" are fully visible
+        fm = experiment_label.fontMetrics()
+        labels = (experiment_label, dataset_label, session_label)
+        # Measure the widest label text and add padding
+        widest = max(fm.horizontalAdvance(lbl.text()) for lbl in labels)
+        min_label_width = int(widest)
+        for lbl in labels:
+            lbl.setMinimumWidth(min_label_width)
+            lbl.setSizePolicy(lbl.sizePolicy().horizontalPolicy(), lbl.sizePolicy().verticalPolicy())
 
         form.addRow(experiment_label, self.experiment_combo)
         form.addRow(dataset_label, self.dataset_combo)
