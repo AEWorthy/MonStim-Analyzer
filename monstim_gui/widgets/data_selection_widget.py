@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QLabel,
     QMenu,
+    QPushButton,
     QStyledItemDelegate,
     QStyleOptionViewItem,
 )
@@ -124,6 +125,13 @@ class DataSelectionWidget(QGroupBox):
         form.addRow(dataset_label, self.dataset_combo)
         form.addRow(session_label, self.session_combo)
 
+        # Add Manage Recordings button
+        self.manage_recordings_button = QPushButton("Manage Recordings")
+        self.manage_recordings_button.setToolTip("Open the recording exclusion editor to manage which recordings are included in analysis")
+        self.manage_recordings_button.clicked.connect(self._on_manage_recordings_clicked)
+        self.manage_recordings_button.setEnabled(False)  # Start disabled until session is loaded
+        form.addRow("", self.manage_recordings_button)
+
         self.setLayout(form)
         self.setup_context_menus()
         self.update_all_completion_statuses()
@@ -230,6 +238,7 @@ class DataSelectionWidget(QGroupBox):
                 self.dataset_combo.blockSignals(False)
                 self.session_combo.blockSignals(False)
 
+                self._update_manage_recordings_button()
                 self.parent.plot_widget.on_data_selection_changed()
             return
 
@@ -251,6 +260,7 @@ class DataSelectionWidget(QGroupBox):
             return
 
         self.parent.data_manager.load_dataset(index)
+        self._update_manage_recordings_button()
 
     def _on_session_combo_changed(self):
         index = self.session_combo.currentIndex()
@@ -259,6 +269,32 @@ class DataSelectionWidget(QGroupBox):
             return
 
         self.parent.data_manager.load_session(index)
+        self._update_manage_recordings_button()
+
+    def _on_manage_recordings_clicked(self):
+        """Open the recording exclusion editor dialog."""
+        if not self.parent.current_session:
+            return
+        
+        from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+        
+        dialog = RecordingExclusionEditor(self.parent)
+        dialog.exclusions_applied.connect(self._on_exclusions_applied)
+        dialog.exec()
+
+    def _on_exclusions_applied(self):
+        """Handle when exclusions are applied from the recording exclusion editor."""
+        # Refresh the current session data and update UI
+        if self.parent.current_session:
+            # Reset cached properties that might be affected by exclusions
+            self.parent.current_session.reset_all_caches()
+            
+        # Notify other parts of the UI that data has changed
+        self.parent.plot_widget.on_data_selection_changed()
+        
+    def _update_manage_recordings_button(self):
+        """Update the enabled state of the manage recordings button."""
+        self.manage_recordings_button.setEnabled(self.parent.current_session is not None)
 
     def update_experiment_combo(self):
         self.experiment_combo.clear()
@@ -322,6 +358,8 @@ class DataSelectionWidget(QGroupBox):
             self.session_combo.setItemData(0, "Please select a dataset first", role=Qt.ItemDataRole.ToolTipRole)
             self.session_combo.setEnabled(False)
             logging.debug("Session combo cleared - no dataset loaded.")
+        
+        self._update_manage_recordings_button()
 
     def update_all_data_combos(self):
         self.update_experiment_combo()
