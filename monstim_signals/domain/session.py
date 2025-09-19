@@ -897,6 +897,14 @@ class Session:
     def __len__(self):
         return self.num_recordings
 
+    def __bool__(self) -> bool:
+        """
+        Sessions can be valid even if they have zero recordings (e.g., after
+        exclusions). Define truthiness explicitly so generic `if session:`
+        checks do not treat them as falsy.
+        """
+        return True
+
     def set_config(self, config: dict) -> None:
         """
         Update the configuration for this session.

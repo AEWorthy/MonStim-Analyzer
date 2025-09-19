@@ -317,6 +317,10 @@ class ApplicationState:
                         finally:
                             # Always clear the restoration flag when done
                             self._is_restoring_session = False
+                            # For empty experiments, ensure combos show correct state after restoration
+                            if gui.current_experiment and not gui.current_experiment.datasets:
+                                gui.data_selection_widget.update_dataset_combo()
+                                gui.data_selection_widget.update_session_combo()
                             # Save the final restored state
                             self.save_current_session_state(
                                 experiment_id=experiment_id,
@@ -339,6 +343,10 @@ class ApplicationState:
                             logging.warning("Session restoration: Gave up waiting for experiment to load after 5 seconds")
                             # Clear the restoration flag if we give up
                             self._is_restoring_session = False
+                            # Ensure combos are in correct state for empty experiments
+                            if gui.current_experiment and not gui.current_experiment.datasets:
+                                gui.data_selection_widget.update_dataset_combo()
+                                gui.data_selection_widget.update_session_combo()
 
                 QTimer.singleShot(1000, restore_nested)  # Give experiment time to load
 

@@ -321,7 +321,7 @@ class DatasetRepository:
                     try:
                         dataset.id = new_folder.name
                         # For each session in the dataset, update the session repo paths
-                        for session in dataset._all_sessions:
+                        for session in dataset.get_all_sessions(include_excluded=True):
                             if session.repo:
                                 # New session folder path under the renamed dataset
                                 new_session_path = self.folder / session.repo.folder.name

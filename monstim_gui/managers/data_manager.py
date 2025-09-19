@@ -30,6 +30,8 @@ from monstim_signals.io.csv_importer import (
 )
 
 if TYPE_CHECKING:
+    from monstim_signals import Experiment
+
     from ..gui_main import MonstimGUI
 
 
@@ -46,7 +48,10 @@ class DataManager:
         logging.debug("Unpacking existing experiments.")
         if os.path.exists(self.gui.output_path):
             try:
-                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                # In headless tests there may be no QApplication; guard cursor changes
+                has_app = QApplication.instance() is not None
+                if has_app:
+                    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
                 self.gui.expts_dict = {
                     name: os.path.join(self.gui.output_path, name)
                     for name in os.listdir(self.gui.output_path)
@@ -55,7 +60,8 @@ class DataManager:
                 self.gui.expts_dict_keys = sorted(self.gui.expts_dict.keys())
                 logging.debug("Existing experiments unpacked successfully.")
             except Exception as e:
-                QApplication.restoreOverrideCursor()
+                if has_app:
+                    QApplication.restoreOverrideCursor()
                 QMessageBox.critical(
                     self.gui,
                     "Error",
@@ -64,7 +70,8 @@ class DataManager:
                 logging.error(f"An error occurred while unpacking existing experiments: {e}")
                 logging.error(traceback.format_exc())
             finally:
-                QApplication.restoreOverrideCursor()
+                if has_app:
+                    QApplication.restoreOverrideCursor()
 
     # ------------------------------------------------------------------
     # import experiment from CSVs
@@ -532,7 +539,7 @@ class DataManager:
                     for ds in self.gui.current_experiment._all_datasets:
                         if ds.repo is not None:
                             ds.repo.update_path(Path(new_expt_path) / ds.id)
-                        for sess in ds._all_sessions:
+                        for sess in ds.get_all_sessions(include_excluded=True):
                             if sess.repo is not None:
                                 sess.repo.update_path(Path(new_expt_path) / ds.id / sess.id)
 
@@ -557,7 +564,7 @@ class DataManager:
                 self.gui.status_bar.showMessage("Experiment renamed successfully.", 5000)
 
     # ------------------------------------------------------------------
-    def delete_experiment(self):
+    def delete_current_experiment(self):
         logging.info("Deleting experiment.")
         if self.gui.current_experiment:
             delete = QMessageBox.warning(
@@ -625,8 +632,8 @@ class DataManager:
                             f"Could not remove session cache file. Reload may not work as expected: {e}",
                         )
                 new_sess = self.gui.current_session.repo.load(config=self.gui.config_repo.read_config())
-                idx = self.gui.current_dataset._all_sessions.index(self.gui.current_session)
-                self.gui.current_dataset._all_sessions[idx] = new_sess
+                idx = self.gui.current_dataset.get_all_sessions(include_excluded=True).index(self.gui.current_session)
+                self.gui.current_dataset.get_all_sessions(include_excluded=True)[idx] = new_sess
                 self.gui.set_current_session(new_sess)
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Session reloaded successfully.", 5000)
@@ -653,7 +660,7 @@ class DataManager:
                         f"Dataset JS file does not exist: {self.gui.current_dataset.repo.dataset_js}. Cannot unlink."
                     )
 
-                for sess in self.gui.current_dataset._all_sessions:
+                for sess in self.gui.current_dataset.get_all_sessions(include_excluded=True):
                     if sess.repo and sess.repo.session_js.exists():
                         try:
                             sess.repo.session_js.unlink()
@@ -710,7 +717,7 @@ class DataManager:
                             f"Dataset JS file does not exist: {ds.repo.dataset_js if ds.repo else 'No repo'}. Cannot unlink."
                         )
 
-                    for sess in ds._all_sessions:
+                    for sess in ds.get_all_sessions(include_excluded=True):
                         if sess.repo and sess.repo.session_js.exists():
                             try:
                                 sess.repo.session_js.unlink()
@@ -750,8 +757,11 @@ class DataManager:
     def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
         logging.debug("Refreshing existing experiments.")
         self.unpack_existing_experiments()
-        self.gui.data_selection_widget.update_experiment_combo()
-        self.gui.plot_widget.on_data_selection_changed()
+        # In tests there may be stubbed widgets; guard optional UI updates
+        if hasattr(self.gui, "data_selection_widget") and hasattr(self.gui.data_selection_widget, "update_experiment_combo"):
+            self.gui.data_selection_widget.update_experiment_combo()
+        if hasattr(self.gui, "plot_widget") and hasattr(self.gui.plot_widget, "on_data_selection_changed"):
+            self.gui.plot_widget.on_data_selection_changed()
 
         if select_expt_id is not None:
             # Find the experiment in the list and select it (accounting for placeholder at index 0)
@@ -766,7 +776,15 @@ class DataManager:
             else:
                 index = 0  # Default to placeholder (no selection)
 
-        self.gui.data_selection_widget.experiment_combo.setCurrentIndex(index)
+        # Block signals to prevent triggering experiment loading during refresh
+        if hasattr(self.gui, "data_selection_widget") and hasattr(self.gui.data_selection_widget, "experiment_combo"):
+            try:
+                self.gui.data_selection_widget.experiment_combo.blockSignals(True)
+                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(index)
+                self.gui.data_selection_widget.experiment_combo.blockSignals(False)
+            except Exception:
+                # Ignore in tests with simplified stubs
+                pass
         logging.debug("Existing experiments refreshed successfully.")
 
     # ------------------------------------------------------------------
@@ -817,7 +835,16 @@ class DataManager:
         # Reset loading completion flag
         self.loading_completed_successfully = False
 
-        experiment_name = self.gui.expts_dict_keys[index]
+        # Get the actual experiment ID from the combo box UserRole data
+        # The combo box index needs to be adjusted for the placeholder at index 0
+        combo_index = index + 1  # Add 1 to account for placeholder
+        stored_experiment_id = self.gui.data_selection_widget.experiment_combo.itemData(combo_index, Qt.ItemDataRole.UserRole)
+
+        if stored_experiment_id:
+            experiment_name = stored_experiment_id
+        else:
+            # Fallback to the old method if UserRole data is not available
+            experiment_name = self.gui.expts_dict_keys[index]
         exp_path = os.path.join(self.gui.output_path, experiment_name)
         logging.info(f"Loading experiment: '{experiment_name}'.")
 
@@ -861,11 +888,15 @@ class DataManager:
         # Start loading
         self.loading_thread.start()
 
-    def _on_experiment_loaded(self, experiment):
+    def _on_experiment_loaded(self, experiment: "Experiment"):
         """Handle successful experiment loading."""
         try:
             # Mark loading as completed successfully
             self.loading_completed_successfully = True
+
+            # Clear current dataset and session when loading a new experiment
+            self.gui.set_current_dataset(None)
+            self.gui.set_current_session(None)
 
             self.gui.set_current_experiment(experiment)
 
@@ -879,11 +910,19 @@ class DataManager:
             app_state.save_current_session_state(experiment_id=experiment.id, profile_name=profile_name)
 
             self.gui.data_selection_widget.update_dataset_combo()
-            # Re-enable dataset combo since an experiment is now loaded
-            self.gui.data_selection_widget.dataset_combo.setEnabled(True)
+            self.gui.data_selection_widget.update_session_combo()
+            # Enable/disable dataset combo based on whether experiment has datasets
+            self.gui.data_selection_widget.dataset_combo.setEnabled(len(experiment.datasets) > 0)
             self.gui.plot_widget.on_data_selection_changed()
-            self.gui.status_bar.showMessage(f"Experiment '{experiment.id}' loaded successfully.", 5000)
-            logging.info(f"Experiment '{experiment.id}' loaded successfully.")
+
+            # Provide informative status message based on experiment content
+            if experiment.datasets:
+                status_msg = f"Experiment '{experiment.id}' loaded successfully ({len(experiment.datasets)} datasets)."
+            else:
+                status_msg = f"Empty experiment '{experiment.id}' loaded (no datasets found)."
+
+            self.gui.status_bar.showMessage(status_msg, 5000)
+            logging.info(status_msg)
         except Exception as e:
             logging.error(f"Error setting loaded experiment: {e}")
             QMessageBox.critical(self.gui, "Error", f"Error setting loaded experiment: {e}")
@@ -1333,7 +1372,11 @@ class DataManager:
     # ------------------------------------------------------------------
     def close_all_data(self):
         """Close all currently open data (experiment, dataset, session)."""
+        import gc
+
         logging.info("Closing all data.")
+
+        # Close current data hierarchy
         if self.gui.current_session:
             self.gui.current_session.close()
             self.gui.set_current_session(None)
@@ -1343,4 +1386,285 @@ class DataManager:
         if self.gui.current_experiment:
             self.gui.current_experiment.close()
             self.gui.set_current_experiment(None)
+
+        # Force garbage collection to release any lingering file handles
+        gc.collect()
+
+        # Small delay to allow file handles to be released on Windows
+        import time
+
+        time.sleep(0.1)
+
         logging.info("All data closed successfully.")
+
+    # ------------------------------------------------------------------
+    # Data Curation I/O Operations
+    # ------------------------------------------------------------------
+
+    def create_experiment(self, exp_name: str):
+        """Create a new empty experiment directory with annotation file."""
+        import json
+        from dataclasses import asdict
+        from pathlib import Path
+
+        from monstim_signals.core import ExperimentAnnot, get_output_path
+
+        try:
+            # Create experiment directory
+            output_path = Path(get_output_path())
+            exp_path = output_path / exp_name
+            exp_path.mkdir(parents=True, exist_ok=True)
+
+            # Create empty experiment annotation
+            annot = ExperimentAnnot.create_empty()
+            annot_file = exp_path / "experiment.annot.json"
+            annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+            # Add to GUI's experiment dictionary
+            self.gui.expts_dict[exp_name] = str(exp_path)
+            self.gui.expts_dict_keys = sorted(self.gui.expts_dict.keys())
+
+            logging.info(f"Created empty experiment: {exp_name}")
+
+        except Exception as e:
+            logging.error(f"Failed to create experiment {exp_name}: {e}")
+            raise Exception(f"Failed to create experiment '{exp_name}': {str(e)}")
+
+    def delete_experiment_by_id(self, exp_id: str):
+        """Delete an experiment by ID (used by data curation manager)."""
+        import gc
+        import time
+
+        try:
+            # Close all open data to prevent file handle conflicts
+            logging.info(f"Closing all open data before deleting experiment '{exp_id}'")
+            self.close_all_data()
+
+            # Check if this is the current experiment
+            if self.gui.current_experiment and self.gui.current_experiment.id == exp_id:
+                # Close the current experiment (redundant now, but kept for clarity)
+                self.gui.current_experiment.close()
+                self.gui.current_experiment = None
+                self.gui.current_dataset = None
+                self.gui.current_session = None
+
+            # Get experiment path and delete
+            exp_path = os.path.join(self.gui.output_path, exp_id)
+            if os.path.exists(exp_path):
+                gc.collect()
+
+                max_retries = 3
+                for retry in range(max_retries):
+                    try:
+                        shutil.rmtree(exp_path)
+                        logging.info(f"Deleted experiment folder: {exp_path}")
+                        break
+                    except (OSError, PermissionError) as e:
+                        if retry < max_retries - 1:
+                            logging.warning(f"Failed to delete '{exp_id}' on attempt {retry + 1}: {e}. Retrying...")
+                            time.sleep(0.5)
+                        else:
+                            raise e
+
+            # Remove from GUI's experiment dictionary
+            if exp_id in self.gui.expts_dict:
+                del self.gui.expts_dict[exp_id]
+                self.gui.expts_dict_keys = sorted(self.gui.expts_dict.keys())
+
+            logging.info(f"Deleted experiment: {exp_id}")
+
+        except Exception as e:
+            logging.error(f"Failed to delete experiment {exp_id}: {e}")
+            raise Exception(f"Failed to delete experiment '{exp_id}': {str(e)}")
+
+    def rename_experiment_by_id(self, old_name: str, new_name: str):
+        """Rename an experiment by ID, regardless of what's currently selected."""
+        import shutil
+        from pathlib import Path
+
+        try:
+            # Validate new name
+            if not new_name or any(c in r'<>:"/\\|?*' for c in new_name):
+                raise ValueError("Experiment name contains invalid characters for a directory name.")
+
+            if old_name == new_name:
+                raise ValueError("The new experiment name is the same as the current one.")
+
+            # Check if new name already exists
+            if new_name in self.gui.expts_dict:
+                raise FileExistsError(f"An experiment with the name '{new_name}' already exists.")
+
+            # Close all open data to prevent file handle conflicts
+            logging.info(f"Closing all open data before renaming experiment '{old_name}' to '{new_name}'")
+            self.close_all_data()
+
+            # Get old and new paths
+            old_exp_path = Path(self.gui.expts_dict[old_name])
+            new_exp_path = old_exp_path.parent / new_name
+
+            # Check if the current experiment is being renamed
+            current_exp_being_renamed = self.gui.current_experiment and self.gui.current_experiment.id == old_name
+
+            # Close current experiment if it's the one being renamed (redundant now, but kept for clarity)
+            if current_exp_being_renamed:
+                self.gui.current_experiment.close()
+
+            # Rename the directory
+            shutil.move(str(old_exp_path), str(new_exp_path))
+
+            # Update GUI experiment dictionary
+            del self.gui.expts_dict[old_name]
+            self.gui.expts_dict[new_name] = str(new_exp_path)
+            self.gui.expts_dict_keys = sorted(self.gui.expts_dict.keys())
+
+            # If we renamed the current experiment, update the current experiment reference
+            if current_exp_being_renamed:
+                self.gui.current_experiment.id = new_name
+                if self.gui.current_experiment.repo is not None:
+                    self.gui.current_experiment.repo.update_path(new_exp_path)
+                for ds in self.gui.current_experiment._all_datasets:
+                    if ds.repo is not None:
+                        ds.repo.update_path(new_exp_path / ds.id)
+                    for sess in ds.get_all_sessions(include_excluded=True):
+                        if sess.repo is not None:
+                            sess.repo.update_path(new_exp_path / ds.id / sess.id)
+
+            # Refresh UI to reflect the changes
+            self.refresh_existing_experiments(select_expt_id=new_name if current_exp_being_renamed else None)
+
+            logging.info(f"Renamed experiment '{old_name}' to '{new_name}'")
+
+        except ValueError as ve:
+            logging.error(f"Invalid experiment name: {ve}")
+            raise Exception(f"Invalid experiment name: {str(ve)}")
+        except FileExistsError as fe:
+            logging.error(f"Experiment name conflict: {fe}")
+            raise Exception(str(fe))
+        except Exception as e:
+            logging.error(f"Failed to rename experiment {old_name} to {new_name}: {e}")
+            raise Exception(f"Failed to rename experiment: {str(e)}")
+
+    def move_dataset(self, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str):
+        """Move a dataset from one experiment to another."""
+        from pathlib import Path
+
+        try:
+            # Close all open data to prevent file handle conflicts
+            logging.info(f"Closing all open data before moving dataset '{dataset_name}'")
+            self.close_all_data()
+
+            # Get source and destination paths
+            from_exp_path = Path(self.gui.expts_dict[from_exp])
+            to_exp_path = Path(self.gui.expts_dict[to_exp])
+
+            # Find the dataset folder name - try exact match first
+            dataset_folder_name = self._find_dataset_folder(from_exp_path, dataset_id, dataset_name)
+            source_path = from_exp_path / dataset_folder_name
+            dest_path = to_exp_path / dataset_folder_name
+
+            if not source_path.exists():
+                raise Exception(f"Source dataset folder not found: {source_path}")
+
+            # Check for naming conflicts
+            if dest_path.exists():
+                raise Exception(f"Dataset '{dataset_folder_name}' already exists in experiment '{to_exp}'")
+
+            # Move the dataset folder
+            shutil.move(str(source_path), str(dest_path))
+
+            logging.info(f"Moved dataset {dataset_name} from {from_exp} to {to_exp}")
+
+        except Exception as e:
+            logging.error(f"Failed to move dataset {dataset_name}: {e}")
+            raise Exception(f"Failed to move dataset '{dataset_name}': {str(e)}")
+
+    def copy_dataset(self, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
+        """Copy a dataset from one experiment to another, optionally with a new name."""
+        from pathlib import Path
+
+        try:
+            # Close all open data to prevent file handle conflicts
+            logging.info(f"Closing all open data before copying dataset '{dataset_name}'")
+            self.close_all_data()
+
+            # Get source and destination paths
+            from_exp_path = Path(self.gui.expts_dict[from_exp])
+            to_exp_path = Path(self.gui.expts_dict[to_exp])
+
+            # Find the dataset folder name - try exact match first
+            dataset_folder_name = self._find_dataset_folder(from_exp_path, dataset_id, dataset_name)
+            source_path = from_exp_path / dataset_folder_name
+
+            # Use new_name if provided, otherwise use original folder name
+            if new_name:
+                dest_folder_name = new_name
+            else:
+                dest_folder_name = dataset_folder_name
+
+            dest_path = to_exp_path / dest_folder_name
+
+            if not source_path.exists():
+                raise Exception(f"Source dataset folder not found: {source_path}")
+
+            # Handle naming conflicts for copies (append number if needed)
+            if dest_path.exists():
+                counter = 1
+                base_name = dest_folder_name
+                while dest_path.exists():
+                    dest_path = to_exp_path / f"{base_name}_copy{counter}"
+                    counter += 1
+
+            # Copy the dataset folder
+            shutil.copytree(str(source_path), str(dest_path))
+
+            logging.info(f"Copied dataset {dataset_name} from {from_exp} to {to_exp} as {dest_path.name}")
+
+        except Exception as e:
+            logging.error(f"Failed to copy dataset {dataset_name}: {e}")
+            raise Exception(f"Failed to copy dataset '{dataset_name}': {str(e)}")
+
+    def delete_dataset(self, dataset_id: str, dataset_name: str, exp_id: str):
+        """Delete a dataset from an experiment."""
+        from pathlib import Path
+
+        try:
+            # Close all open data to prevent file handle conflicts
+            logging.info(f"Closing all open data before deleting dataset '{dataset_name}'")
+            self.close_all_data()
+
+            # Get experiment path
+            exp_path = Path(self.gui.expts_dict[exp_id])
+
+            # Find the dataset folder - try exact match first
+            dataset_folder_name = self._find_dataset_folder(exp_path, dataset_id, dataset_name)
+            dataset_path = exp_path / dataset_folder_name
+
+            if dataset_path.exists():
+                # Delete the dataset folder
+                shutil.rmtree(dataset_path)
+                logging.info(f"Deleted dataset folder: {dataset_path}")
+            else:
+                logging.warning(f"Dataset folder not found for deletion: {dataset_path}")
+
+            logging.info(f"Deleted dataset {dataset_name} from {exp_id}")
+
+        except Exception as e:
+            logging.error(f"Failed to delete dataset {dataset_name}: {e}")
+            raise Exception(f"Failed to delete dataset '{dataset_name}': {str(e)}")
+
+    def _find_dataset_folder(self, exp_path: Path, dataset_id: str, dataset_name: str) -> str:
+        """Find the actual dataset folder name in the experiment directory."""
+        # Try exact match first
+        if (exp_path / dataset_id).exists():
+            return dataset_id
+
+        # Search through folders for a match
+        for folder_name in os.listdir(exp_path):
+            folder_path = exp_path / folder_name
+            if folder_path.is_dir():
+                # Check if this folder contains the dataset we're looking for
+                if folder_name in dataset_name or dataset_name in folder_name:
+                    return folder_name
+
+        # Fallback: use the dataset_id directly
+        return dataset_id

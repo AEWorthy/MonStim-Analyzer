@@ -655,7 +655,8 @@ class MonstimGUI(QMainWindow):
     def set_current_experiment(self, experiment: Experiment | None):
         """Set the current experiment and ensure config is injected."""
         if experiment is None:
-            return  # Handle case where experiment is None, e.g., clear UI, reset state, etc.
+            self.current_experiment = None
+            return
         config = self._get_effective_config()
         experiment.set_config(config)
         self.current_experiment = experiment
@@ -663,7 +664,8 @@ class MonstimGUI(QMainWindow):
     def set_current_dataset(self, dataset: Dataset | None):
         """Set the current dataset and ensure config is injected."""
         if dataset is None:
-            return  # Handle case where dataset is None, e.g., clear UI, reset state, etc.
+            self.current_dataset = None
+            return
         config = self._get_effective_config()
         dataset.set_config(config)
         self.current_dataset = dataset
@@ -671,7 +673,8 @@ class MonstimGUI(QMainWindow):
     def set_current_session(self, session: Session | None):
         """Set the current session and ensure config is injected."""
         if session is None:
-            return  # Handle case where session is None, e.g., clear UI, reset state, etc.
+            self.current_session = None
+            return
         config = self._get_effective_config()
         session.set_config(config)
         self.current_session = session

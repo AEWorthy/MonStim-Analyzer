@@ -38,6 +38,11 @@ class Experiment:
         if self.datasets:
             self.scan_rate = self.datasets[0].scan_rate
             self.stim_start = self.datasets[0].stim_start
+        else:
+            # Set default values for empty experiments
+            # TODO: Update these values when datasets added/removed
+            self.scan_rate = None
+            self.stim_start = None
         self.update_latency_window_parameters()
 
     @property
@@ -180,7 +185,7 @@ class Experiment:
             self.annot.excluded_datasets.remove(dataset_id)
             for ds in self._all_datasets:
                 if ds.id == dataset_id:
-                    for sess in ds._all_sessions:
+                    for sess in ds.get_all_sessions(include_excluded=True):
                         # Restore all sessions of the dataset
                         sess.restore_session()
             self.reset_all_caches()
@@ -385,3 +390,12 @@ class Experiment:
 
     def __len__(self) -> int:
         return self.num_datasets
+
+    def __bool__(self) -> bool:
+        """
+        A loaded Experiment should evaluate to True even if it currently contains
+        zero datasets. Python falls back to __len__ for truthiness when __bool__
+        is not defined; defining this avoids treating empty experiments as falsy
+        (which confused GUI logic that checks `if current_experiment:`).
+        """
+        return True

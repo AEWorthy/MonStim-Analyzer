@@ -29,7 +29,7 @@ class MenuBar(QMenuBar):
         rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
 
         delete_experiment_action = file_menu.addAction("Delete Current Experiment")
-        delete_experiment_action.triggered.connect(self.parent.data_manager.delete_experiment)
+        delete_experiment_action.triggered.connect(self.parent.data_manager.delete_current_experiment)
 
         file_menu.addSeparator()
 
@@ -92,7 +92,7 @@ class MenuBar(QMenuBar):
         reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
         remove_experiment_action = experiment_menu.addAction("Remove Current Experiment")
-        remove_experiment_action.triggered.connect(self.parent.data_manager.delete_experiment)
+        remove_experiment_action.triggered.connect(self.parent.data_manager.delete_current_experiment)
 
         # Dataset level actions
         update_window_action = dataset_menu.addAction("Manage Latency Windows")
@@ -127,6 +127,12 @@ class MenuBar(QMenuBar):
         restore_session_action.triggered.connect(self.parent.prompt_restore_session)
 
         # Data curation actions
+        manage_data_action = curation_menu.addAction("Manage Data...")
+        manage_data_action.triggered.connect(self.show_data_curation_manager)
+        manage_data_action.setToolTip("Create, import, delete, rename experiments and organize datasets")
+
+        curation_menu.addSeparator()
+
         exclude_recordings_action = curation_menu.addAction("Recording Exclusion Editor...")
         exclude_recordings_action.triggered.connect(self.show_recording_exclusion_editor)
         exclude_recordings_action.setToolTip("Exclude recordings based on stimulus amplitude and other criteria")
@@ -272,4 +278,40 @@ class MenuBar(QMenuBar):
                 self.parent,
                 "Error",
                 f"Failed to open recording exclusion editor:\n{str(e)}",
+            )
+
+    def show_data_curation_manager(self):
+        """Show the data curation manager dialog."""
+        if not self.parent.expts_dict_keys:
+            QMessageBox.warning(
+                self.parent,
+                "No Experiments Available",
+                "No experiments are currently loaded. Please import an experiment first.",
+            )
+            return
+
+        try:
+            from monstim_gui.dialogs.data_curation_manager import DataCurationManager
+
+            dialog = DataCurationManager(self.parent)
+
+            # Execute the dialog and refresh UI only after it closes if changes were made
+            dialog.exec()
+
+            # The dialog is modal, so main UI is frozen during execution
+            # Only refresh after dialog closes if changes were made
+            if hasattr(dialog, "_changes_made") and dialog._changes_made:
+                self.parent.data_manager.refresh_existing_experiments()
+                self.parent.data_selection_widget.update_all_data_combos()
+        except ImportError as e:
+            QMessageBox.warning(
+                self.parent,
+                "Data Curation Manager",
+                f"Data curation manager is not available: {e}",
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self.parent,
+                "Error",
+                f"Failed to open data curation manager:\n{str(e)}",
             )
