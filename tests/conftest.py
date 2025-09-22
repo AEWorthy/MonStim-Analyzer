@@ -1,8 +1,9 @@
+import contextlib
 import os
 import sys
-from pathlib import Path
-import contextlib
 import types
+from pathlib import Path
+
 import pytest
 
 # Ensure Qt doesn't try to connect to a display in CI/headless
@@ -21,8 +22,8 @@ def override_output_path(tmpdir: Path):
     """Temporarily override both monstim_signals.core.utils.get_output_path and monstim_signals.core.get_output_path
     so any code importing either will write into tmpdir.
     """
-    import monstim_signals.core.utils as utils
     import monstim_signals.core as core
+    import monstim_signals.core.utils as utils
 
     # Save originals
     original_utils_get_output_path = utils.get_output_path
