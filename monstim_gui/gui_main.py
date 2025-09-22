@@ -111,9 +111,8 @@ class MonstimGUI(QMainWindow):
         # Initialize managers after UI is set up
         self.plot_controller.initialize()
 
-        # Load existing pickled experiments if available
-        self.data_manager.unpack_existing_experiments()
-        self.data_selection_widget.update_experiment_combo()
+        # Initialize data selection combos (preserve selection if any existing state)
+        self.data_selection_widget.refresh()
 
         self.plot_widget.initialize_plot_widget()
 

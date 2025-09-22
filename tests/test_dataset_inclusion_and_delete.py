@@ -23,7 +23,8 @@ def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str):
 class TestDatasetInclusionAndDelete:
     def test_toggle_dataset_inclusion_and_undo(self, fake_gui, temp_output_dir: Path):
         make_experiment_with_dataset(temp_output_dir, "ExpX", "DS1")
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
         inv = CommandInvoker(fake_gui)
 
         cmd = ToggleDatasetInclusionCommand(fake_gui, "ExpX", "DS1", exclude=True)
@@ -40,7 +41,8 @@ class TestDatasetInclusionAndDelete:
 
     def test_delete_dataset_command_irreversible(self, fake_gui, temp_output_dir: Path, monkeypatch):
         make_experiment_with_dataset(temp_output_dir, "ExpY", "DS2")
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
         inv = CommandInvoker(fake_gui)
 
         messages = {}

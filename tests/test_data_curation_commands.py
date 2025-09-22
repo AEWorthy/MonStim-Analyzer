@@ -48,7 +48,8 @@ class TestDataCurationCommands:
     def test_rename_experiment_and_undo(self, fake_gui, temp_output_dir: Path):
         # seed one experiment
         make_experiment_with_dataset(temp_output_dir, "OldExp", "240101 A1 cond")
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
         inv = CommandInvoker(fake_gui)
 
         cmd = RenameExperimentCommand(fake_gui, "OldExp", "NewExp")
@@ -64,7 +65,8 @@ class TestDataCurationCommands:
         # Create two experiments and one dataset in source
         make_experiment_with_dataset(temp_output_dir, "Exp1", "240101 A1 cond")
         make_experiment_with_dataset(temp_output_dir, "Exp2", "240102 A2 cond")
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
 
         inv = CommandInvoker(fake_gui)
         cmd = MoveDatasetCommand(
@@ -81,7 +83,8 @@ class TestDataCurationCommands:
     def test_copy_dataset_and_undo(self, fake_gui, temp_output_dir: Path):
         make_experiment_with_dataset(temp_output_dir, "Exp1", "240101 A1 cond")
         make_experiment_with_dataset(temp_output_dir, "Exp2", "240102 A2 cond")
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
 
         inv = CommandInvoker(fake_gui)
         cmd = CopyDatasetCommand(
@@ -103,7 +106,8 @@ class TestDataCurationCommands:
     def test_delete_experiment_is_irreversible(self, fake_gui, temp_output_dir: Path, monkeypatch):
         # Setup experiment then delete via command
         make_experiment_with_dataset(temp_output_dir, "ExpDel", "240101 A1 cond")
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
         inv = CommandInvoker(fake_gui)
 
         # Monkeypatch QMessageBox.warning to avoid GUI interaction during tests

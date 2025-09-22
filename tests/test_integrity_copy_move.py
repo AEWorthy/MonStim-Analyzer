@@ -17,7 +17,8 @@ class TestIntegrityCopyMove:
         # Destination experiment exists
         (temp_output_dir / "Exp2" / "experiment.annot.json").parent.mkdir(parents=True, exist_ok=True)
         (temp_output_dir / "Exp2" / "experiment.annot.json").write_text(json.dumps({}))
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
 
         src_ds = temp_output_dir / "Exp1" / "DS-Alpha"
         before_hashes = list_files_with_hashes(src_ds)
@@ -58,7 +59,8 @@ class TestIntegrityCopyMove:
         make_experiment_and_dataset_with_nested_content(temp_output_dir, "Exp1", "DS-Bravo")
         (temp_output_dir / "Exp2" / "experiment.annot.json").parent.mkdir(parents=True, exist_ok=True)
         (temp_output_dir / "Exp2" / "experiment.annot.json").write_text(json.dumps({}))
-        fake_gui.data_manager.refresh_existing_experiments()
+        fake_gui.data_manager.unpack_existing_experiments()
+        fake_gui.data_selection_widget.refresh()
 
         src_ds = temp_output_dir / "Exp1" / "DS-Bravo"
         before_hashes = list_files_with_hashes(src_ds)

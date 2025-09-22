@@ -176,8 +176,7 @@ class DataManager:
             self.thread.progress.connect(progress_dialog.setValue)
 
             self.thread.finished.connect(progress_dialog.close)
-            self.thread.finished.connect(self.refresh_existing_experiments)
-            self.thread.finished.connect(lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0))
+            self.thread.finished.connect(self._on_import_finished)
             self.thread.finished.connect(
                 lambda: self.gui.status_bar.showMessage("Data processed and imported successfully.", 5000)
             )
@@ -190,7 +189,7 @@ class DataManager:
             self.thread.canceled.connect(progress_dialog.close)
             self.thread.canceled.connect(lambda: self.gui.status_bar.showMessage("Data processing canceled.", 5000))
             self.thread.canceled.connect(lambda: logging.info("Data processing canceled."))
-            self.thread.canceled.connect(self.refresh_existing_experiments)
+            self.thread.canceled.connect(self._on_import_finished)
 
             self.thread.start()
             progress_dialog.canceled.connect(self.thread.cancel)
@@ -457,7 +456,7 @@ class DataManager:
         self.multi_thread.status_update.connect(lambda msg: progress_dialog.setLabelText(msg))
 
         self.multi_thread.finished.connect(progress_dialog.close)
-        self.multi_thread.finished.connect(self.refresh_existing_experiments)
+        self.multi_thread.finished.connect(self._on_import_finished)
         self.multi_thread.finished.connect(lambda: self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0))
         self.multi_thread.finished.connect(lambda count: self._show_import_summary(count, len(selected_experiments)))
         self.multi_thread.finished.connect(
@@ -473,7 +472,7 @@ class DataManager:
         self.multi_thread.canceled.connect(progress_dialog.close)
         self.multi_thread.canceled.connect(lambda: self.gui.status_bar.showMessage("Multi-experiment import canceled.", 5000))
         self.multi_thread.canceled.connect(lambda: logging.info("Multi-experiment import canceled."))
-        self.multi_thread.canceled.connect(self.refresh_existing_experiments)
+        self.multi_thread.canceled.connect(self._on_import_finished)
 
         self.multi_thread.start()
         progress_dialog.canceled.connect(self.multi_thread.cancel)
@@ -502,66 +501,36 @@ class DataManager:
 
     # ------------------------------------------------------------------
     def rename_experiment(self):
+        """Rename the currently selected experiment using the robust rename_experiment_by_id method."""
         logging.info("Renaming experiment.")
-        if self.gui.current_experiment:
-            new_name, ok = QInputDialog.getText(
-                self.gui,
-                "Rename Experiment",
-                "Enter new experiment name:",
-                text=self.gui.current_experiment.id,
-            )
+        if not self.gui.current_experiment:
+            QMessageBox.warning(self.gui, "Warning", "Please select an experiment first.")
+            return
 
-            if ok and new_name:
-                try:
-                    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-                    self.gui.current_experiment.close()
-                    old_expt_path = os.path.join(self.gui.output_path, self.gui.current_experiment.id)
-                    new_expt_path = os.path.join(self.gui.output_path, new_name)
+        old_name = self.gui.current_experiment.id
+        new_name, ok = QInputDialog.getText(
+            self.gui,
+            "Rename Experiment",
+            "Enter new experiment name:",
+            text=old_name,
+        )
 
-                    if not new_name or any(c in r'<>:"/\\|?*' for c in new_name):
-                        raise ValueError("Experiment name contains invalid characters for a directory name.")
-                    if old_expt_path == new_expt_path:
-                        QMessageBox.warning(
-                            self.gui,
-                            "Warning",
-                            "The new experiment name is the same as the current one. No changes made.",
-                        )
-                        logging.info("No changes made to experiment name as it is the same as the current one.")
-                        return
-                    if os.path.exists(new_expt_path):
-                        raise FileExistsError(f"An experiment with the name '{new_name}' already exists.")
+        if ok and new_name:
+            try:
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
-                    shutil.move(old_expt_path, new_expt_path)
+                # Use the robust rename_experiment_by_id method
+                self.rename_experiment_by_id(old_name, new_name)
 
-                    self.gui.current_experiment.id = new_name
-                    if self.gui.current_experiment.repo is not None:
-                        self.gui.current_experiment.repo.update_path(Path(new_expt_path))
-                    for ds in self.gui.current_experiment._all_datasets:
-                        if ds.repo is not None:
-                            ds.repo.update_path(Path(new_expt_path) / ds.id)
-                        for sess in ds.get_all_sessions(include_excluded=True):
-                            if sess.repo is not None:
-                                sess.repo.update_path(Path(new_expt_path) / ds.id / sess.id)
-
-                except ValueError as ve:
-                    QMessageBox.critical(self.gui, "Error", f"Invalid experiment name: {ve}")
-                    logging.error(f"Invalid experiment name: {ve}")
-                    return
-                except FileExistsError:
-                    QMessageBox.critical(
-                        self.gui,
-                        "Error",
-                        f"An experiment with the name '{new_name}' already exists. Please choose a different name.",
-                    )
-                    logging.warning(
-                        f"An experiment with the name '{new_name}' already exists. Could not rename current experiment."
-                    )
-                    return
-                finally:
-                    QApplication.restoreOverrideCursor()
-
-                self.refresh_existing_experiments(select_expt_id=new_name)
                 self.gui.status_bar.showMessage("Experiment renamed successfully.", 5000)
+                logging.info(f"Experiment renamed from '{old_name}' to '{new_name}' successfully.")
+
+            except Exception as e:
+                # Handle all exceptions from rename_experiment_by_id
+                QMessageBox.critical(self.gui, "Error", str(e))
+                logging.error(f"Failed to rename experiment: {e}")
+            finally:
+                QApplication.restoreOverrideCursor()
 
     # ------------------------------------------------------------------
     def delete_current_experiment(self):
@@ -613,7 +582,9 @@ class DataManager:
                     logging.error(f"Failed to delete experiment '{current_expt_id}': {e}")
                     return
 
-                self.refresh_existing_experiments()
+                # After deleting experiment, refresh the list and reset selections
+                if hasattr(self.gui, "data_selection_widget"):
+                    self.gui.data_selection_widget.refresh()
                 self.gui.status_bar.showMessage("Experiment deleted successfully.", 5000)
 
     # ------------------------------------------------------------------
@@ -679,7 +650,7 @@ class DataManager:
                     self.gui.current_dataset.parent_experiment._all_datasets[idx] = new_ds
                 self.gui.set_current_dataset(new_ds)
 
-            self.gui.data_selection_widget.update_session_combo()
+            self.gui.data_selection_widget.update(levels=("session",))
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Dataset reloaded successfully.", 5000)
             logging.info("Dataset reloaded successfully.")
@@ -687,7 +658,6 @@ class DataManager:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
-        current_experiment_combo_index = self.gui.data_selection_widget.experiment_combo.currentIndex()
         if self.gui.current_experiment:
             logging.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")
             if self.gui.current_experiment.repo is not None:
@@ -738,13 +708,10 @@ class DataManager:
             self.gui.set_current_dataset(None)
             self.gui.set_current_session(None)
 
-            self.refresh_existing_experiments()
-            # Adjust for placeholder: if we had a valid experiment selected (index > 0), maintain it
-            if current_experiment_combo_index > 0:
-                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(current_experiment_combo_index)
-            else:
-                # If we were on placeholder, stay on placeholder
-                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)
+            # After reloading experiment, refresh the list and restore the experiment selection
+            self.unpack_existing_experiments()
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update()  # Will automatically restore selection based on current_experiment
 
             if self.gui.current_experiment:
                 self.gui.current_experiment.reset_all_caches()
@@ -753,39 +720,10 @@ class DataManager:
             logging.debug("Experiment reloaded successfully.")
             self.gui.status_bar.showMessage("Experiment reloaded successfully.", 5000)
 
-    # ------------------------------------------------------------------
-    def refresh_existing_experiments(self, select_expt_id: str | None = None) -> None:
-        logging.debug("Refreshing existing experiments.")
-        self.unpack_existing_experiments()
-        # In tests there may be stubbed widgets; guard optional UI updates
-        if hasattr(self.gui, "data_selection_widget") and hasattr(self.gui.data_selection_widget, "update_experiment_combo"):
-            self.gui.data_selection_widget.update_experiment_combo()
-        if hasattr(self.gui, "plot_widget") and hasattr(self.gui.plot_widget, "on_data_selection_changed"):
-            self.gui.plot_widget.on_data_selection_changed()
-
-        if select_expt_id is not None:
-            # Find the experiment in the list and select it (accounting for placeholder at index 0)
-            if select_expt_id in self.gui.expts_dict_keys:
-                index = self.gui.expts_dict_keys.index(select_expt_id) + 1  # +1 for placeholder
-            else:
-                index = 0  # Select placeholder if not found
-        else:
-            # Check if we currently have an experiment loaded and try to maintain that selection
-            if self.gui.current_experiment and self.gui.current_experiment.id in self.gui.expts_dict_keys:
-                index = self.gui.expts_dict_keys.index(self.gui.current_experiment.id) + 1  # +1 for placeholder
-            else:
-                index = 0  # Default to placeholder (no selection)
-
-        # Block signals to prevent triggering experiment loading during refresh
-        if hasattr(self.gui, "data_selection_widget") and hasattr(self.gui.data_selection_widget, "experiment_combo"):
-            try:
-                self.gui.data_selection_widget.experiment_combo.blockSignals(True)
-                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(index)
-                self.gui.data_selection_widget.experiment_combo.blockSignals(False)
-            except Exception:
-                # Ignore in tests with simplified stubs
-                pass
-        logging.debug("Existing experiments refreshed successfully.")
+    def _on_import_finished(self):
+        """Handle completion of import operations by refreshing the experiments list."""
+        if hasattr(self.gui, "data_selection_widget"):
+            self.gui.data_selection_widget.refresh()
 
     # ------------------------------------------------------------------
     def show_preferences_window(self):
@@ -909,10 +847,15 @@ class DataManager:
             )
             app_state.save_current_session_state(experiment_id=experiment.id, profile_name=profile_name)
 
-            self.gui.data_selection_widget.update_dataset_combo()
-            self.gui.data_selection_widget.update_session_combo()
+            self.gui.data_selection_widget.update(levels=("dataset", "session"))
             # Enable/disable dataset combo based on whether experiment has datasets
             self.gui.data_selection_widget.dataset_combo.setEnabled(len(experiment.datasets) > 0)
+
+            # Automatically load the first dataset and session if available
+            if experiment.datasets:
+                logging.debug(f"Auto-loading first dataset from experiment '{experiment.id}'")
+                self.load_dataset(0, auto_load_first_session=True)  # This will load the first dataset and first session
+
             self.gui.plot_widget.on_data_selection_changed()
 
             # Provide informative status message based on experiment content
@@ -972,7 +915,7 @@ class DataManager:
         if hasattr(self, "current_progress_dialog"):
             del self.current_progress_dialog
 
-    def load_dataset(self, index):
+    def load_dataset(self, index, auto_load_first_session=True):
         if not self.gui.current_experiment:
             logging.debug("No current experiment to load dataset from.")
             return
@@ -1001,9 +944,16 @@ class DataManager:
             self.gui.channel_names = []
             logging.warning("No dataset selected. Channel names will not be updated.")
 
-        self.gui.data_selection_widget.update_session_combo()
-        self.gui.data_selection_widget.session_combo.setEnabled(True)  # Enable session combo since a dataset is now loaded
-        self.gui.plot_widget.on_data_selection_changed()
+        # Update the session list for the newly selected dataset and enable the combo
+        self.gui.data_selection_widget.update(levels=("session",))
+        self.gui.data_selection_widget.session_combo.setEnabled(True)
+
+        # Automatically load the first session if requested and conditions are met
+        if auto_load_first_session and not self.gui.current_session and dataset.sessions:
+            logging.debug(f"Auto-loading first session from dataset '{dataset.id}'")
+            self.load_session(0)  # Load the first session
+        else:
+            self.gui.plot_widget.on_data_selection_changed()
 
     def load_session(self, index):
         if not self.gui.current_dataset:
@@ -1334,33 +1284,9 @@ class DataManager:
             dialog = DatasetMetadataEditor(self.gui.current_dataset, parent=self.gui)
 
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                # The dialog handles folder renaming and updates dataset ID if needed
-                updated_dataset_id = self.gui.current_dataset.id
-
-                # Refresh the dataset combo to show updated display names
-                self.gui.data_selection_widget.update_dataset_combo()
-
-                # Find and select the updated dataset in the combo box
-                if self.gui.current_experiment:
-                    for index, dataset in enumerate(self.gui.current_experiment.datasets):
-                        if dataset.id == updated_dataset_id:
-                            self.gui.data_selection_widget.dataset_combo.setCurrentIndex(index)
-                            logging.info(f"Reselected dataset '{updated_dataset_id}' at index {index} after metadata update")
-                            break
-                    else:
-                        # Fallback: if we can't find the dataset by ID, try to find it by reference
-                        for index, dataset in enumerate(self.gui.current_experiment.datasets):
-                            if dataset is self.gui.current_dataset:
-                                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(index)
-                                logging.info(f"Reselected dataset by reference at index {index} after metadata update")
-                                break
-                        else:
-                            logging.warning(
-                                f"Could not find dataset '{updated_dataset_id}' in experiment after metadata update"
-                            )
-
-                # Update session combo box as well to ensure consistency
-                self.gui.data_selection_widget.update_session_combo()
+                # Refresh the dataset and session combos to show updated display names
+                # Will automatically restore selection based on current_dataset reference
+                self.gui.data_selection_widget.update(levels=("dataset", "session"))
 
                 self.gui.status_bar.showMessage("Dataset metadata updated successfully.", 5000)
                 logging.info(f"Dataset metadata updated for '{self.gui.current_dataset.id}'")
@@ -1530,7 +1456,9 @@ class DataManager:
                             sess.repo.update_path(new_exp_path / ds.id / sess.id)
 
             # Refresh UI to reflect the changes
-            self.refresh_existing_experiments(select_expt_id=new_name if current_exp_being_renamed else None)
+            self.unpack_existing_experiments()
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update(levels=("experiment",))
 
             logging.info(f"Renamed experiment '{old_name}' to '{new_name}'")
 

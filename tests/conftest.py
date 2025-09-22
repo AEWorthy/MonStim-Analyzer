@@ -72,6 +72,13 @@ class FakeDataSelectionWidget:
             setCurrentIndex=lambda *_: None, setEnabled=lambda *_: None, blockSignals=lambda *_: None
         )
 
+    # New unified API in real widget
+    def update(self, levels: tuple[str, ...] | None = None, preserve_selection: bool = True):
+        pass
+
+    def refresh(self, levels: tuple[str, ...] | None = None):
+        pass
+
     def update_experiment_combo(self):
         pass
 
@@ -116,7 +123,7 @@ class FakeGUI:
         self.data_selection_widget = FakeDataSelectionWidget()
         self.config_repo = FakeConfigRepo()
         self.has_unsaved_changes = False
-        # populated by DataManager.refresh_existing_experiments
+        # populated by DataManager.unpack_existing_experiments
         self.profile_selector_combo = types.SimpleNamespace(currentText=lambda: "")
 
     # The following helpers mirror MonstimGUI API used by DataManager
@@ -138,6 +145,6 @@ def fake_gui(temp_output_dir: Path):
     from monstim_gui.managers.data_manager import DataManager
 
     dm = DataManager(gui)
-    dm.refresh_existing_experiments()
+    dm.unpack_existing_experiments()
     gui.data_manager = dm
     return gui

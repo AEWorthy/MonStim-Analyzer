@@ -35,7 +35,7 @@ class MenuBar(QMenuBar):
 
         # refresh existing datasets button
         refresh_datasets_action = file_menu.addAction("Refresh Experiments List")
-        refresh_datasets_action.triggered.connect(self.parent.data_manager.refresh_existing_experiments)
+        refresh_datasets_action.triggered.connect(self._refresh_experiments_list)
         refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
 
         file_menu.addSeparator()
@@ -280,6 +280,20 @@ class MenuBar(QMenuBar):
                 f"Failed to open recording exclusion editor:\n{str(e)}",
             )
 
+    def _refresh_experiments_list(self):
+        """Refresh the experiments list and reset all selections."""
+        # Clear current state and refresh the experiments list
+        self.parent.set_current_experiment(None)
+        self.parent.set_current_dataset(None)
+        self.parent.set_current_session(None)
+
+        # Reset all combo boxes to placeholders (refresh() will handle filesystem rescan)
+        self.parent.data_selection_widget.refresh()
+
+        # Notify plot widget of the state change
+        if hasattr(self.parent, "plot_widget") and hasattr(self.parent.plot_widget, "on_data_selection_changed"):
+            self.parent.plot_widget.on_data_selection_changed()
+
     def show_data_curation_manager(self):
         """Show the data curation manager dialog."""
         if not self.parent.expts_dict_keys:
@@ -301,8 +315,9 @@ class MenuBar(QMenuBar):
             # The dialog is modal, so main UI is frozen during execution
             # Only refresh after dialog closes if changes were made
             if hasattr(dialog, "_changes_made") and dialog._changes_made:
-                self.parent.data_manager.refresh_existing_experiments()
-                self.parent.data_selection_widget.update_all_data_combos()
+                # Refresh experiments list and reset all selections after structural changes
+                self.parent.data_manager.unpack_existing_experiments()
+                self.parent.data_selection_widget.update()
         except ImportError as e:
             QMessageBox.warning(
                 self.parent,
