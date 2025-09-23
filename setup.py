@@ -20,7 +20,7 @@ setup(
         "PyQt6_sip==13.10.2",
         "PyYAML==6.0.2",
         "h5py==3.14.0",
-        "matplotlib==3.10.5",
+        "matplotlib==3.10.6",
         "numpy==2.2.6",
         "pandas==2.3.2",
         "packaging==25.0",
