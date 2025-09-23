@@ -811,5 +811,7 @@ class TestConfigurationIntegration:
         loaded = profile_manager.load_profile(filename)
 
         # Should handle the problematic value gracefully
+        # Fallback behavior: If type coercion fails, the invalid value is preserved rather than raising an exception.
+        # This allows the user or system to detect and correct invalid settings later, rather than failing outright.
         assert loaded["analysis_parameters"]["time_window"] == "not_a_number"  # Fallback
         assert loaded["analysis_parameters"]["valid_setting"] == 5.0  # Preserved
