@@ -70,6 +70,10 @@ def make_experiment_and_dataset_with_nested_content(
     (ds_path / "dataset.annot.json").write_text(json.dumps(ds_meta, indent=2))
 
     # Create nested session content
+    # Use a safe auxiliary directory name across platforms
+    # 'aux' is a reserved device name on Windows and cannot be used as a file or directory name.
+    aux_dir_name = "aux" if os.name != "nt" else "aux_data"
+
     for s in sessions:
         sdir = ds_path / s
         sdir.mkdir(parents=True, exist_ok=True)
@@ -78,7 +82,7 @@ def make_experiment_and_dataset_with_nested_content(
         # raw data placeholder(s)
         _write_bytes(sdir / f"{s}.raw.h5", seed=f"raw-{s}", size=2048)
         # nested auxiliary dirs/files
-        _write_bytes(sdir / "aux" / "log.txt", seed=f"log-{s}", size=256)
+        _write_bytes(sdir / aux_dir_name / "log.txt", seed=f"log-{s}", size=256)
         _write_bytes(sdir / "deep" / "n1" / "n2" / "blob.bin", seed=f"blob-{s}", size=1536)
 
     return exp_path, ds_path, ds_meta
