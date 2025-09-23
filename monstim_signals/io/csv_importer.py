@@ -204,7 +204,11 @@ def import_experiment(
         else:
             for sess_name, paths in sess_map.items():
                 for csv_path in paths:
-                    process_csv(csv_path, ds_name, sess_name)
+                    try:
+                        process_csv(csv_path, ds_name, sess_name)
+                    except Exception:
+                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
+                        logging.error(traceback.format_exc())
 
     logging.info("Processing complete.")
 

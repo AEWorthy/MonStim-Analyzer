@@ -1,5 +1,6 @@
 import contextlib
 import os
+import shutil
 import sys
 import types
 from pathlib import Path
@@ -8,6 +9,11 @@ import pytest
 
 # Ensure Qt doesn't try to connect to a display in CI/headless
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+# Ensure the project root is importable so `monstim_gui` and `monstim_signals` resolve under pytest
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # Ensure local test helpers can be imported with `import helpers`
 tests_dir = os.path.dirname(__file__)
@@ -149,3 +155,22 @@ def fake_gui(temp_output_dir: Path):
     dm.unpack_existing_experiments()
     gui.data_manager = dm
     return gui
+
+
+# --- Session-level cleanup for ad-hoc temp dirs ---
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_pytest_tmp_golden_check():
+    """Delete a stray .pytest-tmp-golden-check folder in repo root after tests.
+
+    Some local runs may create a top-level scratch folder; keep the tree clean by
+    removing it once the test session is over.
+    """
+    yield
+    repo_root = Path(__file__).resolve().parents[1]
+    stray = repo_root / ".pytest-tmp-golden-check"
+    try:
+        if stray.exists():
+            shutil.rmtree(stray, ignore_errors=True)
+    except Exception:
+        # Best-effort cleanup; ignore errors to not mask test results
+        pass

@@ -112,8 +112,15 @@ def parse_v3d(path: Path):
             if "," in line:
                 k, v = line.split(",", 1)
                 raw_meta[k.strip()] = v.strip()
-    df = pd.read_csv(path, sep=",", skiprows=data_start, header=None)
-    data = df.values.astype("float32")
+
+    if data_start is None:
+        raise ValueError(f"Could not find data start marker in v3d file {path}")
+
+    try:
+        df = pd.read_csv(path, sep=",", skiprows=data_start, header=None)
+        data = df.values.astype("float32")
+    except (ValueError, pd.errors.ParserError) as e:
+        raise ValueError(f"Could not parse numeric data from v3d file {path}: {str(e)}")
     meta = normalize_meta(raw_meta)
 
     # Set channel types and number of channels

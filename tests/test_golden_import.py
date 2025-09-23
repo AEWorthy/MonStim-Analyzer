@@ -8,6 +8,8 @@ import pytest
 from monstim_signals.io.csv_importer import import_experiment, parse_session_rec
 from monstim_signals.io.repositories import ExperimentRepository
 
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
+
 
 def _scan_golden_sessions(ds_dir: Path) -> dict[str, set[str]]:
     """Return mapping: session_id -> set of recording stems for CSVs under ds_dir."""
@@ -107,12 +109,9 @@ class TestGoldenCSVImport:
 
         out_expt = temp_output_dir / "InvalidTest"
 
-        # Import should handle exceptions gracefully
-        try:
-            import_experiment(invalid_root, out_expt, overwrite=True, max_workers=1)
-        except Exception as e:
-            # Expected: some imports may fail with format detection errors
-            assert "Could not detect MonStim version" in str(e)
+        # Import should handle exceptions gracefully and continue processing
+        # Invalid CSVs should be logged as errors but not crash the entire import
+        import_experiment(invalid_root, out_expt, overwrite=True, max_workers=1)
 
         # Verify no H5 files were created from invalid inputs
         if out_expt.exists():

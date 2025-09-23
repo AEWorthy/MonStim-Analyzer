@@ -9,6 +9,12 @@ from monstim_gui.commands import (
     ToggleDatasetInclusionCommand,
 )
 
+# --- Test Annotations ---
+# Purpose: ToggleDatasetInclusion and DeleteDataset command behavior + undo semantics
+# Markers: integration (file writes/reads to annot JSON), uses fake_gui and temp_output_dir
+# Notes: Uses monkeypatch to intercept QMessageBox for irreversible actions
+pytestmark = pytest.mark.integration
+
 
 def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str):
     exp_path = root / exp_name

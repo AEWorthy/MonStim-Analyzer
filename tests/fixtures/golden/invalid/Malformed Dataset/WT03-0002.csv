@@ -1,0 +1,5 @@
+[Parameters]
+Stim specs cluster array.<size(s)>, 1
+Stim type cluster array 0.Stimulus Output, Electrical
+[DATA]
+not,a,number

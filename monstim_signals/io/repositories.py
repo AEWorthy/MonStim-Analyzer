@@ -216,6 +216,7 @@ class SessionRepository:
                     continue
                 raise
 
+    @staticmethod
     def discover_in_folder(folder: Path) -> Iterator["SessionRepository"]:
         """
         Given a folder Path, yield a SessionRepository for each session subfolder.
@@ -228,13 +229,13 @@ class SessionRepository:
         """
         for sess_folder in folder.iterdir():
             if sess_folder.is_dir() and (sess_folder / "session.annot.json").exists():
-                logging.info(f"Discovered session: {sess_folder.name}")
+                logging.debug(f"Discovered session: {sess_folder.name}")
                 yield SessionRepository(sess_folder)
             elif sess_folder.is_dir() and any(sess_folder.glob("*.raw.h5")):
-                logging.info(f"Discovered session without annot: {sess_folder.name}")
+                logging.debug(f"Discovered session without annot: {sess_folder.name}")
                 yield SessionRepository(sess_folder)  # still yield, but no session.annot.json
             else:
-                logging.warning(f"No valid session found in {sess_folder}.")
+                logging.warning(f"No valid sessions found in {sess_folder}.")
 
 
 class DatasetRepository:
@@ -260,11 +261,11 @@ class DatasetRepository:
         self.dataset_js = new_folder / "dataset.annot.json"
 
     def load(self, config=None) -> "Dataset":
-        # 1) Each subfolder of `folder` is a session
-        session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+        # 1) Discover valid session folders (those with annot or any *.raw.h5)
+        session_repos = list(SessionRepository.discover_in_folder(self.folder))
 
-        # 2) Load each Session
-        sessions = [SessionRepository(sess_folder).load(config=config) for sess_folder in session_folders]
+        # 2) Load each Session from discovered repos
+        sessions = [repo.load(config=config) for repo in session_repos]
 
         # 3) Load or create dataset annotation JSON
         if self.dataset_js.exists():

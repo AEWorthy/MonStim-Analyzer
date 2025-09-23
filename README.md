@@ -9,6 +9,7 @@ collected with the custom 'MonStim-V3' LabView program created by William Goolsb
 
 - **[User Guide](docs/readme.md)** - Complete usage instructions and installation details
 - **[Quickstart Guide](QUICKSTART.md)** - Express installation and overview
+- **[Testing Guide](docs/testing.md)** - How to run the test suite (markers, golden fixtures, CI tips)
 - **[Changelog](CHANGELOG.md)** - Version history and release notes
 - **[EMG Processing](docs/Transform_EMG.md)** - Signal processing algorithms and analysis methods
 - **[M-max Algorithm](docs/mmax_algorithm.md)** - Detailed technical documentation of M-max detection

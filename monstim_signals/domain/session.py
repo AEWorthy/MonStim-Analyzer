@@ -611,15 +611,28 @@ class Session:
     # 2) User actions that update annot files
     # ──────────────────────────────────────────────────────────────────
     def rename_channels(self, new_names: dict[str, str]):
+        # Compute a prospective list of channel names after applying the mapping,
+        # and validate uniqueness to avoid duplicate channel names.
+        proposed_names = []
+        for ch in self.annot.channels:
+            proposed_names.append(new_names.get(ch.name, ch.name))
+
+        if len(set(proposed_names)) != len(proposed_names):
+            # Find duplicates to report a helpful error
+            from collections import Counter
+
+            dupes = [name for name, cnt in Counter(proposed_names).items() if cnt > 1]
+            raise ValueError(f"Channel renaming would create duplicate names {dupes} in session '{self.id}'. Aborting rename.")
+
+        # Support renaming when multiple channels share the same name by updating all matches
         for old_name, new_name in new_names.items():
-            if old_name in self.channel_names:
-                i = self.channel_names.index(old_name)
-                if 0 <= i < self.num_channels:
-                    #
-                    self.annot.channels[i].name = new_name
-                    logging.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
-                else:
-                    logging.warning(f"Channel index {i} out of range for renaming.")
+            matched = False
+            for i, ch in enumerate(self.annot.channels):
+                if ch.name == old_name:
+                    ch.name = new_name
+                    matched = True
+            if matched:
+                logging.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
             else:
                 logging.warning(f"Channel '{old_name}' not found in session {self.id}. No action taken.")
         # Optionally update cached names and save

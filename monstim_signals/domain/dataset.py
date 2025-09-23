@@ -500,11 +500,9 @@ class Dataset:
 
         if self.sessions == []:
             logging.info(f"All sessions in dataset {self.id} have been excluded.")
-            # If no sessions remain, clear list and exclude dataset from parent experiment
+            # If no sessions remain, optionally notify parent experiment
             if self.parent_experiment is not None:
                 self.parent_experiment.exclude_dataset(self.id)
-            self.annot.excluded_sessions.clear()
-            logging.info(f"Dataset {self.id} has no remaining sessions and is now excluded from the parent experiment.")
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""

@@ -17,9 +17,9 @@ Each dataset contains:
 
 ### Invalid Test Data
 - `invalid/` — Contains malformed inputs for negative testing:
-  - `Empty Dataset/WT00-0000.csv` — Empty file
-  - `Malformed Dataset/WT01-0000.csv` — Missing proper headers
-  - `Wrong Naming/BADNAME.csv` — Invalid filename pattern
+  - `Empty Dataset/` — Intentionally empty or placeholder-only dataset
+  - `Malformed Dataset/` — CSVs with missing sections or non-numeric data in [DATA]
+  - `Wrong Naming/` — CSVs with invalid filename patterns
 
 ## Test Coverage
 
@@ -50,3 +50,4 @@ Each dataset contains:
 - Session/recording IDs inferred from CSV filename structure
 - Tests run in isolated temporary directories, no impact on real data
 - Both threaded and single-threaded import modes tested
+- Golden datasets are expected to contain ≥ 2 channels; enforced by `tests/test_golden_channel_counts.py`

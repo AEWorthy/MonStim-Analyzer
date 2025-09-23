@@ -11,6 +11,12 @@ from monstim_gui.commands import (
     RenameExperimentCommand,
 )
 
+# --- Test Annotations ---
+# Purpose: Data curation workflows (create/move/copy/delete/rename) via DataManager-backed commands
+# Markers: integration (filesystem operations), uses temp_output_dir and fake_gui
+# Notes: Verifies undo for reversible commands; irreversible ones warn via QMessageBox
+pytestmark = pytest.mark.integration
+
 
 def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str, sessions: list[str] = None):
     """Create a minimal experiment folder with a dataset and empty session folders and annotations."""

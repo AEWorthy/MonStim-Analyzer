@@ -8,6 +8,14 @@ from helpers import list_files_with_hashes, make_experiment_and_dataset_with_nes
 
 from monstim_gui.commands import CommandInvoker, CopyDatasetCommand, MoveDatasetCommand
 
+"""
+Test Annotations
+- Purpose: Ensure copy/move commands preserve nested file integrity and metadata with undo support
+- Markers: integration (filesystem operations via commands)
+- Notes: Uses helpers for deterministic content and hash validation
+"""
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.usefixtures("temp_output_dir")
 class TestIntegrityCopyMove:
