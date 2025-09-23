@@ -118,8 +118,8 @@ class ExperimentLoadingThread(QThread):
 
             # Provide appropriate time estimates in logging
             if is_first_load:
-                estimated_time = missing_annotations / 100  # Rough estimate: 100 files per minute
-                self._estimated_time = int(estimated_time * 60)  # Convert to seconds
+                estimated_time = int(missing_annotations / 100 * 60)  # Rough estimate: 100 files per minute
+                self._estimated_time = estimated_time
                 time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created.\nEstimated time: {estimated_time} seconds for {annotations_required} annotations."
                 logging.info(time_msg)
             elif files_to_load > 5000:
