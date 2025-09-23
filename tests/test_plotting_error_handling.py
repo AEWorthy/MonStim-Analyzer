@@ -36,13 +36,8 @@ class TestPlottingErrorHandling:
 
         # Test that the error handler doesn't crash
         # The handle_unable_to_plot_error method should work without crashing
-        try:
-            controller.handle_unable_to_plot_error(error, "emg", {})
-            # If it completes without exception, the test passes
-        except Exception:
-            # If it raises an exception, we can check if it's expected
-            # For now, we'll just ensure it's not a critical error
-            pass
+        controller.handle_unable_to_plot_error(error, "emg", {})
+        # If it completes without exception, the test passes
 
     def test_plot_controller_validates_components(self, fake_gui):
         """Test that PlotController validates required GUI components."""
