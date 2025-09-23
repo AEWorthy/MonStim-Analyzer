@@ -231,7 +231,7 @@ class TestFiltering:
             filtered = butter_bandpass_filter(short_signal, self.fs, 100, 3500, order=4)
             # Should either work or raise an appropriate error
             assert len(filtered) == len(short_signal)
-        except Exception as e:
+        except ValueError as e:
             # Accept that very short signals might not be filterable
             assert "padlen" in str(e).lower() or "filter" in str(e).lower()
 
