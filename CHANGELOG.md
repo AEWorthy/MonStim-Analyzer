@@ -5,6 +5,32 @@ All notable changes to the MonStim Analyzer project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.4.3] - 2025-09-23
+
+### Changed
+- Improved experiment/session switching behavior with clearer UI status updates
+- Renamed and polished Analysis Profile UI labels for clarity
+- Refined margins and label alignment across several GUI widgets
+- Data selection widget refresh and experiment refresh logic improvements
+
+### Added
+- Data Curation Manager dialog and related commands
+- Manage Recordings button in the data selection widget
+- Lightweight metadata methods for repositories to speed up UI listing
+- Pytest-based test infrastructure and initial golden fixtures
+
+### Fixed
+- Minor repository and loader adjustments for stability
+
+### Dependencies
+- Bumped Markdown to 3.9
+- Updated matplotlib and pytest via dependency groups
+- CI: Bumped actions/setup-python from v5 to v6
+
+Note: This is a patch release with incremental UX and stability improvements over 0.4.2.
+
+
 ## [0.4.2] - 2025-09-02
 
 ### Added
@@ -48,7 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking Changes
 - **Matplotlib Plotters Removed**: Completely removed deprecated matplotlib-based plotting modules in favor of PyQtGraph. This improves performance but removes matplotlib as a dependency.
 
-## [0.4.1] - Previous Release
+
+## [0.4.1] - 2025-07-05
 
 ### Features
 - EMG data import and processing
