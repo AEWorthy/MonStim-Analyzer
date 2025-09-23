@@ -521,6 +521,7 @@ class DataSelectionWidget(QGroupBox):
         try:
             if self.parent.expts_dict_keys and self.experiment_combo.count() > 0:
                 from pathlib import Path
+
                 from monstim_signals.io.repositories import ExperimentRepository
 
                 # Skip index 0 (placeholder)
