@@ -786,6 +786,35 @@ class DataManager:
         exp_path = os.path.join(self.gui.output_path, experiment_name)
         logging.info(f"Loading experiment: '{experiment_name}'.")
 
+        # Close any open files/handles from the currently loaded experiment before switching
+        try:
+            if self.gui.current_experiment and getattr(self.gui.current_experiment, "id", None) != experiment_name:
+                logging.debug(
+                    f"Closing currently loaded experiment '{self.gui.current_experiment.id}' before switching to '{experiment_name}'."
+                )
+                # Notify user via status bar
+                try:
+                    self.gui.status_bar.showMessage(
+                        f"Closing current experiment '{self.gui.current_experiment.id}'...",
+                        3000,
+                    )
+                except Exception:
+                    pass
+                try:
+                    self.gui.current_experiment.close()
+                    logging.debug("Previous experiment closed successfully.")
+                except Exception as e:
+                    logging.exception(f"Error closing previous experiment: {e}")
+        except Exception:
+            # Never block switching due to cleanup errors
+            pass
+
+        # Proactively clear dataset and session to avoid UI operating on stale selections
+        # while the experiment is loading (especially for long loads).
+        self.gui.set_current_dataset(None)
+        self.gui.set_current_session(None)
+        self.gui.set_current_experiment(None)
+
         # Create and show progress dialog
         progress_dialog = QProgressDialog("Loading experiment...", "Cancel", 0, 100, self.gui)
         progress_dialog.setWindowTitle(f"Loading: {experiment_name}")
@@ -825,6 +854,16 @@ class DataManager:
 
         # Start loading
         self.loading_thread.start()
+
+        # Reflect loading state in dependent combos immediately
+        try:
+            self.gui.data_selection_widget.update(levels=("dataset", "session"), preserve_selection=False)
+            self.gui.data_selection_widget.dataset_combo.setEnabled(False)
+            self.gui.data_selection_widget.session_combo.setEnabled(False)
+            # Notify downstream UI to clear any views bound to the prior selection
+            self.gui.plot_widget.on_data_selection_changed()
+        except Exception:
+            pass
 
     def _on_experiment_loaded(self, experiment: "Experiment"):
         """Handle successful experiment loading."""
@@ -928,6 +967,25 @@ class DataManager:
 
         logging.debug(f"Loading dataset [{index}] from experiment '{self.gui.current_experiment.id}'.")
         dataset = self.gui.current_experiment.datasets[index]
+
+        # Clear any previously selected session when switching datasets to avoid stale references
+        # and ensure auto-load of the first session (if requested) can occur.
+        if self.gui.current_session is not None and self.gui.current_dataset is not dataset:
+            try:
+                # Close open file handles within the current session
+                self.gui.current_session.close()
+            except Exception:
+                logging.debug("Non-fatal: error while closing previous session during dataset switch.")
+            self.gui.set_current_session(None)
+
+        # If truly switching to a different dataset, close the old dataset to release handles
+        if self.gui.current_dataset is not None and self.gui.current_dataset is not dataset:
+            try:
+                self.gui.current_dataset.close()
+            except Exception:
+                logging.debug("Non-fatal: error while closing previous dataset during dataset switch.")
+
+        # Now set the new dataset
         self.gui.set_current_dataset(dataset)
 
         # Save session state for restoration
@@ -945,7 +1003,8 @@ class DataManager:
             logging.warning("No dataset selected. Channel names will not be updated.")
 
         # Update the session list for the newly selected dataset and enable the combo
-        self.gui.data_selection_widget.update(levels=("session",))
+        # Do not preserve previous session selection since it belonged to a different dataset
+        self.gui.data_selection_widget.update(levels=("session",), preserve_selection=False)
         self.gui.data_selection_widget.session_combo.setEnabled(True)
 
         # Automatically load the first session if requested and conditions are met

@@ -183,7 +183,7 @@ class ExcludeDatasetCommand(Command):
         self.gui.current_dataset = None
         self.gui.current_session = None
         # Update dataset and session lists while keeping experiment selection
-        self.gui.data_selection_widget.update(levels=("dataset", "session"))
+        self.gui.data_selection_widget.update()
 
     def undo(self):
         self.gui.current_experiment.restore_dataset(self.dataset_id)

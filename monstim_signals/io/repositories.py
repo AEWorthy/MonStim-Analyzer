@@ -227,15 +227,25 @@ class SessionRepository:
             SessionRepository(Path("folder/AA01"))
             SessionRepository(Path("folder/AA02"))
         """
-        for sess_folder in folder.iterdir():
-            if sess_folder.is_dir() and (sess_folder / "session.annot.json").exists():
-                logging.debug(f"Discovered session: {sess_folder.name}")
-                yield SessionRepository(sess_folder)
-            elif sess_folder.is_dir() and any(sess_folder.glob("*.raw.h5")):
-                logging.debug(f"Discovered session without annot: {sess_folder.name}")
-                yield SessionRepository(sess_folder)  # still yield, but no session.annot.json
-            else:
-                logging.warning(f"No valid sessions found in {sess_folder}.")
+        for entry in folder.iterdir():
+            # Only consider directories as session candidates; skip files like dataset.annot.json
+            if not entry.is_dir():
+                continue
+
+            # Session folder with explicit session annotation
+            if (entry / "session.annot.json").exists():
+                logging.debug(f"Discovered session: {entry.name}")
+                yield SessionRepository(entry)
+                continue
+
+            # Session folder inferred by presence of raw recordings
+            if any(entry.glob("*.raw.h5")):
+                logging.debug(f"Discovered session without annot: {entry.name}")
+                yield SessionRepository(entry)  # still yield, but no session.annot.json
+                continue
+
+            # Directory present but no recognizable session contents; warn so users can fix layout
+            logging.warning(f"Invalid session directory (no session.annot.json nor *.raw.h5): {entry}")
 
 
 class DatasetRepository:

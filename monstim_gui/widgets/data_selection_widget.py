@@ -49,7 +49,17 @@ class CircleDelegate(QStyledItemDelegate):
         super().paint(painter, option_no_circle, index)
 
         # Get completion status from item data
-        is_completed = index.data(Qt.ItemDataRole.UserRole)
+        # Some combos store non-bool data in UserRole (e.g., experiment id).
+        # If UserRole isn't a bool, fall back to UserRole+1 for the completion flag.
+        data_user = index.data(Qt.ItemDataRole.UserRole)
+        if isinstance(data_user, bool):
+            is_completed = data_user
+        else:
+            is_completed = index.data(Qt.ItemDataRole.UserRole + 1)
+
+        # For placeholder items or unknown status, don't draw a circle
+        if is_completed is None:
+            return
 
         # Draw circle indicating completion
         circle_rect = QRect(option.rect.right() - 18, option.rect.center().y() - 6, 12, 12)
@@ -155,7 +165,7 @@ class DataSelectionWidget(QGroupBox):
         self.update_all_completion_statuses()
 
         # Apply delegate to all combos
-        for combo in (self.dataset_combo, self.session_combo):
+        for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
             combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
@@ -230,6 +240,7 @@ class DataSelectionWidget(QGroupBox):
                         # Check for empty experiment via repository metadata (best-effort)
                         display_name = expt_id
                         tooltip = expt_id
+                        exp_completed = None
                         try:
                             from pathlib import Path
 
@@ -239,6 +250,7 @@ class DataSelectionWidget(QGroupBox):
                             repo = ExperimentRepository(exp_path)
                             metadata = repo.get_metadata()
                             dataset_count = metadata.get("dataset_count", 0)
+                            exp_completed = metadata.get("is_completed", False)
                             tooltip = (
                                 f"Experiment: {expt_id} - {dataset_count} dataset{'s' if dataset_count != 1 else ''}"
                                 if dataset_count > 0
@@ -255,6 +267,8 @@ class DataSelectionWidget(QGroupBox):
                         normal_font = self.experiment_combo.font()
                         normal_font.setItalic(False)
                         self.experiment_combo.setItemData(idx, normal_font, Qt.ItemDataRole.FontRole)
+                        # Store completion status on a separate role to avoid clobbering the id
+                        self.experiment_combo.setItemData(idx, exp_completed, Qt.ItemDataRole.UserRole + 1)
 
                 # Selection
                 if preserve_selection and target_exp_id and parent.expts_dict_keys:
@@ -387,11 +401,13 @@ class DataSelectionWidget(QGroupBox):
             combo.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
         # Connect signals
+        self.experiment_combo.customContextMenuRequested.connect(lambda pos: self.show_context_menu(pos, "experiment"))
         self.dataset_combo.customContextMenuRequested.connect(lambda pos: self.show_context_menu(pos, "dataset"))
         self.session_combo.customContextMenuRequested.connect(lambda pos: self.show_context_menu(pos, "session"))
 
     def show_context_menu(self, pos, level):
         current_obj = {
+            "experiment": self.parent.current_experiment,
             "dataset": self.parent.current_dataset,
             "session": self.parent.current_session,
         }.get(level)
@@ -401,7 +417,7 @@ class DataSelectionWidget(QGroupBox):
         if current_obj:
             action_text = "Mark as Incomplete" if getattr(current_obj, "is_completed", False) else "Mark as Complete"
             toggle_action = menu.addAction(action_text)
-            exclude_action = menu.addAction(f"Exclude {level.capitalize()}")
+            exclude_action = None if level == "experiment" else menu.addAction(f"Exclude {level.capitalize()}")
         else:
             toggle_action = exclude_action = None
 
@@ -419,43 +435,141 @@ class DataSelectionWidget(QGroupBox):
 
         selected = menu.exec(self.sender().mapToGlobal(pos))
 
+        # If the user dismissed the menu without a selection, do nothing
+        if selected is None:
+            return
+
         if selected == toggle_action and current_obj:
             current_obj.is_completed = not getattr(current_obj, "is_completed", False)
             self.parent.has_unsaved_changes = True
+            # Update only the toggled item, then refresh all statuses for safety
             self.update_completion_status(level)
-        elif selected == exclude_action and current_obj:
+            self.update_all_completion_statuses()
+        elif exclude_action is not None and selected == exclude_action and current_obj:
             if level == "dataset":
                 self.parent.exclude_dataset()
+                # Rebuild combos to prevent stale item data/indices after removal
+                self.update(levels=("dataset", "session"), preserve_selection=True)
+                self._update_manage_recordings_button()
+                # Notify downstream UI that selection/data changed
+                if hasattr(self.parent, "plot_widget"):
+                    try:
+                        self.parent.plot_widget.on_data_selection_changed()
+                    except Exception:
+                        pass
             else:
                 self.parent.exclude_session()
+                # Rebuild sessions to keep statuses aligned
+                self.update(levels=("session",), preserve_selection=True)
+                self._update_manage_recordings_button()
+                if hasattr(self.parent, "plot_widget"):
+                    try:
+                        self.parent.plot_widget.on_data_selection_changed()
+                    except Exception:
+                        pass
         elif restore_menu and selected in restore_menu.actions():
             if level == "dataset":
                 self.parent.restore_dataset(selected.text())
+                # Rebuild combos after restore to refresh items and statuses
+                self.update(levels=("dataset", "session"), preserve_selection=True)
+                self._update_manage_recordings_button()
+                if hasattr(self.parent, "plot_widget"):
+                    try:
+                        self.parent.plot_widget.on_data_selection_changed()
+                    except Exception:
+                        pass
             else:
                 self.parent.restore_session(selected.text())
+                self.update(levels=("session",), preserve_selection=True)
+                self._update_manage_recordings_button()
+                if hasattr(self.parent, "plot_widget"):
+                    try:
+                        self.parent.plot_widget.on_data_selection_changed()
+                    except Exception:
+                        pass
 
     def update_completion_status(self, level):
         """Update visual completion status for specified level"""
-        combo = {"dataset": self.dataset_combo, "session": self.session_combo}.get(level)
+        combo = {"experiment": self.experiment_combo, "dataset": self.dataset_combo, "session": self.session_combo}.get(level)
 
         if combo and combo.currentIndex() >= 0:
             current_obj = {
+                "experiment": self.parent.current_experiment,
                 "dataset": self.parent.current_dataset,
                 "session": self.parent.current_session,
             }.get(level)
 
             # Set completion status in item data
-            combo.setItemData(
-                combo.currentIndex(),
-                getattr(current_obj, "is_completed", False),
-                Qt.ItemDataRole.UserRole,
-            )
+            role = Qt.ItemDataRole.UserRole if level in ("dataset", "session") else Qt.ItemDataRole.UserRole + 1
+            # Avoid writing to placeholder row in experiment combo
+            if not (level == "experiment" and combo.currentIndex() == 0):
+                combo.setItemData(
+                    combo.currentIndex(),
+                    getattr(current_obj, "is_completed", False),
+                    role,
+                )
             combo.update()
 
     def update_all_completion_statuses(self):
-        """Update all visual completion statuses"""
-        for level in ("dataset", "session"):
-            self.update_completion_status(level)
+        """Update all visual completion statuses for dataset and session combos.
+
+        This method rewrites the completion status (UserRole) for every item to
+        ensure indices and statuses remain aligned after list mutations
+        (exclude/restore) without relying on a full rebuild.
+        """
+        # Experiments
+        try:
+            if self.parent.expts_dict_keys and self.experiment_combo.count() > 0:
+                from pathlib import Path
+                from monstim_signals.io.repositories import ExperimentRepository
+
+                # Skip index 0 (placeholder)
+                for i, expt_id in enumerate(self.parent.expts_dict_keys, start=1):
+                    if i < self.experiment_combo.count():
+                        try:
+                            exp_path = Path(self.parent.expts_dict[expt_id])
+                            repo = ExperimentRepository(exp_path)
+                            meta = repo.get_metadata()
+                            self.experiment_combo.setItemData(
+                                i, bool(meta.get("is_completed", False)), Qt.ItemDataRole.UserRole + 1
+                            )
+                        except Exception:
+                            # If metadata not available, clear status (no circle)
+                            self.experiment_combo.setItemData(i, None, Qt.ItemDataRole.UserRole + 1)
+                self.experiment_combo.update()
+        except Exception:
+            pass
+
+        # Datasets
+        try:
+            if (
+                self.parent.current_experiment
+                and getattr(self.parent.current_experiment, "datasets", None)
+                and self.dataset_combo.isEnabled()
+            ):
+                datasets = self.parent.current_experiment.datasets
+                # The dataset combo, when enabled, contains only dataset items (no placeholder)
+                for i, ds in enumerate(datasets):
+                    if i < self.dataset_combo.count():
+                        self.dataset_combo.setItemData(i, getattr(ds, "is_completed", False), Qt.ItemDataRole.UserRole)
+                self.dataset_combo.update()
+        except Exception:
+            pass
+
+        # Sessions
+        try:
+            if (
+                self.parent.current_dataset
+                and getattr(self.parent.current_dataset, "sessions", None)
+                and self.session_combo.isEnabled()
+            ):
+                sessions = self.parent.current_dataset.sessions
+                for i, s in enumerate(sessions):
+                    if i < self.session_combo.count():
+                        self.session_combo.setItemData(i, getattr(s, "is_completed", False), Qt.ItemDataRole.UserRole)
+                self.session_combo.update()
+        except Exception:
+            pass
 
     def _on_experiment_combo_changed(self, index):
         # Skip if selecting the placeholder item (index 0)
