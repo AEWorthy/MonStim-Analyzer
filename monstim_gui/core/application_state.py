@@ -123,7 +123,7 @@ class ApplicationState:
 
         # Only save session state if we have at least an experiment
         if experiment_id is not None:
-            logging.info(
+            logging.debug(
                 f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
                 f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
             )

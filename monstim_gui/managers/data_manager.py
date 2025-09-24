@@ -823,12 +823,17 @@ class DataManager:
         progress_dialog.setAutoReset(False)
         progress_dialog.setMinimumDuration(0)  # Show immediately
         progress_dialog.setMinimumWidth(450)  # Make it wider for better text visibility
-        progress_dialog.resize(450, 120)  # Set a specific size
+        progress_dialog.resize(450, 120)
+
+        # Show once to finalize size, then lock height to prevent jumpy resize on long messages
+        progress_dialog.show()
+        QApplication.processEvents()
+        fixed_height = progress_dialog.height()
+        progress_dialog.setFixedSize(450, fixed_height)
 
         # Simple initial message - let the loader provide specific time estimates
         initial_text = f"Initializing {experiment_name}..."
         progress_dialog.setLabelText(initial_text)
-        progress_dialog.show()
 
         # Force immediate display
         QApplication.processEvents()

@@ -18,6 +18,12 @@ from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.recording import Recording
 from monstim_signals.domain.session import Session
+from monstim_signals.io.data_migrations import (
+    FutureVersionError,
+    UnknownVersionError,
+    migrate_annotation_dict,
+    scan_annotation_versions,
+)
 
 
 class RecordingRepository:
@@ -51,7 +57,7 @@ class RecordingRepository:
         self.meta_js = new_stem.with_suffix(".meta.json")
         self.annot_js = new_stem.with_suffix(".annot.json")
 
-    def load(self, config=None) -> "Recording":
+    def load(self, config=None, *, strict_version: bool = False) -> "Recording":
         # 1) Load meta JSON (immutable, record‐time facts)
         meta_dict = json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
@@ -59,6 +65,19 @@ class RecordingRepository:
         # 2) Load or create annot JSON (user edits)
         if self.annot_js.exists():
             annot_dict = json.loads(self.annot_js.read_text())
+            try:
+                report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
+                if report.changed:
+                    logging.debug(
+                        f"Recording annotation migrated {report.original_version}->{report.final_version} for {self.annot_js.name}"
+                    )
+                    # Persist migrated version immediately
+                    self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+            except FutureVersionError as e:
+                logging.error(str(e))
+                raise
+            except UnknownVersionError as e:
+                logging.warning(f"Unknown version for {self.annot_js}: {e}. Proceeding without migration.")
             annot = RecordingAnnot.from_dict(annot_dict)
         else:
             logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
@@ -156,7 +175,7 @@ class SessionRepository:
         # Ensure the session_id reflects the new folder name
         self.session_id = new_folder.name
 
-    def load(self, config=None) -> "Session":
+    def load(self, config=None, *, strict_version: bool = False) -> "Session":
         # 1) Discover all recordings in this folder
         recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
         recordings = [repo.load(config=config) for repo in recording_repos]
@@ -167,10 +186,22 @@ class SessionRepository:
         # 3) Load or create session annotation JSON
         if self.session_js.exists():
             session_annot_dict = json.loads(self.session_js.read_text())
+            try:
+                report = migrate_annotation_dict(session_annot_dict, strict_version=strict_version)
+                if report.changed:
+                    logging.debug(
+                        f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}"
+                    )
+                    self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+            except FutureVersionError as e:
+                logging.error(str(e))
+                raise
+            except UnknownVersionError as e:
+                logging.warning(f"Unknown version for {self.session_js}: {e}. Proceeding without migration.")
             session_annot = SessionAnnot.from_dict(session_annot_dict)
         else:  # If no session.annot.json, initialize a brand‐new one
             if recordings:
-                logging.info(
+                logging.debug(
                     f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one."
                 )
                 session_annot = SessionAnnot.from_meta(recordings[0].meta)
@@ -270,7 +301,7 @@ class DatasetRepository:
         self.folder = new_folder
         self.dataset_js = new_folder / "dataset.annot.json"
 
-    def load(self, config=None) -> "Dataset":
+    def load(self, config=None, *, strict_version: bool = False) -> "Dataset":
         # 1) Discover valid session folders (those with annot or any *.raw.h5)
         session_repos = list(SessionRepository.discover_in_folder(self.folder))
 
@@ -280,6 +311,18 @@ class DatasetRepository:
         # 3) Load or create dataset annotation JSON
         if self.dataset_js.exists():
             session_annot_dict = json.loads(self.dataset_js.read_text())
+            try:
+                report = migrate_annotation_dict(session_annot_dict, strict_version=strict_version)
+                if report.changed:
+                    logging.debug(
+                        f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}"
+                    )
+                    self.dataset_js.write_text(json.dumps(session_annot_dict, indent=2))
+            except FutureVersionError as e:
+                logging.error(str(e))
+                raise
+            except UnknownVersionError as e:
+                logging.warning(f"Unknown version for {self.dataset_js}: {e}. Proceeding without migration.")
             dataset_annot = DatasetAnnot.from_dict(session_annot_dict)
         else:  # If no session.annot.json, initialize a brand‐new one
             logging.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one.")
@@ -434,12 +477,70 @@ class ExperimentRepository:
         self.folder = new_folder
         self.expt_js = new_folder / "experiment.annot.json"
 
-    def load(self, config=None) -> "Experiment":
+    def load(
+        self,
+        config=None,
+        *,
+        strict_version: bool = False,
+        preflight_scan: bool = False,
+        progress_callback=None,
+    ) -> "Experiment":
+        """Load the full experiment.
+
+        Args:
+            config: Optional config object passed through to domain objects.
+            strict_version: If True, raise on unknown / future annotation versions.
+            preflight_scan: If True perform migration scan (mostly used by tests / CLI flows).
+            progress_callback: Optional callable invoked as each dataset is about to be loaded.
+                Signature: callback(level:str, index:int, total:int, name:str) where:
+                    level == "dataset" currently (future: could add session granularity).
+                The callback is invoked BEFORE the dataset is actually loaded so the UI can
+                display a responsive progress bar even for very large datasets.
+        """
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
-        datasets = [DatasetRepository(ds_folder).load(config=config) for ds_folder in dataset_folders]
+        if preflight_scan:
+            try:
+                scan_results = scan_annotation_versions(
+                    self.folder,
+                    include_levels=("experiment", "dataset", "session", "recording"),
+                )
+                outdated = [r for r in scan_results if r.get("needs_migration")]
+                if outdated:
+                    logging.info(
+                        "Preflight migration scan: %d annotation files need migration (example: %s -> %s)",
+                        len(outdated),
+                        outdated[0]["path"],
+                        outdated[0]["planned_steps"],
+                    )
+                else:
+                    logging.info("Preflight migration scan: all annotation files current.")
+            except Exception as e:  # pragma: no cover
+                logging.warning(f"Preflight scan failed (non-fatal): {e}")
+        datasets = []
+        total_datasets = len(dataset_folders)
+        for idx, ds_folder in enumerate(dataset_folders, start=1):
+            if progress_callback is not None:
+                try:  # Never let a UI callback break loading
+                    progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
+                except Exception:  # pragma: no cover - defensive
+                    logging.debug("Progress callback errored (ignored)", exc_info=True)
+            ds_obj = DatasetRepository(ds_folder).load(config=config, strict_version=strict_version)
+            datasets.append(ds_obj)
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
         if self.expt_js.exists():
             annot_dict = json.loads(self.expt_js.read_text())
+            try:
+                report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
+                if report.changed:
+                    logging.debug(
+                        f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}"
+                    )
+                    self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+            except FutureVersionError as e:
+                logging.error(str(e))
+                raise
+            except UnknownVersionError as e:
+                logging.warning(f"Unknown version for {self.expt_js}: {e}. Proceeding without migration.")
             annot = ExperimentAnnot.from_dict(annot_dict)
         else:
             logging.info(f"Experiment annotation file '{self.expt_js}' not found. Creating a new one.")
