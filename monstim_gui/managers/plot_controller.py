@@ -246,7 +246,13 @@ class PlotController:
         # headless/testing context. Tests provide a FakeGUI that sets a
         # 'headless' attribute; in that case we suppress the dialog entirely
         # to avoid QWidget type issues and unnecessary modal UI in CI.
-        if not getattr(self.gui, "headless", False):
+        # Only suppress if the object explicitly defines headless is True.
+        # Using hasattr + getattr avoids unittest.mock creating an auto-spec
+        # attribute that defaults to another Mock (truthy). This way real
+        # Mock() instances without an explicit headless attr will still show
+        # (and therefore be patch-capturable in tests that expect calls).
+        suppress_dialog = hasattr(self.gui, "headless") and getattr(self.gui, "headless") is True
+        if not suppress_dialog:
             QMessageBox.warning(self.gui, title, user_msg)
 
         # Log the error for debugging purposes
