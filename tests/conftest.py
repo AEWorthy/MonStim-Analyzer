@@ -119,6 +119,9 @@ class FakeGUI:
 
     def __init__(self, output_dir: Path):
         self.output_path = str(output_dir)
+        # Mark this stand-in as headless so UI code can choose to suppress
+        # modal dialogs (e.g., QMessageBox) during tests.
+        self.headless = True
         self.expts_dict = {}
         self.expts_dict_keys = []
         self.current_experiment = None
