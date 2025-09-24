@@ -109,6 +109,7 @@ We welcome code contributions that:
 
 ### Testing Requirements
 
+- **Automated tests** with pytest (see [Testing Guide](docs/testing.md))
 - **Manual testing** on multiple operating systems
 - **Test with various data sizes** (small and large datasets)
 - **Verify UI scaling** on different DPI settings
@@ -159,9 +160,10 @@ Before submitting a PR, please test:
 
 ### Test Data
 
-- Use the sample data in the `data/` directory
-- Test with your own EMG data (if possible to share)
-- Create edge cases: empty files, malformed data, very large files
+- Do NOT use the `data/` directory for tests.
+- Use curated 'golden' fixtures under `tests/fixtures/golden/` directory for tests and import them into temporary directories during testing.
+- Negative cases live under `tests/fixtures/golden/invalid/` for malformed inputs and wrong naming.
+- A dedicated test (`tests/test_golden_channel_counts.py`) enforces a ≥ 2 channel policy for all golden imports.
 
 ## Areas for Contribution
 

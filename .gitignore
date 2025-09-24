@@ -3,6 +3,7 @@
 /data
 /.EXAMPLE_DATA
 /.OLD_DATA
+/.pytest-tmp-golden-check
 
 docs/config-user.yml
 

@@ -127,7 +127,7 @@ class Dataset:
 
     @property
     def sessions(self) -> List[Session]:
-        return [sess for sess in self._all_sessions if sess.id not in self.excluded_sessions]
+        return self.get_all_sessions(include_excluded=False)
 
     @property
     def num_channels(self) -> int:
@@ -157,6 +157,15 @@ class Dataset:
             vols = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             binned_voltages.update(vols.tolist())
         return np.array(sorted(binned_voltages))
+
+    def get_all_sessions(self, include_excluded=False):
+        """
+        Returns a list of all sessions in the dataset.
+        If include_excluded is True, includes excluded sessions as well.
+        """
+        if include_excluded:
+            return self._all_sessions
+        return [sess for sess in self._all_sessions if sess.id not in self.excluded_sessions]
 
     # ------------------------------------------------------------------
     # Latency window helper methods
@@ -231,7 +240,7 @@ class Dataset:
         Applies user preferences to the dataset.
         This method is a placeholder for any future preferences that might be added.
         """
-        for session in self._all_sessions:
+        for session in self.get_all_sessions(include_excluded=True):
             session.apply_config()
 
         self._load_config_settings()
@@ -247,7 +256,7 @@ class Dataset:
         Update the configuration for this dataset and all child sessions.
         """
         self._config = config
-        for sess in self._all_sessions:
+        for sess in self.get_all_sessions(include_excluded=True):
             if hasattr(sess, "set_config"):
                 sess.set_config(config)
 
@@ -478,7 +487,7 @@ class Dataset:
 
     def exclude_session(self, session_id: str) -> None:
         """Exclude a session from this dataset by its ID."""
-        if session_id not in [s.id for s in self._all_sessions]:
+        if session_id not in [s.id for s in self.get_all_sessions(include_excluded=True)]:
             logging.warning(f"Session {session_id} not found in dataset {self.id}.")
             return
         if session_id not in self.annot.excluded_sessions:
@@ -491,11 +500,9 @@ class Dataset:
 
         if self.sessions == []:
             logging.info(f"All sessions in dataset {self.id} have been excluded.")
-            # If no sessions remain, clear list and exclude dataset from parent experiment
+            # If no sessions remain, optionally notify parent experiment
             if self.parent_experiment is not None:
                 self.parent_experiment.exclude_dataset(self.id)
-            self.annot.excluded_sessions.clear()
-            logging.info(f"Dataset {self.id} has no remaining sessions and is now excluded from the parent experiment.")
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""
@@ -589,3 +596,11 @@ class Dataset:
 
     def __len__(self) -> int:
         return self.num_sessions
+
+    def __bool__(self) -> bool:
+        """
+        A Dataset instance represents a real dataset, even if it currently has
+        zero sessions (e.g., after exclusion or during import). Make it truthy
+        to avoid accidental falsy evaluation via __len__.
+        """
+        return True

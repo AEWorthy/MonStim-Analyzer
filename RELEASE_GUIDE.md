@@ -29,7 +29,7 @@ pyinstaller --clean win-main.spec
 - [ ] Test basic functionality (import, plot, export)
 
 ### 5. Release Distribution
-- [ ] Create GitHub release with appropriate tag (e.g., `v0.4.2`)
+- [ ] Create GitHub release with appropriate tag (e.g., `v0.4.3`)
 - [ ] Upload the distribution zip file
 - [ ] Include changelog content in release notes
 - [ ] Mark as pre-release if applicable

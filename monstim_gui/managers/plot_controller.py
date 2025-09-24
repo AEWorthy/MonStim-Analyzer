@@ -242,8 +242,10 @@ class PlotController:
             user_msg = f"Unable to create plot: {error_msg}"
             title = "Plot Error"
 
-        # Show user-friendly message (no stack trace)
-        QMessageBox.warning(self.gui, title, user_msg)
+        # Show user-friendly message (no stack trace) if not running in a headless/testing context.
+        suppress_dialog = hasattr(self.gui, "headless") and getattr(self.gui, "headless") is True
+        if not suppress_dialog:
+            QMessageBox.warning(self.gui, title, user_msg)
 
         # Log the error for debugging purposes
         logging.warning(f"Unable to plot: {error_msg}")

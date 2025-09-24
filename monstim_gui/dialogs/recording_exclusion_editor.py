@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
+    from monstim_signals.domain import Session
 
 
 class RecordingExclusionEditor(QDialog):
@@ -240,7 +241,7 @@ class RecordingExclusionEditor(QDialog):
 
         self.update_preview()
 
-    def get_sessions_for_level(self) -> List:
+    def get_sessions_for_level(self) -> List["Session"]:
         """Get list of sessions based on selected application level."""
         level = self.level_combo.currentData()
 
@@ -298,7 +299,7 @@ class RecordingExclusionEditor(QDialog):
         # Collect all recordings and their exclusion status
         recordings_data = []
         for session in sessions:
-            for recording in session.get_recordings(include_excluded=True):  # Include all recordings, even excluded ones
+            for recording in session.get_all_recordings(include_excluded=True):  # Include all recordings, even excluded ones
                 will_exclude = self.should_exclude_recording(recording)
                 current_status = recording.id in session.excluded_recordings
 
@@ -382,7 +383,7 @@ class RecordingExclusionEditor(QDialog):
         total_inclusions = 0
 
         for session in sessions:
-            for recording in session.get_recordings(include_excluded=True):
+            for recording in session.get_all_recordings(include_excluded=True):
                 should_exclude = self.should_exclude_recording(recording)
                 currently_excluded = recording.id in session.excluded_recordings
 
@@ -421,7 +422,7 @@ class RecordingExclusionEditor(QDialog):
             changes = []
             for session in sessions:
                 session_changes = []
-                for recording in session.get_recordings(include_excluded=True):
+                for recording in session.get_all_recordings(include_excluded=True):
                     should_exclude = self.should_exclude_recording(recording)
                     currently_excluded = recording.id in session.excluded_recordings
 
@@ -447,7 +448,7 @@ class RecordingExclusionEditor(QDialog):
             logging.warning("BulkRecordingExclusionCommand not available, applying changes directly")
 
             for session in sessions:
-                for recording in session.get_recordings(include_excluded=True):
+                for recording in session.get_all_recordings(include_excluded=True):
                     should_exclude = self.should_exclude_recording(recording)
                     currently_excluded = recording.id in session.excluded_recordings
 

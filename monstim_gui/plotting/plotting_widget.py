@@ -32,8 +32,8 @@ class PlotWidget(QGroupBox):
         self.current_option_widget: "BasePlotOptions" = None
         self.parent: "MonstimGUI" = parent
         self.layout: "QVBoxLayout" = QVBoxLayout()
-        self.layout.setContentsMargins(8, 8, 8, 8)
-        self.layout.setSpacing(6)
+        self.layout.setContentsMargins(4, 4, 4, 4)
+        self.layout.setSpacing(4)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -81,8 +81,8 @@ class PlotWidget(QGroupBox):
         self.options_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.options_content = QWidget()
         self.options_layout = QVBoxLayout(self.options_content)
-        self.options_layout.setContentsMargins(4, 4, 4, 4)  # Small margins for better appearance
-        self.options_layout.setSpacing(2)  # Minimal spacing between widgets
+        self.options_layout.setContentsMargins(2, 2, 2, 2)
+        self.options_layout.setSpacing(2)  # keep minimal spacing between widgets
         self.options_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align content to top
 
         self.options_scroll.setWidget(self.options_content)

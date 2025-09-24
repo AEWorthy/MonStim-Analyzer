@@ -1,4 +1,4 @@
-name: Pre-Stimulus Time
+name: Pre-Stimulus View
 description: 50ms of recording before the onset of the primary stimulus for a trial.
 stimuli_to_plot:
 - Electrical

@@ -22,12 +22,12 @@ except FileNotFoundError:
     pass
 
 # Set dist name with version
-from monstim_gui.version import VERSION
+from monstim_gui.version import VERSION  # noqa: E402
 EXE_NAME = f'MonStim Analyzer v{VERSION}'
 DIST_NAME = f'MonStim_Analyzer_v{VERSION}-WIN'
 
 
-a = Analysis( # type: ignore
+a = Analysis( # type: ignore  # noqa: F821
     ['main.py'],
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],

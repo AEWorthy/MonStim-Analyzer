@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
-    from gui_main import MonstimGUI
+    from monstim_gui.gui_main import MonstimGUI
 
 
 class Command(abc.ABC):
@@ -19,6 +19,10 @@ class Command(abc.ABC):
     @abc.abstractmethod
     def undo(self):
         pass
+
+    def get_description(self) -> str:
+        """Return a human-readable description of this command."""
+        return getattr(self, "command_name", type(self).__name__)
 
 
 class CommandInvoker:
@@ -90,6 +94,9 @@ class ExcludeRecordingCommand(Command):
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
+    def get_description(self) -> str:
+        return f"Excluded recording '{self.recording_id}'"
+
 
 class RestoreRecordingCommand(Command):
     def __init__(self, gui, recording_id: str):
@@ -111,6 +118,9 @@ class RestoreRecordingCommand(Command):
         except ValueError as e:
             QMessageBox.critical(self.gui, "Error", str(e))
 
+    def get_description(self) -> str:
+        return f"Restored recording '{self.recording_id}'"
+
 
 class ExcludeSessionCommand(Command):
     """Exclude the currently selected session."""
@@ -131,9 +141,8 @@ class ExcludeSessionCommand(Command):
 
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
-
-        # Update combos and keep dataset selection
-        self.gui.data_selection_widget.update_session_combo()
+        # Update only the session list; keep dataset selection
+        self.gui.data_selection_widget.update(levels=("session",))
 
     def undo(self):
         self.gui.current_dataset.restore_session(self.session_id)
@@ -141,8 +150,8 @@ class ExcludeSessionCommand(Command):
         # Ensure we maintain the correct dataset selection
         if self.previous_dataset and self.gui.current_dataset != self.previous_dataset:
             self.gui.current_dataset = self.previous_dataset
-        # Update session combo and set the correct selection
-        self.gui.data_selection_widget.update_session_combo()
+        # Update session list and set the correct selection
+        self.gui.data_selection_widget.update(levels=("session",))
         if self.removed_session:
             try:
                 session_index = self.gui.current_dataset.sessions.index(self.removed_session)
@@ -173,10 +182,8 @@ class ExcludeDatasetCommand(Command):
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
         self.gui.current_session = None
-
-        # Update combos and keep experiment selection
-        self.gui.data_selection_widget.update_dataset_combo()
-        self.gui.data_selection_widget.update_session_combo()
+        # Update dataset and session lists while keeping experiment selection
+        self.gui.data_selection_widget.update()
 
     def undo(self):
         self.gui.current_experiment.restore_dataset(self.dataset_id)
@@ -184,8 +191,8 @@ class ExcludeDatasetCommand(Command):
         # Ensure we maintain the correct experiment selection
         if self.previous_experiment and self.gui.current_experiment != self.previous_experiment:
             self.gui.current_experiment = self.previous_experiment
-        # Update dataset combo and set the correct selection
-        self.gui.data_selection_widget.update_dataset_combo()
+        # Update dataset list and set the correct selection
+        self.gui.data_selection_widget.update(levels=("dataset",))
         if self.removed_dataset:
             try:
                 dataset_index = self.gui.current_experiment.datasets.index(self.removed_dataset)
@@ -194,8 +201,8 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError:
                 pass  # Dataset not found in list
-        # Update session combo since dataset changed
-        self.gui.data_selection_widget.update_session_combo()
+        # Update session list since dataset changed
+        self.gui.data_selection_widget.update(levels=("session",))
 
 
 class RestoreSessionCommand(Command):
@@ -209,13 +216,13 @@ class RestoreSessionCommand(Command):
 
     def execute(self):
         self.session_obj = next(
-            (s for s in self.gui.current_dataset._all_sessions if s.id == self.session_id),
+            (s for s in self.gui.current_dataset.get_all_sessions(include_excluded=True) if s.id == self.session_id),
             None,
         )
         self.gui.current_dataset.restore_session(self.session_id)
         self.gui.current_session = self.session_obj
-        # Only update session combo and sync its selection
-        self.gui.data_selection_widget.update_session_combo()
+        # Only update session list and sync its selection
+        self.gui.data_selection_widget.update(levels=("session",))
         if self.session_obj:
             # Find the index of the restored session
             try:
@@ -229,7 +236,7 @@ class RestoreSessionCommand(Command):
     def undo(self):
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
-        self.gui.data_selection_widget.update_session_combo()
+        self.gui.data_selection_widget.update(levels=("session",))
 
 
 class RestoreDatasetCommand(Command):
@@ -248,8 +255,8 @@ class RestoreDatasetCommand(Command):
         )
         self.gui.current_experiment.restore_dataset(self.dataset_id)
         self.gui.current_dataset = self.dataset_obj
-        # Update dataset combo and sync its selection
-        self.gui.data_selection_widget.update_dataset_combo()
+        # Update dataset list and sync its selection
+        self.gui.data_selection_widget.update(levels=("dataset",))
         if self.dataset_obj:
             # Find the index of the restored dataset
             try:
@@ -259,15 +266,14 @@ class RestoreDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError:
                 pass  # Dataset not found in list
-        # Update session combo since dataset changed
-        self.gui.data_selection_widget.update_session_combo()
+        # Update session list since dataset changed
+        self.gui.data_selection_widget.update(levels=("session",))
 
     def undo(self):
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
         self.gui.current_session = None
-        self.gui.data_selection_widget.update_dataset_combo()
-        self.gui.data_selection_widget.update_session_combo()
+        self.gui.data_selection_widget.update(levels=("dataset", "session"))
 
 
 class InvertChannelPolarityCommand(Command):
@@ -439,3 +445,287 @@ class BulkRecordingExclusionCommand(Command):
 
         except Exception as e:
             QMessageBox.critical(self.gui, "Error", f"Failed to undo bulk exclusions: {str(e)}")
+
+
+# Data Curation Commands
+class CreateExperimentCommand(Command):
+    def __init__(self, gui, exp_name: str):
+        self.command_name = f"Create Experiment '{exp_name}'"
+        self.gui = gui
+        self.exp_name = exp_name
+
+    def execute(self):
+        """Create the experiment immediately."""
+        try:
+            self.gui.data_manager.create_experiment(self.exp_name)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to create experiment: {str(e)}")
+
+    def undo(self):
+        """Delete the created experiment."""
+        try:
+            self.gui.data_manager.delete_experiment_by_id(self.exp_name)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to undo experiment creation: {str(e)}")
+
+    def get_description(self) -> str:
+        return f"Created experiment '{self.exp_name}'"
+
+
+class MoveDatasetCommand(Command):
+    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str):
+        self.command_name = f"Move '{dataset_name}' from '{from_exp}' to '{to_exp}'"
+        self.gui = gui
+        self.dataset_id = dataset_id
+        self.dataset_name = dataset_name
+        self.from_exp = from_exp
+        self.to_exp = to_exp
+
+    def execute(self):
+        """Move the dataset immediately."""
+        try:
+            self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to move dataset: {str(e)}")
+
+    def undo(self):
+        """Move the dataset back to original location."""
+        try:
+            self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to undo dataset move: {str(e)}")
+
+    def get_description(self) -> str:
+        return f"Moved dataset '{self.dataset_name}' from '{self.from_exp}' to '{self.to_exp}'"
+
+
+class CopyDatasetCommand(Command):
+    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
+        self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
+        self.gui = gui
+        self.dataset_id = dataset_id
+        self.dataset_name = dataset_name
+        self.from_exp = from_exp
+        self.to_exp = to_exp
+        self.new_name = new_name  # Optional new name for the copied dataset
+        self.copied_folder_name = None  # Will be set after execution
+
+    def execute(self):
+        """Copy the dataset immediately."""
+        try:
+            # Store the original target experiment datasets before copy
+            from pathlib import Path
+
+            to_exp_path = Path(self.gui.expts_dict[self.to_exp])
+            original_datasets = set(f.name for f in to_exp_path.iterdir() if f.is_dir())
+
+            self.gui.data_manager.copy_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp, self.new_name)
+
+            # Find the new dataset folder name (might have _copy suffix)
+            new_datasets = set(f.name for f in to_exp_path.iterdir() if f.is_dir())
+            added_datasets = new_datasets - original_datasets
+            if added_datasets:
+                self.copied_folder_name = list(added_datasets)[0]
+            else:
+                self.copied_folder_name = self.dataset_id  # fallback
+
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to copy dataset: {str(e)}")
+
+    def undo(self):
+        """Delete the copied dataset."""
+        try:
+            if self.copied_folder_name:
+                self.gui.data_manager.delete_dataset(self.copied_folder_name, self.copied_folder_name, self.to_exp)
+                # Refresh the data curation manager if it's open
+                if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                    self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to undo dataset copy: {str(e)}")
+
+    def get_description(self) -> str:
+        if self.from_exp == self.to_exp:
+            action = "Duplicated"
+            location = f"within '{self.from_exp}'"
+            if self.new_name:
+                location += f" as '{self.new_name}'"
+        else:
+            action = "Copied"
+            location = f"from '{self.from_exp}' to '{self.to_exp}'"
+        return f"{action} dataset '{self.dataset_name}' {location}"
+
+
+class DeleteExperimentCommand(Command):
+    def __init__(self, gui, exp_name: str):
+        self.command_name = f"Delete Experiment '{exp_name}'"
+        self.gui = gui
+        self.exp_name = exp_name
+        self.backup_path = None  # Will store backup information if needed
+
+    def execute(self):
+        """Delete the experiment immediately (with user confirmation already handled)."""
+        try:
+            # For now, we'll use the existing delete method from data manager
+            # Note: This is irreversible, so undo will show a warning
+            self.gui.data_manager.delete_experiment_by_id(self.exp_name)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to delete experiment: {str(e)}")
+
+    def undo(self):
+        """Cannot undo experiment deletion - show warning."""
+        QMessageBox.warning(
+            self.gui,
+            "Cannot Undo Deletion",
+            f"Experiment '{self.exp_name}' was permanently deleted and cannot be restored.\n\n"
+            "Deletion operations are irreversible for safety reasons.",
+        )
+
+    def get_description(self) -> str:
+        return f"Deleted experiment '{self.exp_name}' (irreversible)"
+
+
+class RenameExperimentCommand(Command):
+    def __init__(self, gui, old_name: str, new_name: str):
+        self.command_name = f"Rename Experiment '{old_name}' to '{new_name}'"
+        self.gui = gui
+        self.old_name = old_name
+        self.new_name = new_name
+
+    def execute(self):
+        """Rename the experiment immediately."""
+        try:
+            self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to rename experiment: {str(e)}")
+
+    def undo(self):
+        """Rename back to original name."""
+        try:
+            self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to undo experiment rename: {str(e)}")
+
+    def get_description(self) -> str:
+        return f"Renamed experiment '{self.old_name}' to '{self.new_name}'"
+
+
+class DeleteDatasetCommand(Command):
+    """Delete a dataset from an experiment. This operation is irreversible; undo will show a warning."""
+
+    def __init__(self, gui, dataset_id: str, dataset_name: str, exp_id: str):
+        self.command_name = f"Delete Dataset '{dataset_name}' in '{exp_id}'"
+        self.gui = gui
+        self.dataset_id = dataset_id
+        self.dataset_name = dataset_name
+        self.exp_id = exp_id
+
+    def execute(self):
+        try:
+            self.gui.data_manager.delete_dataset(self.dataset_id, self.dataset_name, self.exp_id)
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+        except Exception as e:
+            raise Exception(f"Failed to delete dataset: {str(e)}")
+
+    def undo(self):
+        QMessageBox.warning(
+            self.gui,
+            "Cannot Undo Deletion",
+            f"Dataset '{self.dataset_name}' in experiment '{self.exp_id}' was permanently deleted and cannot be restored.\n\n"
+            "Deletion operations are irreversible for safety reasons.",
+        )
+
+    def get_description(self) -> str:
+        return f"Deleted dataset '{self.dataset_name}' in '{self.exp_id}' (irreversible)"
+
+
+class ToggleDatasetInclusionCommand(Command):
+    """Include or exclude a dataset at the experiment level by updating ExperimentAnnot.excluded_datasets."""
+
+    def __init__(self, gui, exp_id: str, dataset_id: str, exclude: bool):
+        action = "Exclude" if exclude else "Include"
+        self.command_name = f"{action} Dataset '{dataset_id}' in '{exp_id}'"
+        self.gui = gui
+        self.exp_id = exp_id
+        self.dataset_id = dataset_id
+        self.exclude = exclude
+        self._prev_was_excluded = None
+
+    def _apply(self, set_excluded: bool):
+        from pathlib import Path
+
+        from monstim_signals.io.repositories import ExperimentRepository
+
+        exp_path = Path(self.gui.expts_dict[self.exp_id])
+        repo = ExperimentRepository(exp_path)
+        # Load annot minimally through repo.load or by reading file
+        # To keep it lightweight, read annot JSON and write back
+        import json
+        from dataclasses import asdict
+
+        from monstim_signals.core import ExperimentAnnot
+
+        try:
+            if repo.expt_js.exists():
+                annot_dict = json.loads(repo.expt_js.read_text())
+                annot = ExperimentAnnot.from_dict(annot_dict)
+            else:
+                annot = ExperimentAnnot.create_empty()
+
+            if self._prev_was_excluded is None:
+                self._prev_was_excluded = self.dataset_id in annot.excluded_datasets
+
+            if set_excluded:
+                if self.dataset_id not in annot.excluded_datasets:
+                    annot.excluded_datasets.append(self.dataset_id)
+            else:
+                if self.dataset_id in annot.excluded_datasets:
+                    annot.excluded_datasets = [d for d in annot.excluded_datasets if d != self.dataset_id]
+
+            repo.expt_js.write_text(json.dumps(asdict(annot), indent=2))
+        except Exception as e:
+            raise Exception(f"Failed to update dataset inclusion: {e}")
+
+        # Refresh open dialog/UI if present
+        if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+            self.gui._data_curation_manager.load_data()
+
+    def execute(self):
+        self._apply(self.exclude)
+
+    def undo(self):
+        # Revert to original exclusion state
+        if self._prev_was_excluded is None:
+            # If somehow unknown, just toggle opposite
+            self._apply(not self.exclude)
+        else:
+            self._apply(self._prev_was_excluded)
+
+    def get_description(self) -> str:
+        action = "Excluded" if self.exclude else "Included"
+        return f"{action} dataset '{self.dataset_id}' in '{self.exp_id}'"

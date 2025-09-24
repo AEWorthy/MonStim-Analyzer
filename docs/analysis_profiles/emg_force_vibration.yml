@@ -5,6 +5,6 @@ stimuli_to_plot:
 - Length
 - Electrical
 analysis_parameters:
-  time_window: 400.0
-  pre_stim_time: 200.0
+  time_window: 800.0
+  pre_stim_time: 400.0
   bin_size: 0.5

@@ -5,9 +5,12 @@ Handles UI state and user preferences that should persist across sessions.
 
 import logging
 import os
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
 
 from PyQt6.QtCore import QSettings
+
+if TYPE_CHECKING:
+    from monstim_gui.gui_main import MonstimGUI
 
 
 class ApplicationState:
@@ -238,7 +241,7 @@ class ApplicationState:
         return result
 
     # === SESSION RESTORATION METHODS ===
-    def restore_last_session(self, gui) -> bool:
+    def restore_last_session(self, gui: "MonstimGUI") -> bool:
         """
         Attempt to restore the last session state.
         Returns True if restoration was attempted, False if no valid state exists.
@@ -286,7 +289,8 @@ class ApplicationState:
                                 if dataset_id in dataset_names:
                                     ds_index = dataset_names.index(dataset_id)
                                     logging.info(f"Session restoration: Restoring dataset '{dataset_id}' at index {ds_index}")
-                                    gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
+                                    # Load the dataset through data manager instead of just setting combo index
+                                    gui.data_manager.load_dataset(ds_index)
 
                                     # Restore session
                                     if session_id and gui.current_dataset:
@@ -296,7 +300,8 @@ class ApplicationState:
                                             logging.info(
                                                 f"Session restoration: Restoring session '{session_id}' at index {sess_index}"
                                             )
-                                            gui.data_selection_widget.session_combo.setCurrentIndex(sess_index)
+                                            # Load the session through data manager instead of just setting combo index
+                                            gui.data_manager.load_session(sess_index)
                                         else:
                                             logging.warning(
                                                 f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'"
@@ -309,6 +314,9 @@ class ApplicationState:
                                     logging.warning(
                                         f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'"
                                     )
+
+                            # After loading, ensure visual combo selections are synced with actual state
+                            gui.data_selection_widget.update()
                         except Exception as e:
                             logging.error(f"Error restoring dataset/session: {e}")
                             import traceback
@@ -317,6 +325,9 @@ class ApplicationState:
                         finally:
                             # Always clear the restoration flag when done
                             self._is_restoring_session = False
+                            # For empty experiments, ensure combos show correct state after restoration
+                            if gui.current_experiment and not gui.current_experiment.datasets:
+                                gui.data_selection_widget.update(levels=("dataset", "session"))
                             # Save the final restored state
                             self.save_current_session_state(
                                 experiment_id=experiment_id,
@@ -339,6 +350,9 @@ class ApplicationState:
                             logging.warning("Session restoration: Gave up waiting for experiment to load after 5 seconds")
                             # Clear the restoration flag if we give up
                             self._is_restoring_session = False
+                            # Ensure combos are in correct state for empty experiments
+                            if gui.current_experiment and not gui.current_experiment.datasets:
+                                gui.data_selection_widget.update(levels=("dataset", "session"))
 
                 QTimer.singleShot(1000, restore_nested)  # Give experiment time to load
 

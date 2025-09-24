@@ -216,6 +216,7 @@ class SessionRepository:
                     continue
                 raise
 
+    @staticmethod
     def discover_in_folder(folder: Path) -> Iterator["SessionRepository"]:
         """
         Given a folder Path, yield a SessionRepository for each session subfolder.
@@ -226,15 +227,25 @@ class SessionRepository:
             SessionRepository(Path("folder/AA01"))
             SessionRepository(Path("folder/AA02"))
         """
-        for sess_folder in folder.iterdir():
-            if sess_folder.is_dir() and (sess_folder / "session.annot.json").exists():
-                logging.info(f"Discovered session: {sess_folder.name}")
-                yield SessionRepository(sess_folder)
-            elif sess_folder.is_dir() and any(sess_folder.glob("*.raw.h5")):
-                logging.info(f"Discovered session without annot: {sess_folder.name}")
-                yield SessionRepository(sess_folder)  # still yield, but no session.annot.json
-            else:
-                logging.warning(f"No valid session found in {sess_folder}.")
+        for entry in folder.iterdir():
+            # Only consider directories as session candidates; skip files like dataset.annot.json
+            if not entry.is_dir():
+                continue
+
+            # Session folder with explicit session annotation
+            if (entry / "session.annot.json").exists():
+                logging.debug(f"Discovered session: {entry.name}")
+                yield SessionRepository(entry)
+                continue
+
+            # Session folder inferred by presence of raw recordings
+            if any(entry.glob("*.raw.h5")):
+                logging.debug(f"Discovered session without annot: {entry.name}")
+                yield SessionRepository(entry)  # still yield, but no session.annot.json
+                continue
+
+            # Directory present but no recognizable session contents; warn so users can fix layout
+            logging.warning(f"Invalid session directory (no session.annot.json nor *.raw.h5): {entry}")
 
 
 class DatasetRepository:
@@ -260,11 +271,11 @@ class DatasetRepository:
         self.dataset_js = new_folder / "dataset.annot.json"
 
     def load(self, config=None) -> "Dataset":
-        # 1) Each subfolder of `folder` is a session
-        session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+        # 1) Discover valid session folders (those with annot or any *.raw.h5)
+        session_repos = list(SessionRepository.discover_in_folder(self.folder))
 
-        # 2) Load each Session
-        sessions = [SessionRepository(sess_folder).load(config=config) for sess_folder in session_folders]
+        # 2) Load each Session from discovered repos
+        sessions = [repo.load(config=config) for repo in session_repos]
 
         # 3) Load or create dataset annotation JSON
         if self.dataset_js.exists():
@@ -321,7 +332,7 @@ class DatasetRepository:
                     try:
                         dataset.id = new_folder.name
                         # For each session in the dataset, update the session repo paths
-                        for session in dataset._all_sessions:
+                        for session in dataset.get_all_sessions(include_excluded=True):
                             if session.repo:
                                 # New session folder path under the renamed dataset
                                 new_session_path = self.folder / session.repo.folder.name
@@ -346,6 +357,60 @@ class DatasetRepository:
                     gc.collect()
                     continue
                 raise
+
+    def get_metadata(self) -> dict:
+        """
+        Get lightweight metadata about the dataset without loading heavy session/recording data.
+        Returns basic info like session count, names, completion status, etc.
+        """
+        try:
+            # Get dataset annotation
+            if self.dataset_js.exists():
+                annot_dict = json.loads(self.dataset_js.read_text())
+                dataset_annot = DatasetAnnot.from_dict(annot_dict)
+            else:
+                dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+
+            # Get session folders without loading them
+            session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            session_names = [folder.name for folder in session_folders]
+
+            # Construct formatted name like the Dataset domain object does
+            if dataset_annot.date and dataset_annot.animal_id and dataset_annot.condition:
+                formatted_name = f"{dataset_annot.date} {dataset_annot.animal_id} {dataset_annot.condition}"
+            else:
+                formatted_name = self.dataset_id
+
+            return {
+                "id": self.dataset_id,
+                "path": str(self.folder),
+                "formatted_name": formatted_name,
+                "session_count": len(session_folders),
+                "session_names": session_names,
+                "is_completed": dataset_annot.is_completed,
+                "excluded_sessions": dataset_annot.excluded_sessions,
+                "data_version": dataset_annot.data_version,
+                "animal_id": dataset_annot.animal_id,
+                "date": dataset_annot.date,
+                "condition": dataset_annot.condition,
+            }
+
+        except Exception as e:
+            logging.error(f"Failed to get metadata for dataset {self.dataset_id}: {e}")
+            return {
+                "id": self.dataset_id,
+                "path": str(self.folder),
+                "formatted_name": self.dataset_id,
+                "session_count": 0,
+                "session_names": [],
+                "is_completed": False,
+                "excluded_sessions": [],
+                "data_version": "unknown",
+                "animal_id": "unknown",
+                "date": "unknown",
+                "condition": "unknown",
+                "error": str(e),
+            }
 
 
 class ExperimentRepository:
@@ -382,6 +447,52 @@ class ExperimentRepository:
             self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
         expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
         return expt
+
+    def get_metadata(self) -> dict:
+        """
+        Get lightweight metadata about the experiment without loading heavy data.
+        Returns basic info like dataset count, names, etc.
+        """
+        try:
+            # Get experiment annotation
+            if self.expt_js.exists():
+                annot_dict = json.loads(self.expt_js.read_text())
+                annot = ExperimentAnnot.from_dict(annot_dict)
+            else:
+                annot = ExperimentAnnot.create_empty()
+
+            # Get dataset folders without loading them
+            dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            dataset_metadata = []
+
+            for ds_folder in dataset_folders:
+                # Get basic dataset info without loading sessions/recordings
+                ds_repo = DatasetRepository(ds_folder)
+                ds_meta = ds_repo.get_metadata()
+                dataset_metadata.append(ds_meta)
+
+            return {
+                "id": self.folder.name,
+                "path": str(self.folder),
+                "dataset_count": len(dataset_folders),
+                "datasets": dataset_metadata,
+                "is_completed": annot.is_completed,
+                "excluded_datasets": annot.excluded_datasets,
+                "data_version": annot.data_version,
+            }
+
+        except Exception as e:
+            logging.error(f"Failed to get metadata for experiment {self.folder.name}: {e}")
+            return {
+                "id": self.folder.name,
+                "path": str(self.folder),
+                "dataset_count": 0,
+                "datasets": [],
+                "is_completed": False,
+                "excluded_datasets": [],
+                "data_version": "unknown",
+                "error": str(e),
+            }
 
     def save(self, expt: Experiment) -> None:
         """
