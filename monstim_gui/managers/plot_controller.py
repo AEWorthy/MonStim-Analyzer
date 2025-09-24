@@ -242,15 +242,7 @@ class PlotController:
             user_msg = f"Unable to create plot: {error_msg}"
             title = "Plot Error"
 
-        # Show user-friendly message (no stack trace) unless running in a
-        # headless/testing context. Tests provide a FakeGUI that sets a
-        # 'headless' attribute; in that case we suppress the dialog entirely
-        # to avoid QWidget type issues and unnecessary modal UI in CI.
-        # Only suppress if the object explicitly defines headless is True.
-        # Using hasattr + getattr avoids unittest.mock creating an auto-spec
-        # attribute that defaults to another Mock (truthy). This way real
-        # Mock() instances without an explicit headless attr will still show
-        # (and therefore be patch-capturable in tests that expect calls).
+        # Show user-friendly message (no stack trace) if not running in a headless/testing context.
         suppress_dialog = hasattr(self.gui, "headless") and getattr(self.gui, "headless") is True
         if not suppress_dialog:
             QMessageBox.warning(self.gui, title, user_msg)
