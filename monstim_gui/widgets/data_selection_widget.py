@@ -495,7 +495,7 @@ class DataSelectionWidget(QGroupBox):
             else:
                 self.parent.restore_session(selected.text())
             # Rebuild of combos is handled by the parent commands
-            
+
     def update_completion_status(self, level):
         """Update visual completion status for specified level"""
         combo = {"experiment": self.experiment_combo, "dataset": self.dataset_combo, "session": self.session_combo}.get(level)
