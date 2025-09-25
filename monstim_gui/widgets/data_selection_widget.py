@@ -678,9 +678,9 @@ class DataSelectionWidget(QGroupBox):
     def sync_combo_selections(self):
         """Synchronize combo box selections with current objects without rebuilding them."""
         # This method is mainly for recording operations that don't affect higher-level selections
-        # For exclude/restore operations, use more targeted updates
+        # For exclude/restore operations above the level of recordings, use update() or refresh() instead.
 
-        # Sync experiment combo (should rarely be needed)
+        # Sync experiment combo
         if self.parent.current_experiment and self.parent.expts_dict_keys:
             try:
                 exp_index = self.parent.expts_dict_keys.index(self.parent.current_experiment.id) + 1  # +1 for placeholder
@@ -690,11 +690,11 @@ class DataSelectionWidget(QGroupBox):
                     self.experiment_combo.blockSignals(False)
             except ValueError:
                 # Experiment not found in list - set to placeholder
-                logging.warning("Current experiment not found in combo list. Setting to placeholder.")
-                if self.experiment_combo.currentIndex() != 0:
-                    self.experiment_combo.blockSignals(True)
-                    self.experiment_combo.setCurrentIndex(0)  # Placeholder
-                    self.experiment_combo.blockSignals(False)
+                logging.warning("Current experiment not found in combo list. Refreshing Data Selection Widget.")
+                self.refresh()
+        else:
+            logging.warning("No current experiment to sync. Refreshing Data Selection Widget.")
+            self.refresh()
 
         # Sync dataset combo (should rarely be needed for recording operations)
         if self.parent.current_dataset and self.parent.current_experiment:
@@ -705,8 +705,23 @@ class DataSelectionWidget(QGroupBox):
                     self.dataset_combo.setCurrentIndex(dataset_index)
                     self.dataset_combo.blockSignals(False)
             except ValueError:
-                # Dataset not found in list (might be excluded)
-                pass
+                logging.warning("Current dataset not found in combo list. Selecting first available dataset.")
+                if self.parent.current_experiment.datasets:
+                    self.dataset_combo.blockSignals(True)
+                    self.dataset_combo.setCurrentIndex(0)
+                    self.dataset_combo.blockSignals(False)
+                else:
+                    logging.warning("Current experiment has no datasets. Refreshing Data Selection Widget.")
+                    self.refresh()
+        else:
+            logging.warning("No current dataset to sync. Selecting first available dataset if possible.")
+            if self.parent.current_experiment and self.parent.current_experiment.datasets:
+                self.dataset_combo.blockSignals(True)
+                self.dataset_combo.setCurrentIndex(0)
+                self.dataset_combo.blockSignals(False)
+            else:
+                logging.warning("No current experiment or datasets. Refreshing Data Selection Widget.")
+                self.refresh()
 
         # Sync session combo (should rarely be needed for recording operations)
         if self.parent.current_session and self.parent.current_dataset:
@@ -717,8 +732,23 @@ class DataSelectionWidget(QGroupBox):
                     self.session_combo.setCurrentIndex(session_index)
                     self.session_combo.blockSignals(False)
             except ValueError:
-                # Session not found in list (might be excluded)
-                pass
+                logging.warning("Current session not found in combo list. Selecting first available session.")
+                if self.parent.current_dataset.sessions:
+                    self.session_combo.blockSignals(True)
+                    self.session_combo.setCurrentIndex(0)
+                    self.session_combo.blockSignals(False)
+                else:
+                    logging.warning("Current dataset has no sessions. Refreshing Data Selection Widget.")
+                    self.refresh()
+        else:
+            logging.warning("No current session to sync. Selecting first available session if possible.")
+            if self.parent.current_dataset and self.parent.current_dataset.sessions:
+                self.session_combo.blockSignals(True)
+                self.session_combo.setCurrentIndex(0)
+                self.session_combo.blockSignals(False)
+            else:
+                logging.warning("No current dataset or sessions. Refreshing Data Selection Widget.")
+                self.refresh()
 
     def update_combos_and_sync(self):
         """Deprecated: Update contents and sync selections. Use update()."""

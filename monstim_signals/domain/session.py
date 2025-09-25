@@ -161,6 +161,10 @@ class Session:
         return len(self.recordings)
 
     @property
+    def num_all_recordings(self) -> int:
+        return len(self.all_recordings)
+
+    @property
     def latency_windows(self) -> List[LatencyWindow]:
         """
         Return the list of latency windows defined in the session annotations.
@@ -248,6 +252,13 @@ class Session:
         This filters out any recordings that are marked as excluded in the session annotations.
         """
         return self.get_all_recordings(include_excluded=False)
+
+    @property
+    def all_recordings(self) -> List[Recording]:
+        """
+        Return a list of all recordings in the session, including excluded ones.
+        """
+        return self.get_all_recordings(include_excluded=True)
 
     def get_all_recordings(self, include_excluded: bool = False) -> List[Recording]:
         """

@@ -140,9 +140,29 @@ class ExcludeSessionCommand(Command):
         self.previous_dataset = self.gui.current_dataset  # Preserve dataset selection
 
         self.gui.current_dataset.exclude_session(self.session_id)
-        self.gui.current_session = None
-        # Update only the session list; keep dataset selection
+        # Determine new selection: try next session at same index, else previous.
+        new_current = None
+        remaining_sessions = self.gui.current_dataset.sessions
+        if remaining_sessions:
+            if self.idx < len(remaining_sessions):
+                new_current = remaining_sessions[self.idx]
+            else:
+                new_current = remaining_sessions[-1]
+        self.gui.current_session = new_current
+        # Update session list; keep dataset selection
         self.gui.data_selection_widget.update(levels=("session",))
+        # Reflect new selection in combo (block signals to avoid recursive loads)
+        if new_current:
+            try:
+                session_index = self.gui.current_dataset.sessions.index(new_current)
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except ValueError:
+                pass
+        else:
+            # No sessions left; clear plots
+            self.gui.plot_widget.on_data_selection_changed()
 
     def undo(self):
         self.gui.current_dataset.restore_session(self.session_id)

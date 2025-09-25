@@ -471,8 +471,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Get EMG recordings
         emg_recordings = self.get_emg_recordings(data_type)
 
-        if recording_index >= len(emg_recordings):
-            raise ValueError(f"Recording index {recording_index} out of range")
+        # Strict recording index validation: never auto-wrap or coerce silently.
+        # Rationale: Silent wrapping can mask upstream logic errors (e.g., stale cached
+        # counts after exclusions). By raising an UnableToPlotError we surface the
+        # problematic index to the GUI layer, which can log and handle it explicitly.
+        if not emg_recordings:
+            raise UnableToPlotError("No recordings available to plot in this session")
+        if recording_index < 0 or recording_index >= len(emg_recordings):
+            raise UnableToPlotError(f"Recording index {recording_index} out of range (0-{len(emg_recordings)-1})")
 
         # Calculate fixed y-axis limits if needed
         y_min, y_max = None, None
