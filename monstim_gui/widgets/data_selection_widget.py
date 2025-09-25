@@ -492,24 +492,10 @@ class DataSelectionWidget(QGroupBox):
         elif restore_menu and selected in restore_menu.actions():
             if level == "dataset":
                 self.parent.restore_dataset(selected.text())
-                # Rebuild combos after restore to refresh items and statuses
-                self.update(levels=("dataset", "session"), preserve_selection=True)
-                self._update_manage_recordings_button()
-                if hasattr(self.parent, "plot_widget"):
-                    try:
-                        self.parent.plot_widget.on_data_selection_changed()
-                    except Exception:
-                        pass
             else:
                 self.parent.restore_session(selected.text())
-                self.update(levels=("session",), preserve_selection=True)
-                self._update_manage_recordings_button()
-                if hasattr(self.parent, "plot_widget"):
-                    try:
-                        self.parent.plot_widget.on_data_selection_changed()
-                    except Exception:
-                        pass
-
+            # Rebuild of combos is handled by the parent commands
+            
     def update_completion_status(self, level):
         """Update visual completion status for specified level"""
         combo = {"experiment": self.experiment_combo, "dataset": self.dataset_combo, "session": self.session_combo}.get(level)
