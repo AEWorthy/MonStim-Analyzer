@@ -180,7 +180,9 @@ class ExcludeSessionCommand(Command):
                 try:
                     self.gui.plot_widget.on_data_selection_changed()
                 except Exception:
-                    logging.warning("Plot refresh after session exclusion (no sessions left) failed (non-fatal).", exc_info=True)
+                    logging.warning(
+                        "Plot refresh after session exclusion (no sessions left) failed (non-fatal).", exc_info=True
+                    )
 
         # Always refresh plots after exclusion to reflect new session
         if self.gui.current_session and hasattr(self.gui, "plot_widget"):
@@ -271,7 +273,7 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f'Index error during dataset exclusion execute: {e}')
+                logging.warning(f"Index error during dataset exclusion execute: {e}")
         self.gui.data_selection_widget.update(levels=("session",))
         if self.gui.current_session:
             try:
@@ -314,7 +316,7 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f'Index error during dataset exclusion undo: {e}')
+                logging.warning(f"Index error during dataset exclusion undo: {e}")
 
         # Update sessions and select first session (consistent with RestoreDatasetCommand)
         self.gui.data_selection_widget.update(levels=("session",))
@@ -325,7 +327,7 @@ class ExcludeDatasetCommand(Command):
                     self.gui.current_session = sessions_attr[0]
                 except Exception as e:
                     self.gui.current_session = None
-                    logging.warning(f'Non-fatal: session selection failed after dataset exclusion undo: {e}', exc_info=True)
+                    logging.warning(f"Non-fatal: session selection failed after dataset exclusion undo: {e}", exc_info=True)
             else:
                 self.gui.current_session = None
         else:
@@ -336,7 +338,7 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except Exception as e:
-                logging.warning(f'Non-fatal: session combo update failed after dataset exclusion undo: {e}', exc_info=True)
+                logging.warning(f"Non-fatal: session combo update failed after dataset exclusion undo: {e}", exc_info=True)
 
         # Trigger downstream updates
         if hasattr(self.gui, "plot_widget"):
@@ -372,7 +374,7 @@ class RestoreSessionCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f'Session index error during session restore: {e}')
+                logging.warning(f"Session index error during session restore: {e}")
 
         # Refresh plots since restored session becomes active
         if self.gui.current_session and hasattr(self.gui, "plot_widget"):
@@ -426,7 +428,7 @@ class RestoreDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f'Dataset index error during dataset restore: {e}')
+                logging.warning(f"Dataset index error during dataset restore: {e}")
 
         # Now refresh the session list for this dataset
         self.gui.data_selection_widget.update(levels=("session",))
@@ -440,7 +442,7 @@ class RestoreDatasetCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except Exception as e:
-                logging.warning(f'Non-fatal: session combo update failed after dataset restore: {e}', exc_info=True)
+                logging.warning(f"Non-fatal: session combo update failed after dataset restore: {e}", exc_info=True)
         else:
             self.gui.current_session = None
 
