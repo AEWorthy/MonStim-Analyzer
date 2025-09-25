@@ -49,6 +49,7 @@ class Session:
         self._initialize_annotations()
         self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
+        self.__check_recording_consistency()
 
     @property
     def is_completed(self) -> bool:
@@ -172,6 +173,55 @@ class Session:
         return self.annot.latency_windows
 
     # ------------------------------------------------------------------
+    # Low-level consistency checks
+    # ------------------------------------------------------------------
+    def __check_recording_consistency(self) -> None:
+        """Check that recordings within the session share key acquisition parameters.
+
+        Populates internal warning list (for GUI notices) rather than raising.
+        Currently checks:
+          - scan_rate uniformity
+          - num_channels uniformity
+          - stim_start / stim_delay consistency
+          - stimulus voltage monotonicity & duplicates
+        """
+        warnings: list[str] = []
+        try:
+            if not self.recordings:
+                return
+            first = self.recordings[0].meta
+            for rec in self.recordings[1:]:
+                m = rec.meta
+                if m.scan_rate != first.scan_rate:
+                    warnings.append(f"Recording {rec.id} scan_rate {m.scan_rate} != {first.scan_rate}.")
+                if m.num_channels != first.num_channels:
+                    warnings.append(f"Recording {rec.id} num_channels {m.num_channels} != {first.num_channels}.")
+                # Stim delay / start relative metrics
+                if hasattr(m, "primary_stim") and hasattr(first, "primary_stim"):
+                    if m.primary_stim.stim_delay != first.primary_stim.stim_delay:
+                        warnings.append(
+                            f"Recording {rec.id} stim_delay {m.primary_stim.stim_delay} != {first.primary_stim.stim_delay}."
+                        )
+            # Stimulus voltage issues
+            volts = [r.meta.primary_stim.stim_v for r in self.recordings if getattr(r.meta, "primary_stim", None)]
+            if volts:
+                # Duplicates
+                from collections import Counter
+
+                dupes = [v for v, c in Counter(volts).items() if c > 1]
+                if dupes:
+                    # warnings.append(f"Duplicate stimulus voltages detected: {sorted(set(dupes))}.")
+                    pass  # do nothing; duplicates are allowed
+                # Monotonicity expectation (optional): should be non-decreasing sequence
+                if any(b < a for a, b in zip(volts, volts[1:])):
+                    warnings.append("Stimulus voltages are not sorted non-decreasing.")
+        finally:
+            # Store for notice system
+            self._consistency_warnings = warnings
+            for w in warnings:
+                logging.warning(f"Session {self.id} consistency: {w}")
+
+    # ------------------------------------------------------------------
     # Latency window helper methods
     # ------------------------------------------------------------------
     def add_latency_window(
@@ -275,6 +325,115 @@ class Session:
             return self._all_recordings
         else:
             return [rec for rec in self._all_recordings if rec.id not in self.excluded_recordings]
+
+    # ------------------------------------------------------------------
+    # Diagnostic / notice helpers (queried by GUI)
+    # ------------------------------------------------------------------
+    def collect_notices(self) -> list[dict[str, str]]:
+        """Return structured session-level notices for GUI warning/info icons.
+
+        Codes:
+          - inconsistent_scan_rate
+          - inconsistent_num_channels
+          - inconsistent_stim_delay
+          - duplicate_stim_voltages
+          - unsorted_stim_voltages
+          - heterogeneous_latency_windows (session-specific: overlapping or zero-duration windows)
+        """
+        notices: list[dict[str, str]] = []
+        try:
+            # Consistency warnings captured earlier
+            for msg in getattr(self, "_consistency_warnings", []):
+                code = "generic_consistency"
+                if "scan_rate" in msg:
+                    code = "inconsistent_scan_rate"
+                elif "num_channels" in msg:
+                    code = "inconsistent_num_channels"
+                elif "stim_delay" in msg:
+                    code = "inconsistent_stim_delay"
+                elif "Duplicate stimulus voltages" in msg:
+                    code = "duplicate_stim_voltages"
+                elif "not sorted" in msg:
+                    code = "unsorted_stim_voltages"
+                notices.append({"level": "warning", "code": code, "message": msg})
+
+            # Latency window sanity checks (per-session)
+            for w in self.latency_windows:
+                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations)):
+                    if dur <= 0:
+                        notices.append(
+                            {
+                                "level": "warning",
+                                "code": "zero_or_negative_window",
+                                "message": f"Latency window '{w.name}' channel {ch} has non-positive duration {dur}.",
+                            }
+                        )
+            # Missing canonical M-wave window
+            if not any(
+                (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"}
+                for w in self.latency_windows
+            ):
+                notices.append(
+                    {
+                        "level": "info",
+                        "code": "missing_m_wave_window",
+                        "message": "Session is missing an M-wave latency window.",
+                    }
+                )
+
+            # No active recordings
+            if len(self.recordings) == 0:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "no_active_recordings",
+                        "message": "Session has no active recordings.",
+                    }
+                )
+
+            # Window bounds validation
+            total_window_ms = self.time_window_ms  # configured acquisition window
+            for w in self.latency_windows:
+                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations)):
+                    if start < 0 or (start + dur) > total_window_ms:
+                        notices.append(
+                            {
+                                "level": "warning",
+                                "code": "window_out_of_bounds",
+                                "message": f"Window '{w.name}' channel {ch} exceeds acquisition bounds (start={start}, dur={dur}).",
+                            }
+                        )
+
+            # Excessive overlap detection (replace previous simple overlap notice)
+            overlap_threshold = 0.5  # 50% of the shorter window
+            for ch in range(self.num_channels):
+                spans = []
+                for w in self.latency_windows:
+                    if ch < len(w.start_times):
+                        spans.append((w.name, w.start_times[ch], w.start_times[ch] + w.durations[ch]))
+                spans.sort(key=lambda x: x[1])
+                for i in range(len(spans)):
+                    n1, s1, e1 = spans[i]
+                    for j in range(i + 1, len(spans)):
+                        n2, s2, e2 = spans[j]
+                        if s2 >= e1:
+                            break  # since sorted by start
+                        overlap = min(e1, e2) - max(s1, s2)
+                        if overlap > 0:
+                            len1 = e1 - s1
+                            len2 = e2 - s2
+                            shorter = min(len1, len2) or 1.0
+                            if (overlap / shorter) >= overlap_threshold:
+                                notices.append(
+                                    {
+                                        "level": "info",
+                                        "code": "excessive_window_overlap",
+                                        "message": f"Windows '{n1}' and '{n2}' overlap >50% on channel {ch}.",
+                                    }
+                                )
+        except Exception as e:
+            logging.debug(f"Notice collection error (session {self.id}): {e}")
+        return notices
 
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods

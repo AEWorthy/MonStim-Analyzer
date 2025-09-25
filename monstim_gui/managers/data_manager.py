@@ -960,6 +960,10 @@ class DataManager:
             del self.current_progress_dialog
 
     def load_dataset(self, index, auto_load_first_session=True):
+        # Set busy cursor if QApplication is available
+        if QApplication.instance() is not None:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
         if not self.gui.current_experiment:
             logging.debug("No current experiment to load dataset from.")
             return
@@ -1019,7 +1023,15 @@ class DataManager:
         else:
             self.gui.plot_widget.on_data_selection_changed()
 
+        # Restore normal cursor
+        if QApplication.instance() is not None:
+            QApplication.restoreOverrideCursor()
+
     def load_session(self, index):
+        # Set busy cursor if QApplication is available
+        if QApplication.instance() is not None:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
         if not self.gui.current_dataset:
             logging.debug("No current dataset to load session from.")
             return
@@ -1046,6 +1058,10 @@ class DataManager:
         if hasattr(self.gui.plot_widget.current_option_widget, "recording_cycler"):
             self.gui.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()  # type: ignore
         self.gui.plot_widget.on_data_selection_changed()
+
+        # Restore normal cursor
+        if QApplication.instance() is not None:
+            QApplication.restoreOverrideCursor()
 
     # ------------------------------------------------------------------
     @staticmethod

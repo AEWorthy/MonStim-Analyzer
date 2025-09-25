@@ -1,5 +1,6 @@
 import abc
 import copy
+import logging
 from collections import deque
 from typing import TYPE_CHECKING
 
@@ -36,7 +37,13 @@ class CommandInvoker:
         self.history.append(command)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
-        # Set self.parent._has_unsaved_changes to True if needed
+        # --> Set self.parent._has_unsaved_changes to True if needed <--
+        # Always refresh notice icons after a command executes so diagnostics stay in sync with domain state.
+        try:
+            self.parent.data_selection_widget.refresh_notice_icons()
+        except Exception as e:
+            logging.error(f"Failed to refresh notice icons: {str(e)}")
+            pass  # Non-fatal UI update failure should not break command flow
 
     def undo(self):
         if self.history:
@@ -44,7 +51,12 @@ class CommandInvoker:
             command.undo()
             self.redo_stack.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # Set self.parent._has_unsaved_changes to True if needed
+            # --> Set self.parent._has_unsaved_changes to True if needed <--
+            try:
+                self.parent.data_selection_widget.refresh_notice_icons()
+            except Exception as e:
+                logging.error(f"Failed to refresh notice icons: {str(e)}")
+                pass
 
     def redo(self):
         if self.redo_stack:
@@ -52,7 +64,12 @@ class CommandInvoker:
             command.execute()
             self.history.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # Set self.parent._has_unsaved_changes to True if needed
+            # --> Set self.parent._has_unsaved_changes to True if needed <--
+            try:
+                self.parent.data_selection_widget.refresh_notice_icons()
+            except Exception as e:
+                logging.error(f"Failed to refresh notice icons: {str(e)}")
+                pass
 
     def get_undo_command_name(self):
         if self.history:

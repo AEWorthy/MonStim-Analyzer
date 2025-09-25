@@ -143,9 +143,194 @@ class Dataset:
 
     @property
     def latency_windows(self) -> List[LatencyWindow]:
+        """Return a representative list of latency windows.
+
+        NOTE: Historically this returned the first session's windows and higher-level code
+        assumed uniformity across sessions. The application now permits heterogeneous
+        per-session latency windows (sessions may add/remove or customize windows
+        independently). This legacy property is retained for backward compatibility with
+        existing code paths but should NOT be used for aggregation logic. Use the new
+        union/inspection helpers instead:
+
+            - unique_latency_window_names()
+            - window_presence_map()
+            - iter_latency_window_names()
+
+        Returns the latency windows from the first available session or an empty list if
+        there are no sessions.
+        """
         if not self.sessions:
             return []
         return self.sessions[0].latency_windows
+
+    # ------------------------------------------------------------------
+    # Heterogeneous latency window inspection helpers
+    # ------------------------------------------------------------------
+    def unique_latency_window_names(self) -> List[str]:
+        """Return sorted list of the union of latency window names across sessions.
+
+        Case-insensitive uniqueness; original case of first occurrence is preserved.
+        """
+        name_map: dict[str, str] = {}
+        for sess in self.sessions:
+            for w in getattr(sess.annot, "latency_windows", []):
+                low = (w.name or "").lower()
+                if low and low not in name_map:
+                    name_map[low] = w.name
+        return [name_map[k] for k in sorted(name_map.keys())]
+
+    def iter_latency_window_names(self):
+        """Yield latency window names (union) in sorted order."""
+        for name in self.unique_latency_window_names():
+            yield name
+
+    def window_presence_map(self) -> dict[str, List[str]]:
+        """Return mapping of window name -> list of session IDs that contain it."""
+        presence: dict[str, List[str]] = {name: [] for name in self.unique_latency_window_names()}
+        for sess in self.sessions:
+            sess_names = {w.name for w in getattr(sess.annot, "latency_windows", [])}
+            for name in presence.keys():
+                if name in sess_names:
+                    presence[name].append(sess.id)
+        return presence
+
+    @property
+    def has_heterogeneous_latency_windows(self) -> bool:
+        """True if sessions do not all share identical ordered window name lists."""
+        if len(self.sessions) <= 1:
+            return False
+        first = [w.name for w in self.sessions[0].annot.latency_windows]
+        for sess in self.sessions[1:]:
+            if [w.name for w in sess.annot.latency_windows] != first:
+                return True
+        return False
+
+    def get_session_latency_window(self, session: Session, window_name: str) -> LatencyWindow | None:
+        """Fetch a latency window by name (case-insensitive) from a specific session."""
+        low = window_name.lower()
+        for w in getattr(session.annot, "latency_windows", []):
+            if (w.name or "").lower() == low:
+                return w
+        return None
+
+    # ------------------------------------------------------------------
+    # Diagnostic / notice helpers (queried by GUI for tooltip indicators)
+    # ------------------------------------------------------------------
+    def collect_notices(self) -> list[dict[str, str]]:
+        """Return a list of structured notices about this dataset.
+
+        Each notice is a dict with keys:
+            - level: one of "warning", "info"
+            - code: machine-readable short code
+            - message: human-readable description
+
+        The GUI can map level->icon color (e.g., red exclamation for warning, grey for info)
+        and aggregate tooltip text.
+        """
+        notices: list[dict[str, str]] = []
+        try:
+            if self.has_heterogeneous_latency_windows:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "heterogeneous_latency_windows",
+                        "message": "Sessions in this dataset have differing latency window sets.",
+                    }
+                )
+            # Sample rate incongruence (already prevented normally). Defensive check:
+            if len({s.scan_rate for s in self.sessions}) > 1:
+                notices.append(
+                    {
+                        "level": "info",
+                        "code": "mixed_scan_rates",
+                        "message": "Sessions have differing scan rates; comparisons may be approximate.",
+                    }
+                )
+            # Include any consistency warnings captured during initialization
+            for msg in getattr(self, "_consistency_warnings", []):
+                code = "generic_consistency"
+                if "scan_rate" in msg:
+                    code = "inconsistent_scan_rate"
+                elif "num_channels" in msg:
+                    code = "inconsistent_num_channels"
+                elif "stim_start" in msg:
+                    code = "inconsistent_stim_start"
+                notices.append({"level": "warning", "code": code, "message": msg})
+
+            # Missing M-wave latency window at dataset level (if no session has it)
+            if not any(
+                any(
+                    (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"}
+                    for w in sess.latency_windows
+                )
+                for sess in self.sessions
+            ):
+                notices.append(
+                    {
+                        "level": "info",
+                        "code": "missing_m_wave_window",
+                        "message": "No session in this dataset has an M-wave latency window.",
+                    }
+                )
+
+            # No active sessions
+            if len(self.sessions) == 0:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "no_active_session",
+                        "message": "Dataset has no active sessions.",
+                    }
+                )
+
+            # Single session only
+            if len(self.sessions) == 1:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "single_session_only",
+                        "message": "Dataset contains only a single active session.",
+                    }
+                )
+
+            # NOTE: Too intensiveto check heterogeneous M-max failures here
+            # # Heterogeneous M-max failures: some sessions have m_max None and others valid
+            # mmax_states = []
+            # for sess in self.sessions:
+            #     try:
+            #         mm = sess.get_m_max(sess.default_method, 0)  # channel 0 heuristic
+            #         mmax_states.append(mm is not None)
+            #     except Exception:
+            #         mmax_states.append(False)
+            # if mmax_states and any(mmax_states) and not all(mmax_states):
+            #     notices.append({
+            #         "level": "info",
+            #         "code": "heterogeneous_mmax_failures",
+            #         "message": "Some sessions have calculable M-max while others do not.",
+            #     })
+
+            # High latency window name churn (fraction of unique names not present in majority)
+            all_names = []
+            for sess in self.sessions:
+                all_names.extend([(w.name or "") for w in sess.latency_windows])
+            if all_names:
+                from collections import Counter
+
+                counts = Counter(all_names)
+                total_sessions = len(self.sessions)
+                rare = [n for n, c in counts.items() if c < max(2, int(0.5 * total_sessions))]
+                if len(rare) / max(1, len(counts)) > 0.4:  # >40% names are rare
+                    notices.append(
+                        {
+                            "level": "info",
+                            "code": "high_latency_window_name_churn",
+                            "message": "High diversity of latency window names; aggregation consistency may suffer.",
+                        }
+                    )
+
+        except Exception as e:
+            logging.debug(f"Notice collection error (dataset {self.id}): {e}")
+        return notices
 
     @property
     def stimulus_voltages(self) -> np.ndarray:
@@ -202,11 +387,6 @@ class Dataset:
             session.apply_latency_window_preset(preset_name)
         self.update_latency_window_parameters()
 
-    def get_latency_window(self, name: str) -> LatencyWindow | None:
-        if not self.sessions:
-            return None
-        return self.sessions[0].get_latency_window(name)
-
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
@@ -220,18 +400,9 @@ class Dataset:
         self.update_latency_window_parameters()
 
     def update_latency_window_parameters(self):
-        self.m_start = [0.0] * self.num_channels
-        self.m_duration = [0.0] * self.num_channels
-        self.h_start = [0.0] * self.num_channels
-        self.h_duration = [0.0] * self.num_channels
-        for window in self.latency_windows:
-            lname = window.name.lower()
-            if lname in {"m-wave", "m_wave", "m wave", "mwave"}:
-                self.m_start = window.start_times
-                self.m_duration = window.durations
-            elif lname in {"h-reflex", "h_reflex", "h reflex", "hreflex"}:
-                self.h_start = window.start_times
-                self.h_duration = window.durations
+        """
+        Updates the latency window M/H-reflex parameters for all sessions in the dataset.
+        """
         for session in self.sessions:
             session.update_latency_window_parameters()
 
@@ -398,19 +569,32 @@ class Dataset:
     def get_lw_reflex_amplitudes(
         self, method: str, channel_index: int, window: str | LatencyWindow
     ) -> dict[str, List[np.ndarray]]:
-        """Returns reflex amplitudes for a specific latency window across all sessions in the dataset."""
+        """Return reflex amplitudes for a latency window across sessions.
+
+        The window is resolved per session by name (case-insensitive). Sessions missing
+        the window are skipped. This allows heterogeneous per-session latency windows.
+        Returns mapping: session_id -> np.ndarray of amplitudes (ordered by that session's
+        stimulus sequence).
+        """
         if not self.sessions:
             return {}
 
-        if not isinstance(window, LatencyWindow):
-            window = self.get_latency_window(window)
-            if window is None:
-                logging.warning(f"Latency window '{window}' not found in dataset {self.id}.")
-                return {}
+        window_name: str
+        if isinstance(window, LatencyWindow):
+            window_name = window.name
+        else:
+            window_name = str(window)
 
         result: dict[str, List[np.ndarray]] = {}
+        missing_sessions: list[str] = []
         for session in self.sessions:
-            result[session.id] = session.get_lw_reflex_amplitudes(method, channel_index, window.name)
+            if self.get_session_latency_window(session, window_name) is None:
+                missing_sessions.append(session.id)
+                continue
+            result[session.id] = session.get_lw_reflex_amplitudes(method, channel_index, window_name)
+
+        if missing_sessions:
+            logging.warning(f"Dataset {self.id}: latency window '{window_name}' absent in sessions: {missing_sessions}.")
         return result
 
     def get_average_lw_reflex_curve(
@@ -422,36 +606,47 @@ class Dataset:
         Curve's X-axis is the stimulus voltage (float), Y-axis is the average reflex amplitude (float) for a given channel/window.
         """
         if not self.sessions:
-            return {"voltages": [], "means": [], "stdevs": []}
-        if not isinstance(window, LatencyWindow):
-            window = self.get_latency_window(window)
-            if window is None:
-                logging.warning(f"Latency window '{window}' not found in dataset {self.id}.")
-                return {"voltages": [], "means": [], "stdevs": []}
+            return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
 
-        # Get all reflex amplitudes for all sessions using the dataset-level method
-        all_amplitudes = self.get_lw_reflex_amplitudes(method, channel_index, window)
-        # all_amplitudes: dict[session_id, List[float]]
-        # Need to bin by voltage
-        voltages = self.stimulus_voltages
-        # Build a list of amplitudes for each voltage bin across sessions
-        bin_amplitudes = {v: [] for v in voltages}
+        window_name: str
+        if isinstance(window, LatencyWindow):
+            window_name = window.name
+        else:
+            window_name = str(window)
+
+        # Get all reflex amplitudes across available sessions
+        all_amplitudes = self.get_lw_reflex_amplitudes(method, channel_index, window_name)
+        if not all_amplitudes:
+            return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
+
+        voltages_union = self.stimulus_voltages
+        bin_amplitudes: dict[float, list[float]] = {v: [] for v in voltages_union}
+        contrib_counts: dict[float, int] = {v: 0 for v in voltages_union}
+
         for session_id, amps in all_amplitudes.items():
             session = next((s for s in self.sessions if s.id == session_id), None)
             if session is None:
                 continue
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
+            # Build a temporary mapping for the session to count contribution per voltage bin
+            seen_bins: set[float] = set()
             for v, amp in zip(binned, amps):
                 if v in bin_amplitudes:
                     bin_amplitudes[v].append(amp)
-        # Compute the mean and standard deviation for each voltage bin
-        voltages = sorted(bin_amplitudes.keys())
-        means = [float(np.mean(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in voltages]
-        stdevs = [float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in voltages]
+                    seen_bins.add(v)
+            for v in seen_bins:
+                contrib_counts[v] += 1
+
+        sorted_volts = sorted(bin_amplitudes.keys())
+        means = [float(np.mean(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in sorted_volts]
+        stdevs = [float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in sorted_volts]
+        n_sessions = [contrib_counts[v] for v in sorted_volts]
+
         return {
-            "voltages": np.array(voltages),
+            "voltages": np.array(sorted_volts),
             "means": np.array(means),
             "stdevs": np.array(stdevs),
+            "n_sessions": np.array(n_sessions),
         }
 
     # ──────────────────────────────────────────────────────────────────
@@ -468,22 +663,6 @@ class Dataset:
             session.invert_channel_polarity(channel_index)
         self.reset_all_caches()
         logging.info(f"Inverted polarity of channel {channel_index} in dataset {self.id}.")
-
-    def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
-        m_window = self.get_latency_window("M-wave")
-        if m_window:
-            m_window.start_times = m_start
-            m_window.durations = m_duration
-        h_window = self.get_latency_window("H-reflex")
-        if h_window:
-            h_window.start_times = h_start
-            h_window.durations = h_duration
-        for session in self.sessions:
-            session.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
-        self.update_latency_window_parameters()
-        logging.info(
-            f"Changed reflex latency windows for dataset {self.id} to M-wave start: {m_start}, duration: {m_duration}, H-reflex start: {h_start}, duration: {h_duration}."
-        )
 
     def exclude_session(self, session_id: str) -> None:
         """Exclude a session from this dataset by its ID."""

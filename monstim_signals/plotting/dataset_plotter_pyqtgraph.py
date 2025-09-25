@@ -110,40 +110,57 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
         """Plot reflex curves data for a specific channel, robust to domain object return types."""
         try:
             # Get the data from the domain Dataset object
-            for window in self.emg_object.latency_windows:
+            # Iterate over union of window names (heterogeneity-aware)
+            window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
+            presence_map = getattr(self.emg_object, "window_presence_map", lambda: {})()
+            total_sessions = len(self.emg_object.sessions)
+
+            for window_name in window_names:
                 window_reflex_data = self.emg_object.get_average_lw_reflex_curve(
-                    method=method, channel_index=channel_idx, window=window
+                    method=method, channel_index=channel_idx, window=window_name
                 )
+                means = window_reflex_data.get("means")
+                stdevs = window_reflex_data.get("stdevs")
+                voltages = window_reflex_data.get("voltages")
+                # n_sessions array available for future advanced visualization (e.g., shading by contribution)
 
-                # Make a copy of the data for potential normalization
-                means = window_reflex_data["means"]
-                stdevs = window_reflex_data["stdevs"]
-                voltages = window_reflex_data["voltages"]
+                if means is None or len(means) == 0:
+                    continue  # Nothing to plot
 
-                # Normalize to M-max if needed
+                # Choose a color: attempt to fetch a session's window color; fallback palette
+                color_hex = None
+                try:
+                    # Use first session that has this window
+                    for sess in self.emg_object.sessions:
+                        w = self.emg_object.get_session_latency_window(sess, window_name)  # type: ignore[attr-defined]
+                        if w is not None:
+                            color_hex = w.color
+                            break
+                except Exception:
+                    pass
+                if color_hex is None:
+                    color_hex = "white"
+
+                # Normalize if requested
                 if relative_to_mmax and means is not None:
                     if manual_mmax is None:
                         mmax = self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
                     else:
                         mmax = manual_mmax
-                    if mmax == 0:
-                        raise ValueError("M-max cannot be zero when normalizing reflex curves.")
-                    # Normalize means and stdevs by M-max
-                    means = means / mmax
-                    stdevs = stdevs / mmax
+                    if mmax and mmax != 0:
+                        means = means / mmax
+                        stdevs = stdevs / mmax
 
-                # Collect raw data
                 for v, m, s in zip(voltages, means, stdevs):
                     raw_data_dict["channel_index"].append(channel_idx)
-                    raw_data_dict["window_name"].append(window.name)
+                    raw_data_dict["window_name"].append(window_name)
                     raw_data_dict["voltage"].append(v)
                     raw_data_dict["mean_amplitude"].append(m)
                     raw_data_dict["stdev_amplitude"].append(s)
 
-                color = self._convert_matplotlib_color(window.color)
+                color = self._convert_matplotlib_color(color_hex)
                 pale_color = self._pale_color(color, blend=0.25)
 
-                # Plot the error bands
                 upper = means + stdevs
                 lower = means - stdevs
                 transparent_pen = pg.mkPen(color=pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine)
@@ -152,16 +169,19 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if not hasattr(plot_item, "_fill_curves_refs"):
                     plot_item._fill_curves_refs = []
                 plot_item._fill_curves_refs.extend([upper_curve, lower_curve])
-                fill = pg.FillBetweenItem(
-                    curve1=upper_curve,
-                    curve2=lower_curve,
-                    brush=pg.mkBrush(color=pale_color, alpha=50),
-                )
+                fill = pg.FillBetweenItem(curve1=upper_curve, curve2=lower_curve, brush=pg.mkBrush(color=pale_color, alpha=50))
                 plot_item.addItem(fill)
 
-                # Plot mean line last so it appears on top and is visible
+                # Legend entry with contribution count
                 if plot_legend:
                     plot_item.addLegend()
+                contrib = 0
+                try:
+                    if window_name in presence_map:
+                        contrib = len(presence_map[window_name])
+                except Exception:
+                    pass
+                label = f"{window_name} [n={contrib}(/{total_sessions})]"
                 plot_item.plot(
                     voltages,
                     means,
@@ -169,7 +189,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     symbol="o",
                     symbolSize=6,
                     symbolBrush=color,
-                    name=window.name,
+                    name=label,
                 )
 
         except Exception as e:

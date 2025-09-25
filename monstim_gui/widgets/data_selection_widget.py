@@ -78,85 +78,105 @@ class DataSelectionWidget(QGroupBox):
         super().__init__("Data Selection", parent)
         self.parent: "MonstimGUI" = parent
         self.circle_delegate = CircleDelegate(self)
-
+        # Form layout
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.setHorizontalSpacing(6)  # tighten the space between label & field
-        form.setVerticalSpacing(4)  # vertical spacing between rows
-        form.setContentsMargins(4, 4, 4, 4)  # outer margins of the groupbox
+        form.setHorizontalSpacing(2)
+        form.setVerticalSpacing(4)
+        form.setContentsMargins(6, 4, 4, 2)
 
+        # Combos
         self.experiment_combo = QComboBox()
         self.experiment_combo.currentIndexChanged.connect(self._on_experiment_combo_changed)
         self.experiment_combo.setToolTip("Select an experiment")
-        self.experiment_combo.wheelEvent = lambda event: None  # Disable scroll wheel
+        self.experiment_combo.wheelEvent = lambda event: None
 
         self.dataset_combo = QComboBox()
         self.dataset_combo.currentIndexChanged.connect(self._on_dataset_combo_changed)
-        self.dataset_combo.setEnabled(False)  # Start disabled until experiment is loaded
+        self.dataset_combo.setEnabled(False)
         self.dataset_combo.setToolTip("Select a dataset")
-        self.dataset_combo.wheelEvent = lambda event: None  # Disable scroll wheel
+        self.dataset_combo.wheelEvent = lambda event: None
 
         self.session_combo = QComboBox()
         self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
-        self.session_combo.setEnabled(False)  # Start disabled until dataset is loaded
+        self.session_combo.setEnabled(False)
         self.session_combo.setToolTip("Select a session")
-        self.session_combo.wheelEvent = lambda event: None  # Disable scroll wheel
+        self.session_combo.wheelEvent = lambda event: None
 
-        # Create labels with tooltips and ensure they don't get elided/truncated
+        # Labels
         experiment_label = QLabel("Experiment:")
-        experiment_label.setToolTip("Experiment")
         experiment_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        experiment_label.setSizePolicy(
-            experiment_label.sizePolicy().horizontalPolicy(), experiment_label.sizePolicy().verticalPolicy()
-        )
-
+        experiment_label.setToolTip("Experiment")
         dataset_label = QLabel("Dataset:")
-        dataset_label.setToolTip("Dataset")
         dataset_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        dataset_label.setSizePolicy(dataset_label.sizePolicy().horizontalPolicy(), dataset_label.sizePolicy().verticalPolicy())
-
+        dataset_label.setToolTip("Dataset")
         session_label = QLabel("Session:")
-        session_label.setToolTip("Session")
         session_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        session_label.setSizePolicy(session_label.sizePolicy().horizontalPolicy(), session_label.sizePolicy().verticalPolicy())
+        session_label.setToolTip("Session")
 
-        # Compute a safe minimum label width so short labels like "Experiment" are fully visible
-        fm = experiment_label.fontMetrics()
-        labels = (experiment_label, dataset_label, session_label)
-        # Measure the widest label text and add padding
-        widest = max(fm.horizontalAdvance(lbl.text()) for lbl in labels)
-        min_label_width = int(widest)
-        for lbl in labels:
-            lbl.setMinimumWidth(min_label_width)
-            lbl.setSizePolicy(lbl.sizePolicy().horizontalPolicy(), lbl.sizePolicy().verticalPolicy())
+        # Notice labels
+        def _make_notice(name: str):
+            lab = QLabel("")
+            lab.setObjectName(name)
+            lab.setMinimumWidth(16)
+            lab.setMaximumWidth(16)
+            lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lab.setToolTip("")
+            lab.setStyleSheet(
+                f"QLabel#{name} {{ color: #e0b000; font-weight: bold; }}"
+            )  # Base style (color adjusted dynamically in update)
+            return lab
 
-        form.addRow(experiment_label, self.experiment_combo)
-        form.addRow(dataset_label, self.dataset_combo)
-        form.addRow(session_label, self.session_combo)
+        self.experiment_notice_label = _make_notice("experimentNotice")
+        self.dataset_notice_label = _make_notice("datasetNotice")
+        self.session_notice_label = _make_notice("sessionNotice")
 
-        # Add management buttons in a horizontal layout
+        # Row builders
         from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
-        button_widget = QWidget()
-        button_layout = QHBoxLayout(button_widget)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(4)
+        def _row(widget, icon):
+            container = QWidget()
+            hl = QHBoxLayout(container)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(4)
+            hl.addWidget(widget, 1)
+            hl.addWidget(icon)
+            return container
 
-        # Manage Recordings button
+        exp_row = _row(self.experiment_combo, self.experiment_notice_label)
+        ds_row = _row(self.dataset_combo, self.dataset_notice_label)
+        sess_row = _row(self.session_combo, self.session_notice_label)
+
+        # Uniform label widths
+        fm = experiment_label.fontMetrics()
+        widest = max(fm.horizontalAdvance(lbl.text()) for lbl in (experiment_label, dataset_label, session_label))
+        for lbl in (experiment_label, dataset_label, session_label):
+            lbl.setMinimumWidth(widest)
+
+        # Assemble form
+        form.addRow(experiment_label, exp_row)
+        form.addRow(dataset_label, ds_row)
+        form.addRow(session_label, sess_row)
+
+        # Buttons
+        button_widget = QWidget()
+        btn_layout = QHBoxLayout(button_widget)
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+        btn_layout.setSpacing(4)
+
         self.manage_recordings_button = QPushButton("Manage Recordings")
         self.manage_recordings_button.setToolTip(
             "Open the recording exclusion editor to manage which recordings are included in analysis"
         )
         self.manage_recordings_button.clicked.connect(self._on_manage_recordings_clicked)
-        self.manage_recordings_button.setEnabled(False)  # Start disabled until session is loaded
-        button_layout.addWidget(self.manage_recordings_button)
+        self.manage_recordings_button.setEnabled(False)
+        btn_layout.addWidget(self.manage_recordings_button)
 
-        # Manage Data button
         self.manage_data_button = QPushButton("Manage Data")
         self.manage_data_button.setToolTip("Open the data curation manager to organize experiments and datasets")
         self.manage_data_button.clicked.connect(self._on_manage_data_clicked)
-        button_layout.addWidget(self.manage_data_button)
+        btn_layout.addWidget(self.manage_data_button)
 
         form.addRow("", button_widget)
 
@@ -164,11 +184,12 @@ class DataSelectionWidget(QGroupBox):
         self.setup_context_menus()
         self.update_all_completion_statuses()
 
-        # Apply delegate to all combos
         for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
             combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
             combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
+
+        self._update_notice_icons()
 
     # -----------------------------
     # Unified update/refresh API
@@ -370,6 +391,7 @@ class DataSelectionWidget(QGroupBox):
             # Update completion indicators for visible selections
             self.update_all_completion_statuses()
             self._update_manage_recordings_button()
+            self._update_notice_icons()
         finally:
             _block_all(False)
 
@@ -595,6 +617,7 @@ class DataSelectionWidget(QGroupBox):
 
                 self._update_manage_recordings_button()
                 self.parent.plot_widget.on_data_selection_changed()
+                self._update_notice_icons()
             return
 
         # Check if we have experiments available
@@ -607,6 +630,7 @@ class DataSelectionWidget(QGroupBox):
 
         # Adjust index to account for placeholder item
         self.parent.data_manager.load_experiment(index - 1)
+        self._update_notice_icons()
 
     def _on_dataset_combo_changed(self):
         index = self.dataset_combo.currentIndex()
@@ -616,6 +640,7 @@ class DataSelectionWidget(QGroupBox):
 
         self.parent.data_manager.load_dataset(index)
         self._update_manage_recordings_button()
+        self._update_notice_icons()
 
     def _on_session_combo_changed(self):
         index = self.session_combo.currentIndex()
@@ -625,6 +650,7 @@ class DataSelectionWidget(QGroupBox):
 
         self.parent.data_manager.load_session(index)
         self._update_manage_recordings_button()
+        self._update_notice_icons()
 
     def _on_manage_recordings_clicked(self):
         """Open the recording exclusion editor dialog."""
@@ -650,6 +676,79 @@ class DataSelectionWidget(QGroupBox):
     def _update_manage_recordings_button(self):
         """Update the enabled state of the manage recordings button."""
         self.manage_recordings_button.setEnabled(self.parent.current_session is not None)
+
+    # -----------------------------
+    # Notice / heterogeneity icons
+    # -----------------------------
+    def _gather_notices(self, obj):
+        try:
+            if obj and hasattr(obj, "collect_notices"):
+                notices = obj.collect_notices()
+                # Normalize structure: list of dicts with level/code/message
+                norm = []
+                for n in notices or []:
+                    if isinstance(n, dict):
+                        level = n.get("level", "info")
+                        code = n.get("code", "")
+                        msg = n.get("message", str(n))
+                    else:
+                        level = "info"
+                        code = ""
+                        msg = str(n)
+                    norm.append({"level": level, "code": code, "message": msg})
+                return norm
+        except Exception:
+            pass
+        return []
+
+    def _format_notice_tooltip(self, notices):
+        lines = []
+        for n in notices:
+            prefix = "[WARN]" if n["level"] == "warning" else "[INFO]"
+            code = f"{n['code']} - " if n.get("code") else ""
+            lines.append(f"{prefix} {code}{n['message']}")
+        return "\n".join(lines)
+
+    def _update_notice_icons(self):
+        exp = getattr(self.parent, "current_experiment", None)
+        ds = getattr(self.parent, "current_dataset", None)
+        sess = getattr(self.parent, "current_session", None)
+        exp_notices = self._gather_notices(exp)
+        ds_notices = self._gather_notices(ds)
+        sess_notices = self._gather_notices(sess)
+
+        def _apply(label, notices):
+            if not label:
+                return
+            if not notices:
+                label.setText("")
+                label.setToolTip("")
+                # Reset to neutral dim style when empty
+                label.setStyleSheet(f"QLabel#{label.objectName()} {{ }}")
+                return
+            # Choose highest severity icon: warning > info
+            has_warn = any(n["level"] == "warning" for n in notices)
+            icon = "⚠" if has_warn else "ℹ"
+            label.setText(icon)
+            # Set color based on severity: warning -> yellow, info -> light grey
+            if has_warn:
+                label.setStyleSheet(f"QLabel#{label.objectName()} {{ color: #e0b000; font-weight: bold; }}")
+            else:
+                label.setStyleSheet(f"QLabel#{label.objectName()} {{ color: #9e9e9e; font-weight: bold; }}")
+            label.setToolTip(self._format_notice_tooltip(notices))
+
+        _apply(self.experiment_notice_label, exp_notices)
+        _apply(self.dataset_notice_label, ds_notices)
+        _apply(self.session_notice_label, sess_notices)
+
+    # Public wrapper so external components (e.g., command invoker) can request
+    # a notice refresh without accessing the private method directly.
+    def refresh_notice_icons(self):  # pragma: no cover - thin wrapper
+        try:
+            self._update_notice_icons()
+        except Exception:
+            # Suppress any UI refresh errors (non-fatal)
+            pass
 
     def _on_manage_data_clicked(self):
         """Open the data curation manager dialog."""
