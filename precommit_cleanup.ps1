@@ -30,7 +30,7 @@ if ($env:CONDA_DEFAULT_ENV -ne 'alv_lab') {
     Write-Host (C "[warn] Active env: $($env:CONDA_DEFAULT_ENV) (expected alv_lab)" 'yellow')
 }
 
-function Run-Cmd {
+function Invoke-Cmd {
     param(
         [string]$Label,
         [string]$Cmd
@@ -53,8 +53,8 @@ $blackArgs = if ($Check) { '--check --diff .' } else { '.' }
 $flakeArgs = '.'  # flake8 always just checks
 
 $exitCode = 0
-if ($exitCode -eq 0) { $exitCode = Run-Cmd -Label 'isort' -Cmd "isort monstim_signals monstim_gui tests $isortArgs" }
-if ($exitCode -eq 0) { $exitCode = Run-Cmd -Label 'black' -Cmd "black $blackArgs" }
-if ($exitCode -eq 0) { $exitCode = Run-Cmd -Label 'flake8' -Cmd "flake8 $flakeArgs" }
+if ($exitCode -eq 0) { $exitCode = Invoke-Cmd -Label 'isort' -Cmd "isort monstim_signals monstim_gui tests $isortArgs" }
+if ($exitCode -eq 0) { $exitCode = Invoke-Cmd -Label 'black' -Cmd "black $blackArgs" }
+if ($exitCode -eq 0) { $exitCode = Invoke-Cmd -Label 'flake8' -Cmd "flake8 $flakeArgs" }
 
 exit $exitCode
