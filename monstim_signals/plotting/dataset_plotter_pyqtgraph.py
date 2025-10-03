@@ -268,6 +268,9 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     h_response_amplitudes.extend(h_responses)
                     stimulus_voltages_for_channel.extend([voltage] * len(m_waves))
 
+                m_wave_amplitudes = np.array(m_wave_amplitudes)
+                h_response_amplitudes = np.array(h_response_amplitudes)
+
                 # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
                 if relative_to_mmax:
                     if manual_mmax is not None:
