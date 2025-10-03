@@ -42,12 +42,15 @@ def auto_refresh(method):
     def wrapper(self, *args, **kwargs):
         try:
             # For PyQt signal connections, filter out unexpected boolean arguments
-            # that can be passed by clicked signals
-            filtered_args = []
-            for arg in args:
-                # Skip boolean arguments that are often passed by PyQt signals
-                if not isinstance(arg, bool):
-                    filtered_args.append(arg)
+            # that can be passed by clicked signals ONLY if:
+            # 1. There's exactly one argument
+            # 2. That argument is a boolean
+            # This prevents filtering out legitimate boolean parameters when multiple args exist
+            filtered_args = args
+            if len(args) == 1 and isinstance(args[0], bool):
+                # This is likely a spurious signal argument (e.g., from clicked signal)
+                # that should be filtered out
+                filtered_args = ()
 
             result = method(self, *filtered_args, **kwargs)
             # Only refresh if the method completed successfully

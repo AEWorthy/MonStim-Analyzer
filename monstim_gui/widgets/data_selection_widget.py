@@ -745,9 +745,14 @@ class DataSelectionWidget(QGroupBox):
             result = dialog.exec()
 
             # If changes were applied, refresh the GUI
-            if result == dialog.DialogCode.Accepted:
-                # Refresh experiments list and reset selections after structural changes
-                self.refresh()
+            if result == dialog.DialogCode.Accepted and hasattr(dialog, "_changes_made") and dialog._changes_made:
+                # If an experiment is currently loaded, reload it to pick up annotation changes
+                # (e.g., excluded datasets list)
+                if self.parent.current_experiment:
+                    self.parent.data_manager.reload_current_experiment()
+                else:
+                    # Otherwise just refresh experiments list and reset selections
+                    self.refresh()
 
         except ImportError as e:
             logging.error(f"Failed to import Data Curation Manager: {e}")

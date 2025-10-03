@@ -110,18 +110,23 @@ class UIScaling:
         return target_width, target_height
 
     def get_centered_geometry(self, width: int, height: int) -> QRect:
-        """Get centered window geometry for given dimensions."""
+        """Get top-centered window geometry for given dimensions.
+
+        Aligns the window's top-middle with the screen's top-center point.
+        """
         screen = QApplication.instance().primaryScreen()
         if not screen:
             return QRect(30, 30, width, height)
 
         screen_rect = screen.availableGeometry()
-        x = (screen_rect.width() - width) // 2
-        y = (screen_rect.height() - height) // 2
+        # Center horizontally at the screen's horizontal center
+        x = screen_rect.left() + (screen_rect.width() - width) // 2
+        # Position at the top of the screen
+        y = screen_rect.top() + 30  # Small offset from top edge
 
         # Ensure window isn't positioned off-screen
-        x = max(0, min(x, screen_rect.width() - width))
-        y = max(0, min(y, screen_rect.height() - height))
+        x = max(screen_rect.left(), min(x, screen_rect.right() - width))
+        y = max(screen_rect.top(), min(y, screen_rect.bottom() - height))
 
         return QRect(x, y, width, height)
 

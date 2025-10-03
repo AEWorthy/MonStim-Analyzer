@@ -2,7 +2,7 @@ import copy
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QPoint, Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -76,28 +76,23 @@ class LatencyWindowsDialog(QDialog):
         self._reposition_to_left_middle_of_parent()
 
     def _reposition_to_left_middle_of_parent(self):
-        # parent should be your main window
-        w = self.parentWidget() or self.window()
-        # get its top-left in global coords
-        top_left: QPoint = w.mapToGlobal(QPoint(0, 0))
-        pw, ph = w.width(), w.height()
-
-        # compute center of the *left half* of that parent
-        cx = top_left.x() + pw // 4
-        cy = top_left.y() + ph // 3
-
-        # move this dialog so its center sits there
-        x = cx - (self.width() // 2)
-        y = cy - (self.height() // 2)
-
-        # Get screen geometry to ensure dialog stays on screen
+        # Get screen geometry
         screen = self.screen()
-        if screen:
-            screen_rect = screen.availableGeometry()
+        if not screen:
+            return
 
-            # Ensure dialog doesn't go off the edges
-            x = max(screen_rect.left(), min(x, screen_rect.right() - self.width()))
-            y = max(screen_rect.top(), min(y, screen_rect.bottom() - self.height()))
+        screen_rect = screen.availableGeometry()
+
+        # Position dialog's left edge at screen's left edge
+        x = screen_rect.left()
+
+        # Position dialog's vertical center at screen's vertical center
+        screen_center_y = screen_rect.top() + screen_rect.height() // 2
+        y = screen_center_y - (self.height() // 2)
+
+        # Ensure dialog doesn't go off the edges
+        x = max(screen_rect.left(), min(x, screen_rect.right() - self.width()))
+        y = max(screen_rect.top(), min(y, screen_rect.bottom() - self.height()))
 
         self.move(x, y)
 

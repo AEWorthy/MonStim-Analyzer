@@ -317,7 +317,14 @@ class MenuBar(QMenuBar):
             if hasattr(dialog, "_changes_made") and dialog._changes_made:
                 # Refresh experiments list and reset all selections after structural changes
                 self.parent.data_manager.unpack_existing_experiments()
-                self.parent.data_selection_widget.update()
+
+                # If an experiment is currently loaded, reload it to pick up annotation changes
+                # (e.g., excluded datasets list)
+                if self.parent.current_experiment:
+                    self.parent.data_manager.reload_current_experiment()
+                else:
+                    # Otherwise just update the UI
+                    self.parent.data_selection_widget.update()
         except ImportError as e:
             QMessageBox.warning(
                 self.parent,
