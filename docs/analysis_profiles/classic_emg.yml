@@ -4,5 +4,5 @@ description: Standard M-/H-response EMG analysis with a single-pulse electrical 
 stimuli_to_plot:
 - Electrical
 analysis_parameters:
-  time_window: 8.0
+  time_window: 10.0
   pre_stim_time: 2.0
