@@ -5,7 +5,7 @@ pandas==2.3.2
 matplotlib==3.10.6
 pyqtgraph>=0.13.1,<0.14
 scipy==1.15.3
-PyYAML==6.0.2
+PyYAML==6.0.3
 h5py==3.14.0
 packaging==25.0
 python_markdown_math==0.9

@@ -18,7 +18,7 @@ setup(
         "Markdown==3.9",
         "PyQt6==6.9.1",
         "PyQt6_sip==13.10.2",
-        "PyYAML==6.0.2",
+        "PyYAML==6.0.3",
         "h5py==3.14.0",
         "matplotlib==3.10.6",
         "numpy==2.2.6",
