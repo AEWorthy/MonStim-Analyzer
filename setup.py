@@ -22,7 +22,7 @@ setup(
         "h5py==3.14.0",
         "matplotlib==3.10.6",
         "numpy==2.2.6",
-        "pandas==2.3.2",
+        "pandas==2.3.3",
         "packaging==25.0",
         "python_markdown_math==0.9",
         "pytest==8.4.2",
