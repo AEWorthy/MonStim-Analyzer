@@ -143,13 +143,21 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Normalize if requested
                 if relative_to_mmax and means is not None:
-                    if manual_mmax is None:
-                        mmax = self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
-                    else:
-                        mmax = manual_mmax
-                    if mmax and mmax != 0:
-                        means = means / mmax
-                        stdevs = stdevs / mmax
+                    # Resolve potential array-like mmax to a scalar safely
+                    try:
+                        if manual_mmax is None:
+                            mmax_val = self._resolve_to_scalar(
+                                self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
+                            )
+                        else:
+                            mmax_val = self._resolve_to_scalar(manual_mmax)
+                    except ValueError as ve:
+                        # Ambiguous multi-element mmax value
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
+
+                    if mmax_val is not None and mmax_val != 0:
+                        means = means / mmax_val
+                        stdevs = stdevs / mmax_val
 
                 for v, m, s in zip(voltages, means, stdevs):
                     raw_data_dict["channel_index"].append(channel_idx)
@@ -273,12 +281,19 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
                 if relative_to_mmax:
-                    if manual_mmax is not None:
-                        m_max = manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax
-                    else:
-                        m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
+                    try:
+                        if manual_mmax is not None:
+                            m_max = self._resolve_to_scalar(
+                                manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax
+                            )
+                        else:
+                            m_max = self._resolve_to_scalar(
+                                self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
+                            )
+                    except ValueError as ve:
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_index}: {ve}")
 
-                    if m_max and m_max != 0:
+                    if m_max is not None and m_max != 0:
                         m_wave_amplitudes = m_wave_amplitudes / m_max
                         h_response_amplitudes = h_response_amplitudes / m_max
                     else:
@@ -299,7 +314,10 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 h_color = self._convert_matplotlib_color(self.emg_object.h_color)
 
                 # Plot M-wave data points
-                if m_wave_amplitudes:
+                # Use explicit size check to avoid ambiguous truth value for numpy arrays
+                if (hasattr(m_wave_amplitudes, "size") and m_wave_amplitudes.size > 0) or (
+                    hasattr(m_wave_amplitudes, "__len__") and len(m_wave_amplitudes) > 0
+                ):
                     # Calculate and plot mean with error bars
                     mean_m = np.mean(m_wave_amplitudes)
                     std_m = np.std(m_wave_amplitudes)
@@ -349,7 +367,9 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     plot_item.addItem(text_m)
 
                 # Plot H-response data points
-                if h_response_amplitudes:
+                if (hasattr(h_response_amplitudes, "size") and h_response_amplitudes.size > 0) or (
+                    hasattr(h_response_amplitudes, "__len__") and len(h_response_amplitudes) > 0
+                ):
                     # Calculate and plot mean with error bars
                     mean_h = np.mean(h_response_amplitudes)
                     std_h = np.std(h_response_amplitudes)

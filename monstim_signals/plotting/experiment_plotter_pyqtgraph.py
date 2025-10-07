@@ -89,11 +89,15 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                         continue
 
                     if relative_to_mmax:
-                        if manual_mmax is None:
-                            mmax = self.emg_object.get_avg_m_max(method, channel_idx)
-                        else:
-                            mmax = manual_mmax
-                        if mmax and mmax != 0:
+                        try:
+                            if manual_mmax is None:
+                                mmax = self._resolve_to_scalar(self.emg_object.get_avg_m_max(method, channel_idx))
+                            else:
+                                mmax = self._resolve_to_scalar(manual_mmax)
+                        except ValueError as ve:
+                            raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
+
+                        if mmax is not None and mmax != 0:
                             means = means / mmax
                             stdevs = stdevs / mmax
 
@@ -271,16 +275,19 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 h_response_amplitudes = np.concatenate((h_response_amplitudes, h_amplitudes))
                 stimulus_voltages_for_channel = np.concatenate((stimulus_voltages_for_channel, [voltage] * len(m_amplitudes)))
 
-            # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
-            if relative_to_mmax:
-                if manual_mmax is not None:
-                    m_max_amplitude = manual_mmax[channel_idx]
-                else:
-                    m_max_amplitude = self.emg_object.get_avg_m_max(method, channel_idx)
+                # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
+                if relative_to_mmax:
+                    try:
+                        if manual_mmax is not None:
+                            m_max_amplitude = self._resolve_to_scalar(manual_mmax[channel_idx])
+                        else:
+                            m_max_amplitude = self._resolve_to_scalar(self.emg_object.get_avg_m_max(method, channel_idx))
+                    except ValueError as ve:
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
 
-                if m_max_amplitude and m_max_amplitude > 0:
-                    m_wave_amplitudes = m_wave_amplitudes / m_max_amplitude
-                    h_response_amplitudes = h_response_amplitudes / m_max_amplitude
+                    if m_max_amplitude is not None and m_max_amplitude > 0:
+                        m_wave_amplitudes = m_wave_amplitudes / m_max_amplitude
+                        h_response_amplitudes = h_response_amplitudes / m_max_amplitude
 
             # Append data to raw data dictionary
             raw_data_dict["channel_index"].extend([channel_idx] * len(m_wave_amplitudes))
