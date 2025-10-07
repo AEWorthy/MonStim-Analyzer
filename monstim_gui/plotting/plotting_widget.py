@@ -5,13 +5,18 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QRadioButton,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -146,6 +151,83 @@ class PlotWidget(QGroupBox):
         if self.current_option_widget and hasattr(self.current_option_widget, "channel_selector"):
             self.persistent_channel_selection = self.current_option_widget.channel_selector.get_selected_channels()
 
+    def save_current_options(self):
+        """Save the current options for the active view and plot type.
+
+        This is called whenever an option widget changes so that selections
+        such as the M-max "method" are preserved when the data selection
+        changes (which recreates the options widget).
+        """
+        try:
+            if not self.current_option_widget:
+                return
+            plot_type = self.plot_type_combo.currentText()
+            if not plot_type:
+                return
+
+            current_options = self.current_option_widget.get_options()
+            # Deep copy to avoid later mutation
+            self.last_options[self.view][plot_type] = copy.deepcopy(current_options)
+        except Exception as e:
+            logging.debug(f"Failed to save current options: {e}")
+
+    def connect_option_change_signals(self):
+        """Connect common option widget signals to save_current_options.
+
+        This inspects the current_option_widget for known child widgets and
+        connects their change signals so the PlotWidget remembers option
+        changes immediately.
+        """
+        # Avoid reconnecting for the same widget
+        if not self.current_option_widget:
+            return
+        if getattr(self, "_option_change_connected_widget", None) is self.current_option_widget:
+            return
+
+        # Remember which widget we've connected so we don't duplicate connections
+        self._option_change_connected_widget = self.current_option_widget
+
+        # Connect common named controls
+        try:
+            w = self.current_option_widget
+            # method combo if present
+            if hasattr(w, "method_combo"):
+                try:
+                    w.method_combo.currentTextChanged.connect(self.save_current_options)
+                except Exception:
+                    pass
+
+            # data type combo or other QComboBox children
+            for cb in w.findChildren(QComboBox):
+                try:
+                    cb.currentTextChanged.connect(self.save_current_options)
+                except Exception:
+                    pass
+
+            # checkboxes
+            for chk in w.findChildren(QCheckBox):
+                try:
+                    chk.stateChanged.connect(self.save_current_options)
+                except Exception:
+                    pass
+
+            # line edits
+            for le in w.findChildren(QLineEdit):
+                try:
+                    le.textChanged.connect(self.save_current_options)
+                except Exception:
+                    pass
+
+            # spinboxes
+            for sb in w.findChildren((QSpinBox, QDoubleSpinBox)):
+                try:
+                    sb.valueChanged.connect(self.save_current_options)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            logging.debug(f"Failed to connect option change signals: {e}")
+
     def connect_channel_selection_updates(self):
         """Connect channel selector checkboxes to update persistent selection."""
         if self.current_option_widget and hasattr(self.current_option_widget, "channel_selector"):
@@ -278,6 +360,12 @@ class PlotWidget(QGroupBox):
                     # Connect channel selection updates for real-time persistence
                     self.connect_channel_selection_updates()
 
+                    # Connect option change signals so modifications are saved immediately
+                    self.connect_option_change_signals()
+
+                    # Connect option change signals so modifications are saved immediately
+                    self.connect_option_change_signals()
+
                     self.options_layout.update()
 
                     # Handle special case for Single EMG Recordings
@@ -336,6 +424,9 @@ class PlotWidget(QGroupBox):
 
             # Connect channel selection updates for real-time persistence
             self.connect_channel_selection_updates()
+
+            # Connect option change signals so modifications are saved immediately
+            self.connect_option_change_signals()
 
             # Recalculate size after options are initialized with a slight delay
             # to ensure all widgets are properly laid out

@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
     from .plotting_widget import PlotWidget
 
+CALCULATION_METHODS = ["peak_to_trough", "rms", "average_rectified", "average_unrectified"]
+DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
+
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
@@ -121,7 +124,7 @@ class EMGOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.data_type_combo = ResponsiveComboBox()
-        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
+        self.data_type_combo.addItems(DATA_TYPES)
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # flags / legend / colormap
@@ -193,7 +196,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.data_type_combo = ResponsiveComboBox()
-        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
+        self.data_type_combo.addItems(DATA_TYPES)
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # Create and add checkboxes
@@ -286,7 +289,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -349,7 +352,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -403,7 +406,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -465,7 +468,7 @@ class MMaxOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -510,7 +513,7 @@ class MaxHReflexOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)

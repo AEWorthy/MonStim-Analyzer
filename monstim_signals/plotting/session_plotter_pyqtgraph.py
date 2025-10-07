@@ -575,6 +575,36 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             )
             self.add_colormap_scalebar(layout, plot_items, value_range)
 
+        # Add an info bubble showing the primary stimulus amplitude (formatted like dataset/experiment inlays)
+        # This inlay mirrors the pg.TextItem usage in dataset/experiment plotters
+        # TODO: Make bubble move with zoom/pan
+        try:
+            info_text = f"Stimulus: {stimulus_v:.2f} V"
+            # Use same styling as other plotters' inlay TextItem
+            text_item = pg.TextItem(
+                info_text,
+                anchor=(1, 0),
+                color="white",
+                border=pg.mkPen("w"),
+                fill=pg.mkBrush(255, 255, 255, 200),
+            )
+            # Position the text in the top-right of the first plot item
+            first_plot = plot_items[0]
+            # Determine a reasonable position: x near right edge, y near top of visible range
+            vb = first_plot.vb
+            view_range = vb.viewRange()
+            # viewRange returns [[xMin,xMax],[yMin,yMax]]
+            x_min, x_max = view_range[0]
+            y_min, y_max = view_range[1]
+            # Place text slightly inset from top-right corner
+            x_pos = x_max - 0.02 * (x_max - x_min)
+            y_pos = y_max - 0.02 * (y_max - y_min)
+            text_item.setPos(x_pos, y_pos)
+            first_plot.addItem(text_item)
+        except Exception:
+            # Fail silently for non-critical UI addition
+            logging.error("Failed to add stimulus info inlay to single EMG plot", exc_info=True)
+
         if not fixed_y_axis:
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
