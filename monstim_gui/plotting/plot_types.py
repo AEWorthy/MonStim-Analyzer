@@ -2,6 +2,7 @@ from .plot_options import (
     AverageReflexCurvesOptions,
     AverageSessionReflexOptions,
     EMGOptions,
+    LatencyWindowDistributionOptions,
     MaxHReflexOptions,
     MMaxOptions,
     SessionReflexCurvesOptions,
@@ -17,6 +18,7 @@ PLOT_NAME_DICT = {
     "Average Reflex:Stimulus Curves": "averageReflexCurves",
     "Single EMG Recordings": "singleEMG",
     "Reflex Averages": "reflexAverages",
+    "Latency Window Distribution": "latency_window_distribution",
 }
 
 PLOT_OPTIONS_DICT = {
@@ -26,10 +28,12 @@ PLOT_OPTIONS_DICT = {
         "Reflex Averages": AverageSessionReflexOptions,
         "Reflex:Stimulus Curves": SessionReflexCurvesOptions,
         "Average Reflex:Stimulus Curves": AverageSessionReflexOptions,
+        "Latency Window Distribution": LatencyWindowDistributionOptions,
         "M-max": MMaxOptions,
     },
     "dataset": {
         "Average Reflex:Stimulus Curves": AverageReflexCurvesOptions,
+        "Latency Window Distribution": LatencyWindowDistributionOptions,
         "Max H-reflex": MaxHReflexOptions,
         "M-max": MMaxOptions,
     },

@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING, List
 
 import numpy as np
@@ -614,3 +615,188 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting M-max: {str(e)}")
+
+    def plot_latency_window_distribution(
+        self,
+        channel_indices: List[int] = None,
+        method: str = None,
+        bins: int | np.ndarray = 30,
+        density: bool = False,
+        plot_legend: bool = True,
+        canvas=None,
+    ):
+        """Plot distribution (histogram) of latency-window reflex amplitudes across the DATASET.
+
+        - X-axis: binned EMG amplitudes (shared bins per channel)
+        - Y-axis: frequency (counts) per amplitude bin (or density when density=True)
+        - Each latency window is shown as a dot plot with connecting lines.
+
+        Aggregates all latency-window amplitudes from every session (using
+        Dataset.get_lw_reflex_amplitudes) and then bins them per-window.
+        Returns a pandas.DataFrame with multi-index (channel_index, window_name, bin_center)
+        and a column 'value' (for frequency or probability density).
+        """
+        try:
+            if canvas is None:
+                raise UnableToPlotError("Canvas is required for plotting.")
+
+            if method is None:
+                method = self.emg_object.default_method
+
+            if channel_indices is None:
+                channel_indices = list(range(self.emg_object.num_channels))
+
+            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+
+            # Unlink X-axes for this plot type so each channel shows its full distribution
+            # (create_plot_layout links X axes by default for multi-channel layouts).
+            for _pi in plot_items:
+                try:
+                    _pi.setXLink(None)
+                except Exception:
+                    # If unlinking fails for any backend reason, ignore and continue
+                    pass
+
+            raw_data_dict = {
+                "channel_index": [],
+                "window_name": [],
+                "bin_left": [],
+                "bin_right": [],
+                "bin_center": [],
+                "value": [],
+            }
+
+            # For each channel compute a common binning across all windows so lines are comparable
+            # Iterate using zip to ensure plot_items and channel_indices are paired correctly
+            for plot_item, channel_index in zip(plot_items, channel_indices):
+                if channel_index >= self.emg_object.num_channels:
+                    continue
+
+                # Gather window names available in the dataset
+                window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
+
+                # Collect amplitudes across all windows to determine common bin edges
+                all_amps_for_channel = []
+                window_to_amps: dict[str, np.ndarray] = {}
+                for window_name in window_names:
+                    per_session_amps = self.emg_object.get_lw_reflex_amplitudes(method, channel_index, window_name)
+                    # per_session_amps is a dict session_id -> np.ndarray
+                    amps_concat = np.concatenate([a for a in per_session_amps.values()]) if per_session_amps else np.array([])
+                    # Filter NaN
+                    amps_concat = amps_concat[~np.isnan(amps_concat)] if amps_concat.size > 0 else np.array([])
+                    window_to_amps[window_name] = amps_concat
+                    if amps_concat.size > 0:
+                        all_amps_for_channel.extend(amps_concat.tolist())
+
+                # (no debug logging here; keep function output clean)
+
+                if len(all_amps_for_channel) == 0:
+                    # Nothing to plot for this channel
+                    self.set_labels(
+                        plot_item,
+                        title=f"{self.emg_object.channel_names[channel_index]}",
+                        x_label="EMG Amp.",
+                        y_label="Frequency",
+                    )
+                    plot_item.showGrid(True, True)
+                    continue
+
+                all_amps_for_channel = np.array(all_amps_for_channel)
+
+                # Determine bin edges (common for all windows)
+                if isinstance(bins, int):
+                    bin_edges = np.histogram_bin_edges(all_amps_for_channel, bins=bins)
+                else:
+                    bin_edges = np.asarray(bins)
+
+                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+
+                # Plot each window's distribution
+                # Add legend container if requested (one per plot_item)
+                if plot_legend:
+                    try:
+                        plot_item.addLegend()
+                    except Exception:
+                        pass
+
+                for window_name, amps in window_to_amps.items():
+                    if amps.size == 0:
+                        continue
+
+                    try:
+                        # Compute counts or probability density (properly normalized)
+                        if density:
+                            # np.histogram with density=True returns values such that
+                            # integral(density * bin_width) == 1
+                            counts, _ = np.histogram(amps, bins=bin_edges, density=True)
+                        else:
+                            counts, _ = np.histogram(amps, bins=bin_edges)
+
+                        # record raw data
+                        for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts):
+                            raw_data_dict["channel_index"].append(channel_index)
+                            raw_data_dict["window_name"].append(window_name)
+                            raw_data_dict["bin_left"].append(float(left))
+                            raw_data_dict["bin_right"].append(float(right))
+                            raw_data_dict["bin_center"].append(float(center))
+                            raw_data_dict["value"].append(float(freq))
+
+                        # Determine a color for the window (try to reuse session window color)
+                        color_hex = None
+                        try:
+                            for sess in self.emg_object.sessions:
+                                w = self.emg_object.get_session_latency_window(sess, window_name)  # type: ignore[attr-defined]
+                                if w is not None:
+                                    color_hex = w.color
+                                    break
+                        except Exception:
+                            pass
+                        if color_hex is None:
+                            color_hex = "white"
+
+                        color = self._convert_matplotlib_color(color_hex)
+
+                        # Plot line with markers
+                        plot_item.plot(
+                            bin_centers,
+                            counts,
+                            pen=pg.mkPen(color=color, width=2),
+                            symbol="o",
+                            symbolSize=6,
+                            symbolBrush=color,
+                            name=window_name if plot_legend else None,
+                        )
+                    except Exception:
+                        logging.error(f"Could not plot latency window '{window_name}' for channel {channel_index}.")
+                        continue
+
+                # Labels and formatting per channel
+                # Labels and formatting per channel
+                self.set_labels(
+                    plot_item,
+                    title=f"{self.emg_object.channel_names[channel_index]}",
+                    x_label="EMG Amp. (binned)",
+                    y_label=("Probability Density" if density else "Frequency"),
+                )
+                # Ensure this plot auto-ranges its X axis independently so the
+                # histogram/binning for this channel is fully visible.
+                try:
+                    plot_item.enableAutoRange(axis="x", enable=True)
+                except Exception:
+                    # Fall back silently if the backend does not support this call
+                    pass
+
+                plot_item.showGrid(True, True)
+
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
+
+            raw_data_df = pd.DataFrame(raw_data_dict)
+            if not raw_data_df.empty:
+                raw_data_df.set_index(["channel_index", "window_name", "bin_center"], inplace=True)
+            return raw_data_df
+
+        except UnableToPlotError:
+            raise
+        except Exception as e:
+            raise UnableToPlotError(f"Error plotting latency-window distribution: {str(e)}")

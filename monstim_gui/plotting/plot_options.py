@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QLineEdit,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -399,6 +400,73 @@ class AverageReflexCurvesOptions(BasePlotOptions):
             self.relative_to_mmax_checkbox.setChecked(options["relative_to_mmax"])
         if "plot_legend" in options:
             self.show_legend_checkbox.setChecked(options["plot_legend"])
+
+
+class LatencyWindowDistributionOptions(BasePlotOptions):
+    """Options for dataset-level latency-window amplitude distribution plots."""
+
+    def create_options(self):
+        form = self.create_form_layout()
+
+        # Method selection
+        self.method_combo = ResponsiveComboBox()
+        self.method_combo.addItems(CALCULATION_METHODS)
+        self.method_combo.setCurrentIndex(0)
+        form.addRow("Reflex Calc. Method:", self.method_combo)
+
+        # Bins (integer)
+        self.bins_spin = QSpinBox()
+        self.bins_spin.setMinimum(5)
+        self.bins_spin.setMaximum(1000)
+        self.bins_spin.setValue(30)
+        self.bins_spin.setToolTip("Number of bins to use for amplitude histogram (shared per channel)")
+        form.addRow("Number of bins:", self.bins_spin)
+
+        # Density checkbox
+        self.density_checkbox = QCheckBox()
+        self.density_checkbox.setToolTip("If checked, plot densities instead of raw counts")
+        form.addRow("Show Density:", self.density_checkbox)
+
+        # Legend checkbox
+        self.plot_legend_checkbox = QCheckBox()
+        self.plot_legend_checkbox.setChecked(True)
+        form.addRow("Show Legend:", self.plot_legend_checkbox)
+
+        # Channel selector
+        self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        self.layout.addWidget(options_widget)
+        self.layout.addWidget(self.channel_selector)
+
+    def get_options(self):
+        return {
+            "channel_indices": self.channel_selector.get_selected_channels(),
+            "method": self.method_combo.currentText(),
+            "bins": int(self.bins_spin.value()),
+            "density": self.density_checkbox.isChecked(),
+            "plot_legend": self.plot_legend_checkbox.isChecked(),
+        }
+
+    def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
+        if "method" in options:
+            idx = self.method_combo.findText(options["method"])
+            if idx >= 0:
+                self.method_combo.setCurrentIndex(idx)
+        if "bins" in options:
+            try:
+                self.bins_spin.setValue(int(options["bins"]))
+            except Exception:
+                pass
+        if "density" in options:
+            self.density_checkbox.setChecked(bool(options["density"]))
+        if "plot_legend" in options:
+            self.plot_legend_checkbox.setChecked(bool(options["plot_legend"]))
 
 
 class AverageSessionReflexOptions(BasePlotOptions):
