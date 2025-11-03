@@ -165,7 +165,7 @@ jobs:
         bandit -r . -x tests/ || true
 
     - name: Upload security report
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       if: always()
       with:
         name: security-report-${{ github.run_id }}
