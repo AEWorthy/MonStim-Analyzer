@@ -15,8 +15,7 @@ import h5py
 import pytest
 
 from monstim_signals.io.csv_importer import import_experiment
-
-from .helpers import get_golden_root
+from tests.helpers import get_golden_root
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
