@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from helpers import list_files_with_hashes, make_experiment_and_dataset_with_nested_content
+from tests.helpers import list_files_with_hashes, make_experiment_and_dataset_with_nested_content
 
 from monstim_gui.commands import CommandInvoker, CopyDatasetCommand, MoveDatasetCommand
 

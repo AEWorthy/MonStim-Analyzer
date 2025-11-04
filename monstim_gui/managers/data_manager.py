@@ -1273,7 +1273,7 @@ class DataManager:
 
         if is_valid_format:
             # Name is already in correct format
-            logging.info(f"Dataset name '{original_dataset_name}' follows standard format.")
+            logging.debug(f"Dataset name '{original_dataset_name}' follows standard format.")
             return dataset_path, metadata
         else:
             # Name doesn't follow standard format - give user options
@@ -1302,6 +1302,13 @@ class DataManager:
                         f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}" using os.rename().'
                     )
 
+                # TODO: Smart rename UX
+                # - Consider adding a "Suggest Name" button that attempts to
+                #   auto-format common non-standard names (e.g., swapping delimiters,
+                #   filling missing year digits) and presents suggested renames
+                #   in batch for multi-dataset imports.
+                # - Add an option to apply the same rename rule across multiple
+                #   datasets (preview & confirm) during MultiExpt import.
                 return validated_dataset_path, new_metadata
 
             elif user_choice["action"] == "keep":

@@ -58,6 +58,17 @@ class RecordingExclusionEditor(QDialog):
         self.setup_ui()
         self.load_data()
 
+# TODO: Exclusion editor enhancements
+# - Add thumbnail/sparkline previews for each recording in the preview table so users
+#   can get a quick visual cue when deciding to exclude recordings.
+# - Allow multi-row selection in the preview table with a "Toggle Exclusion" button
+#   to manually override the automatic criteria. This should integrate with the
+#   Command pattern (BulkRecordingExclusionCommand) so actions are undoable.
+# - Implement additional exclusion criteria (SNR, baseline drift, flatline, line-noise
+#   50/60Hz content, artifact detection) and an "Auto-flag low quality" quick action.
+# - Provide Save/Load exclusion profile support so users can persist criteria sets
+#   and reapply them across experiments.
+
     def setup_ui(self):
         """Set up the dialog UI."""
         self.setWindowTitle("Recording Exclusion Editor")
@@ -212,6 +223,9 @@ class RecordingExclusionEditor(QDialog):
 
         # Table for recordings
         self.recordings_table = QTableWidget()
+    # TODO: Add a small thumbnail/sparkline column to the left of Recording ID.
+    # Implementation note: draw a downsampled polyline on a QPixmap and set as
+    # an icon on a QTableWidgetItem or use a custom delegate for richer UX.
         self.recordings_table.setColumnCount(4)
         self.recordings_table.setHorizontalHeaderLabels(["Recording ID", "Session", "Stimulus (V)", "Status"])
 
@@ -284,6 +298,11 @@ class RecordingExclusionEditor(QDialog):
         # e.g., recording quality, signal-to-noise ratio, etc.
 
         return False
+
+# TODO: Exclusion criteria extensibility
+# - When adding new criteria (SNR, RMS outliers, baseline drift), provide a
+#   unified evaluation pipeline that returns (bool, reason_dict) for preview so
+#   tooltips can explain why a recording was flagged.
 
     def update_preview(self):
         """Update the preview table based on current criteria."""
@@ -416,6 +435,10 @@ class RecordingExclusionEditor(QDialog):
 
         # Apply exclusions using command pattern for undo support
         try:
+            # Prefer using the command/undo system so exclusions are reversible.
+            # TODO: Ensure the command_invoker is always available in the GUI and
+            # avoid falling back to non-undoable changes. If the invoker is missing,
+            # grey out the Apply button instead of silently applying without undo.
             from monstim_gui.commands import BulkRecordingExclusionCommand
 
             # Create command with all the changes
@@ -444,24 +467,14 @@ class RecordingExclusionEditor(QDialog):
                 )
 
         except ImportError:
-            # Fallback: apply changes directly without command pattern
-            logging.warning("BulkRecordingExclusionCommand not available, applying changes directly")
-
-            for session in sessions:
-                for recording in session.get_all_recordings(include_excluded=True):
-                    should_exclude = self.should_exclude_recording(recording)
-                    currently_excluded = recording.id in session.excluded_recordings
-
-                    if should_exclude and not currently_excluded:
-                        session.exclude_recording(recording.id)
-                    elif not should_exclude and currently_excluded:
-                        session.restore_recording(recording.id)
-
-            self.exclusions_applied.emit()
-            self.accept()
-
-            self.gui.status_bar.showMessage(
-                f"Applied exclusion criteria: {total_exclusions} excluded, {total_inclusions} included", 5000
+            # Fallback: if command class is not importable, raise a clear error
+            # instead of silently applying non-undoable changes. This prevents
+            # accidental data loss and encourages wiring the command system.
+            logging.error("BulkRecordingExclusionCommand not available - Command pattern not installed or import failed.")
+            QMessageBox.critical(
+                self,
+                "Internal Error",
+                "Cannot apply exclusions because the undo/redo command system is not available. Please restart the app or contact support.",
             )
 
         except Exception as e:

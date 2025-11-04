@@ -741,7 +741,7 @@ def golden_session(tmp_path):
     """Import golden CSVs to a temp dir and load a real session."""
     from monstim_signals.io.csv_importer import import_experiment
 
-    from .helpers import get_golden_root
+    from tests.helpers import get_golden_root
 
     out_expt = tmp_path / "GoldenExp"
     import_experiment(get_golden_root(), out_expt, overwrite=True, max_workers=1)
@@ -769,7 +769,7 @@ def golden_dataset(tmp_path):
     """Import golden CSVs to a temp dir and load a real dataset."""
     from monstim_signals.io.csv_importer import import_experiment
 
-    from .helpers import get_golden_root
+    from tests.helpers import get_golden_root
 
     out_expt = tmp_path / "GoldenExp"
     import_experiment(get_golden_root(), out_expt, overwrite=True, max_workers=1)

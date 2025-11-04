@@ -14,6 +14,14 @@ def savgol_filter_y(y, polyorder=3):
         window_length += 1
     return signal.savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
+# TODO: UX / Visualization
+# - Provide a GUI hook or small helper to visualize the detected plateau region
+#   and the candidate M-max approaches (mean_corrected, 95th percentile,
+#   maximum, top-20%). This will make it much easier to inspect algorithm
+#   decisions interactively and to allow users to pick an approach.
+# - Expose the Savitzky-Golay window length calculation via configuration so
+#   users can tune smoothing in the GUI or via analysis profiles.
+
 
 def detect_plateau(y, max_window_size, min_window_size, threshold):
     """Detect a plateau region in a reflex curve."""

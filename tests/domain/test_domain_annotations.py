@@ -23,7 +23,7 @@ def temp_copied_session(tmp_path: Path) -> Path:
     """Import golden CSVs into a temp directory and return a valid session path."""
     from monstim_signals.io.csv_importer import import_experiment
 
-    from .helpers import get_golden_root
+    from tests.helpers import get_golden_root
 
     out_expt = tmp_path / "GoldenExp"
     import_experiment(get_golden_root(), out_expt, overwrite=True, max_workers=1)

@@ -137,7 +137,13 @@ class Session:
             for i in range(self.num_channels)
         ]
 
-        # Preserve existing latency windows; do not create defaults automatically
+    # TODO: Latency window UX
+    # - Consider adding an automated latency-window suggestion routine that
+    #   detects candidate M-wave/H-reflex windows from averaged or median
+    #   traces and prompts the user to accept/modify them.
+    # - The current Jupyter-only `update_window_settings` helper should be
+    #   integrated into the main GUI latency editor so editing is consistent
+    #   across environments.
 
     def apply_config(self, reset_caches: bool = True) -> None:
         """
@@ -481,6 +487,13 @@ class Session:
                 if channel_type in ("force", "length"):
                     # Apply specific processing for force and length channels
                     # TODO: Implement specific filtering for force and length channels if needed
+                    # Notes/TODOs:
+                    # - Force/length channels may need low-pass smoothing or detrending
+                    #   rather than the EMG bandpass. Add configuration options and a
+                    #   clear API entry point for channel-specific processing.
+                    # - Consider adding unit tests that validate the processing for
+                    #   force/length channels and ensure these channels are not
+                    #   inadvertently rectified/treated as EMG.
                     filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
                 elif channel_type in ("emg",):
                     # Apply specific processing for EMG channels
@@ -574,6 +587,12 @@ class Session:
         self.reset_cached_reflex_properties()
         self.update_latency_window_parameters()
 
+# TODO: Caching / consistency
+# - Ensure cached_property names and keys cleared by reset_recordings_cache() match
+#   exactly. Consider automating this via a decorator or metaclass.
+#   — add tests to validate cache invalidation for all cached properties including
+#   `m_max`, `recordings_rectified_filtered`, etc.
+
     def update_latency_window_parameters(self):
         """
         Update cached M/H-response parameters from latency windows.
@@ -629,12 +648,16 @@ class Session:
             del self.__dict__["recordings"]
         if "recordings_raw" in self.__dict__:
             del self.__dict__["recordings_raw"]
-        if "recordings_processed" in self.__dict__:
-            del self.__dict__["recordings_processed"]
+
         if "recordings_filtered" in self.__dict__:
             del self.__dict__["recordings_filtered"]
         if "recordings_rectified_raw" in self.__dict__:
             del self.__dict__["recordings_rectified_raw"]
+        # TODO: include recordings_rectified_filtered and the cached m_max if present
+        if "recordings_rectified_filtered" in self.__dict__:
+            del self.__dict__["recordings_rectified_filtered"]
+        if "m_max" in self.__dict__:
+            del self.__dict__["m_max"]
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Properties for GUI & analysis code

@@ -271,6 +271,12 @@ class ApplicationState:
             # Set flag to suppress session state saves during restoration (including experiment loading)
             self._is_restoring_session = True
 
+            # TODO: Robust restoration
+            # - Prefer restoring by explicit IDs stored in combo UserRole instead of
+            #   by index arithmetic (+1 placeholder). Where possible, always write
+            #   and restore user-facing state by stable IDs to avoid fragile index
+            #   based restoring when UI ordering or placeholders change.
+
             # Restore experiment
             exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
             gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)

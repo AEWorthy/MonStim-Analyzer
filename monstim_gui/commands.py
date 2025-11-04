@@ -701,6 +701,64 @@ class MoveDatasetCommand(Command):
         return f"Moved dataset '{self.dataset_name}' from '{self.from_exp}' to '{self.to_exp}'"
 
 
+class MoveDatasetsCommand(Command):
+    """Batched move of multiple datasets executed as a single undoable command."""
+
+    def __init__(self, gui, moves: list[tuple]):
+        """
+        moves: list of tuples (dataset_id, dataset_name, from_exp, to_exp)
+        """
+        self.gui : 'MonstimGUI' = gui
+        self.moves = list(moves)
+        self.command_name = f"Move {len(self.moves)} datasets"
+        # Will record only the moves that actually succeeded during execute()
+        self._succeeded = []
+
+    def execute(self):
+        """Execute all moves sequentially. Record successes for undo."""
+        try:
+            for ds_id, ds_name, from_exp, to_exp in self.moves:
+                try:
+                    self.gui.data_manager.move_dataset(ds_id, ds_name, from_exp, to_exp)
+                    self._succeeded.append((ds_id, ds_name, from_exp, to_exp))
+                except Exception as e:
+                    logging.error(f"Failed to move dataset '{ds_name}' from '{from_exp}' to '{to_exp}': {e}")
+
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                try:
+                    self.gui._data_curation_manager.load_data()
+                except Exception:
+                    # Best-effort; do not fail the entire command if refresh errors
+                    logging.exception("Failed to refresh Data Curation Manager after batched move")
+
+        except Exception as e:
+            raise Exception(f"Failed to execute batched dataset moves: {str(e)}")
+
+    def undo(self):
+        """Undo by moving succeeded items back in reverse order."""
+        try:
+            for ds_id, ds_name, from_exp, to_exp in reversed(self._succeeded):
+                try:
+                    # Move back from to_exp -> from_exp
+                    self.gui.data_manager.move_dataset(ds_id, ds_name, to_exp, from_exp)
+                except Exception as e:
+                    logging.error(f"Failed to undo move of dataset '{ds_name}' from '{to_exp}' back to '{from_exp}': {e}")
+
+            # Refresh once after undo
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                try:
+                    self.gui._data_curation_manager.load_data()
+                except Exception:
+                    logging.exception("Failed to refresh Data Curation Manager after undoing batched move")
+
+        except Exception as e:
+            raise Exception(f"Failed to undo batched dataset moves: {str(e)}")
+
+    def get_description(self) -> str:
+        return f"Moved {len(self._succeeded)} dataset(s) in batch"
+
+
 class CopyDatasetCommand(Command):
     def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
         self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
