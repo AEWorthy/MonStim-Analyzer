@@ -40,6 +40,24 @@ class BasePlotterPyQtGraph:
             "#17becf",
         ]
 
+        # Decimation configuration (for large datasets during plotting)
+        # Defaults can be overridden by config or caller after construction.
+        self.enable_decimation: bool = True
+        self.max_points_per_curve: int = 10000
+        self.decimation_strategy: str = "minmax"  # 'minmax' | 'mean' | 'subsample'
+        # Only decimate when series is significantly larger than the cap (skip work otherwise)
+        self.min_decimation_factor: int = 3  # require len(data) >= factor * max_points
+        # Attempt to pull overrides from emg_object config if present
+        try:
+            cfg = getattr(self.emg_object, "_config", None) or {}
+            plotting_cfg = cfg.get("plotting", {}) if isinstance(cfg, dict) else {}
+            self.enable_decimation = bool(plotting_cfg.get("enable_decimation", self.enable_decimation))
+            self.max_points_per_curve = int(plotting_cfg.get("max_points_per_curve", self.max_points_per_curve))
+            self.decimation_strategy = str(plotting_cfg.get("decimation_strategy", self.decimation_strategy))
+            self.min_decimation_factor = int(plotting_cfg.get("min_decimation_factor", self.min_decimation_factor))
+        except Exception:
+            pass
+
     def create_plot_layout(
         self, canvas: "PlotPane", channel_indices: List[int] = None
     ) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
@@ -350,6 +368,22 @@ class BasePlotterPyQtGraph:
             color = self.default_colors[len(self.current_plot_items) % len(self.default_colors)]
 
         pen = pg.mkPen(color, width=line_width)
+
+        # Optional pre-plot decimation to reduce memory and draw time for very long series
+        try:
+            if (
+                self.enable_decimation
+                and self.max_points_per_curve > 0
+                and len(data) >= self.min_decimation_factor * self.max_points_per_curve
+            ):
+                from .decimation import decimate_series
+
+                time_axis, data = decimate_series(
+                    time_axis, data, max_points=self.max_points_per_curve, strategy=self.decimation_strategy
+                )
+        except Exception:
+            # Fail open: if decimation fails, plot the original data
+            pass
 
         curve = plot_item.plot(time_axis, data, pen=pen, name=label)
 

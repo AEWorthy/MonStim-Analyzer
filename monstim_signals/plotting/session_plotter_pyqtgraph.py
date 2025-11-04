@@ -131,12 +131,16 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Use default color cycling
             color = self.default_colors[channel_index % len(self.default_colors)]
 
-        # Plot the data with PyQtGraph built-in performance optimizations
-        curve = plot_item.plot(time_segment, data_segment, pen=pg.mkPen(color=color, width=1.5))
+        # Plot via base helper (adds optional decimation and pyqtgraph optimizations)
+        curve = self.plot_time_series(
+            plot_item,
+            time_segment,
+            data_segment,
+            color=color,
+            line_width=1.5,
+        )
 
-        # Enable PyQtGraph's built-in performance optimizations
-        curve.setClipToView(True)  # Only render visible portions
-        curve.setDownsampling(auto=True)  # Auto-downsample when zoomed out
+        curve.setClipToView(True)  # Optimize rendering by clipping to view
 
         # Store curve reference for dynamic colormap updates
         if norm is not None:
