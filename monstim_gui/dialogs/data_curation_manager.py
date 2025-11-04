@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QFont, QDrag, QPixmap, QPainter, QPen, QFontMetrics
+from PyQt6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -591,7 +591,7 @@ class DataCurationManager(QDialog):
         # If there are buffered moves, execute them as a single batched command
         if pending:
             try:
-                from monstim_gui.commands import MoveDatasetsCommand, MoveDatasetCommand
+                from monstim_gui.commands import MoveDatasetCommand, MoveDatasetsCommand
 
                 if len(pending) == 1:
                     # Single move: use the existing single-dataset command for consistency

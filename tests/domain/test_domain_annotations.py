@@ -22,7 +22,6 @@ pytestmark = [pytest.mark.integration, pytest.mark.slow]
 def temp_copied_session(tmp_path: Path) -> Path:
     """Import golden CSVs into a temp directory and return a valid session path."""
     from monstim_signals.io.csv_importer import import_experiment
-
     from tests.helpers import get_golden_root
 
     out_expt = tmp_path / "GoldenExp"
