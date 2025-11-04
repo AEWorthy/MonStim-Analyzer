@@ -70,6 +70,7 @@ def test_move_datasets_command_execute_and_undo_all_succeed():
 
 def test_move_datasets_command_partial_failure():
     mock_gui = Mock()
+
     # Create a data_manager.move_dataset that fails on second call
     def side_effect(ds_id, ds_name, from_exp, to_exp):
         if ds_id == "ds2":

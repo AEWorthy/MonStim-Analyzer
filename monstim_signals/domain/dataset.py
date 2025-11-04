@@ -179,13 +179,13 @@ class Dataset:
                     name_map[low] = w.name
         return [name_map[k] for k in sorted(name_map.keys())]
 
-# TODO: Aggregation UX
-# - Dataset-level aggregation for latency windows is non-trivial when sessions
-#   have heterogeneous windows. Consider adding a GUI helper that visualizes
-#   the union of windows across sessions and lets the user choose a canonical
-#   mapping (e.g., pick a representative window, merge similar windows, or
-#   define per-session offsets). This would improve dataset-level aggregation
-#   and make downstream reports more consistent.
+    # TODO: Aggregation UX
+    # - Dataset-level aggregation for latency windows is non-trivial when sessions
+    #   have heterogeneous windows. Consider adding a GUI helper that visualizes
+    #   the union of windows across sessions and lets the user choose a canonical
+    #   mapping (e.g., pick a representative window, merge similar windows, or
+    #   define per-session offsets). This would improve dataset-level aggregation
+    #   and make downstream reports more consistent.
 
     def iter_latency_window_names(self):
         """Yield latency window names (union) in sorted order."""

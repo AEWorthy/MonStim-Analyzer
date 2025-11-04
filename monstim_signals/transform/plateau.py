@@ -14,6 +14,7 @@ def savgol_filter_y(y, polyorder=3):
         window_length += 1
     return signal.savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
+
 # TODO: UX / Visualization
 # - Provide a GUI hook or small helper to visualize the detected plateau region
 #   and the candidate M-max approaches (mean_corrected, 95th percentile,

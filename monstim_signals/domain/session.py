@@ -587,11 +587,11 @@ class Session:
         self.reset_cached_reflex_properties()
         self.update_latency_window_parameters()
 
-# TODO: Caching / consistency
-# - Ensure cached_property names and keys cleared by reset_recordings_cache() match
-#   exactly. Consider automating this via a decorator or metaclass.
-#   — add tests to validate cache invalidation for all cached properties including
-#   `m_max`, `recordings_rectified_filtered`, etc.
+    # TODO: Caching / consistency
+    # - Ensure cached_property names and keys cleared by reset_recordings_cache() match
+    #   exactly. Consider automating this via a decorator or metaclass.
+    #   — add tests to validate cache invalidation for all cached properties including
+    #   `m_max`, `recordings_rectified_filtered`, etc.
 
     def update_latency_window_parameters(self):
         """

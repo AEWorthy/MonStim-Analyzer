@@ -708,7 +708,7 @@ class MoveDatasetsCommand(Command):
         """
         moves: list of tuples (dataset_id, dataset_name, from_exp, to_exp)
         """
-        self.gui : 'MonstimGUI' = gui
+        self.gui: "MonstimGUI" = gui
         self.moves = list(moves)
         self.command_name = f"Move {len(self.moves)} datasets"
         # Will record only the moves that actually succeeded during execute()

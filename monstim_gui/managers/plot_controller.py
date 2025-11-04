@@ -262,6 +262,7 @@ class PlotController:
         logging.warning(f"Unable to plot: {error_msg}")
         logging.info(f"Plot type: {plot_type}, options: {plot_options}")
         logging.info(f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}")
+
     # TODO: Structured plotting errors
     # - Replace ad-hoc string matching (e.g., "No channels to plot") with
     #   structured exception types or error codes (e.g., UnableToPlotError(reason='no_channels')).
@@ -285,10 +286,10 @@ class PlotController:
             except Exception as hook_error:
                 logging.warning(f"Error in error hook: {hook_error}")
 
-# TODO: Hook examples and recipes
-# - Document example pre/post plot hooks in the codebase (or a small docs file)
-#   demonstrating how to automatically overlay latency windows, highlight
-#   plateau regions, or compute summary metrics after each successful plot.
+    # TODO: Hook examples and recipes
+    # - Document example pre/post plot hooks in the codebase (or a small docs file)
+    #   demonstrating how to automatically overlay latency windows, highlight
+    #   plateau regions, or compute summary metrics after each successful plot.
 
     def add_pre_plot_hook(self, hook_func):
         """Add a function to be called before plotting."""

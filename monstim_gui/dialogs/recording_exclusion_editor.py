@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, List, Set
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QIcon
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -24,8 +25,13 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QVBoxLayout,
+    QCheckBox,
+    QFileDialog,
     QWidget,
 )
+
+import json
+from typing import Dict, Any
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
@@ -58,16 +64,16 @@ class RecordingExclusionEditor(QDialog):
         self.setup_ui()
         self.load_data()
 
-# TODO: Exclusion editor enhancements
-# - Add thumbnail/sparkline previews for each recording in the preview table so users
-#   can get a quick visual cue when deciding to exclude recordings.
-# - Allow multi-row selection in the preview table with a "Toggle Exclusion" button
-#   to manually override the automatic criteria. This should integrate with the
-#   Command pattern (BulkRecordingExclusionCommand) so actions are undoable.
-# - Implement additional exclusion criteria (SNR, baseline drift, flatline, line-noise
-#   50/60Hz content, artifact detection) and an "Auto-flag low quality" quick action.
-# - Provide Save/Load exclusion profile support so users can persist criteria sets
-#   and reapply them across experiments.
+    # TODO: Exclusion editor enhancements
+    # - Add thumbnail/sparkline previews for each recording in the preview table so users
+    #   can get a quick visual cue when deciding to exclude recordings.
+    # - Allow multi-row selection in the preview table with a "Toggle Exclusion" button
+    #   to manually override the automatic criteria. This should integrate with the
+    #   Command pattern (BulkRecordingExclusionCommand) so actions are undoable.
+    # - Implement additional exclusion criteria (SNR, baseline drift, flatline, line-noise
+    #   50/60Hz content, artifact detection) and an "Auto-flag low quality" quick action.
+    # - Provide Save/Load exclusion profile support so users can persist criteria sets
+    #   and reapply them across experiments.
 
     def setup_ui(self):
         """Set up the dialog UI."""
@@ -221,13 +227,11 @@ class RecordingExclusionEditor(QDialog):
         header_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
         layout.addWidget(header_label)
 
-        # Table for recordings
+        # Table for recordings (add Preview column)
         self.recordings_table = QTableWidget()
-    # TODO: Add a small thumbnail/sparkline column to the left of Recording ID.
-    # Implementation note: draw a downsampled polyline on a QPixmap and set as
-    # an icon on a QTableWidgetItem or use a custom delegate for richer UX.
-        self.recordings_table.setColumnCount(4)
-        self.recordings_table.setHorizontalHeaderLabels(["Recording ID", "Session", "Stimulus (V)", "Status"])
+        # Columns: Preview, Recording ID, Session, Stimulus, Status
+        self.recordings_table.setColumnCount(5)
+        self.recordings_table.setHorizontalHeaderLabels(["Preview", "Recording ID", "Session", "Stimulus (V)", "Status"])
 
         # Configure table
         header = self.recordings_table.horizontalHeader()
@@ -244,6 +248,14 @@ class RecordingExclusionEditor(QDialog):
         # Summary label
         self.summary_label = QLabel()
         layout.addWidget(self.summary_label)
+
+    # Toggle exclusion button for manual override (undoable)
+    toggle_layout = QHBoxLayout()
+    self.toggle_exclusion_button = QPushButton("Toggle Exclusion")
+    self.toggle_exclusion_button.clicked.connect(self.toggle_selected_exclusions)
+    toggle_layout.addWidget(self.toggle_exclusion_button)
+    toggle_layout.addStretch()
+    layout.addLayout(toggle_layout)
 
         return preview_widget
 
@@ -299,10 +311,154 @@ class RecordingExclusionEditor(QDialog):
 
         return False
 
-# TODO: Exclusion criteria extensibility
-# - When adding new criteria (SNR, RMS outliers, baseline drift), provide a
-#   unified evaluation pipeline that returns (bool, reason_dict) for preview so
-#   tooltips can explain why a recording was flagged.
+    def compute_quality_metrics(self, recording) -> Dict[str, Any]:
+        """Compute simple quality metrics for a recording.
+
+        Returns a dict with keys: snr, baseline_drift, flatline, line_noise. Values
+        are numeric or None if computation unavailable.
+        """
+        # Attempt to robustly fetch waveform data from likely attributes
+        waveform = None
+        for attr in ("waveform", "signal", "data", "trace", "samples"):
+            waveform = getattr(recording, attr, None)
+            if waveform is not None:
+                break
+
+        # If waveform is callable (method) call it
+        try:
+            if callable(waveform):
+                waveform = waveform()
+        except Exception:
+            waveform = None
+
+        # Ensure waveform is a sequence of numbers
+        try:
+            import numpy as _np
+
+            arr = _np.asarray(waveform) if waveform is not None else None
+        except Exception:
+            arr = None
+
+        metrics = {"snr": None, "baseline_drift": None, "flatline": None, "line_noise": None}
+
+        if arr is None or arr.size == 0:
+            return metrics
+
+        # Simple RMS-based SNR: estimate noise from first 10% of trace
+        try:
+            n = arr.size
+            noise_seg = arr[: max(1, n // 10)]
+            signal_seg = arr[n // 10 :]
+            noise_rms = float((_np.mean(noise_seg ** 2)) ** 0.5)
+            signal_rms = float((_np.mean(signal_seg ** 2)) ** 0.5)
+            metrics["snr"] = signal_rms / (noise_rms + 1e-12)
+        except Exception:
+            metrics["snr"] = None
+
+        # Baseline drift: absolute difference between median of first and last 10%
+        try:
+            first_med = float(_np.median(arr[: max(1, n // 10)]))
+            last_med = float(_np.median(arr[-max(1, n // 10) :]))
+            metrics["baseline_drift"] = abs(last_med - first_med)
+        except Exception:
+            metrics["baseline_drift"] = None
+
+        # Flatline: low variance
+        try:
+            metrics["flatline"] = float(_np.std(arr))
+        except Exception:
+            metrics["flatline"] = None
+
+        # Line noise detection: rudimentary via fft energy near 50/60 Hz
+        try:
+            fs = getattr(recording, "sampling_rate", None) or getattr(recording, "fs", None) or 1000.0
+            freqs = _np.fft.rfftfreq(n, 1.0 / float(fs))
+            fft = _np.abs(_np.fft.rfft(arr))
+            # look for energy near 50 and 60 Hz
+            def band_energy(target):
+                mask = (freqs > (target - 1.0)) & (freqs < (target + 1.0))
+                return float(_np.sum(fft[mask]))
+
+            e50 = band_energy(50)
+            e60 = band_energy(60)
+            metrics["line_noise"] = max(e50, e60)
+        except Exception:
+            metrics["line_noise"] = None
+
+        return metrics
+
+    def generate_sparkline_icon(self, recording, width=80, height=24) -> QIcon:
+        """Generate a small sparkline icon for a recording if waveform is available.
+
+        Returns a QIcon. Falls back to a simple placeholder pixmap.
+        """
+        # Attempt to get waveform similar to compute_quality_metrics
+        waveform = None
+        for attr in ("waveform", "signal", "data", "trace", "samples"):
+            waveform = getattr(recording, attr, None)
+            if waveform is not None:
+                break
+
+        try:
+            if callable(waveform):
+                waveform = waveform()
+        except Exception:
+            waveform = None
+
+        try:
+            import numpy as _np
+
+            arr = _np.asarray(waveform) if waveform is not None else None
+        except Exception:
+            arr = None
+
+        pix = QPixmap(width, height)
+        pix.fill(QColor("transparent"))
+        painter = QPainter(pix)
+        pen = QPen(QColor("#2b85d8"))
+        pen.setWidth(1)
+        painter.setPen(pen)
+
+        if arr is None or arr.size == 0:
+            # draw placeholder line
+            painter.drawLine(2, height // 2, width - 2, height // 2)
+            painter.end()
+            return QIcon(pix)
+
+        # downsample to width points
+        try:
+            n = arr.size
+            if n <= width:
+                ys = arr
+            else:
+                import numpy as _np
+
+                idx = _np.linspace(0, n - 1, width).astype(int)
+                ys = arr[idx]
+
+            # normalize to [2, height-2]
+            ymin, ymax = float(ys.min()), float(ys.max())
+            rng = ymax - ymin if ymax != ymin else 1.0
+            points = []
+            for i, v in enumerate(ys):
+                x = int(i * (width - 4) / max(1, len(ys) - 1)) + 2
+                y = int((1.0 - (float(v) - ymin) / rng) * (height - 4)) + 2
+                points.append((x, y))
+
+            for i in range(len(points) - 1):
+                x1, y1 = points[i]
+                x2, y2 = points[i + 1]
+                painter.drawLine(x1, y1, x2, y2)
+        except Exception:
+            painter.drawLine(2, height // 2, width - 2, height // 2)
+
+        painter.end()
+        return QIcon(pix)
+
+    # TODO: Exclusion criteria extensibility
+    # - When adding new criteria (SNR, RMS outliers, baseline drift), provide a
+    #   unified evaluation pipeline that returns (bool, reason_dict) for preview so
+    #   tooltips can explain why a recording was flagged.
 
     def update_preview(self):
         """Update the preview table based on current criteria."""

@@ -243,7 +243,7 @@ class DatasetTreeWidget(QTreeWidget):
         """
         # Limit the number of preview names shown
         max_preview = 3
-        names = [it.text(0) for it in items[: max_preview]]
+        names = [it.text(0) for it in items[:max_preview]]
         count = len(items)
 
         # Pixmap sizing
@@ -359,7 +359,9 @@ class DatasetTreeWidget(QTreeWidget):
                         data = ds_item.data(0, Qt.ItemDataRole.UserRole)
                         if data and data.get("type") == "dataset":
                             ds_meta = data.get("metadata", {})
-                            items_info.append((ds_meta.get("id", ""), ds_meta.get("formatted_name", ""), data.get("experiment_id")))
+                            items_info.append(
+                                (ds_meta.get("id", ""), ds_meta.get("formatted_name", ""), data.get("experiment_id"))
+                            )
                 except Exception:
                     # skip items that don't support check state
                     pass
@@ -458,7 +460,6 @@ class DataCurationManager(QDialog):
 
         main_layout.addLayout(button_layout)
 
-
     def create_data_management_tab(self) -> QWidget:
         """Create the data management tab with drag-and-drop functionality."""
         tab_widget = QWidget()
@@ -498,11 +499,11 @@ class DataCurationManager(QDialog):
         self.import_new_experiment_button.setMaximumHeight(self.create_blank_experiment_button.maximumHeight())
         batch_layout.addWidget(self.import_new_experiment_button)
 
-    # TODO: Batch operations - add buttons for additional curation tools
-    # - Batch Rename
-    # - Validate Selected
-    # - Move to Trash / Restore (Trash view)
-    # These should be inserted here aligned with the existing batch controls.
+        # TODO: Batch operations - add buttons for additional curation tools
+        # - Batch Rename
+        # - Validate Selected
+        # - Move to Trash / Restore (Trash view)
+        # These should be inserted here aligned with the existing batch controls.
 
         batch_layout.addStretch()
 
@@ -556,8 +557,8 @@ class DataCurationManager(QDialog):
         self.dataset_summary.setStyleSheet("border: 1px solid gray; padding: 5px;")
         layout.addWidget(self.dataset_summary)
 
-    # TODO: Consider adding a small 'Views' / 'Saved Filters' pane here in the future
-    # to let users save common filter criteria or tag-based views for fast access.
+        # TODO: Consider adding a small 'Views' / 'Saved Filters' pane here in the future
+        # to let users save common filter criteria or tag-based views for fast access.
 
         return tab_widget
 
@@ -645,7 +646,6 @@ class DataCurationManager(QDialog):
             except Exception:
                 pass
 
-
     def load_data(self):
         """Load current experiment and dataset data."""
         try:
@@ -667,7 +667,6 @@ class DataCurationManager(QDialog):
         except Exception as e:
             logging.error(f"Failed to load data in Data Curation Manager: {e}")
             QMessageBox.critical(self, "Data Loading Error", f"Failed to load experiment data:\n{str(e)}")
-
 
     def _save_tree_expansion_state(self):
         """Save the current expansion state of tree items."""
@@ -816,7 +815,6 @@ class DataCurationManager(QDialog):
                 "error": str(e),
             }
 
-
     def on_dataset_checkbox_changed(self, item, column):
         """Handle dataset checkbox changes in the tree."""
         # Only respond to checkbox changes on column 0 and only for dataset items (not experiments)
@@ -964,6 +962,7 @@ class DataCurationManager(QDialog):
         This uses the application's DataManager.import_expt_data() method and
         preserves the existing confirmation for unsaved changes.
         """
+
         # Helper to disable/enable dataset UI during long operations
         def _set_dataset_ui_enabled(enabled: bool):
             try:
@@ -1529,7 +1528,6 @@ class DataCurationManager(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{str(e)}")
                 raise  # Let decorator handle the refresh
-
 
     @auto_refresh
     def undo_last_change(self):
