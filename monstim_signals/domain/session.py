@@ -80,35 +80,61 @@ class Session:
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
-        first_meta = self.recordings[0].meta
-        self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
-        self.scan_rate = first_meta.scan_rate  # Hz
-        self.num_samples = first_meta.num_samples  # samples/channel
-        self.num_channels = first_meta.num_channels  # number of channels
-        self._channel_types: List[str] = first_meta.channel_types.copy()  # list of channel types
+        if self.recordings:
+            first_meta = self.recordings[0].meta
+            self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
+            self.scan_rate = first_meta.scan_rate  # Hz
+            self.num_samples = first_meta.num_samples  # samples/channel
+            self.num_channels = first_meta.num_channels  # number of channels
+            self._channel_types: List[str] = first_meta.channel_types.copy()  # list of channel types
 
-        # Stimulus parameters
-        self.stim_clusters: List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
-        self.primary_stim: StimCluster = getattr(first_meta, "primary_stim", None)  # the primary StimCluster for this session
-        if self.primary_stim is None:
-            logging.warning(
-                f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster."
-            )
-            self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
+            # Stimulus parameters
+            self.stim_clusters: List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
+            self.primary_stim: StimCluster = getattr(
+                first_meta, "primary_stim", None
+            )  # the primary StimCluster for this session
             if self.primary_stim is None:
-                logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
-                raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
-        self.pre_stim_acquired = first_meta.pre_stim_acquired
-        self.post_stim_acquired = first_meta.post_stim_acquired
-        self.stim_delay = self.primary_stim.stim_delay  # in ms, delay
-        self.stim_duration = self.primary_stim.stim_duration
-        self.stim_start: float = self.stim_delay + self.pre_stim_acquired
+                logging.warning(
+                    f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster."
+                )
+                self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
+                if self.primary_stim is None:
+                    logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+                    raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+            self.pre_stim_acquired = first_meta.pre_stim_acquired
+            self.post_stim_acquired = first_meta.post_stim_acquired
+            self.stim_delay = self.primary_stim.stim_delay  # in ms, delay
+            self.stim_duration = self.primary_stim.stim_duration
+            self.stim_start: float = self.stim_delay + self.pre_stim_acquired
 
-        # Parameters that may sometimes be None
-        self.recording_interval: float = getattr(
-            first_meta, "recording_interval", None
-        )  # in seconds, time between recordings (if applicable)
-        self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
+            # Parameters that may sometimes be None
+            self.recording_interval: float = getattr(
+                first_meta, "recording_interval", None
+            )  # in seconds, time between recordings (if applicable)
+            self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
+        else:
+            # No recordings available. Use annotation/defaults where possible and avoid raising.
+            logging.warning(f"Session {self.id} contains no recordings. Using annotation/defaults for session parameters.")
+            self.formatted_name = self.id
+            self.scan_rate = None
+            self.num_samples = 0
+            # Prefer channel count from annotation, otherwise fall back to configured defaults
+            try:
+                self.num_channels = (
+                    len(self.annot.channels) if getattr(self.annot, "channels", None) else len(self.default_channel_names)
+                )
+            except Exception:
+                self.num_channels = len(self.default_channel_names)
+            self._channel_types = []
+            self.stim_clusters = []
+            self.primary_stim = None
+            self.pre_stim_acquired = 0
+            self.post_stim_acquired = 0
+            self.stim_delay = 0.0
+            self.stim_duration = 0.0
+            self.stim_start = 0.0
+            self.recording_interval = None
+            self.emg_amp_gains = None
 
     def _initialize_annotations(self):
         # Check in case of empty list annot

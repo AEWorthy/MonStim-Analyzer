@@ -408,6 +408,55 @@ class ApplicationState:
         """Check if OpenGL acceleration should be used."""
         return self.get_preference("use_opengl_acceleration", True)
 
+    # === PERFORMANCE / LOADING PREFS ===
+    def should_use_lazy_open_h5(self) -> bool:
+        """Return whether HDF5 files should be opened lazily during experiment load.
+
+        Default: True (faster initial load; raw data is re-opened lazily when required)
+        """
+        return self.get_preference("use_lazy_open_h5", True)
+
+    def should_use_parallel_loading(self) -> bool:
+        """Return whether parallel dataset loading should be enabled.
+
+        Default: True (use multiple threads to load independent datasets)
+        """
+        pref = self.get_preference("enable_parallel_loading", True)
+        # Parallel loading relies on lazy-opening HDF5 files. If lazy-open
+        # is disabled we must not enable parallel loading because that would
+        # risk opening many HDF5 handles concurrently (unsafe/slow).
+        if pref and not self.should_use_lazy_open_h5():
+            logging.debug("Parallel loading requested but disabled because lazy_open_h5 is False")
+            return False
+        return pref
+
+    def get_parallel_load_workers(self) -> int:
+        """Get the number of worker threads to use for parallel dataset loading.
+
+        Behavior:
+            - If the user has explicitly stored an integer under
+              ProgramPreferences/parallel_load_workers, that value is used.
+            - Otherwise, choose max(1, os.cpu_count() - 1) so we leave one
+              core free for UI and general OS scheduling. If os.cpu_count()
+              returns None, default to 1.
+        """
+        try:
+            # If user explicitly set a value, use it
+            val = self.settings.value("ProgramPreferences/parallel_load_workers", None, type=int)
+            if isinstance(val, int) and val > 0:
+                return val
+        except Exception:
+            pass
+
+        # Default to CPU count - 1 (leave one core spare); if single-core, use 1
+        try:
+            import os
+
+            count = os.cpu_count() or 1
+            return max(1, count - 1)
+        except Exception:
+            return 1
+
     def clear_all_tracked_data(self):
         """Clear all tracked user data."""
         # Clear session restoration data

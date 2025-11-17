@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from monstim_gui.core.application_state import app_state
 from monstim_signals.io.data_migrations import scan_annotation_versions
 from monstim_signals.io.repositories import ExperimentRepository
 
@@ -185,7 +186,20 @@ class ExperimentLoadingThread(QThread):
                     self.progress.emit(pct)
                     self.status_update.emit(f"Loading dataset {index}/{total}: '{name_display}' ...")
 
-            experiment = repo.load(config=self.config, progress_callback=_progress_cb)
+            # Overlay application preferences (QSettings) for loading:
+            cfg = dict(self.config or {})
+            # If config doesn't explicitly set lazy_open_h5, use QSettings default
+            if "lazy_open_h5" not in cfg:
+                cfg["lazy_open_h5"] = app_state.should_use_lazy_open_h5()
+
+            # Determine load_workers: prefer explicit config value, else use QSettings auto behavior
+            if "load_workers" not in cfg:
+                if app_state.should_use_parallel_loading():
+                    cfg["load_workers"] = app_state.get_parallel_load_workers()
+                else:
+                    cfg["load_workers"] = 1
+
+            experiment = repo.load(config=cfg, progress_callback=_progress_cb)
 
             self.progress.emit(90)
             self.status_update.emit("Finalizing experiment structure...")
