@@ -80,17 +80,13 @@ def main():
                 m = re.search(r"==(.+)$", spec)
                 req_ver = m.group(1).strip() if m else None
                 if req_ver and env_ver and req_ver != env_ver:
-                    mismatches.append(
-                        f"{name}: requirements.txt -> {spec} but environment.yml -> {conda_map[candidate][0]}"
-                    )
+                    mismatches.append(f"{name}: requirements.txt -> {spec} but environment.yml -> {conda_map[candidate][0]}")
                 break
             if candidate in pip_map:
                 found = True
                 env_spec = pip_map[candidate]
                 if env_spec != spec:
-                    mismatches.append(
-                        f"{name}: requirements.txt -> {spec} but environment.yml(pip) -> {env_spec}"
-                    )
+                    mismatches.append(f"{name}: requirements.txt -> {spec} but environment.yml(pip) -> {env_spec}")
                 break
         if not found:
             mismatches.append(f"{name}: present in requirements.txt ({spec}) but missing from environment.yml")
