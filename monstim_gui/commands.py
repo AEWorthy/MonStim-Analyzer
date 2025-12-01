@@ -174,6 +174,7 @@ class ExcludeSessionCommand(Command):
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError:
                 # Session not found in the list (may have been removed); safe to ignore.
+                # Session not found in the list (may have been removed); safe to ignore.
                 pass
         else:
             # No sessions left; clear plots
