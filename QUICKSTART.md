@@ -5,12 +5,12 @@ Get up and running with MonStim EMG Analyzer in minutes!
 ## 📥 Installation
 
 1. **Download** the latest release from [GitHub Releases](https://github.com/AEWorthy/MonStim-Analyzer/releases)
-   - Windows: `MonStim-Analyzer-v0.4.3-WIN.zip`
+   - Windows: `MonStim-Analyzer-v0.5.0-WIN.zip`
    - Mac: Currently unavailable
 
 2. **Extract** the zip file to your desired location
 
-3. **Run** `MonStim Analyzer v0.4.3.exe` from the extracted folder
+3. **Run** `MonStim Analyzer v0.5.0.exe` from the extracted folder
    - ⚠️ Keep all files in the extracted directory
    - ⚠️ First launch may take longer and trigger security warnings (unsigned software)
 
@@ -101,5 +101,28 @@ Click any report button:
 - **[MonStim Plotter](https://github.com/AEWorthy/MonStim-Plotter/)**: Publication-ready figures from exported data
 
 ---
+
+
+## 🛠 Developer / Running from Source
+
+- **Activate the development Conda environment first:** this repository expects the `alv_lab` environment for running tests and development tools.
+
+```pwsh
+conda activate alv_lab
+```
+
+- **Run the application from source (development):**
+
+```pwsh
+python main.py --debug
+```
+
+- **Run tests:** make sure `alv_lab` is active, then run:
+
+```pwsh
+pytest -q
+```
+
+- **Plotting backend:** The GUI uses `PyQtGraph` for interactive plotting. Matplotlib-based plotters were removed in earlier releases; do not rely on matplotlib for GUI plotting.
 
 **License**: BSD 2-Clause | **© 2024 Andrew Worthy**

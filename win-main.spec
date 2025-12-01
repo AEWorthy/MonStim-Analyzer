@@ -8,31 +8,34 @@ import os
 import sys
 import shutil
 from PyInstaller.config import CONF
+from PyInstaller.utils.hooks import collect_data_files
 
 # Set project root
 project_root = os.path.abspath(os.getcwd())
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Delete 'config-user.yml' in ./docs/
-config_user_path = os.path.join(project_root, 'docs', 'config-user.yml')
-try:
-    os.remove(config_user_path)
-except FileNotFoundError:
-    pass
-
 # Set dist name with version
 from monstim_gui.version import VERSION  # noqa: E402
 EXE_NAME = f'MonStim Analyzer v{VERSION}'
 DIST_NAME = f'MonStim_Analyzer_v{VERSION}-WIN'
 
+datas = []
+datas += collect_data_files('src')
+datas += collect_data_files('docs')
+datas += collect_data_files('numpy')
+datas += collect_data_files('scipy')
+datas += collect_data_files('matplotlib')
+datas += collect_data_files('pyqt6')
+
+hiddenimports = ['numpy', 'scipy', 'matplotlib', 'pyqt6']
 
 a = Analysis( # type: ignore  # noqa: F821
     ['main.py'],
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],
-    datas=[('src', 'src'), ('docs', 'docs')], # add config.yml and readme.md to datas. Add Settings option to the GUI under File
-    hiddenimports=[],
+    datas=datas, # add config.yml and readme.md to datas. Add Settings option to the GUI under File
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -40,6 +43,11 @@ a = Analysis( # type: ignore  # noqa: F821
     noarchive=False, # change to False for release, True for debug
     optimize=1, # change to 1 for release, 0 for debug
 )
+
+# Custom hook: exclude docs/config-user.yml from datas
+a.datas = [d for d in a.datas if not (
+    isinstance(d, tuple) and 'config-user.yml' in d[0]
+)]
 
 pyz = PYZ(a.pure) # type: ignore
 
@@ -50,10 +58,10 @@ exe = EXE( # type: ignore
     exclude_binaries=True,
     name=EXE_NAME,
     debug=False, # False for release, True for debug
-    bootloader_ignore_signals=False,
+    bootloader_ignore_signals=False, # False for release, True for debug
     upx=True,
     console=False, # False for release, True for debug
-    disable_windowed_traceback=True, # True for release, False for debug.
+    disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,

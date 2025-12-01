@@ -1,4 +1,9 @@
+
 # MonStim Analyzer - EMG Analysis and Visualization Tool
+
+**Version:** 0.5.0 (Full Release)
+
+This is the first full release of MonStim Analyzer. All previous beta references have been removed. See CHANGELOG.md for details.
 
 This repository contains the source code for the MonStim EMG Analyzer GUI
 application and the supporting signal processing library. The tool provides
@@ -20,3 +25,13 @@ collected with the custom 'MonStim-V3' LabView program created by William Goolsb
 ## Quick Start
 
 See the **[Quickstart Guide](/QUICKSTART.md)** for express installation instructions and a brief program overview. For full installation and usage instructions, see the **[User Guide](docs/readme.md)**.
+
+## Developer Quick Note
+
+- When running locally for development or to execute tests, activate the `alv_lab` conda environment first:
+
+```pwsh
+conda activate alv_lab
+```
+
+See `QUICKSTART.md` and `docs/readme.md` for full developer instructions.

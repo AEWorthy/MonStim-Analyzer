@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+
+
+## [0.5.0] - 2025-12-01
+
+### Added
+- Windows distributable and installer artifacts: `MonStim Analyzer v0.5.0.exe` and `MonStim_Analyzer_v0.5.0-WIN.zip` (packaging managed via `win-main.spec`).
+- Comprehensive Quickstart and user-facing documentation packaged with the release (`docs/readme.md`, `QUICKSTART.md`).
+- Improved release QA artifacts included in the `build/` directory for easier verification of installers and packaging.
+
+### Changed
+- Incremented GUI/application version to `0.5.0` (`monstim_gui/version.py`) and prepared repository for a full, non-beta release.
+- Documentation overhaul: expanded Quickstart, installation instructions, and the M-max algorithm documentation in `docs/`.
+- Packaging: updated PyInstaller spec (`win-main.spec`) to include documentation and QUICKSTART files in the distributable and to use a consistent EXE/DIST naming convention.
+- Data handling: retained `DATA_VERSION = "2.0.1"` while ensuring migration hooks remain available for future changes.
+
+### Fixed
+- Various stability and UI issues discovered during release QA: improved startup reliability, settings persistence, and plot refresh behavior across several widgets.
+- Resolved packaging path and data inclusion issues so documentation and sample files are present in the distributable.
+
+### Testing
+- Expanded pytest-based automated tests and golden fixtures under the `tests/` tree to improve coverage and regression protection.
+- Test configuration and CI-related updates included to better exercise packaging and GUI smoke checks (`pytest.ini`, `pyproject.toml`).
+
+### Dependencies
+- Small dependency bumps and housekeeping in `requirements.txt`/`pyproject.toml` to keep CI and packaging stable.
+- Continued reliance on PyQtGraph as the supported plotting backend (matplotlib plotters were removed in earlier releases).
+
+### Status
+- This is the first full release (no longer beta).
+
+### Notes
+- See `docs/readme.md` and `QUICKSTART.md` for installation, usage, and packaging details. Visit the repository releases page for downloadable artifacts and checksums.
+
+
 ## [0.4.3] - 2025-09-23
 
 ### Changed
