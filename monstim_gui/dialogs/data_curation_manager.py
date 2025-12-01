@@ -162,6 +162,7 @@ class DatasetTreeWidget(QTreeWidget):
                     if idx.isValid():
                         idxs.append(idx)
                 except Exception:
+                    # Ignore items that cannot be converted to valid indexes (e.g., corrupted or non-standard items).
                     pass
 
             if idxs:
