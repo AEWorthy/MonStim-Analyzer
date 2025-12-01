@@ -445,8 +445,9 @@ class ApplicationState:
             val = self.settings.value("ProgramPreferences/parallel_load_workers", None, type=int)
             if isinstance(val, int) and val > 0:
                 return val
-        except Exception:
-            pass
+        except Exception as e:
+            # Failed to read parallel_load_workers from QSettings; falling back to default.
+            logging.warning(f"Error reading ProgramPreferences/parallel_load_workers: {e}")
 
         # Default to CPU count - 1 (leave one core spare); if single-core, use 1
         try:
