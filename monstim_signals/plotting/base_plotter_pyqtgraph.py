@@ -56,6 +56,7 @@ class BasePlotterPyQtGraph:
             self.decimation_strategy = str(plotting_cfg.get("decimation_strategy", self.decimation_strategy))
             self.min_decimation_factor = int(plotting_cfg.get("min_decimation_factor", self.min_decimation_factor))
         except Exception:
+            # If errors, ignore overrides
             pass
 
     def create_plot_layout(
