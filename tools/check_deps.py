@@ -4,11 +4,11 @@
 This script tolerates common pip<->conda name differences via a small mapping.
 Exit code 0 if consistent, non-zero otherwise.
 """
-from pathlib import Path
 import re
 import sys
-import yaml
+from pathlib import Path
 
+import yaml
 
 DEV_EXCLUDE = {"pytest", "setuptools", "flake8", "black", "isort", "bandit", "safety", "pytest-qt"}
 

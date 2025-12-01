@@ -1,6 +1,7 @@
-from setuptools import find_packages, setup
-from pathlib import Path
 import re
+from pathlib import Path
+
+from setuptools import find_packages, setup
 
 from monstim_gui.version import VERSION
 

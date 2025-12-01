@@ -7,13 +7,12 @@ Strategy:
 
 This script is intended to be run in CI and committed back to the repo when changes occur.
 """
-from pathlib import Path
 import re
+from pathlib import Path
+
 import yaml
 
-
 DEV_EXCLUDE = {"pytest", "setuptools", "flake8", "black", "isort", "bandit", "safety", "pytest-qt"}
-
 
 def parse_requirements(path="requirements.txt"):
     reqs = {}

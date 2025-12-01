@@ -23,6 +23,8 @@ jobs:
     - name: Set up Conda environment from environment.yml
       uses: conda-incubator/setup-miniconda@v2
       with:
+        # Install Miniforge so conda is available on the hosted runner
+        miniforge-version: 'latest'
         python-version: ${{ matrix.python-version }}
         activate-environment: alv_lab
         environment-file: environment.yml
