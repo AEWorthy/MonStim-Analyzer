@@ -173,8 +173,9 @@ class DatasetTreeWidget(QTreeWidget):
             try:
                 mime = self.model().mimeData([idx for idx in self.selectedIndexes()])
                 drag.setMimeData(mime)
-            except Exception:
-                pass
+            except Exception as e:
+                # Safe to ignore: drag will proceed without mime data if this fails.
+                logging.debug("Failed to set mime data from selected indexes: %r", e)
 
         if not pix.isNull():
             drag.setPixmap(pix)
@@ -223,13 +224,15 @@ class DatasetTreeWidget(QTreeWidget):
             if pos.x() < vp_rect.left() + margin:
                 try:
                     hsb.setValue(hsb.value() - scroll_amount_h)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Safe to ignore: horizontal auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll left: %r", e)
             elif pos.x() > vp_rect.right() - margin:
                 try:
                     hsb.setValue(hsb.value() + scroll_amount_h)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Safe to ignore: horizontal auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll right: %r", e)
         except Exception:
             # Don't let autoscroll failures block drag
             pass
@@ -1659,7 +1662,9 @@ class DataCurationManager(QDialog):
                     self.session_commands.clear()
                     self._changes_made = False
                 except Exception:
-                    pass
+                    # Suppress unexpected errors during undo to avoid crashing the dialog,
+                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
+                    logging.exception("Unexpected error during undo-all in reject()")
 
         if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()

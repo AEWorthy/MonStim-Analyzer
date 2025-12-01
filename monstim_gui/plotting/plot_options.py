@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING, List
 
 from PyQt6.QtCore import Qt
@@ -461,8 +462,10 @@ class LatencyWindowDistributionOptions(BasePlotOptions):
         if "bins" in options:
             try:
                 self.bins_spin.setValue(int(options["bins"]))
-            except Exception:
-                pass
+            except Exception as e:
+                # If bins value is invalid, log the error and set to default (30)
+                logging.warning(f"Invalid bins value in set_options: {options.get('bins')!r} ({e}) - using default 30")
+                self.bins_spin.setValue(30)
         if "density" in options:
             self.density_checkbox.setChecked(bool(options["density"]))
         if "plot_legend" in options:
