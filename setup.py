@@ -21,7 +21,7 @@ setup(
         "PyYAML==6.0.3",
         "h5py==3.15.1",
         "matplotlib==3.10.7",
-        "numpy==2.2.6",
+        "numpy==2.3.5",
         "pandas==2.3.3",
         "packaging==25.0",
         "python_markdown_math==0.9",

@@ -1,6 +1,6 @@
 PyQt6==6.10.0
 PyQt6_sip==13.10.2
-numpy==2.2.6
+numpy==2.3.5
 pandas==2.3.3
 matplotlib==3.10.7
 pyqtgraph>=0.13.1,<0.15
