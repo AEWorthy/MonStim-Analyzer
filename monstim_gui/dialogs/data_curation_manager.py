@@ -180,8 +180,9 @@ class DatasetTreeWidget(QTreeWidget):
             try:
                 # Place the pixmap's top-left corner at the cursor click point
                 drag.setHotSpot(pix.rect().topLeft())
-            except Exception:
-                pass
+            except Exception as e:
+                logging.debug("Failed to set drag hotspot for pixmap: %r", e)
+                # Safe to ignore: drag will proceed without custom hotspot
 
         # Execute the drag using the supported actions passed in
         drag.exec(supportedActions)
