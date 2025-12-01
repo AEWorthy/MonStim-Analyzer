@@ -194,36 +194,36 @@ class PlotWidget(QGroupBox):
             if hasattr(w, "method_combo"):
                 try:
                     w.method_combo.currentTextChanged.connect(self.save_current_options)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Failed to connect method_combo signal for {w}: {e}")
 
             # data type combo or other QComboBox children
             for cb in w.findChildren(QComboBox):
                 try:
                     cb.currentTextChanged.connect(self.save_current_options)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Failed to connect QComboBox signal for {cb}: {e}")
 
             # checkboxes
             for chk in w.findChildren(QCheckBox):
                 try:
                     chk.stateChanged.connect(self.save_current_options)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Failed to connect QCheckBox signal for {chk}: {e}")
 
             # line edits
             for le in w.findChildren(QLineEdit):
                 try:
                     le.textChanged.connect(self.save_current_options)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Failed to connect QLineEdit signal for {le}: {e}")
 
             # spinboxes
             for sb in w.findChildren((QSpinBox, QDoubleSpinBox)):
                 try:
                     sb.valueChanged.connect(self.save_current_options)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {sb}: {e}")
 
         except Exception as e:
             logging.debug(f"Failed to connect option change signals: {e}")
