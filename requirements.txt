@@ -2,12 +2,15 @@ PyQt6==6.10.0
 PyQt6_sip==13.10.2
 numpy==2.2.6
 pandas==2.3.3
-matplotlib==3.8.0
-pyqtgraph>=0.13.1,<0.15
+matplotlib==3.10.7
+pyqtgraph==0.14.0
 scipy==1.15.3
 PyYAML==6.0.3
 h5py==3.15.1
 packaging==25.0
-python_markdown_math==0.9
 traitlets==5.14.3
+Markdown==3.10
+python_markdown_math==0.9
+pytest==9.0.0
+setuptools==80.9.0
 # Use environment.yml for managing the conda environment
