@@ -35,3 +35,13 @@ conda activate alv_lab
 ```
 
 See `QUICKSTART.md` and `docs/readme.md` for full developer instructions.
+
+## Conda vs Pip and PyQt pinning
+
+- **PyQt (GUI) should be installed via Conda.** GUI packages are binary and platform-sensitive; Conda provides compatible builds for many platforms. Do not list `PyQt6` in `requirements.txt` when you provide `pyqt` in `environment.yml`.
+- To pin the exact PyQt version used by developers and CI, we pin the conda package in `environment.yml` (example: `pyqt=6.10.0`). This ensures consistent GUI binaries across machines.
+- If you need a pip-only workflow, provide separate instructions and a `requirements-pip.txt` that pins `PyQt6` explicitly (e.g. `PyQt6==6.10.0`) and document that pip installs are not covered by the `alv_lab` conda environment.
+
+CI and tooling notes:
+- The repository's dependency consistency check understands the `pyqt` ↔ `PyQt6` name mapping and will not fail when `pyqt` is provided by `environment.yml` and omitted from `requirements.txt`.
+- Use `tools/sync_env_from_requirements.py` or the GitHub Actions workflow to keep `environment.yml` and `requirements.txt` in sync when changing pinned versions.
