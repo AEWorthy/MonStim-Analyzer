@@ -581,8 +581,9 @@ class DataCurationManager(QDialog):
             from PyQt6.QtWidgets import QApplication
 
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        except Exception:
-            pass
+        except Exception as e:
+            # Setting the busy cursor is cosmetic; ignore failures but log for debugging.
+            logging.debug(f"Failed to set busy cursor during batch move: {e}")
 
     def on_dataset_dragged_batch(self, moved_count: int, target_exp_id: str):
         """Called after a batch of dataset moves completes.
