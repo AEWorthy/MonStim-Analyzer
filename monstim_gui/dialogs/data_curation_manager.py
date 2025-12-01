@@ -107,6 +107,7 @@ class DatasetTreeWidget(QTreeWidget):
                 # Use built-in setter if available
                 self.setAutoScrollMargin(self._auto_scroll_margin)
             except Exception:
+                # Non-fatal: setAutoScrollMargin may not be available on all platforms/PyQt versions
                 pass
         except Exception:
             # Non-fatal if attributes aren't present on the platform
