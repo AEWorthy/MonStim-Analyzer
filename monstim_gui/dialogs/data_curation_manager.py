@@ -212,13 +212,15 @@ class DatasetTreeWidget(QTreeWidget):
             if pos.y() < vp_rect.top() + margin:
                 try:
                     vsb.setValue(vsb.value() - scroll_amount_v)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Safe to ignore: vertical auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll up: %r", e)
             elif pos.y() > vp_rect.bottom() - margin:
                 try:
                     vsb.setValue(vsb.value() + scroll_amount_v)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Safe to ignore: vertical auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll down: %r", e)
 
             # Horizontal scrolling (if needed)
             if pos.x() < vp_rect.left() + margin:
