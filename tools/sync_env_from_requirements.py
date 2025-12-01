@@ -14,6 +14,7 @@ import yaml
 
 DEV_EXCLUDE = {"pytest", "setuptools", "flake8", "black", "isort", "bandit", "safety", "pytest-qt"}
 
+
 def parse_requirements(path="requirements.txt"):
     reqs = {}
     p = Path(path)
