@@ -132,6 +132,8 @@ class DatasetTreeWidget(QTreeWidget):
                     if ds_item.checkState(0) == Qt.CheckState.Checked:
                         checked_items.append(ds_item)
                 except Exception:
+                    # Some items may not support checkState (e.g., corrupted or custom widgets).
+                    # Safe to ignore and skip these items for drag selection.
                     pass
 
         if checked_items:
