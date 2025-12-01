@@ -1,0 +1,27 @@
+{
+  "extends": ["config:base"],
+  "prConcurrentLimit": 6,
+  "packageRules": [
+    {
+      "managers": ["conda"],
+      "fileMatch": ["(^|/)environment\\.yml$"],
+      "groupName": "conda dependencies",
+      "labels": ["dependencies", "conda"],
+      "updateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "merge"
+    },
+    {
+      "managers": ["pip_requirements"],
+      "fileMatch": ["(^|/)requirements\\.txt$"],
+      "groupName": "pip dependencies",
+      "labels": ["dependencies", "pip"],
+      "updateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "merge"
+    }
+  ],
+  "enabledManagers": ["conda", "pip_requirements"]
+}
