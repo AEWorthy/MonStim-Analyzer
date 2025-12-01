@@ -640,6 +640,7 @@ class DataCurationManager(QDialog):
 
                     QApplication.restoreOverrideCursor()
                 except Exception:
+                    # Ignore errors restoring cursor: non-critical UI cleanup.
                     pass
 
         # Refresh dataset tree now that batch operations are done
@@ -649,8 +650,9 @@ class DataCurationManager(QDialog):
             # fallback to explicit update
             try:
                 self.update_dataset_tree()
-            except Exception:
-                pass
+            except Exception as e:
+                # Fallback failed; log the error but do not raise, as this is a non-critical UI update
+                logging.error(f"Failed to update dataset tree in Data Curation Manager fallback: {e}")
 
     def load_data(self):
         """Load current experiment and dataset data."""
@@ -974,6 +976,7 @@ class DataCurationManager(QDialog):
             try:
                 self.dataset_tree.setEnabled(enabled)
             except Exception:
+                # Ignore errors if the widget is missing or in a transient state; safe to skip in UI enable/disable.
                 pass
 
             for btn_name in (
@@ -989,8 +992,10 @@ class DataCurationManager(QDialog):
                 if btn is not None:
                     try:
                         btn.setEnabled(enabled)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # It is safe to ignore errors here (e.g., widget may be deleted during teardown),
+                        # but log them for debugging purposes.
+                        logging.error(f"Failed to set enabled state for {btn_name}: {e}")
 
         # Disable dataset UI to 'pause' dataset management while importing
         _set_dataset_ui_enabled(False)
@@ -1020,8 +1025,8 @@ class DataCurationManager(QDialog):
                 # Restore UI and cursor
                 try:
                     QApplication.restoreOverrideCursor()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.warning(f"Failed to restore cursor: {e}")
                 _set_dataset_ui_enabled(True)
                 self._suppress_autorefresh = False
                 return
@@ -1035,8 +1040,8 @@ class DataCurationManager(QDialog):
             # Restore UI and cursor
             try:
                 QApplication.restoreOverrideCursor()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"Failed to restore cursor after import error: {e}")
             _set_dataset_ui_enabled(True)
             self._suppress_autorefresh = False
             raise
@@ -1049,11 +1054,13 @@ class DataCurationManager(QDialog):
             try:
                 QApplication.restoreOverrideCursor()
             except Exception:
+                # Ignore errors restoring cursor; not critical if cursor was not set
                 pass
             try:
                 _set_dataset_ui_enabled(True)
-            except Exception:
-                pass
+            except Exception as e:
+                # Non-critical: UI may already be disabled or window closed. Log for debugging.
+                logging.error("Failed to re-enable dataset UI: %s", e)
             # clear suppression and perform a single refresh
             self._suppress_autorefresh = False
             try:
@@ -1061,8 +1068,9 @@ class DataCurationManager(QDialog):
             except Exception:
                 try:
                     self.update_dataset_tree()
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Suppress all errors here to avoid crashing the UI; log for diagnostics.
+                    logging.warning(f"Failed to update dataset tree after import: {e}")
 
         if thread is not None and getattr(thread, "isRunning", lambda: False)():
             # Connect finish handlers
@@ -1556,8 +1564,9 @@ class DataCurationManager(QDialog):
             # Re-insert to preserve history since undo failed
             try:
                 self.session_commands.append(cmd)
-            except Exception:
-                pass
+            except Exception as append_error:
+                # Failed to re-insert command into history; log and continue.
+                logging.error(f"Failed to re-insert command into session_commands after undo failure: {append_error}")
             QMessageBox.critical(self, "Undo Failed", f"Failed to undo last change '{cmd_name}':\n{str(e)}")
             # Re-raise to let auto_refresh ensure a refresh and to surface the error
             raise
@@ -1596,8 +1605,8 @@ class DataCurationManager(QDialog):
                 self._changes_made = False
                 try:
                     self._refresh_undo_last_button()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.exception("Failed to refresh undo/last button after undoing all changes: %s", e)
 
             except Exception as e:
                 QMessageBox.critical(
@@ -1623,8 +1632,10 @@ class DataCurationManager(QDialog):
                             logging.exception("Undo failed during close: %s", e)
                     self.session_commands.clear()
                     self._changes_made = False
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Suppress unexpected errors during undo to avoid crashing the dialog,
+                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
+                    logging.exception("Unexpected error during undo-all in accept(): %s", e)
 
         # Emit change signal if there were changes this session
         if getattr(self, "_changes_made", False):
