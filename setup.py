@@ -15,7 +15,7 @@ setup(
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
-        "Markdown==3.9",
+        "Markdown==3.10",
         "PyQt6==6.10.0",
         "PyQt6_sip==13.10.2",
         "PyYAML==6.0.3",
@@ -25,7 +25,7 @@ setup(
         "pandas==2.3.3",
         "packaging==25.0",
         "python_markdown_math==0.9",
-        "pytest==8.4.2",
+        "pytest==9.0.0",
         "scipy==1.15.3",
         "setuptools==80.9.0",
         "traitlets==5.14.3",
