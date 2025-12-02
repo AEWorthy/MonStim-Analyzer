@@ -14,6 +14,19 @@ import yaml
 
 DEV_EXCLUDE = {"pytest", "setuptools", "flake8", "black", "isort", "bandit", "safety", "pytest-qt"}
 
+# Packages that should always be managed by conda (do not promote to pip:)
+# This prevents Qt bindings/runtimes (PyQt6, PySide6, shiboken6, etc.) from
+# being accidentally placed in the `pip:` subsection of `environment.yml`.
+PIP_EXCLUDE = {
+    "pyqt6",
+    "pyqt",
+    "pyside6",
+    "pyqt6-qt6",
+    "pyqt6_sip",
+    "pyqt6-sip",
+    "shiboken6",
+}
+
 
 def parse_requirements(path="requirements.txt"):
     reqs = {}
@@ -77,7 +90,11 @@ def sync(env_path="environment.yml", req_path="requirements.txt"):
     # Build pip list from requirements that were not applied to conda entries
     pip_items = []
     for rname, data in reqs.items():
-        if rname.lower() in conda_updated:
+        lname = rname.lower()
+        if lname in conda_updated:
+            continue
+        # Skip items that should be managed by conda (avoid pip/conda mixing)
+        if lname in PIP_EXCLUDE:
             continue
         pip_items.append(data["raw"])
 

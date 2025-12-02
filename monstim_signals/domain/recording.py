@@ -115,6 +115,7 @@ class Recording:
                 try:
                     h5file.close()
                 except Exception:
+                    logging.exception("Failed to close HDF5 file after dataset access failure.")
                     pass
                 raise
             # Update num_samples in metadata in case it changed

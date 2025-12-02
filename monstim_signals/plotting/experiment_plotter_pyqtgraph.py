@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, List
+import logging
 
 import numpy as np
 import pandas as pd
@@ -115,6 +116,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                             if found:
                                 break
                     except Exception:
+                        logging.exception("Failed to retrieve latency window color for plotting.")
                         pass
 
                     color = self._convert_matplotlib_color(color_hex)

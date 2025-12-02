@@ -80,6 +80,7 @@ class RecordingRepository:
                         try:
                             size = self.annot_js.stat().st_size
                         except Exception:
+                            logging.exception(f"Failed to get size of annotation file '{self.annot_js}'")
                             pass
                         logging.error(f"Failed to decode JSON in annotation file '{self.annot_js}' (size={size}): {e}")
                         # Move corrupt file aside and create a fresh annotation file
@@ -262,6 +263,7 @@ class SessionRepository:
                         try:
                             size = self.session_js.stat().st_size
                         except Exception:
+                            logging.exception(f"Failed to get size of session annotation file '{self.session_js}'")
                             pass
                         logging.error(f"Failed to decode JSON in session annotation '{self.session_js}' (size={size}): {e}")
                         ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -419,6 +421,7 @@ class DatasetRepository:
                         try:
                             size = self.dataset_js.stat().st_size
                         except Exception:
+                            logging.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
                             pass
                         logging.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
                         ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -548,6 +551,7 @@ class DatasetRepository:
                             try:
                                 size = self.dataset_js.stat().st_size
                             except Exception:
+                                logging.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
                                 pass
                             logging.error(
                                 f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}"
@@ -735,6 +739,7 @@ class ExperimentRepository:
                         try:
                             size = self.expt_js.stat().st_size
                         except Exception:
+                            logging.exception(f"Failed to get size of experiment annotation file '{self.expt_js}'")
                             pass
                         logging.error(f"Failed to decode JSON in experiment annotation '{self.expt_js}' (size={size}): {e}")
                         ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
