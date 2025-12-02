@@ -9,6 +9,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
 
+from monstim_gui.core.splash import SPLASH_INFO
+from monstim_signals.core import get_source_path
+
 # Optional WebEngine for LaTeX via MathJax (graceful fallback).
 # Note: Only used if the QtWebEngine module is present at runtime.
 WEB_ENGINE_AVAILABLE = False
@@ -21,8 +24,6 @@ try:
 except Exception:
     QWebEngineView = None
 
-from monstim_gui.core.splash import SPLASH_INFO
-from monstim_signals.core import get_source_path
 
 # WebEngine-based rendering was removed for simplicity since
 # the application does not require dynamic JS bridging here.
@@ -63,9 +64,19 @@ class LatexHelpWindow(QWidget):
             <html>
             <head>
                 <meta charset=\"utf-8\">
+                <script>
+                    window.MathJax = {{
+                        tex: {{ inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$','$$']] }},
+                        options: {{ skipHtmlTags: ['script','noscript','style','textarea','pre'] }}
+                    }};
+                </script>
                 <script id=\"MathJax-script\" async src=\"file:///{mathjax_path}\"></script>
                 <script>
-                    window.MathJax = {{ tex: {{ inlineMath: [['$', '$'], ['\\(', '\\)']] }} }};
+                    document.addEventListener('DOMContentLoaded', function() {{
+                        if (window.MathJax && window.MathJax.typesetPromise) {{
+                            window.MathJax.typesetPromise();
+                        }}
+                    }});
                 </script>
                 <style>
                     body {{ font-family: -apple-system, Segoe UI, Roboto, Arial; margin: 0; padding: 10px; }}
@@ -82,10 +93,9 @@ class LatexHelpWindow(QWidget):
             base_dir = os.path.dirname(mathjax_path) + "/"
             self.web_view.setHtml(full_html, baseUrl=QUrl.fromLocalFile(base_dir))
         else:
-            # Simple QTextBrowser fallback (no LaTeX rendering, plain HTML)
+            # Simple QTextBrowser fallback (show raw Markdown so math remains visible)
             self.text_browser = QTextBrowser()
-            self.text_browser.setOpenExternalLinks(True)
-            self.text_browser.setHtml(self.markdown_to_html(markdown_content))
+            self.text_browser.setPlainText(markdown_content)
             layout.addWidget(self.text_browser)
 
     def process_content(self, markdown_content):
