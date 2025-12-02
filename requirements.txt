@@ -11,7 +11,7 @@ traitlets==5.14.3
 # Pip-only packages (from environment.yml pip subsection)
 Markdown==3.10
 python_markdown_math==0.9
-pytest==9.0.0
+pytest==9.0.1
 setuptools==80.9.0
 
  # NOTE: This `requirements.txt` is generated from `environment.yml`.
