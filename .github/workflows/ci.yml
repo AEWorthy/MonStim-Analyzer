@@ -85,10 +85,10 @@ jobs:
     - name: Install additional pip/dev dependencies into conda env
       run: |
         # environment.yml installs pip-listed runtime deps. Add test/dev helpers into the conda env.
-        conda run -n alv_lab python -m pip install --upgrade pip
-        conda run -n alv_lab python -m pip install -r requirements.txt
-        conda run -n alv_lab python -m pip install pytest pytest-qt
-        conda run -n alv_lab python -m pip install -e . --no-deps
+        conda run --name alv_lab python -m pip install --upgrade pip
+        conda run --name alv_lab python -m pip install -r requirements.txt
+        conda run --name alv_lab python -m pip install pytest pytest-qt
+        conda run --name alv_lab python -m pip install -e . --no-deps
 
     - name: Lint with flake8
       run: |
@@ -100,18 +100,18 @@ jobs:
 
     - name: Test import capabilities
       run: |
-        conda run -n alv_lab python -c "import sys; print('Python version:', sys.version)"
-        conda run -n alv_lab python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 import successful')"
-        conda run -n alv_lab python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
-        conda run -n alv_lab python -c "import numpy as np; print('NumPy version:', np.__version__)"
-        conda run -n alv_lab python -c "import matplotlib; print('Matplotlib version:', matplotlib.__version__)"
+        conda run --name alv_lab python -c "import sys; print('Python version:', sys.version)"
+        conda run --name alv_lab python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 import successful')"
+        conda run --name alv_lab python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
+        conda run --name alv_lab python -c "import numpy as np; print('NumPy version:', np.__version__)"
+        conda run --name alv_lab python -c "import matplotlib; print('Matplotlib version:', matplotlib.__version__)"
 
     - name: Test basic application startup (Linux/macOS)
       if: runner.os != 'Windows'
       run: |
         export QT_QPA_PLATFORM=offscreen
         if [ "$RUNNER_OS" = "Linux" ]; then
-          xvfb-run -a conda run -n alv_lab bash -lc "python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print(\"GUI initialization successful\")'"
+          xvfb-run -a conda run --name alv_lab bash -lc "python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print(\"GUI initialization successful\")'"
         else
           conda run -n alv_lab python -c "import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print('GUI initialization successful')"
         fi
@@ -119,11 +119,11 @@ jobs:
     - name: Test basic application startup (Windows)
       if: runner.os == 'Windows'
       run: |
-        conda run -n alv_lab python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+          conda run --name alv_lab python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
 
     - name: Test core signal processing modules
       run: |
-        conda run -n alv_lab python -c 'import monstim_signals.domain.experiment; import monstim_signals.domain.dataset; import monstim_signals.domain.session; import monstim_signals.io.csv_importer; print("Core modules import successful")'
+        conda run --name alv_lab python -c 'import monstim_signals.domain.experiment; import monstim_signals.domain.dataset; import monstim_signals.domain.session; import monstim_signals.io.csv_importer; print("Core modules import successful")'
 
     - name: Run basic functionality tests (if test files exist)
       run: |
@@ -132,9 +132,9 @@ jobs:
             if ("${{ runner.os }}" -ne "Windows") {
               $env:QT_QPA_PLATFORM = "offscreen"
               if ("${{ runner.os }}" -eq "Linux") {
-                xvfb-run -a conda run -n alv_lab bash -lc "python -m pytest tests/ -v"
+                xvfb-run -a conda run --name alv_lab bash -lc "python -m pytest tests/ -v"
               } else {
-                conda run -n alv_lab python -m pytest tests/ -v
+                conda run --name alv_lab python -m pytest tests/ -v
               }
             } else {
               conda run -n alv_lab python -m pytest tests/ -v
