@@ -26,7 +26,7 @@ setup(
         "packaging==25.0",
         "python_markdown_math==0.9",
         "pytest==9.0.0",
-        "scipy==1.15.3",
+        "scipy==1.16.3",
         "setuptools==80.9.0",
         "traitlets==5.14.3",
     ],
