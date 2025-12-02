@@ -218,12 +218,13 @@ class PlotWidget(QGroupBox):
                 except Exception as e:
                     logging.debug(f"Failed to connect QLineEdit signal for {le}: {e}")
 
-            # spinboxes
-            for sb in w.findChildren((QSpinBox, QDoubleSpinBox)):
+            # spin boxes
+            for child in w.findChildren(QWidget):
                 try:
-                    sb.valueChanged.connect(self.save_current_options)
+                    if isinstance(child, (QSpinBox, QDoubleSpinBox)):
+                        child.valueChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {sb}: {e}")
+                    logging.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {child}: {e}")
 
         except Exception as e:
             logging.debug(f"Failed to connect option change signals: {e}")
