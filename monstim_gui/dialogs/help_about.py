@@ -1,4 +1,5 @@
 import os
+import re
 
 import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
@@ -93,9 +94,11 @@ class LatexHelpWindow(QWidget):
             base_dir = os.path.dirname(mathjax_path) + "/"
             self.web_view.setHtml(full_html, baseUrl=QUrl.fromLocalFile(base_dir))
         else:
-            # Simple QTextBrowser fallback (show raw Markdown so math remains visible)
+            # Simple QTextBrowser fallback: render HTML converted from Markdown
+            # (math markers are preserved so a future WebEngine view could typeset them).
             self.text_browser = QTextBrowser()
-            self.text_browser.setPlainText(markdown_content)
+            self.text_browser.setOpenExternalLinks(True)
+            self.text_browser.setHtml(self.markdown_to_html(markdown_content))
             layout.addWidget(self.text_browser)
 
     def process_content(self, markdown_content):
@@ -111,7 +114,28 @@ class LatexHelpWindow(QWidget):
                 MathExtension(enable_dollar_delimiter=True),
             ]
         )
-        return md.convert(markdown_content)
+        html = md.convert(markdown_content)
+
+        # mdx_math may emit math in <script type="math/tex">...</script>
+        # Script tags are not displayed by QTextBrowser. For the QTextBrowser
+        # fallback we convert those back into visible TeX delimiters so the
+        # user still sees the math source. When a WebEngine view is used,
+        # MathJax will still recognise the $...$ / $$...$$ delimiters.
+        def _replace_math_script(m):
+            mode = m.group("mode") or ""
+            content = m.group("content")
+            if "display" in mode:
+                return f"$$${content}$$$".replace("$$$", "$$")
+            else:
+                return f"${content}$"
+
+        html = re.sub(
+            r"<script\s+type=[\'\"]math/tex(?:;\s*mode=(?P<mode>display))?[\'\"]>(?P<content>.*?)</script>",
+            _replace_math_script,
+            html,
+            flags=re.DOTALL,
+        )
+        return html
 
 
 class AboutDialog(QWidget):
