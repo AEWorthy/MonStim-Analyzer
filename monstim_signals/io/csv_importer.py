@@ -289,6 +289,7 @@ class MultiExptImportingThread(QThread):
     finished = Signal(int)  # Emits count of successfully imported experiments
     error = Signal(Exception)
     canceled = Signal()
+
     def __init__(
         self,
         experiment_paths: list[str],
