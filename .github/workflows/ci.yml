@@ -20,16 +20,51 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
-    - name: Set up Conda environment from environment.yml
+    - name: Install Miniforge (setup conda) only
       uses: conda-incubator/setup-miniconda@v2
       with:
-        # Install Miniforge so conda is available on the hosted runner
+        # Install Miniforge so conda is available on the hosted runner.
+        # We do NOT let the action auto-create the env so we can run
+        # an explicit `conda env update` and capture solver logs.
         miniforge-version: 'latest'
-        python-version: ${{ matrix.python-version }}
-        activate-environment: alv_lab
-        environment-file: environment.yml
         auto-update-conda: true
         use-mamba: false
+
+    - name: Create/update conda env (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        set -o pipefail
+        echo "Conda info:"
+        conda info
+        echo "Attempting: conda env update -n alv_lab -f environment.yml --prune -v"
+        conda env update -n alv_lab -f environment.yml --prune -v || {
+          echo "conda env update failed, printing debug info and attempting full create"
+          conda config --show-sources || true
+          conda info -a || true
+          conda clean --all --yes || true
+          echo "Attempting: conda env create -n alv_lab -f environment.yml -v"
+          conda env create -n alv_lab -f environment.yml -v || {
+            echo "conda env create also failed. Exiting with error."
+            exit 1
+          }
+        }
+
+    - name: Create/update conda env (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host "Conda info:"
+        conda info
+        Write-Host "Attempting: conda env update -n alv_lab -f environment.yml --prune -v"
+        conda env update -n alv_lab -f environment.yml --prune -v
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "conda env update failed, printing debug info and attempting full create"
+          conda config --show-sources
+          conda info -a
+          conda clean --all --yes
+          conda env create -n alv_lab -f environment.yml -v
+          if ($LASTEXITCODE -ne 0) { throw "conda env create failed" }
+        }
 
     - name: Cache pip dependencies
       uses: actions/cache@v4
