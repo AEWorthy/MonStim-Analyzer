@@ -1,27 +1,43 @@
 {
   "extends": ["config:base"],
+  "labels": ["dependencies", "renovate"],
+  "timezone": "UTC",
   "prConcurrentLimit": 6,
-  "packageRules": [
+  "regexManagers": [
     {
-      "managers": ["conda"],
-      "fileMatch": ["(^|/)environment\\.yml$"],
-      "groupName": "conda dependencies",
-      "labels": ["dependencies", "conda"],
-      "updateTypes": ["minor", "patch", "pin", "digest"],
-      "automerge": true,
-      "automergeType": "pr",
-      "automergeStrategy": "merge"
+      "fileMatch": ["^environment\\.yml$"],
+      "matchStrings": ["-\\s*(?:[^:\\s]+::)?([^=\\s]+)=([^\\s]+)"],
+      "depNameTemplate": "$1",
+      "packageNameTemplate": "$1",
+      "datasourceTemplate": "conda",
+      "versioningTemplate": "conda"
     },
     {
-      "managers": ["pip_requirements"],
-      "fileMatch": ["(^|/)requirements\\.txt$"],
-      "groupName": "pip dependencies",
-      "labels": ["dependencies", "pip"],
-      "updateTypes": ["minor", "patch", "pin", "digest"],
-      "automerge": true,
-      "automergeType": "pr",
-      "automergeStrategy": "merge"
+      "fileMatch": ["^environment\\.yml$"],
+      "matchStrings": ["-\\s*([^=\\s]+)==([^\\s]+)"],
+      "depNameTemplate": "$1",
+      "packageNameTemplate": "$1",
+      "datasourceTemplate": "pypi",
+      "versioningTemplate": "pep440"
     }
   ],
-  "enabledManagers": ["conda", "pip_requirements"]
+  "packageRules": [
+    {
+      "matchDatasources": ["conda"],
+      "groupName": "conda dependencies",
+      "schedule": ["before 5am on saturday"],
+      "automerge": false
+    },
+    {
+      "matchDatasources": ["pypi"],
+      "groupName": "pip dependencies",
+      "schedule": ["before 6am on sunday"],
+      "automerge": false
+    },
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
 }
