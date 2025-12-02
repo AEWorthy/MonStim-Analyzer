@@ -111,7 +111,7 @@ jobs:
       run: |
         export QT_QPA_PLATFORM=offscreen
         if [ "$RUNNER_OS" = "Linux" ]; then
-          xvfb-run -a conda run -n alv_lab -p bash -c "python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print(\"GUI initialization successful\")'"
+          xvfb-run -a conda run -n alv_lab bash -lc "python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print(\"GUI initialization successful\")'"
         else
           conda run -n alv_lab python -c "import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print('GUI initialization successful')"
         fi
@@ -132,7 +132,7 @@ jobs:
             if ("${{ runner.os }}" -ne "Windows") {
               $env:QT_QPA_PLATFORM = "offscreen"
               if ("${{ runner.os }}" -eq "Linux") {
-                xvfb-run -a conda run -n alv_lab -p bash -c "python -m pytest tests/ -v"
+                xvfb-run -a conda run -n alv_lab bash -lc "python -m pytest tests/ -v"
               } else {
                 conda run -n alv_lab python -m pytest tests/ -v
               }
