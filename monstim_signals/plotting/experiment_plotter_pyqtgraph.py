@@ -1,5 +1,5 @@
-from typing import TYPE_CHECKING, List
 import logging
+from typing import TYPE_CHECKING, List
 
 import numpy as np
 import pandas as pd
