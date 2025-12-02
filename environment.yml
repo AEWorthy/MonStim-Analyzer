@@ -13,8 +13,7 @@ channels:
 dependencies:
   - numpy=2.2.6
   - pandas=2.3.3
-  - matplotlib=3.10.7  # Use latest available on conda
-  - pyqtgraph=0.14.0
+  - matplotlib=3.10.7
   - scipy=1.15.3
   - h5py=3.15.1
   - pyyaml=6.0.3
@@ -27,3 +26,5 @@ dependencies:
       - pytest==9.0.0
       - setuptools==80.9.0
       - PyQt6>=6,<7
+      - pyqtgraph==0.14.0
+
