@@ -1,6 +1,6 @@
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QDoubleValidator
-from PyQt6.QtWidgets import QLineEdit
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QDoubleValidator
+from PySide6.QtWidgets import QLineEdit
 
 
 class FloatLineEdit(QLineEdit):

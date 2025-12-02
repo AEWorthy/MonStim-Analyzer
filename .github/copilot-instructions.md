@@ -1,8 +1,25 @@
 # Copilot Instructions for MonStim Analyzer
 
+## 🚨 ABSOLUTELY REQUIRED: Activate the `alv_lab` Conda Environment First
+You MUST activate the `alv_lab` environment **before running ANY code, tests, imports, migrations, or package installs**. Failing to do this causes missing dependency errors (e.g. `pytest` not found, GUI backend issues, version mismatches).
+
+Always do this first in every fresh terminal session:
+
+```powershell
+conda activate alv_lab
+```
+
+If the environment is missing:
+1. Create it from `docs/environment.yml` (preferred) or install from `requirements.txt`.
+2. Re-open VS Code or reload the window so the interpreter is detected.
+
+Never run `python`, `pytest`, or `pyinstaller` until `conda info --envs` shows `alv_lab` with an asterisk.
+
+If automation (like Copilot) attempts to run tests without activation, STOP and activate first. Treat unactivated runs as invalid.
+
 ## Architecture Overview
 
-**Two-Package Structure**: The codebase is split into domain logic (`monstim_signals`) and GUI logic (`monstim_gui`). Never import PyQt6 in `monstim_signals` - it must remain GUI-agnostic.
+**Two-Package Structure**: The codebase is split into domain logic (`monstim_signals`) and GUI logic (`monstim_gui`). Never import PySide6 in `monstim_signals` - it must remain GUI-agnostic.
 
 **Hierarchical Data Model**: `Experiment` → `Dataset` → `Session` → `Recording`. This hierarchy drives all UI organization and data operations. Each level has its own repository class for persistence and annotation overlay system.
 
@@ -37,23 +54,29 @@
 ## Development Workflows
 
 ### Running the Application
-**Important**: Use the `alv_lab` conda environment if available - the application has specific dependency requirements.
+ALWAYS activate `alv_lab` first. Do not skip this step.
 
-```bash
-# Activate the environment first
-conda activate alv_lab
-
-# Then run the application
-python main.py --debug  # For development with console logging
+```powershell
+conda activate alv_lab  # REQUIRED
+python main.py --debug  # Development run with console logging
 ```
 
 If `alv_lab` environment is not available, ensure all dependencies from `requirements.txt` are installed in your active environment.
 
 ### Testing Components
+ALWAYS ensure the environment is active:
+
+```powershell
+conda activate alv_lab  # REQUIRED before any test
+pytest -q               # Run full test suite
+```
+
+Selective interactive helpers:
 ```python
-# Use the testing module for domain objects
 from monstim_signals.testing import test_session_object, test_dataset_object
 ```
+
+If a test unexpectedly fails due to ImportError / missing dependency, first confirm environment activation.
 
 ### Building Release
 ```powershell

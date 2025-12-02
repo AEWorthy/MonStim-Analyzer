@@ -3,7 +3,7 @@ Domain Hierarchy and Cache Behavior
 
 Purpose: Validate Dataset/Session properties, hierarchy navigation, and cache reset semantics.
 Markers: unit (where in-memory), integration (when loading from repo); fast by default.
-Notes: Avoid PyQt6 in domain; use create_empty annotations and small stubs.
+Notes: Avoid PySide6 in domain; use create_empty annotations and small stubs.
 """
 
 from __future__ import annotations

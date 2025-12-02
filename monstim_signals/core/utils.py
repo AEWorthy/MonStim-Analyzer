@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import List
 
 import yaml
-from PyQt6.QtCore import QStandardPaths
+from PySide6.QtCore import QStandardPaths
 
 try:
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 except ImportError:  # Allow headless environments
     QApplication = None
 import numpy as np

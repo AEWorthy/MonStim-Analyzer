@@ -21,6 +21,8 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
     - Interactive latency window selection
     - Crosshair cursor for measurements
     - Multi-channel plotting support
+    - Generalized (heterogeneity-aware) reflex curve plotting now iterates over the
+    union of latency window names across all sessions of all datasets.
     """
 
     def __init__(self, experiment: "Experiment"):
@@ -30,13 +32,18 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
     def plot_averageReflexCurves(
         self,
         channel_indices: List[int] = None,
-        method=None,
-        plot_legend=True,
-        relative_to_mmax=False,
-        manual_mmax=None,
+        method: str | None = None,
+        plot_legend: bool = True,
+        relative_to_mmax: bool = False,
+        manual_mmax: float | int | None = None,
         canvas=None,
     ):
-        """Plot average reflex curves for the experiment with interactive features."""
+        """Plot average reflex curves per latency window (heterogeneity-aware).
+
+        Replaces legacy M/H-only plotting with union-of-window-name aggregation.
+        Legend includes contribution counts (n contributing sessions / total sessions).
+        Returns DataFrame indexed by (channel_index, window_name, voltage).
+        """
         try:
             if canvas is None:
                 raise UnableToPlotError("Canvas is required for plotting.")
@@ -44,180 +51,125 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             if method is None:
                 method = self.emg_object.default_method
 
-            # Get channel information
             if channel_indices is None:
                 channel_indices = list(range(self.emg_object.num_channels))
 
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _layout = self.create_plot_layout(canvas, channel_indices)
 
-            # Raw data collection
             raw_data_dict = {
                 "channel_index": [],
-                "stimulus_v": [],
-                "avg_m_wave": [],
-                "stderr_m_wave": [],
-                "avg_h_wave": [],
-                "stderr_h_wave": [],
+                "window_name": [],
+                "voltage": [],
+                "mean_amplitude": [],
+                "stdev_amplitude": [],
             }
 
+            window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
+            total_sessions = sum(len(ds.sessions) for ds in self.emg_object.datasets)
+
             for plot_item, channel_idx in zip(plot_items, channel_indices):
-                # Set labels
-                y_label = f'Average Reflex Ampl. (mV{", rel. to M-max" if relative_to_mmax else ""})'
                 self.set_labels(
                     plot_item=plot_item,
                     title=f"Channel {channel_idx + 1}",
-                    y_label=y_label,
+                    y_label=f"Avg Reflex Ampl. (mV{', rel. to M-max' if relative_to_mmax else ''})",
                     x_label="Stimulus Intensity (V)",
                 )
                 plot_item.showGrid(True, True)
-
-                # Add legend for this plot if requested (before plotting named curves)
                 if plot_legend:
                     plot_item.addLegend()
 
-                # Plot reflex curves data and collect raw data
-                self._plot_reflex_curves_data(
-                    plot_item,
-                    channel_idx,
-                    method,
-                    relative_to_mmax,
-                    manual_mmax,
-                    raw_data_dict,
-                )
+                for window_name in window_names:
+                    curve = self.emg_object.get_average_lw_reflex_curve(
+                        method=method, channel_index=channel_idx, window=window_name
+                    )
+                    voltages = curve.get("voltages")
+                    means = curve.get("means")
+                    stdevs = curve.get("stdevs")
+                    n_sessions = curve.get("n_sessions")
+                    if voltages is None or means is None or stdevs is None or len(voltages) == 0:
+                        continue
 
-            # Auto-range Y-axis for all linked plots
+                    if relative_to_mmax:
+                        try:
+                            if manual_mmax is None:
+                                mmax = self._resolve_to_scalar(self.emg_object.get_avg_m_max(method, channel_idx))
+                            else:
+                                mmax = self._resolve_to_scalar(manual_mmax)
+                        except ValueError as ve:
+                            raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
+
+                        if mmax is not None and mmax != 0:
+                            means = means / mmax
+                            stdevs = stdevs / mmax
+
+                    # Representative color from first session containing the window
+                    color_hex = "white"
+                    try:
+                        found = False
+                        for ds in self.emg_object.datasets:
+                            for sess in ds.sessions:
+                                lw = ds.get_session_latency_window(sess, window_name)  # type: ignore[attr-defined]
+                                if lw is not None and getattr(lw, "color", None):
+                                    color_hex = lw.color
+                                    found = True
+                                    break
+                            if found:
+                                break
+                    except Exception:
+                        logging.exception("Failed to retrieve latency window color for plotting.")
+                        pass
+
+                    color = self._convert_matplotlib_color(color_hex)
+                    pale = self._pale_color(color, blend=0.25)
+                    upper = means + stdevs
+                    lower = means - stdevs
+                    upper_curve = plot_item.plot(
+                        voltages,
+                        upper,
+                        pen=pg.mkPen(color=pale, width=1, style=QtCore.Qt.PenStyle.DotLine),
+                    )
+                    lower_curve = plot_item.plot(
+                        voltages,
+                        lower,
+                        pen=pg.mkPen(color=pale, width=1, style=QtCore.Qt.PenStyle.DotLine),
+                    )
+                    if not hasattr(plot_item, "_fill_curves_refs"):
+                        plot_item._fill_curves_refs = []
+                    plot_item._fill_curves_refs.extend([upper_curve, lower_curve])
+                    fill = pg.FillBetweenItem(curve1=upper_curve, curve2=lower_curve, brush=pg.mkBrush(color=pale, alpha=50))
+                    plot_item.addItem(fill)
+
+                    contrib_label = ""
+                    if n_sessions is not None and len(n_sessions) > 0:
+                        contrib_label = f" [n={int(n_sessions.max())}(/{total_sessions})]"
+                    label = f"{window_name}{contrib_label}"
+                    plot_item.plot(
+                        voltages,
+                        means,
+                        pen=pg.mkPen(color=color, width=2),
+                        symbol="o",
+                        symbolSize=6,
+                        symbolBrush=color,
+                        name=label,
+                    )
+
+                    for v, m, s in zip(voltages, means, stdevs):
+                        raw_data_dict["channel_index"].append(channel_idx)
+                        raw_data_dict["window_name"].append(window_name)
+                        raw_data_dict["voltage"].append(v)
+                        raw_data_dict["mean_amplitude"].append(m)
+                        raw_data_dict["stdev_amplitude"].append(s)
+
             self.auto_range_y_axis_linked_plots(plot_items)
 
-            # Create DataFrame with multi-level index
-            raw_data_df = pd.DataFrame(raw_data_dict)
-            raw_data_df.set_index(["channel_index", "stimulus_v"], inplace=True)
-            return raw_data_df
-
+            raw_df = pd.DataFrame(raw_data_dict)
+            if not raw_df.empty:
+                raw_df.set_index(["channel_index", "window_name", "voltage"], inplace=True)
+            return raw_df
         except UnableToPlotError:
-            # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
-
-    def _plot_reflex_curves_data(
-        self,
-        plot_item: pg.PlotItem,
-        channel_idx: int,
-        method: str,
-        relative_to_mmax: bool,
-        manual_mmax: float | None,
-        raw_data_dict: dict,
-    ):
-        """Plot reflex curves data for a specific channel."""
-        try:
-            # Get M-wave and H-reflex data using the Experiment domain object API
-            m_wave_means, m_wave_error = self.emg_object.get_avg_m_wave_amplitudes(method, channel_idx)
-            h_response_means, h_response_error = self.emg_object.get_avg_h_wave_amplitudes(method, channel_idx)
-
-            # Get stimulus voltages
-            stimulus_voltages = self.emg_object.stimulus_voltages
-
-            # Make the M-wave and H-reflex amplitudes relative to the maximum M-wave amplitude if specified
-            if relative_to_mmax:
-                if manual_mmax is not None:
-                    m_max_amplitude = manual_mmax
-                else:
-                    m_max_amplitude = self.emg_object.get_avg_m_max(method, channel_idx)
-
-                if m_max_amplitude and m_max_amplitude > 0:
-                    m_wave_means = m_wave_means / m_max_amplitude
-                    m_wave_error = m_wave_error / m_max_amplitude
-                    h_response_means = h_response_means / m_max_amplitude
-                    h_response_error = h_response_error / m_max_amplitude
-
-            # Append data to raw data dictionary
-            raw_data_dict["channel_index"].extend([channel_idx] * len(stimulus_voltages))
-            raw_data_dict["stimulus_v"].extend(stimulus_voltages)
-            raw_data_dict["avg_m_wave"].extend(m_wave_means)
-            raw_data_dict["stderr_m_wave"].extend(m_wave_error)
-            raw_data_dict["avg_h_wave"].extend(h_response_means)
-            raw_data_dict["stderr_h_wave"].extend(h_response_error)
-
-            # Plot M-wave curve with error bands
-            m_color = self._convert_matplotlib_color(self.emg_object.m_color)
-            m_pale_color = self._pale_color(m_color, blend=0.25)
-
-            # Plot M-wave error bands
-            m_upper = m_wave_means + m_wave_error
-            m_lower = m_wave_means - m_wave_error
-            m_upper_curve = plot_item.plot(
-                stimulus_voltages,
-                m_upper,
-                pen=pg.mkPen(color=m_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
-            )
-            m_lower_curve = plot_item.plot(
-                stimulus_voltages,
-                m_lower,
-                pen=pg.mkPen(color=m_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
-            )
-
-            # Create fill between curves for M-wave
-            if not hasattr(plot_item, "_fill_curves_refs"):
-                plot_item._fill_curves_refs = []
-            plot_item._fill_curves_refs.extend([m_upper_curve, m_lower_curve])
-            m_fill = pg.FillBetweenItem(
-                curve1=m_upper_curve,
-                curve2=m_lower_curve,
-                brush=pg.mkBrush(color=m_pale_color, alpha=50),
-            )
-            plot_item.addItem(m_fill)
-
-            # Plot M-wave mean line (on top of fill)
-            plot_item.plot(
-                stimulus_voltages,
-                m_wave_means,
-                pen=pg.mkPen(color=m_color, width=2),
-                symbol="o",
-                symbolSize=6,
-                symbolBrush=m_color,
-                name="M-wave",
-            )
-
-            # Plot H-reflex curve with error bands
-            h_color = self._convert_matplotlib_color(self.emg_object.h_color)
-            h_pale_color = self._pale_color(h_color, blend=0.25)
-
-            # Plot H-reflex error bands
-            h_upper = h_response_means + h_response_error
-            h_lower = h_response_means - h_response_error
-            h_upper_curve = plot_item.plot(
-                stimulus_voltages,
-                h_upper,
-                pen=pg.mkPen(color=h_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
-            )
-            h_lower_curve = plot_item.plot(
-                stimulus_voltages,
-                h_lower,
-                pen=pg.mkPen(color=h_pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine),
-            )
-
-            # Create fill between curves for H-reflex
-            plot_item._fill_curves_refs.extend([h_upper_curve, h_lower_curve])
-            h_fill = pg.FillBetweenItem(
-                curve1=h_upper_curve,
-                curve2=h_lower_curve,
-                brush=pg.mkBrush(color=h_pale_color, alpha=50),
-            )
-            plot_item.addItem(h_fill)
-
-            # Plot H-reflex mean line (on top of fill)
-            plot_item.plot(
-                stimulus_voltages,
-                h_response_means,
-                pen=pg.mkPen(color=h_color, width=2),
-                symbol="o",
-                symbolSize=6,
-                symbolBrush=h_color,
-                name="H-reflex",
-            )
-
-        except Exception as e:
-            logging.warning(f"Could not plot reflex curves for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting reflex curves: {e}")
 
     def plot_maxH(
         self,
@@ -325,16 +277,19 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 h_response_amplitudes = np.concatenate((h_response_amplitudes, h_amplitudes))
                 stimulus_voltages_for_channel = np.concatenate((stimulus_voltages_for_channel, [voltage] * len(m_amplitudes)))
 
-            # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
-            if relative_to_mmax:
-                if manual_mmax is not None:
-                    m_max_amplitude = manual_mmax[channel_idx]
-                else:
-                    m_max_amplitude = self.emg_object.get_avg_m_max(method, channel_idx)
+                # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
+                if relative_to_mmax:
+                    try:
+                        if manual_mmax is not None:
+                            m_max_amplitude = self._resolve_to_scalar(manual_mmax[channel_idx])
+                        else:
+                            m_max_amplitude = self._resolve_to_scalar(self.emg_object.get_avg_m_max(method, channel_idx))
+                    except ValueError as ve:
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
 
-                if m_max_amplitude and m_max_amplitude > 0:
-                    m_wave_amplitudes = m_wave_amplitudes / m_max_amplitude
-                    h_response_amplitudes = h_response_amplitudes / m_max_amplitude
+                    if m_max_amplitude is not None and m_max_amplitude > 0:
+                        m_wave_amplitudes = m_wave_amplitudes / m_max_amplitude
+                        h_response_amplitudes = h_response_amplitudes / m_max_amplitude
 
             # Append data to raw data dictionary
             raw_data_dict["channel_index"].extend([channel_idx] * len(m_wave_amplitudes))

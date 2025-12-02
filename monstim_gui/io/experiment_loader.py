@@ -4,8 +4,10 @@ import logging
 import traceback
 from pathlib import Path
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
+from monstim_gui.core.application_state import app_state
+from monstim_signals.io.data_migrations import scan_annotation_versions
 from monstim_signals.io.repositories import ExperimentRepository
 
 
@@ -13,10 +15,10 @@ class ExperimentLoadingThread(QThread):
     """Thread for loading experiments asynchronously."""
 
     # Signals
-    finished = pyqtSignal(object)  # Emits the loaded experiment
-    error = pyqtSignal(str)  # Emits error message
-    progress = pyqtSignal(int)  # Emits progress percentage
-    status_update = pyqtSignal(str)  # Emits status message
+    finished = Signal(object)  # Emits the loaded experiment
+    error = Signal(str)  # Emits error message
+    progress = Signal(int)  # Emits progress percentage
+    status_update = Signal(str)  # Emits status message
 
     def __init__(self, experiment_path: str, config: dict):
         super().__init__()
@@ -95,15 +97,16 @@ class ExperimentLoadingThread(QThread):
         try:
             logging.debug(f"Starting async load of experiment: '{self.experiment_name}'")
             self.status_update.emit(f"Loading experiment: '{self.experiment_name}'")
-            self.progress.emit(10)
 
             # Check if path exists
             exp_path = Path(self.experiment_path)
             if not exp_path.exists():
                 self.error.emit(f"Experiment folder '{self.experiment_path}' not found.")
+                # Wait so user can read the message
+                QThread.sleep(3)
                 return
 
-            self.progress.emit(15)
+            self.progress.emit(10)
             self.status_update.emit("Analyzing experiment structure...")
 
             # Analyze if this is a first-time load
@@ -126,12 +129,9 @@ class ExperimentLoadingThread(QThread):
                 time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
                 logging.info(time_msg)
 
-            self.progress.emit(25)
-            self.status_update.emit("Loading experiment repository...")
-
             # Create repository
             repo = ExperimentRepository(exp_path)
-            self.progress.emit(35)
+            self.progress.emit(15)
 
             # This is the slow part - the actual repo.load() call
             if is_first_load:
@@ -144,10 +144,62 @@ class ExperimentLoadingThread(QThread):
                 )
             else:
                 self.status_update.emit("Reading experiment metadata...")
-            self.progress.emit(40)
+            self.progress.emit(20)
+
+            # Preflight migration scan (before heavy load) so we can communicate wait time.
+            self.status_update.emit("Scanning annotations for required migrations...")
+            try:
+                scan_results = scan_annotation_versions(exp_path)
+                outdated = [r for r in scan_results if r.get("needs_migration")]
+                if outdated:
+                    # Rough heuristic: each migration step per file is tiny, but IO dominates. Estimate ~2ms per file.
+                    est_ms = max(50, int(len(outdated) * 2))
+                    msg = (
+                        f"{len(outdated)} annotation files require migration (e.g. {outdated[0]['path']}).\n"
+                        f"Planned steps example: {', '.join(outdated[0]['planned_steps'])}.\n"
+                        f"This may add ~{est_ms/1000:.2f}s to load time."
+                    )
+                    logging.info("Experiment preflight: %s", msg.replace("\n", " "))
+                    self.status_update.emit("Annotation migrations pending...\n" + msg)
+                else:
+                    logging.debug("Experiment preflight: all annotation files current.")
+            except Exception as e:  # pragma: no cover
+                logging.debug(f"Annotation preflight scan failed (non-fatal): {e}")
+
+            self.progress.emit(30)
+            self.status_update.emit("Loading experiment repository...")
 
             # Load experiment - this can take a long time for large experiments
-            experiment = repo.load(config=self.config)
+            # Map dataset iteration progress (callback driven) into progress range 30-85.
+            def _progress_cb(level: str, index: int, total: int, name: str):
+                if level == "dataset" and total > 0:
+                    # Reserve 55% of the bar (30 -> 85) for dataset loading.
+                    base = 30
+                    span = 55
+                    frac = index / total
+                    pct = base + int(span * frac)
+                    # Truncate very long dataset names to keep dialog width stable
+                    if len(name) > 48:
+                        name_display = f"{name[:22]}…{name[-22:]}"
+                    else:
+                        name_display = name
+                    self.progress.emit(pct)
+                    self.status_update.emit(f"Loading dataset {index}/{total}: '{name_display}' ...")
+
+            # Overlay application preferences (QSettings) for loading:
+            cfg = dict(self.config or {})
+            # If config doesn't explicitly set lazy_open_h5, use QSettings default
+            if "lazy_open_h5" not in cfg:
+                cfg["lazy_open_h5"] = app_state.should_use_lazy_open_h5()
+
+            # Determine load_workers: prefer explicit config value, else use QSettings auto behavior
+            if "load_workers" not in cfg:
+                if app_state.should_use_parallel_loading():
+                    cfg["load_workers"] = app_state.get_parallel_load_workers()
+                else:
+                    cfg["load_workers"] = 1
+
+            experiment = repo.load(config=cfg, progress_callback=_progress_cb)
 
             self.progress.emit(90)
             self.status_update.emit("Finalizing experiment structure...")

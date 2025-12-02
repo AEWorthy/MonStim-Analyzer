@@ -1,52 +1,52 @@
 version: 2
 updates:
-  # Monitor Python dependencies in requirements.txt
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-    open-pull-requests-limit: 5
-    assignees:
-      - "AEWorthy"
-    commit-message:
-      prefix: "deps"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "security"
-    # Allow dependabot to resolve conflicts automatically
-    rebase-strategy: "auto"
-    # Group minor updates together to reduce PR noise
-    groups:
-      development-dependencies:
-        patterns:
-          - "pytest*"
-          - "flake8*"
-          - "black*"
-          - "isort*"
-          - "bandit*"
-          - "safety*"
-      scientific-computing:
-        patterns:
-          - "numpy*"
-          - "pandas*"
-          - "matplotlib*"
-          - "scipy*"
-          - "h5py*"
-      gui-framework:
-        patterns:
-          - "PyQt6*"
-          - "pyqtgraph*"
-      utility-libraries:
-        patterns:
-          - "PyYAML*"
-          - "packaging*"
-          - "python-markdown-math*"
-          - "traitlets*"
+  # # Monitor Python dependencies in requirements.txt
+  # - package-ecosystem: "pip"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "09:00"
+  #   open-pull-requests-limit: 5
+  #   assignees:
+  #     - "AEWorthy"
+  #   commit-message:
+  #     prefix: "deps"
+  #     include: "scope"
+  #   labels:
+  #     - "dependencies"
+  #     - "security"
+  #   # Allow dependabot to resolve conflicts automatically
+  #   rebase-strategy: "auto"
+  #   # Group minor updates together to reduce PR noise
+  #   groups:
+  #     development-dependencies:
+  #       patterns:
+  #         - "pytest*"
+  #         - "flake8*"
+  #         - "black*"
+  #         - "isort*"
+  #         - "bandit*"
+  #         - "safety*"
+  #     scientific-computing:
+  #       patterns:
+  #         - "numpy*"
+  #         - "pandas*"
+  #         - "matplotlib*"
+  #         - "scipy*"
+  #         - "h5py*"
+  #     gui-framework:
+  #       patterns:
+  #         - "PySide6*"
+  #         - "pyqtgraph*"
+  #     utility-libraries:
+  #       patterns:
+  #         - "PyYAML*"
+  #         - "packaging*"
+  #         - "python-markdown-math*"
+  #         - "traitlets*"
 
-  # Monitor GitHub Actions
+    # Monitor GitHub Actions only. Renovate manages pip/conda dependencies.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

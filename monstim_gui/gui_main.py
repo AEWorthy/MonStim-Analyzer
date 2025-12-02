@@ -14,12 +14,12 @@ if TYPE_CHECKING:
         PlotPane,
         PlotWidget,
     )
-    from PyQt6.QtWidgets import QStatusBar
+    from PySide6.QtWidgets import QStatusBar
 
 import markdown
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QInputDialog,
@@ -136,7 +136,7 @@ class MonstimGUI(QMainWindow):
         self.status_bar: "QStatusBar" = widgets["status_bar"]
 
         # --- Add Profile Selector to Main Window ---
-        from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
+        from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
 
         self.profile_selector_row = QWidget()
         self.profile_selector_layout = QHBoxLayout(self.profile_selector_row)
@@ -170,7 +170,7 @@ class MonstimGUI(QMainWindow):
     @staticmethod
     def handle_qt_error_logs():
         # Install Qt message handler to suppress QPainter warnings during resize operations
-        from PyQt6.QtCore import QtMsgType, qInstallMessageHandler
+        from PySide6.QtCore import QtMsgType, qInstallMessageHandler
 
         def qt_message_handler(mode, context, message):
             # Suppress specific QPainter warnings that occur during window resize/fullscreen operations
@@ -620,10 +620,11 @@ class MonstimGUI(QMainWindow):
         """Show help dialog using HelpFileRepository."""
         file = "readme.md" if topic is None else topic
         markdown_content = self.help_repo.read_help_file(file)
-        html_content = markdown.markdown(markdown_content)
         if latex:
-            self.help_window = LatexHelpWindow(html_content, topic)
+            # Pass raw Markdown so LatexHelpWindow can convert with math support
+            self.help_window = LatexHelpWindow(markdown_content, topic)
         else:
+            html_content = markdown.markdown(markdown_content)
             self.help_window = HelpWindow(html_content, topic)
         self.help_window.show()
 

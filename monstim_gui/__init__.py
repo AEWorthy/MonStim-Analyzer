@@ -11,7 +11,7 @@ __author__ = "Andrew Worthy"
 __email__ = "aeworth@emory.edu"
 
 
-# Lazy imports to avoid PyQt6 dependency during setup
+# Lazy imports to avoid PySide6 dependency during setup
 def __getattr__(name):
     if name == "SplashScreen":
         from .core.splash import SplashScreen

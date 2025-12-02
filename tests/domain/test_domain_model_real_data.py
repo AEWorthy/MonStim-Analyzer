@@ -13,8 +13,7 @@ import pytest
 from monstim_signals.core.data_models import LatencyWindow
 from monstim_signals.io.csv_importer import import_experiment
 from monstim_signals.io.repositories import DatasetRepository, SessionRepository
-
-from .helpers import get_golden_root
+from tests.helpers import get_golden_root
 
 # --- Test Annotations ---
 # Purpose: Exercise domain model against golden fixtures (smoke coverage for repos + overlays)
@@ -286,8 +285,7 @@ class TestDomainModelIntegration:
     def test_channel_rename_duplicate_guard(self, tmp_path):
         """Renaming channels to duplicate names should raise ValueError and not change state."""
         from monstim_signals.io.repositories import SessionRepository
-
-        from .helpers import create_minimal_session_folder
+        from tests.helpers import create_minimal_session_folder
 
         sess_dir = create_minimal_session_folder(tmp_path, num_channels=3)
         session = SessionRepository(sess_dir).load()

@@ -1,3 +1,4 @@
+import copy
 import logging
 import traceback
 from typing import TYPE_CHECKING
@@ -5,8 +6,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from monstim_signals.plotting import UnableToPlotError
 
@@ -97,8 +98,16 @@ class PlotController:
 
         plot_type_raw = config_data["plot_type_raw"]
         plot_type = config_data["plot_type"]
+        # Use a separate copy of plot options for hooks/plotting so hooks
+        # cannot silently mutate the UI's live options object. Hooks will
+        # receive and can modify this copy; the modified copy is what gets
+        # passed to the plotting layer. This ensures the UI always reflects
+        # the user's selected options.
         plot_options = config_data["plot_options"]
         raw_data = None
+
+        # Work on a deepcopy that will be passed to hooks and used for plotting
+        plot_options_for_hooks = copy.deepcopy(plot_options) if plot_options is not None else {}
 
         # Only inject stimuli_to_plot for session-level EMG plots
         config = None
@@ -114,9 +123,9 @@ class PlotController:
 
         if is_session_emg_plot:
             if config and "stimuli_to_plot" in config:
-                plot_options["stimuli_to_plot"] = config["stimuli_to_plot"]
+                plot_options_for_hooks["stimuli_to_plot"] = config["stimuli_to_plot"]
             elif default_profile_selected:
-                plot_options["stimuli_to_plot"] = ["Electrical"]
+                plot_options_for_hooks["stimuli_to_plot"] = ["Electrical"]
 
         level, level_object = self.get_plot_level_and_object()
 
@@ -142,7 +151,7 @@ class PlotController:
             "level_object": level_object,
             "plot_type": plot_type,
             "plot_type_raw": plot_type_raw,
-            "plot_options": plot_options,
+            "plot_options": plot_options_for_hooks,
         }
 
         for hook in self._pre_plot_hooks:
@@ -152,10 +161,12 @@ class PlotController:
                 logging.warning(f"Error in pre-plot hook: {hook_error}")
 
         try:
+            # Use the possibly modified copy from hooks for plotting
+            final_plot_options = plot_context.get("plot_options", plot_options_for_hooks)
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             raw_data = level_object.plot(
                 plot_type=plot_type,
-                **plot_options,
+                **final_plot_options,
                 canvas=self.gui.plot_pane,
             )
         except UnableToPlotError as e:
@@ -252,6 +263,12 @@ class PlotController:
         logging.info(f"Plot type: {plot_type}, options: {plot_options}")
         logging.info(f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}")
 
+    # TODO: Structured plotting errors
+    # - Replace ad-hoc string matching (e.g., "No channels to plot") with
+    #   structured exception types or error codes (e.g., UnableToPlotError(reason='no_channels')).
+    # - This makes it trivial to present contextual help dialogs and to
+    #   programmatically handle recoverable conditions in hooks.
+
     def handle_plot_error(self, e, plot_type, plot_options):
         """Centralized error handling for plot operations."""
         error_msg = f"An error occurred while plotting: {e}"
@@ -268,6 +285,11 @@ class PlotController:
                 hook(e, plot_type, plot_options)
             except Exception as hook_error:
                 logging.warning(f"Error in error hook: {hook_error}")
+
+    # TODO: Hook examples and recipes
+    # - Document example pre/post plot hooks in the codebase (or a small docs file)
+    #   demonstrating how to automatically overlay latency windows, highlight
+    #   plateau regions, or compute summary metrics after each successful plot.
 
     def add_pre_plot_hook(self, hook_func):
         """Add a function to be called before plotting."""

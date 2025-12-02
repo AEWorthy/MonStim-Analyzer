@@ -24,7 +24,7 @@ def _scan_golden_sessions(ds_dir: Path) -> dict[str, set[str]]:
 
 def _get_golden_root() -> Path:
     """Locate golden fixtures, preferring populated directories."""
-    base = Path(__file__).parent
+    base = Path(__file__).parent.parent
     candidates = [base / "fixtures" / "golden", base / "golden"]
 
     # Prefer directories with actual datasets

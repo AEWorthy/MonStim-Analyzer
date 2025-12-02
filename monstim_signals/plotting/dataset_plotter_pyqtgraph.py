@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING, List
 
 import numpy as np
@@ -110,40 +111,65 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
         """Plot reflex curves data for a specific channel, robust to domain object return types."""
         try:
             # Get the data from the domain Dataset object
-            for window in self.emg_object.latency_windows:
+            # Iterate over union of window names (heterogeneity-aware)
+            window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
+            presence_map = getattr(self.emg_object, "window_presence_map", lambda: {})()
+            total_sessions = len(self.emg_object.sessions)
+
+            for window_name in window_names:
                 window_reflex_data = self.emg_object.get_average_lw_reflex_curve(
-                    method=method, channel_index=channel_idx, window=window
+                    method=method, channel_index=channel_idx, window=window_name
                 )
+                means = window_reflex_data.get("means")
+                stdevs = window_reflex_data.get("stdevs")
+                voltages = window_reflex_data.get("voltages")
+                # n_sessions array available for future advanced visualization (e.g., shading by contribution)
 
-                # Make a copy of the data for potential normalization
-                means = window_reflex_data["means"]
-                stdevs = window_reflex_data["stdevs"]
-                voltages = window_reflex_data["voltages"]
+                if means is None or len(means) == 0:
+                    continue  # Nothing to plot
 
-                # Normalize to M-max if needed
+                # Choose a color: attempt to fetch a session's window color; fallback palette
+                color_hex = None
+                try:
+                    # Use first session that has this window
+                    for sess in self.emg_object.sessions:
+                        w = self.emg_object.get_session_latency_window(sess, window_name)  # type: ignore[attr-defined]
+                        if w is not None:
+                            color_hex = w.color
+                            break
+                except Exception:
+                    pass
+                if color_hex is None:
+                    color_hex = "white"
+
+                # Normalize if requested
                 if relative_to_mmax and means is not None:
-                    if manual_mmax is None:
-                        mmax = self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
-                    else:
-                        mmax = manual_mmax
-                    if mmax == 0:
-                        raise ValueError("M-max cannot be zero when normalizing reflex curves.")
-                    # Normalize means and stdevs by M-max
-                    means = means / mmax
-                    stdevs = stdevs / mmax
+                    # Resolve potential array-like mmax to a scalar safely
+                    try:
+                        if manual_mmax is None:
+                            mmax_val = self._resolve_to_scalar(
+                                self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
+                            )
+                        else:
+                            mmax_val = self._resolve_to_scalar(manual_mmax)
+                    except ValueError as ve:
+                        # Ambiguous multi-element mmax value
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
 
-                # Collect raw data
+                    if mmax_val is not None and mmax_val != 0:
+                        means = means / mmax_val
+                        stdevs = stdevs / mmax_val
+
                 for v, m, s in zip(voltages, means, stdevs):
                     raw_data_dict["channel_index"].append(channel_idx)
-                    raw_data_dict["window_name"].append(window.name)
+                    raw_data_dict["window_name"].append(window_name)
                     raw_data_dict["voltage"].append(v)
                     raw_data_dict["mean_amplitude"].append(m)
                     raw_data_dict["stdev_amplitude"].append(s)
 
-                color = self._convert_matplotlib_color(window.color)
+                color = self._convert_matplotlib_color(color_hex)
                 pale_color = self._pale_color(color, blend=0.25)
 
-                # Plot the error bands
                 upper = means + stdevs
                 lower = means - stdevs
                 transparent_pen = pg.mkPen(color=pale_color, width=1, style=QtCore.Qt.PenStyle.DotLine)
@@ -152,16 +178,19 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if not hasattr(plot_item, "_fill_curves_refs"):
                     plot_item._fill_curves_refs = []
                 plot_item._fill_curves_refs.extend([upper_curve, lower_curve])
-                fill = pg.FillBetweenItem(
-                    curve1=upper_curve,
-                    curve2=lower_curve,
-                    brush=pg.mkBrush(color=pale_color, alpha=50),
-                )
+                fill = pg.FillBetweenItem(curve1=upper_curve, curve2=lower_curve, brush=pg.mkBrush(color=pale_color, alpha=50))
                 plot_item.addItem(fill)
 
-                # Plot mean line last so it appears on top and is visible
+                # Legend entry with contribution count
                 if plot_legend:
                     plot_item.addLegend()
+                contrib = 0
+                try:
+                    if window_name in presence_map:
+                        contrib = len(presence_map[window_name])
+                except Exception:
+                    pass
+                label = f"{window_name} [n={contrib}(/{total_sessions})]"
                 plot_item.plot(
                     voltages,
                     means,
@@ -169,7 +198,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     symbol="o",
                     symbolSize=6,
                     symbolBrush=color,
-                    name=window.name,
+                    name=label,
                 )
 
         except Exception as e:
@@ -248,14 +277,24 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     h_response_amplitudes.extend(h_responses)
                     stimulus_voltages_for_channel.extend([voltage] * len(m_waves))
 
+                m_wave_amplitudes = np.array(m_wave_amplitudes)
+                h_response_amplitudes = np.array(h_response_amplitudes)
+
                 # Make the M-wave amplitudes relative to the maximum M-wave amplitude if specified
                 if relative_to_mmax:
-                    if manual_mmax is not None:
-                        m_max = manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax
-                    else:
-                        m_max = self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
+                    try:
+                        if manual_mmax is not None:
+                            m_max = self._resolve_to_scalar(
+                                manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax
+                            )
+                        else:
+                            m_max = self._resolve_to_scalar(
+                                self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
+                            )
+                    except ValueError as ve:
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_index}: {ve}")
 
-                    if m_max and m_max != 0:
+                    if m_max is not None and m_max != 0:
                         m_wave_amplitudes = m_wave_amplitudes / m_max
                         h_response_amplitudes = h_response_amplitudes / m_max
                     else:
@@ -276,7 +315,10 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 h_color = self._convert_matplotlib_color(self.emg_object.h_color)
 
                 # Plot M-wave data points
-                if m_wave_amplitudes:
+                # Use explicit size check to avoid ambiguous truth value for numpy arrays
+                if (hasattr(m_wave_amplitudes, "size") and m_wave_amplitudes.size > 0) or (
+                    hasattr(m_wave_amplitudes, "__len__") and len(m_wave_amplitudes) > 0
+                ):
                     # Calculate and plot mean with error bars
                     mean_m = np.mean(m_wave_amplitudes)
                     std_m = np.std(m_wave_amplitudes)
@@ -326,7 +368,9 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     plot_item.addItem(text_m)
 
                 # Plot H-response data points
-                if h_response_amplitudes:
+                if (hasattr(h_response_amplitudes, "size") and h_response_amplitudes.size > 0) or (
+                    hasattr(h_response_amplitudes, "__len__") and len(h_response_amplitudes) > 0
+                ):
                     # Calculate and plot mean with error bars
                     mean_h = np.mean(h_response_amplitudes)
                     std_h = np.std(h_response_amplitudes)
@@ -571,3 +615,188 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise
         except Exception as e:
             raise UnableToPlotError(f"Error plotting M-max: {str(e)}")
+
+    def plot_latency_window_distribution(
+        self,
+        channel_indices: List[int] = None,
+        method: str = None,
+        bins: int | np.ndarray = 30,
+        density: bool = False,
+        plot_legend: bool = True,
+        canvas=None,
+    ):
+        """Plot distribution (histogram) of latency-window reflex amplitudes across the DATASET.
+
+        - X-axis: binned EMG amplitudes (shared bins per channel)
+        - Y-axis: frequency (counts) per amplitude bin (or density when density=True)
+        - Each latency window is shown as a dot plot with connecting lines.
+
+        Aggregates all latency-window amplitudes from every session (using
+        Dataset.get_lw_reflex_amplitudes) and then bins them per-window.
+        Returns a pandas.DataFrame with multi-index (channel_index, window_name, bin_center)
+        and a column 'value' (for frequency or probability density).
+        """
+        try:
+            if canvas is None:
+                raise UnableToPlotError("Canvas is required for plotting.")
+
+            if method is None:
+                method = self.emg_object.default_method
+
+            if channel_indices is None:
+                channel_indices = list(range(self.emg_object.num_channels))
+
+            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+
+            # Unlink X-axes for this plot type so each channel shows its full distribution
+            # (create_plot_layout links X axes by default for multi-channel layouts).
+            for _pi in plot_items:
+                try:
+                    _pi.setXLink(None)
+                except Exception:
+                    # If unlinking fails for any backend reason, ignore and continue
+                    pass
+
+            raw_data_dict = {
+                "channel_index": [],
+                "window_name": [],
+                "bin_left": [],
+                "bin_right": [],
+                "bin_center": [],
+                "value": [],
+            }
+
+            # For each channel compute a common binning across all windows so lines are comparable
+            # Iterate using zip to ensure plot_items and channel_indices are paired correctly
+            for plot_item, channel_index in zip(plot_items, channel_indices):
+                if channel_index >= self.emg_object.num_channels:
+                    continue
+
+                # Gather window names available in the dataset
+                window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
+
+                # Collect amplitudes across all windows to determine common bin edges
+                all_amps_for_channel = []
+                window_to_amps: dict[str, np.ndarray] = {}
+                for window_name in window_names:
+                    per_session_amps = self.emg_object.get_lw_reflex_amplitudes(method, channel_index, window_name)
+                    # per_session_amps is a dict session_id -> np.ndarray
+                    amps_concat = np.concatenate([a for a in per_session_amps.values()]) if per_session_amps else np.array([])
+                    # Filter NaN
+                    amps_concat = amps_concat[~np.isnan(amps_concat)] if amps_concat.size > 0 else np.array([])
+                    window_to_amps[window_name] = amps_concat
+                    if amps_concat.size > 0:
+                        all_amps_for_channel.extend(amps_concat.tolist())
+
+                # (no debug logging here; keep function output clean)
+
+                if len(all_amps_for_channel) == 0:
+                    # Nothing to plot for this channel
+                    self.set_labels(
+                        plot_item,
+                        title=f"{self.emg_object.channel_names[channel_index]}",
+                        x_label="EMG Amp.",
+                        y_label="Frequency",
+                    )
+                    plot_item.showGrid(True, True)
+                    continue
+
+                all_amps_for_channel = np.array(all_amps_for_channel)
+
+                # Determine bin edges (common for all windows)
+                if isinstance(bins, int):
+                    bin_edges = np.histogram_bin_edges(all_amps_for_channel, bins=bins)
+                else:
+                    bin_edges = np.asarray(bins)
+
+                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+
+                # Plot each window's distribution
+                # Add legend container if requested (one per plot_item)
+                if plot_legend:
+                    try:
+                        plot_item.addLegend()
+                    except Exception:
+                        pass
+
+                for window_name, amps in window_to_amps.items():
+                    if amps.size == 0:
+                        continue
+
+                    try:
+                        # Compute counts or probability density (properly normalized)
+                        if density:
+                            # np.histogram with density=True returns values such that
+                            # integral(density * bin_width) == 1
+                            counts, _ = np.histogram(amps, bins=bin_edges, density=True)
+                        else:
+                            counts, _ = np.histogram(amps, bins=bin_edges)
+
+                        # record raw data
+                        for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts):
+                            raw_data_dict["channel_index"].append(channel_index)
+                            raw_data_dict["window_name"].append(window_name)
+                            raw_data_dict["bin_left"].append(float(left))
+                            raw_data_dict["bin_right"].append(float(right))
+                            raw_data_dict["bin_center"].append(float(center))
+                            raw_data_dict["value"].append(float(freq))
+
+                        # Determine a color for the window (try to reuse session window color)
+                        color_hex = None
+                        try:
+                            for sess in self.emg_object.sessions:
+                                w = self.emg_object.get_session_latency_window(sess, window_name)  # type: ignore[attr-defined]
+                                if w is not None:
+                                    color_hex = w.color
+                                    break
+                        except Exception:
+                            pass
+                        if color_hex is None:
+                            color_hex = "white"
+
+                        color = self._convert_matplotlib_color(color_hex)
+
+                        # Plot line with markers
+                        plot_item.plot(
+                            bin_centers,
+                            counts,
+                            pen=pg.mkPen(color=color, width=2),
+                            symbol="o",
+                            symbolSize=6,
+                            symbolBrush=color,
+                            name=window_name if plot_legend else None,
+                        )
+                    except Exception:
+                        logging.error(f"Could not plot latency window '{window_name}' for channel {channel_index}.")
+                        continue
+
+                # Labels and formatting per channel
+                # Labels and formatting per channel
+                self.set_labels(
+                    plot_item,
+                    title=f"{self.emg_object.channel_names[channel_index]}",
+                    x_label="EMG Amp. (binned)",
+                    y_label=("Probability Density" if density else "Frequency"),
+                )
+                # Ensure this plot auto-ranges its X axis independently so the
+                # histogram/binning for this channel is fully visible.
+                try:
+                    plot_item.enableAutoRange(axis="x", enable=True)
+                except Exception:
+                    # Fall back silently if the backend does not support this call
+                    pass
+
+                plot_item.showGrid(True, True)
+
+            # Auto-range Y-axis for all linked plots
+            self.auto_range_y_axis_linked_plots(plot_items)
+
+            raw_data_df = pd.DataFrame(raw_data_dict)
+            if not raw_data_df.empty:
+                raw_data_df.set_index(["channel_index", "window_name", "bin_center"], inplace=True)
+            return raw_data_df
+
+        except UnableToPlotError:
+            raise
+        except Exception as e:
+            raise UnableToPlotError(f"Error plotting latency-window distribution: {str(e)}")

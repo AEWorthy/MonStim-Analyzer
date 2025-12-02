@@ -1,0 +1,23 @@
+name: alv_lab
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - numpy=2.2.*
+  - pandas=2.3.*
+  - matplotlib=3.10.*
+  - scipy=1.15.*
+  - h5py=3.15.*
+  - pyyaml=6.0.*
+  - packaging=25.*
+  - traitlets=5.14.*
+  - pillow=12.0.*
+  - pyside6=6.9.*
+  - pyqtgraph=0.14.*
+  - pip
+  - pip:
+      - Markdown==3.10
+      - python_markdown_math==0.9
+      - pytest==9.0.0
+      - setuptools==80.9.0

@@ -7,7 +7,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Dict, List
 
-from PyQt6.QtCore import QSettings
+from PySide6.QtCore import QSettings
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
@@ -123,7 +123,7 @@ class ApplicationState:
 
         # Only save session state if we have at least an experiment
         if experiment_id is not None:
-            logging.info(
+            logging.debug(
                 f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
                 f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
             )
@@ -271,6 +271,12 @@ class ApplicationState:
             # Set flag to suppress session state saves during restoration (including experiment loading)
             self._is_restoring_session = True
 
+            # TODO: Robust restoration
+            # - Prefer restoring by explicit IDs stored in combo UserRole instead of
+            #   by index arithmetic (+1 placeholder). Where possible, always write
+            #   and restore user-facing state by stable IDs to avoid fragile index
+            #   based restoring when UI ordering or placeholders change.
+
             # Restore experiment
             exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
             gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
@@ -278,7 +284,7 @@ class ApplicationState:
             # Wait for experiment to load, then restore dataset/session
             if dataset_id or session_id:
                 # Schedule dataset/session restoration for after experiment loads
-                from PyQt6.QtCore import QTimer
+                from PySide6.QtCore import QTimer
 
                 def restore_nested():
                     if gui.current_experiment and gui.current_experiment.id == experiment_id:
@@ -401,6 +407,56 @@ class ApplicationState:
     def should_use_opengl_acceleration(self) -> bool:
         """Check if OpenGL acceleration should be used."""
         return self.get_preference("use_opengl_acceleration", True)
+
+    # === PERFORMANCE / LOADING PREFS ===
+    def should_use_lazy_open_h5(self) -> bool:
+        """Return whether HDF5 files should be opened lazily during experiment load.
+
+        Default: True (faster initial load; raw data is re-opened lazily when required)
+        """
+        return self.get_preference("use_lazy_open_h5", True)
+
+    def should_use_parallel_loading(self) -> bool:
+        """Return whether parallel dataset loading should be enabled.
+
+        Default: True (use multiple threads to load independent datasets)
+        """
+        pref = self.get_preference("enable_parallel_loading", True)
+        # Parallel loading relies on lazy-opening HDF5 files. If lazy-open
+        # is disabled we must not enable parallel loading because that would
+        # risk opening many HDF5 handles concurrently (unsafe/slow).
+        if pref and not self.should_use_lazy_open_h5():
+            logging.debug("Parallel loading requested but disabled because lazy_open_h5 is False")
+            return False
+        return pref
+
+    def get_parallel_load_workers(self) -> int:
+        """Get the number of worker threads to use for parallel dataset loading.
+
+        Behavior:
+            - If the user has explicitly stored an integer under
+              ProgramPreferences/parallel_load_workers, that value is used.
+            - Otherwise, choose max(1, os.cpu_count() - 1) so we leave one
+              core free for UI and general OS scheduling. If os.cpu_count()
+              returns None, default to 1.
+        """
+        try:
+            # If user explicitly set a value, use it
+            val = self.settings.value("ProgramPreferences/parallel_load_workers", None, type=int)
+            if isinstance(val, int) and val > 0:
+                return val
+        except Exception as e:
+            # Failed to read parallel_load_workers from QSettings; falling back to default.
+            logging.warning(f"Error reading ProgramPreferences/parallel_load_workers: {e}")
+
+        # Default to CPU count - 1 (leave one core spare); if single-core, use 1
+        try:
+            import os
+
+            count = os.cpu_count() or 1
+            return max(1, count - 1)
+        except Exception:
+            return 1
 
     def clear_all_tracked_data(self):
         """Clear all tracked user data."""

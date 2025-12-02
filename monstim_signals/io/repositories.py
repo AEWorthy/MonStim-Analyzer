@@ -1,9 +1,11 @@
 # monstim_signals/io/repositories.py
+import concurrent.futures
+import datetime
 import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 import h5py
 
@@ -18,6 +20,12 @@ from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.recording import Recording
 from monstim_signals.domain.session import Session
+from monstim_signals.io.data_migrations import (
+    FutureVersionError,
+    UnknownVersionError,
+    migrate_annotation_dict,
+    scan_annotation_versions,
+)
 
 
 class RecordingRepository:
@@ -51,28 +59,93 @@ class RecordingRepository:
         self.meta_js = new_stem.with_suffix(".meta.json")
         self.annot_js = new_stem.with_suffix(".annot.json")
 
-    def load(self, config=None) -> "Recording":
+    def load(self, config=None, *, strict_version: bool = False, lazy_open_h5: Optional[bool] = None) -> "Recording":
         # 1) Load meta JSON (immutable, record‐time facts)
         meta_dict = json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
 
         # 2) Load or create annot JSON (user edits)
         if self.annot_js.exists():
-            annot_dict = json.loads(self.annot_js.read_text())
-            annot = RecordingAnnot.from_dict(annot_dict)
+            try:
+                text = self.annot_js.read_text()
+                if not text.strip():
+                    logging.warning(f"Annotation file '{self.annot_js}' is empty. Recreating empty annotation.")
+                    annot_dict = asdict(RecordingAnnot.create_empty())
+                    self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+                else:
+                    try:
+                        annot_dict = json.loads(text)
+                    except json.JSONDecodeError as e:
+                        size = None
+                        try:
+                            size = self.annot_js.stat().st_size
+                        except Exception:
+                            logging.exception(f"Failed to get size of annotation file '{self.annot_js}'")
+                            pass
+                        logging.error(f"Failed to decode JSON in annotation file '{self.annot_js}' (size={size}): {e}")
+                        # Move corrupt file aside and create a fresh annotation file
+                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        corrupt_path = self.annot_js.with_name(f"{self.annot_js.name}.corrupt-{ts}")
+                        try:
+                            self.annot_js.rename(corrupt_path)
+                            logging.warning(f"Moved corrupt annotation to {corrupt_path}. Creating new empty annotation.")
+                        except Exception:
+                            logging.exception(f"Failed to move corrupt annotation file {self.annot_js}")
+                        annot_dict = asdict(RecordingAnnot.create_empty())
+                        self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+
+                try:
+                    report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
+                    if report.changed:
+                        logging.debug(
+                            f"Recording annotation migrated {report.original_version}->{report.final_version} for {self.annot_js.name}"
+                        )
+                        # Persist migrated version immediately
+                        self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+                except FutureVersionError as e:
+                    logging.error(str(e))
+                    raise
+                except UnknownVersionError as e:
+                    logging.warning(f"Unknown version for {self.annot_js}: {e}. Proceeding without migration.")
+                annot = RecordingAnnot.from_dict(annot_dict)
+            except Exception:
+                logging.exception(f"Unexpected error while reading annotation file {self.annot_js}")
+                raise
         else:
             logging.warning(f"Annotation file '{self.annot_js}' not found. Creating a new empty one.")
             annot = RecordingAnnot.create_empty()
             self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
 
-        # 3) Open HDF5 file in read‐only mode; pass the dataset itself (lazy)
-        h5file = h5py.File(self.raw_h5, "r")
-        raw_dataset: h5py.Dataset = h5file["raw"]  # type: ignore
+        # 3) Optionally avoid opening the HDF5 file here to speed up initial loads.
+        #    If the config specifies `lazy_open_h5=True` we will not open the
+        #    file here and instead rely on the `meta.num_samples` field if it is
+        #    present. This drastically reduces per-recording overhead when many
+        #    recordings are present and raw data will only be accessed later.
+        # Determine lazy_open behavior: prefer explicit argument; otherwise default
+        # to the original eager behavior (do not lazy-open) to preserve backwards compatibility.
+        lazy_open = bool(lazy_open_h5) if lazy_open_h5 is not None else False
 
-        # 4) Patch in num_samples from the raw array shape
-        meta.num_samples = raw_dataset.shape[0]  # (#samples × #channels)
+        raw_dataset = None
+        if not lazy_open:
+            # default behavior: open dataset now (maintains existing behavior)
+            h5file = h5py.File(self.raw_h5, "r")
+            raw_dataset = h5file["raw"]  # type: ignore
+            # Patch in num_samples from the raw array shape
+            meta.num_samples = int(raw_dataset.shape[0])  # (#samples × #channels)
+        else:
+            # If we choose laziness and the meta contains num_samples, rely on it.
+            # Otherwise open the file temporarily to extract num_samples.
+            if meta.num_samples is None:
+                # Rare case: read the HDF5 just to set num_samples then close
+                tmp_h5 = h5py.File(self.raw_h5, "r")
+                try:
+                    raw_ds_tmp = tmp_h5["raw"]
+                    meta.num_samples = int(raw_ds_tmp.shape[0])
+                finally:
+                    tmp_h5.close()
 
-        # 5) Build the domain object, passing the `h5py.Dataset` directly
+        # 5) Build the domain object. If `raw_dataset` is None we pass a placeholder
+        #    which will be reopened lazily later when `rec.raw_view(...)` is called.
         recording = Recording(meta=meta, annot=annot, raw=raw_dataset, repo=self, config=config)
         return recording
 
@@ -156,21 +229,74 @@ class SessionRepository:
         # Ensure the session_id reflects the new folder name
         self.session_id = new_folder.name
 
-    def load(self, config=None) -> "Session":
+    def load(self, config=None, *, strict_version: bool = False) -> "Session":
         # 1) Discover all recordings in this folder
         recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-        recordings = [repo.load(config=config) for repo in recording_repos]
+        # Pass through lazy_open_h5 from config if present; prefer explicit key in config
+        lazy_from_cfg = None
+        try:
+            if config is not None and "lazy_open_h5" in config:
+                lazy_from_cfg = bool(config.get("lazy_open_h5"))
+        except Exception:
+            lazy_from_cfg = None
+
+        recordings = [repo.load(config=config, lazy_open_h5=lazy_from_cfg) for repo in recording_repos]
 
         # 2) Sort by the primary StimCluster’s stim_v
         recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
 
         # 3) Load or create session annotation JSON
         if self.session_js.exists():
-            session_annot_dict = json.loads(self.session_js.read_text())
-            session_annot = SessionAnnot.from_dict(session_annot_dict)
+            try:
+                text = self.session_js.read_text()
+                if not text.strip():
+                    logging.warning(
+                        f"Session annotation file '{self.session_js}' is empty. Creating empty session annotation."
+                    )
+                    session_annot_dict = asdict(SessionAnnot.create_empty())
+                    self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                else:
+                    try:
+                        session_annot_dict = json.loads(text)
+                    except json.JSONDecodeError as e:
+                        size = None
+                        try:
+                            size = self.session_js.stat().st_size
+                        except Exception:
+                            logging.exception(f"Failed to get size of session annotation file '{self.session_js}'")
+                            pass
+                        logging.error(f"Failed to decode JSON in session annotation '{self.session_js}' (size={size}): {e}")
+                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        corrupt_path = self.session_js.with_name(f"{self.session_js.name}.corrupt-{ts}")
+                        try:
+                            self.session_js.rename(corrupt_path)
+                            logging.warning(
+                                f"Moved corrupt session annotation to {corrupt_path}. Creating new empty annotation."
+                            )
+                        except Exception:
+                            logging.exception(f"Failed to move corrupt session annotation file {self.session_js}")
+                        session_annot_dict = asdict(SessionAnnot.create_empty())
+                        self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+
+                try:
+                    report = migrate_annotation_dict(session_annot_dict, strict_version=strict_version)
+                    if report.changed:
+                        logging.debug(
+                            f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}"
+                        )
+                        self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                except FutureVersionError as e:
+                    logging.error(str(e))
+                    raise
+                except UnknownVersionError as e:
+                    logging.warning(f"Unknown version for {self.session_js}: {e}. Proceeding without migration.")
+                session_annot = SessionAnnot.from_dict(session_annot_dict)
+            except Exception:
+                logging.exception(f"Unexpected error while reading session annotation {self.session_js}")
+                raise
         else:  # If no session.annot.json, initialize a brand‐new one
             if recordings:
-                logging.info(
+                logging.debug(
                     f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one."
                 )
                 session_annot = SessionAnnot.from_meta(recordings[0].meta)
@@ -270,17 +396,62 @@ class DatasetRepository:
         self.folder = new_folder
         self.dataset_js = new_folder / "dataset.annot.json"
 
-    def load(self, config=None) -> "Dataset":
+    def load(self, config=None, *, strict_version: bool = False, lazy_open_h5: Optional[bool] = None) -> "Dataset":
         # 1) Discover valid session folders (those with annot or any *.raw.h5)
         session_repos = list(SessionRepository.discover_in_folder(self.folder))
 
         # 2) Load each Session from discovered repos
-        sessions = [repo.load(config=config) for repo in session_repos]
+        sessions = [repo.load(config=config, strict_version=strict_version) for repo in session_repos]
 
         # 3) Load or create dataset annotation JSON
         if self.dataset_js.exists():
-            session_annot_dict = json.loads(self.dataset_js.read_text())
-            dataset_annot = DatasetAnnot.from_dict(session_annot_dict)
+            try:
+                text = self.dataset_js.read_text()
+                if not text.strip():
+                    logging.warning(
+                        f"Dataset annotation file '{self.dataset_js}' is empty. Creating empty dataset annotation."
+                    )
+                    dataset_annot_dict = asdict(DatasetAnnot.from_ds_name(self.dataset_id))
+                    self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                else:
+                    try:
+                        dataset_annot_dict = json.loads(text)
+                    except json.JSONDecodeError as e:
+                        size = None
+                        try:
+                            size = self.dataset_js.stat().st_size
+                        except Exception:
+                            logging.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
+                            pass
+                        logging.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
+                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        corrupt_path = self.dataset_js.with_name(f"{self.dataset_js.name}.corrupt-{ts}")
+                        try:
+                            self.dataset_js.rename(corrupt_path)
+                            logging.warning(
+                                f"Moved corrupt dataset annotation to {corrupt_path}. Creating new empty annotation."
+                            )
+                        except Exception:
+                            logging.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
+                        dataset_annot_dict = asdict(DatasetAnnot.from_ds_name(self.dataset_id))
+                        self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+
+                try:
+                    report = migrate_annotation_dict(dataset_annot_dict, strict_version=strict_version)
+                    if report.changed:
+                        logging.debug(
+                            f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}"
+                        )
+                        self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                except FutureVersionError as e:
+                    logging.error(str(e))
+                    raise
+                except UnknownVersionError as e:
+                    logging.warning(f"Unknown version for {self.dataset_js}: {e}. Proceeding without migration.")
+                dataset_annot = DatasetAnnot.from_dict(dataset_annot_dict)
+            except Exception:
+                logging.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
+                raise
         else:  # If no session.annot.json, initialize a brand‐new one
             logging.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one.")
             dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
@@ -366,8 +537,36 @@ class DatasetRepository:
         try:
             # Get dataset annotation
             if self.dataset_js.exists():
-                annot_dict = json.loads(self.dataset_js.read_text())
-                dataset_annot = DatasetAnnot.from_dict(annot_dict)
+                try:
+                    text = self.dataset_js.read_text()
+                    if not text.strip():
+                        logging.warning(f"Dataset annotation file '{self.dataset_js}' is empty. Using defaults.")
+                        dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+                    else:
+                        try:
+                            annot_dict = json.loads(text)
+                            dataset_annot = DatasetAnnot.from_dict(annot_dict)
+                        except json.JSONDecodeError as e:
+                            size = None
+                            try:
+                                size = self.dataset_js.stat().st_size
+                            except Exception:
+                                logging.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
+                                pass
+                            logging.error(
+                                f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}"
+                            )
+                            ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                            corrupt_path = self.dataset_js.with_name(f"{self.dataset_js.name}.corrupt-{ts}")
+                            try:
+                                self.dataset_js.rename(corrupt_path)
+                                logging.warning(f"Moved corrupt dataset annotation to {corrupt_path}. Using defaults.")
+                            except Exception:
+                                logging.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
+                            dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+                except Exception:
+                    logging.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
+                    dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
             else:
                 dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
 
@@ -434,13 +633,141 @@ class ExperimentRepository:
         self.folder = new_folder
         self.expt_js = new_folder / "experiment.annot.json"
 
-    def load(self, config=None) -> "Experiment":
+    def load(
+        self,
+        config=None,
+        *,
+        strict_version: bool = False,
+        preflight_scan: bool = False,
+        progress_callback=None,
+        lazy_open_h5: Optional[bool] = None,
+        load_workers: Optional[int] = None,
+    ) -> "Experiment":
+        """Load the full experiment.
+
+        Args:
+            config: Optional config object passed through to domain objects.
+            strict_version: If True, raise on unknown / future annotation versions.
+            preflight_scan: If True perform migration scan (mostly used by tests / CLI flows).
+            progress_callback: Optional callable invoked as each dataset is about to be loaded.
+                Signature: callback(level:str, index:int, total:int, name:str) where:
+                    level == "dataset" currently (future: could add session granularity).
+                The callback is invoked BEFORE the dataset is actually loaded so the UI can
+                display a responsive progress bar even for very large datasets.
+        """
         dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
-        datasets = [DatasetRepository(ds_folder).load(config=config) for ds_folder in dataset_folders]
+        if preflight_scan:
+            try:
+                scan_results = scan_annotation_versions(
+                    self.folder,
+                    include_levels=("experiment", "dataset", "session", "recording"),
+                )
+                outdated = [r for r in scan_results if r.get("needs_migration")]
+                if outdated:
+                    logging.info(
+                        "Preflight migration scan: %d annotation files need migration (example: %s -> %s)",
+                        len(outdated),
+                        outdated[0]["path"],
+                        outdated[0]["planned_steps"],
+                    )
+                else:
+                    logging.info("Preflight migration scan: all annotation files current.")
+            except Exception as e:  # pragma: no cover
+                logging.warning(f"Preflight scan failed (non-fatal): {e}")
+        datasets = []
+        total_datasets = len(dataset_folders)
+
+        # Read concurrency settings from explicit function args. We do not
+        # treat lazy_open_h5/load_workers as config-file keys here; they should
+        # be passed explicitly by the caller (e.g. the GUI using QSettings).
+        max_workers = int(load_workers) if load_workers is not None else 1
+        parallel_allowed = max_workers > 1 and bool(lazy_open_h5)
+
+        if parallel_allowed:
+            # Use a ThreadPoolExecutor to load datasets concurrently; limit
+            # concurrency to not exhaust system resources. We only allow
+            # parallel loads when `lazy_open_h5` is True, so h5py handles are
+            # not opened concurrently across threads (reduces thread-safety risk).
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+                future_map = {}
+                for idx, ds_folder in enumerate(dataset_folders, start=1):
+                    # Call the progress callback just before scheduling load
+                    if progress_callback is not None:
+                        try:
+                            progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
+                        except Exception:  # pragma: no cover - defensive
+                            logging.debug("Progress callback errored (ignored)", exc_info=True)
+                    future = ex.submit(DatasetRepository(ds_folder).load, config=config, strict_version=strict_version)
+                    future_map[future] = ds_folder
+
+                # Collect results in original order for deterministic behavior
+                for idx, ds_folder in enumerate(dataset_folders, start=1):
+                    # Wait for the specific future to complete
+                    for f in list(future_map.keys()):
+                        if future_map[f] == ds_folder:
+                            try:
+                                ds_obj = f.result()
+                                datasets.append(ds_obj)
+                            except Exception:
+                                logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                                # Skip/continue on failure; caller should handle missing datasets.
+                            finally:
+                                del future_map[f]
+                            break
+        else:
+            for idx, ds_folder in enumerate(dataset_folders, start=1):
+                if progress_callback is not None:
+                    try:  # Never let a UI callback break loading
+                        progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
+                    except Exception:  # pragma: no cover - defensive
+                        logging.debug("Progress callback errored (ignored)", exc_info=True)
+                ds_obj = DatasetRepository(ds_folder).load(config=config, strict_version=strict_version)
+                datasets.append(ds_obj)
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
         if self.expt_js.exists():
-            annot_dict = json.loads(self.expt_js.read_text())
-            annot = ExperimentAnnot.from_dict(annot_dict)
+            try:
+                text = self.expt_js.read_text()
+                if not text.strip():
+                    logging.warning(f"Experiment annotation file '{self.expt_js}' is empty. Creating a new one.")
+                    annot_dict = asdict(ExperimentAnnot.create_empty())
+                    self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                else:
+                    try:
+                        annot_dict = json.loads(text)
+                    except json.JSONDecodeError as e:
+                        size = None
+                        try:
+                            size = self.expt_js.stat().st_size
+                        except Exception:
+                            logging.exception(f"Failed to get size of experiment annotation file '{self.expt_js}'")
+                            pass
+                        logging.error(f"Failed to decode JSON in experiment annotation '{self.expt_js}' (size={size}): {e}")
+                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        corrupt_path = self.expt_js.with_name(f"{self.expt_js.name}.corrupt-{ts}")
+                        try:
+                            self.expt_js.rename(corrupt_path)
+                            logging.warning(f"Moved corrupt experiment annotation to {corrupt_path}. Creating new one.")
+                        except Exception:
+                            logging.exception(f"Failed to move corrupt experiment annotation file {self.expt_js}")
+                        annot_dict = asdict(ExperimentAnnot.create_empty())
+                        self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+
+                try:
+                    report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
+                    if report.changed:
+                        logging.debug(
+                            f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}"
+                        )
+                        self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                except FutureVersionError as e:
+                    logging.error(str(e))
+                    raise
+                except UnknownVersionError as e:
+                    logging.warning(f"Unknown version for {self.expt_js}: {e}. Proceeding without migration.")
+                annot = ExperimentAnnot.from_dict(annot_dict)
+            except Exception:
+                logging.exception(f"Unexpected error while reading experiment annotation {self.expt_js}")
+                raise
         else:
             logging.info(f"Experiment annotation file '{self.expt_js}' not found. Creating a new one.")
             annot = ExperimentAnnot.create_empty()

@@ -1,0 +1,43 @@
+{
+  "extends": ["config:base"],
+  "labels": ["dependencies", "renovate"],
+  "timezone": "UTC",
+  "prConcurrentLimit": 6,
+  "regexManagers": [
+    {
+      "fileMatch": ["^environment\\.yml$"],
+      "matchStrings": ["-\\s*(?:[^:\\s]+::)?([^=\\s]+)=([^\\s]+)"],
+      "depNameTemplate": "$1",
+      "packageNameTemplate": "$1",
+      "datasourceTemplate": "conda",
+      "versioningTemplate": "conda"
+    },
+    {
+      "fileMatch": ["^environment\\.yml$"],
+      "matchStrings": ["-\\s*([^=\\s]+)==([^\\s]+)"],
+      "depNameTemplate": "$1",
+      "packageNameTemplate": "$1",
+      "datasourceTemplate": "pypi",
+      "versioningTemplate": "pep440"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["conda"],
+      "groupName": "conda dependencies",
+      "schedule": ["before 5am on saturday"],
+      "automerge": false
+    },
+    {
+      "matchDatasources": ["pypi"],
+      "groupName": "pip dependencies",
+      "schedule": ["before 6am on sunday"],
+      "automerge": false
+    },
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}

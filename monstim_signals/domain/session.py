@@ -49,6 +49,7 @@ class Session:
         self._initialize_annotations()
         self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
+        self.__check_recording_consistency()
 
     @property
     def is_completed(self) -> bool:
@@ -79,35 +80,61 @@ class Session:
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
-        first_meta = self.recordings[0].meta
-        self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
-        self.scan_rate = first_meta.scan_rate  # Hz
-        self.num_samples = first_meta.num_samples  # samples/channel
-        self.num_channels = first_meta.num_channels  # number of channels
-        self._channel_types: List[str] = first_meta.channel_types.copy()  # list of channel types
+        if self.recordings:
+            first_meta = self.recordings[0].meta
+            self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
+            self.scan_rate = first_meta.scan_rate  # Hz
+            self.num_samples = first_meta.num_samples  # samples/channel
+            self.num_channels = first_meta.num_channels  # number of channels
+            self._channel_types: List[str] = first_meta.channel_types.copy()  # list of channel types
 
-        # Stimulus parameters
-        self.stim_clusters: List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
-        self.primary_stim: StimCluster = getattr(first_meta, "primary_stim", None)  # the primary StimCluster for this session
-        if self.primary_stim is None:
-            logging.warning(
-                f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster."
-            )
-            self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
+            # Stimulus parameters
+            self.stim_clusters: List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
+            self.primary_stim: StimCluster = getattr(
+                first_meta, "primary_stim", None
+            )  # the primary StimCluster for this session
             if self.primary_stim is None:
-                logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
-                raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
-        self.pre_stim_acquired = first_meta.pre_stim_acquired
-        self.post_stim_acquired = first_meta.post_stim_acquired
-        self.stim_delay = self.primary_stim.stim_delay  # in ms, delay
-        self.stim_duration = self.primary_stim.stim_duration
-        self.stim_start: float = self.stim_delay + self.pre_stim_acquired
+                logging.warning(
+                    f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster."
+                )
+                self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
+                if self.primary_stim is None:
+                    logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+                    raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+            self.pre_stim_acquired = first_meta.pre_stim_acquired
+            self.post_stim_acquired = first_meta.post_stim_acquired
+            self.stim_delay = self.primary_stim.stim_delay  # in ms, delay
+            self.stim_duration = self.primary_stim.stim_duration
+            self.stim_start: float = self.stim_delay + self.pre_stim_acquired
 
-        # Parameters that may sometimes be None
-        self.recording_interval: float = getattr(
-            first_meta, "recording_interval", None
-        )  # in seconds, time between recordings (if applicable)
-        self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
+            # Parameters that may sometimes be None
+            self.recording_interval: float = getattr(
+                first_meta, "recording_interval", None
+            )  # in seconds, time between recordings (if applicable)
+            self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
+        else:
+            # No recordings available. Use annotation/defaults where possible and avoid raising.
+            logging.warning(f"Session {self.id} contains no recordings. Using annotation/defaults for session parameters.")
+            self.formatted_name = self.id
+            self.scan_rate = None
+            self.num_samples = 0
+            # Prefer channel count from annotation, otherwise fall back to configured defaults
+            try:
+                self.num_channels = (
+                    len(self.annot.channels) if getattr(self.annot, "channels", None) else len(self.default_channel_names)
+                )
+            except Exception:
+                self.num_channels = len(self.default_channel_names)
+            self._channel_types = []
+            self.stim_clusters = []
+            self.primary_stim = None
+            self.pre_stim_acquired = 0
+            self.post_stim_acquired = 0
+            self.stim_delay = 0.0
+            self.stim_duration = 0.0
+            self.stim_start = 0.0
+            self.recording_interval = None
+            self.emg_amp_gains = None
 
     def _initialize_annotations(self):
         # Check in case of empty list annot
@@ -136,7 +163,13 @@ class Session:
             for i in range(self.num_channels)
         ]
 
-        # Preserve existing latency windows; do not create defaults automatically
+    # TODO: Latency window UX
+    # - Consider adding an automated latency-window suggestion routine that
+    #   detects candidate M-wave/H-reflex windows from averaged or median
+    #   traces and prompts the user to accept/modify them.
+    # - The current Jupyter-only `update_window_settings` helper should be
+    #   integrated into the main GUI latency editor so editing is consistent
+    #   across environments.
 
     def apply_config(self, reset_caches: bool = True) -> None:
         """
@@ -161,11 +194,64 @@ class Session:
         return len(self.recordings)
 
     @property
+    def num_all_recordings(self) -> int:
+        return len(self.all_recordings)
+
+    @property
     def latency_windows(self) -> List[LatencyWindow]:
         """
         Return the list of latency windows defined in the session annotations.
         """
         return self.annot.latency_windows
+
+    # ------------------------------------------------------------------
+    # Low-level consistency checks
+    # ------------------------------------------------------------------
+    def __check_recording_consistency(self) -> None:
+        """Check that recordings within the session share key acquisition parameters.
+
+        Populates internal warning list (for GUI notices) rather than raising.
+        Currently checks:
+          - scan_rate uniformity
+          - num_channels uniformity
+          - stim_start / stim_delay consistency
+          - stimulus voltage monotonicity & duplicates
+        """
+        warnings: list[str] = []
+        try:
+            if not self.recordings:
+                return
+            first = self.recordings[0].meta
+            for rec in self.recordings[1:]:
+                m = rec.meta
+                if m.scan_rate != first.scan_rate:
+                    warnings.append(f"Recording {rec.id} scan_rate {m.scan_rate} != {first.scan_rate}.")
+                if m.num_channels != first.num_channels:
+                    warnings.append(f"Recording {rec.id} num_channels {m.num_channels} != {first.num_channels}.")
+                # Stim delay / start relative metrics
+                if hasattr(m, "primary_stim") and hasattr(first, "primary_stim"):
+                    if m.primary_stim.stim_delay != first.primary_stim.stim_delay:
+                        warnings.append(
+                            f"Recording {rec.id} stim_delay {m.primary_stim.stim_delay} != {first.primary_stim.stim_delay}."
+                        )
+            # Stimulus voltage issues
+            volts = [r.meta.primary_stim.stim_v for r in self.recordings if getattr(r.meta, "primary_stim", None)]
+            if volts:
+                # Duplicates
+                from collections import Counter
+
+                dupes = [v for v, c in Counter(volts).items() if c > 1]
+                if dupes:
+                    # warnings.append(f"Duplicate stimulus voltages detected: {sorted(set(dupes))}.")
+                    pass  # do nothing; duplicates are allowed
+                # Monotonicity expectation (optional): should be non-decreasing sequence
+                if any(b < a for a, b in zip(volts, volts[1:])):
+                    warnings.append("Stimulus voltages are not sorted non-decreasing.")
+        finally:
+            # Store for notice system
+            self._consistency_warnings = warnings
+            for w in warnings:
+                logging.warning(f"Session {self.id} consistency: {w}")
 
     # ------------------------------------------------------------------
     # Latency window helper methods
@@ -249,6 +335,13 @@ class Session:
         """
         return self.get_all_recordings(include_excluded=False)
 
+    @property
+    def all_recordings(self) -> List[Recording]:
+        """
+        Return a list of all recordings in the session, including excluded ones.
+        """
+        return self.get_all_recordings(include_excluded=True)
+
     def get_all_recordings(self, include_excluded: bool = False) -> List[Recording]:
         """
         Return a list of recordings in the session.
@@ -264,6 +357,115 @@ class Session:
             return self._all_recordings
         else:
             return [rec for rec in self._all_recordings if rec.id not in self.excluded_recordings]
+
+    # ------------------------------------------------------------------
+    # Diagnostic / notice helpers (queried by GUI)
+    # ------------------------------------------------------------------
+    def collect_notices(self) -> list[dict[str, str]]:
+        """Return structured session-level notices for GUI warning/info icons.
+
+        Codes:
+          - inconsistent_scan_rate
+          - inconsistent_num_channels
+          - inconsistent_stim_delay
+          - duplicate_stim_voltages
+          - unsorted_stim_voltages
+          - heterogeneous_latency_windows (session-specific: overlapping or zero-duration windows)
+        """
+        notices: list[dict[str, str]] = []
+        try:
+            # Consistency warnings captured earlier
+            for msg in getattr(self, "_consistency_warnings", []):
+                code = "generic_consistency"
+                if "scan_rate" in msg:
+                    code = "inconsistent_scan_rate"
+                elif "num_channels" in msg:
+                    code = "inconsistent_num_channels"
+                elif "stim_delay" in msg:
+                    code = "inconsistent_stim_delay"
+                elif "Duplicate stimulus voltages" in msg:
+                    code = "duplicate_stim_voltages"
+                elif "not sorted" in msg:
+                    code = "unsorted_stim_voltages"
+                notices.append({"level": "warning", "code": code, "message": msg})
+
+            # Latency window sanity checks (per-session)
+            for w in self.latency_windows:
+                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations)):
+                    if dur <= 0:
+                        notices.append(
+                            {
+                                "level": "warning",
+                                "code": "zero_or_negative_window",
+                                "message": f"Latency window '{w.name}' channel {ch} has non-positive duration {dur}.",
+                            }
+                        )
+            # Missing canonical M-wave window
+            if not any(
+                (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"}
+                for w in self.latency_windows
+            ):
+                notices.append(
+                    {
+                        "level": "info",
+                        "code": "missing_m_wave_window",
+                        "message": "Session is missing an M-wave latency window.",
+                    }
+                )
+
+            # No active recordings
+            if len(self.recordings) == 0:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "no_active_recordings",
+                        "message": "Session has no active recordings.",
+                    }
+                )
+
+            # Window bounds validation
+            total_window_ms = self.time_window_ms  # configured acquisition window
+            for w in self.latency_windows:
+                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations)):
+                    if start < 0 or (start + dur) > total_window_ms:
+                        notices.append(
+                            {
+                                "level": "warning",
+                                "code": "window_out_of_bounds",
+                                "message": f"Window '{w.name}' channel {ch} exceeds acquisition bounds (start={start}, dur={dur}).",
+                            }
+                        )
+
+            # Excessive overlap detection (replace previous simple overlap notice)
+            overlap_threshold = 0.5  # 50% of the shorter window
+            for ch in range(self.num_channels):
+                spans = []
+                for w in self.latency_windows:
+                    if ch < len(w.start_times):
+                        spans.append((w.name, w.start_times[ch], w.start_times[ch] + w.durations[ch]))
+                spans.sort(key=lambda x: x[1])
+                for i in range(len(spans)):
+                    n1, s1, e1 = spans[i]
+                    for j in range(i + 1, len(spans)):
+                        n2, s2, e2 = spans[j]
+                        if s2 >= e1:
+                            break  # since sorted by start
+                        overlap = min(e1, e2) - max(s1, s2)
+                        if overlap > 0:
+                            len1 = e1 - s1
+                            len2 = e2 - s2
+                            shorter = min(len1, len2) or 1.0
+                            if (overlap / shorter) >= overlap_threshold:
+                                notices.append(
+                                    {
+                                        "level": "info",
+                                        "code": "excessive_window_overlap",
+                                        "message": f"Windows '{n1}' and '{n2}' overlap >50% on channel {ch}.",
+                                    }
+                                )
+        except Exception as e:
+            logging.debug(f"Notice collection error (session {self.id}): {e}")
+        return notices
 
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
@@ -311,6 +513,13 @@ class Session:
                 if channel_type in ("force", "length"):
                     # Apply specific processing for force and length channels
                     # TODO: Implement specific filtering for force and length channels if needed
+                    # Notes/TODOs:
+                    # - Force/length channels may need low-pass smoothing or detrending
+                    #   rather than the EMG bandpass. Add configuration options and a
+                    #   clear API entry point for channel-specific processing.
+                    # - Consider adding unit tests that validate the processing for
+                    #   force/length channels and ensure these channels are not
+                    #   inadvertently rectified/treated as EMG.
                     filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
                 elif channel_type in ("emg",):
                     # Apply specific processing for EMG channels
@@ -404,6 +613,12 @@ class Session:
         self.reset_cached_reflex_properties()
         self.update_latency_window_parameters()
 
+    # TODO: Caching / consistency
+    # - Ensure cached_property names and keys cleared by reset_recordings_cache() match
+    #   exactly. Consider automating this via a decorator or metaclass.
+    #   — add tests to validate cache invalidation for all cached properties including
+    #   `m_max`, `recordings_rectified_filtered`, etc.
+
     def update_latency_window_parameters(self):
         """
         Update cached M/H-response parameters from latency windows.
@@ -459,12 +674,16 @@ class Session:
             del self.__dict__["recordings"]
         if "recordings_raw" in self.__dict__:
             del self.__dict__["recordings_raw"]
-        if "recordings_processed" in self.__dict__:
-            del self.__dict__["recordings_processed"]
+
         if "recordings_filtered" in self.__dict__:
             del self.__dict__["recordings_filtered"]
         if "recordings_rectified_raw" in self.__dict__:
             del self.__dict__["recordings_rectified_raw"]
+        # TODO: include recordings_rectified_filtered and the cached m_max if present
+        if "recordings_rectified_filtered" in self.__dict__:
+            del self.__dict__["recordings_rectified_filtered"]
+        if "m_max" in self.__dict__:
+            del self.__dict__["m_max"]
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Properties for GUI & analysis code
@@ -750,7 +969,7 @@ class Session:
         """
         import sys
 
-        from PyQt6.QtWidgets import (
+        from PySide6.QtWidgets import (
             QApplication,
             QHBoxLayout,
             QLabel,

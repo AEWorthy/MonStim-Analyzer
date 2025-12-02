@@ -6,8 +6,8 @@ performance, and data tracking settings.
 
 import logging
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDoubleSpinBox,
@@ -27,7 +27,7 @@ from monstim_gui.core.ui_scaling import ui_scaling
 
 
 class ProgramSettingsDialog(QDialog):
-    settings_changed = pyqtSignal()  # Signal emitted when settings change
+    settings_changed = Signal()  # Signal emitted when settings change
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -188,6 +188,20 @@ class ProgramSettingsDialog(QDialog):
                 scale = self.manual_scale_spinbox.value()
                 self.current_scale_label.setText(f"{scale:.1f}x (manual)")
 
+    def _on_parallel_toggled(self, checked: bool):
+        """When parallel loading is enabled, ensure lazy-open is also enabled."""
+        if checked:
+            # If user enables parallel loading, force lazy open on.
+            if hasattr(self, "lazy_open_checkbox") and not self.lazy_open_checkbox.isChecked():
+                self.lazy_open_checkbox.setChecked(True)
+
+    def _on_lazy_toggled(self, checked: bool):
+        """If lazy-open is turned off, disable/turn off parallel loading to keep them consistent."""
+        if not checked:
+            if hasattr(self, "parallel_load_checkbox") and self.parallel_load_checkbox.isChecked():
+                # Turn off parallel loading if lazy open is disabled
+                self.parallel_load_checkbox.setChecked(False)
+
     def create_performance_group(self):
         """Create the performance settings group."""
         group = QGroupBox("Performance Settings")
@@ -201,6 +215,27 @@ class ProgramSettingsDialog(QDialog):
             "Changes require restarting the application to take effect."
         )
         layout.addRow("Use OpenGL acceleration:", self.opengl_checkbox)
+
+        # Lazy HDF5 open during experiment load
+        self.lazy_open_checkbox = QCheckBox()
+        self.lazy_open_checkbox.setToolTip(
+            "When enabled, experiment loading avoids opening each .raw.h5 file up-front; metadata from .meta.json is used instead. "
+            "This typically results in much faster initial load times for large experiments. Raw data is reopened lazily when required."
+        )
+        layout.addRow("Lazy open raw HDF5 files:", self.lazy_open_checkbox)
+
+        # Parallel dataset loading
+        self.parallel_load_checkbox = QCheckBox()
+        self.parallel_load_checkbox.setToolTip(
+            "Use multiple threads to load datasets in parallel. Defaults to the number of CPU cores minus one to leave one core free. "
+            "Enabling this can speed up loading of experiments where datasets are independent (one dataset per animal)."
+        )
+        layout.addRow("Parallel dataset loading:", self.parallel_load_checkbox)
+
+        # Keep parallel/lazy settings tied: parallel requires lazy_open to be True.
+        # Connect signals to enforce the relationship in the UI.
+        self.parallel_load_checkbox.toggled.connect(self._on_parallel_toggled)
+        self.lazy_open_checkbox.toggled.connect(self._on_lazy_toggled)
 
         return group
 
@@ -291,6 +326,9 @@ class ProgramSettingsDialog(QDialog):
         opengl_enabled = self.app_state.should_use_opengl_acceleration()
         self.opengl_checkbox.setChecked(opengl_enabled)
         self._original_opengl_setting = opengl_enabled
+        # New performance settings
+        self.lazy_open_checkbox.setChecked(self.app_state.should_use_lazy_open_h5())
+        self.parallel_load_checkbox.setChecked(self.app_state.should_use_parallel_loading())
 
         # Tracking settings
         self.session_tracking_checkbox.setChecked(self.app_state.should_track_session_restoration())
@@ -314,6 +352,8 @@ class ProgramSettingsDialog(QDialog):
 
         # Save performance settings
         self.app_state.set_setting("use_opengl_acceleration", self.opengl_checkbox.isChecked())
+        self.app_state.set_setting("use_lazy_open_h5", self.lazy_open_checkbox.isChecked())
+        self.app_state.set_setting("enable_parallel_loading", self.parallel_load_checkbox.isChecked())
 
         # Save tracking settings
         self.app_state.set_setting("track_session_restoration", self.session_tracking_checkbox.isChecked())
@@ -369,6 +409,11 @@ class ProgramSettingsDialog(QDialog):
 
             # Reset performance settings to defaults
             self.opengl_checkbox.setChecked(True)
+            # New default: lazy open HDF5 and parallel loading enabled
+            if hasattr(self, "lazy_open_checkbox"):
+                self.lazy_open_checkbox.setChecked(True)
+            if hasattr(self, "parallel_load_checkbox"):
+                self.parallel_load_checkbox.setChecked(True)
 
             # Reset tracking settings to defaults
             self.session_tracking_checkbox.setChecked(True)

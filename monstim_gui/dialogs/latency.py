@@ -2,8 +2,8 @@ import copy
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QPoint, Qt, QTimer
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
     QDialog,
@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 
 from monstim_gui.commands import SetLatencyWindowsCommand
+from monstim_gui.core.clipboard import LatencyWindowClipboard
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_signals.core import LatencyWindow, get_config_path
 from monstim_signals.domain.dataset import Dataset
@@ -75,28 +76,23 @@ class LatencyWindowsDialog(QDialog):
         self._reposition_to_left_middle_of_parent()
 
     def _reposition_to_left_middle_of_parent(self):
-        # parent should be your main window
-        w = self.parentWidget() or self.window()
-        # get its top-left in global coords
-        top_left: QPoint = w.mapToGlobal(QPoint(0, 0))
-        pw, ph = w.width(), w.height()
-
-        # compute center of the *left half* of that parent
-        cx = top_left.x() + pw // 4
-        cy = top_left.y() + ph // 3
-
-        # move this dialog so its center sits there
-        x = cx - (self.width() // 2)
-        y = cy - (self.height() // 2)
-
-        # Get screen geometry to ensure dialog stays on screen
+        # Get screen geometry
         screen = self.screen()
-        if screen:
-            screen_rect = screen.availableGeometry()
+        if not screen:
+            return
 
-            # Ensure dialog doesn't go off the edges
-            x = max(screen_rect.left(), min(x, screen_rect.right() - self.width()))
-            y = max(screen_rect.top(), min(y, screen_rect.bottom() - self.height()))
+        screen_rect = screen.availableGeometry()
+
+        # Position dialog's left edge at screen's left edge
+        x = screen_rect.left()
+
+        # Position dialog's vertical center at screen's vertical center
+        screen_center_y = screen_rect.top() + screen_rect.height() // 2
+        y = screen_center_y - (self.height() // 2)
+
+        # Ensure dialog doesn't go off the edges
+        x = max(screen_rect.left(), min(x, screen_rect.right() - self.width()))
+        y = max(screen_rect.top(), min(y, screen_rect.bottom() - self.height()))
 
         self.move(x, y)
 
@@ -155,10 +151,27 @@ class LatencyWindowsDialog(QDialog):
         for window in self.data.latency_windows:
             self._add_window_group(window)
 
+        # --- Action Row (Add / Copy / Paste) ---
+        action_row = QHBoxLayout()
         add_button = QPushButton("Add Window")
         add_button.setToolTip("Create a new latency window with default settings")
         add_button.clicked.connect(lambda: self._add_window_group())
-        layout.addWidget(add_button, 0)  # No stretch for the button
+        action_row.addWidget(add_button)
+
+        copy_button = QPushButton("Copy All")
+        copy_button.setToolTip("Copy the current latency windows to a transient clipboard (not saved to disk)")
+        copy_button.clicked.connect(self._copy_windows_to_clipboard)
+        action_row.addWidget(copy_button)
+
+        paste_button = QPushButton("Paste")
+        paste_button.setToolTip("Paste latency windows from clipboard, replacing current list")
+        paste_button.clicked.connect(self._paste_windows_from_clipboard)
+        paste_button.setEnabled(LatencyWindowClipboard.has())
+        self._paste_button = paste_button  # store for state updates
+        action_row.addWidget(paste_button)
+
+        action_row.addStretch()
+        layout.addLayout(action_row)
 
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -468,6 +481,82 @@ class LatencyWindowsDialog(QDialog):
                 linestyle=win.get("linestyle", ":"),
             )
             self._add_window_group(window)
+        # After applying preset, any future paste is still valid
+        self._update_paste_enabled()
+
+    # ---------------- Clipboard Support -----------------
+    def _copy_windows_to_clipboard(self):
+        """Copy current windows to the in-memory clipboard."""
+        windows = []
+        num_channels = len(self.data.channel_names)
+        for (
+            group,
+            window,
+            name_edit,
+            global_start_spin,
+            dur_spin,
+            color_combo,
+            global_radio,
+            per_channel_spins,
+        ) in self.window_entries:
+            # Build a fresh LatencyWindow snapshot (respecting global/per-channel state)
+            if global_radio.isChecked():
+                start_times = [global_start_spin.value()] * num_channels
+            else:
+                start_times = [spin.value() for spin in per_channel_spins]
+            durations = [dur_spin.value()] * num_channels
+            win_copy = LatencyWindow(
+                name=name_edit.text().strip() or "Window",
+                start_times=start_times,
+                durations=durations,
+                color=color_combo.currentData(),
+                linestyle=window.linestyle,
+            )
+            windows.append(win_copy)
+        if windows:
+            LatencyWindowClipboard.set(windows)
+            if self.gui and hasattr(self.gui, "status_bar"):
+                self.gui.status_bar.showMessage(f"Copied {len(windows)} latency window(s) to clipboard (transient).", 5000)
+        self._update_paste_enabled()
+
+    def _paste_windows_from_clipboard(self):
+        """Paste windows from clipboard, replacing current view."""
+        windows = LatencyWindowClipboard.get()
+        if not windows:
+            QMessageBox.information(self, "Clipboard Empty", "There are no latency windows in the clipboard.")
+            self._update_paste_enabled()
+            return
+
+        # Confirm replacement if existing windows present
+        if self.window_entries:
+            resp = QMessageBox.question(
+                self,
+                "Replace Existing Windows?",
+                "Pasting will replace all currently displayed latency windows. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if resp != QMessageBox.StandardButton.Yes:
+                return
+
+        # Clear existing entries
+        for group, *_ in self.window_entries:
+            self.scroll_layout.removeWidget(group)
+            group.setParent(None)
+            group.deleteLater()
+        self.window_entries.clear()
+
+        # Add new ones (ensure channel counts are reconciled automatically by _add_window_group)
+        for w in windows:
+            self._add_window_group(w)
+        self._reorganize_grid_layout()
+        self._update_paste_enabled()
+        if self.gui and hasattr(self.gui, "status_bar"):
+            self.gui.status_bar.showMessage(f"Pasted {len(windows)} latency window(s) from clipboard.", 5000)
+
+    def _update_paste_enabled(self):
+        if hasattr(self, "_paste_button"):
+            self._paste_button.setEnabled(LatencyWindowClipboard.has())
 
     def save_windows(self):
         new_windows = []

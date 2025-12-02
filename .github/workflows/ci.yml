@@ -12,19 +12,56 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
-        python-version: ['3.10', '3.11', '3.12']
-        exclude:
-          # Reduce matrix size - test only critical combinations on macOS
-          - os: macos-latest
-            python-version: '3.11'
+        python-version: ['3.13.9']
 
     steps:
     - uses: actions/checkout@v6
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+    - name: Install Miniforge (setup conda/mamba)
+      uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: ${{ matrix.python-version }}
+        miniforge-version: 'latest'
+        auto-update-conda: true
+        use-mamba: true
+
+    - name: Create/update conda env (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        set -o pipefail
+        echo "Conda info:"
+        conda info
+        echo "Ensuring base env with matrix Python version"
+        mamba create -n alv_lab python=${{ matrix.python-version }} -y || true
+        echo "Attempting: mamba env update -n alv_lab -f environment.ci.yml --prune -v"
+        mamba env update -n alv_lab -f environment.ci.yml --prune -v || {
+          echo "conda env update failed, printing debug info and attempting full create"
+          conda config --show-sources || true
+          conda info -a || true
+          conda clean --all --yes || true
+          echo "Attempting: mamba env create -n alv_lab -f environment.ci.yml -v"
+          mamba env create -n alv_lab -f environment.ci.yml -v || {
+            echo "conda env create also failed. Exiting with error."
+            exit 1
+          }
+        }
+
+    - name: Create/update conda env (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host "Conda info:"
+        conda info
+        Write-Host "Ensuring base env with matrix Python version"
+        mamba create -n alv_lab python=${{ matrix.python-version }} -y; if ($LASTEXITCODE -ne 0) { Write-Host "Env likely exists already, continuing" }
+        Write-Host "Attempting: mamba env update -n alv_lab -f environment.ci.yml --prune -v"
+        mamba env update -n alv_lab -f environment.ci.yml --prune -v
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "conda env update failed, printing debug info and attempting full create"
+          conda config --show-sources
+          conda info -a
+          conda clean --all --yes
+          mamba env create -n alv_lab -f environment.ci.yml -v
+          if ($LASTEXITCODE -ne 0) { throw "conda env create failed" }
+        }
 
     - name: Cache pip dependencies
       uses: actions/cache@v4
@@ -42,12 +79,41 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0 libegl1 libgl1 libglib2.0-0 libfontconfig1 libdbus-1-3
 
-    - name: Install dependencies
+    - name: Install additional pip/dev dependencies into conda env
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-qt
-        pip install -e . --no-deps
+        # environment.yml installs pip-listed runtime deps. Add test/dev helpers into the conda env.
+        conda run --name alv_lab python -m pip install --upgrade pip
+        conda run --name alv_lab python -m pip install -r requirements.txt
+        conda run --name alv_lab python -m pip install pytest pytest-qt
+        conda run --name alv_lab python -m pip install -e . --no-deps
+
+    - name: Verify Qt packages and fallback install (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        set -e
+        echo "Checking for PySide6 in conda env"
+        conda run --name alv_lab python -c "import PySide6, sys; print('PySide6 found:', PySide6.__version__)" || {
+          echo "PySide6 not found via conda, installing via pip fallback"
+          conda run --name alv_lab python -m pip install "PySide6==6.9.*"
+          conda run --name alv_lab python -c "import PySide6, sys; print('PySide6 installed (pip):', PySide6.__version__)"
+        }
+        echo "Listing Qt-related packages"
+        conda run --name alv_lab conda list | grep -i -E "pyside6|qt|pyqtgraph" || true
+
+    - name: Verify Qt packages and fallback install (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Continue'
+        Write-Host "Checking for PySide6 in conda env"
+        conda run --name alv_lab python -c "import PySide6, sys; print('PySide6 found:', PySide6.__version__)"
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "PySide6 not found via conda, installing via pip fallback"
+          conda run --name alv_lab python -m pip install "PySide6==6.9.*"
+          conda run --name alv_lab python -c "import PySide6, sys; print('PySide6 installed (pip):', PySide6.__version__)"
+        }
+        Write-Host "Listing Qt-related packages"
+        conda run --name alv_lab conda list | findstr /i "pyside6 qt pyqtgraph" || exit 0
 
     - name: Lint with flake8
       run: |
@@ -59,30 +125,30 @@ jobs:
 
     - name: Test import capabilities
       run: |
-        python -c "import sys; print('Python version:', sys.version)"
-        python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 import successful')"
-        python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
-        python -c "import numpy as np; print('NumPy version:', np.__version__)"
-        python -c "import matplotlib; print('Matplotlib version:', matplotlib.__version__)"
+        conda run --name alv_lab python -c "import sys; print('Python version:', sys.version)"
+        conda run --name alv_lab python -c "from PySide6.QtWidgets import QApplication; print('PySide6 import successful')"
+        conda run --name alv_lab python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
+        conda run --name alv_lab python -c "import numpy as np; print('NumPy version:', np.__version__)"
+        conda run --name alv_lab python -c "import matplotlib; print('Matplotlib version:', matplotlib.__version__)"
 
     - name: Test basic application startup (Linux/macOS)
       if: runner.os != 'Windows'
       run: |
         export QT_QPA_PLATFORM=offscreen
         if [ "$RUNNER_OS" = "Linux" ]; then
-          xvfb-run -a python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+          xvfb-run -a conda run --name alv_lab python -c 'import sys; from PySide6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
         else
-          python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+          conda run -n alv_lab python -c "import sys; from PySide6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print('GUI initialization successful')"
         fi
 
     - name: Test basic application startup (Windows)
       if: runner.os == 'Windows'
       run: |
-        python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+          conda run --name alv_lab python -c 'import sys; from PySide6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
 
     - name: Test core signal processing modules
       run: |
-        python -c 'import monstim_signals.domain.experiment; import monstim_signals.domain.dataset; import monstim_signals.domain.session; import monstim_signals.io.csv_importer; print("Core modules import successful")'
+        conda run --name alv_lab python -c 'import monstim_signals.domain.experiment; import monstim_signals.domain.dataset; import monstim_signals.domain.session; import monstim_signals.io.csv_importer; print("Core modules import successful")'
 
     - name: Run basic functionality tests (if test files exist)
       run: |
@@ -91,12 +157,12 @@ jobs:
             if ("${{ runner.os }}" -ne "Windows") {
               $env:QT_QPA_PLATFORM = "offscreen"
               if ("${{ runner.os }}" -eq "Linux") {
-                xvfb-run -a python -m pytest tests/ -v
+                xvfb-run -a conda run --name alv_lab python -m pytest tests/ -v
               } else {
-                python -m pytest tests/ -v
+                conda run --name alv_lab python -m pytest tests/ -v
               }
             } else {
-              python -m pytest tests/ -v
+              conda run -n alv_lab python -m pytest tests/ -v
             }
           } else {
             Write-Host "Tests directory exists but no test files found, skipping pytest"

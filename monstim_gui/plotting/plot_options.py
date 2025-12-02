@@ -1,14 +1,16 @@
+import logging
 from typing import TYPE_CHECKING, List
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIntValidator
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIntValidator
+from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
     QLineEdit,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -22,6 +24,9 @@ if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
 
     from .plotting_widget import PlotWidget
+
+CALCULATION_METHODS = ["peak_to_trough", "rms", "average_rectified", "average_unrectified"]
+DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
 
 
 # Base class for plot options
@@ -121,7 +126,7 @@ class EMGOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.data_type_combo = ResponsiveComboBox()
-        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
+        self.data_type_combo.addItems(DATA_TYPES)
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # flags / legend / colormap
@@ -193,7 +198,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.data_type_combo = ResponsiveComboBox()
-        self.data_type_combo.addItems(["filtered", "raw", "rectified_raw", "rectified_filtered"])
+        self.data_type_combo.addItems(DATA_TYPES)
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # Create and add checkboxes
@@ -286,7 +291,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -349,7 +354,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -398,12 +403,81 @@ class AverageReflexCurvesOptions(BasePlotOptions):
             self.show_legend_checkbox.setChecked(options["plot_legend"])
 
 
+class LatencyWindowDistributionOptions(BasePlotOptions):
+    """Options for dataset-level latency-window amplitude distribution plots."""
+
+    def create_options(self):
+        form = self.create_form_layout()
+
+        # Method selection
+        self.method_combo = ResponsiveComboBox()
+        self.method_combo.addItems(CALCULATION_METHODS)
+        self.method_combo.setCurrentIndex(0)
+        form.addRow("Reflex Calc. Method:", self.method_combo)
+
+        # Bins (integer)
+        self.bins_spin = QSpinBox()
+        self.bins_spin.setMinimum(5)
+        self.bins_spin.setMaximum(1000)
+        self.bins_spin.setValue(30)
+        self.bins_spin.setToolTip("Number of bins to use for amplitude histogram (shared per channel)")
+        form.addRow("Number of bins:", self.bins_spin)
+
+        # Density checkbox
+        self.density_checkbox = QCheckBox()
+        self.density_checkbox.setToolTip("If checked, plot densities instead of raw counts")
+        form.addRow("Show Density:", self.density_checkbox)
+
+        # Legend checkbox
+        self.plot_legend_checkbox = QCheckBox()
+        self.plot_legend_checkbox.setChecked(True)
+        form.addRow("Show Legend:", self.plot_legend_checkbox)
+
+        # Channel selector
+        self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
+
+        options_widget = QWidget()
+        options_widget.setLayout(form)
+        options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        self.layout.addWidget(options_widget)
+        self.layout.addWidget(self.channel_selector)
+
+    def get_options(self):
+        return {
+            "channel_indices": self.channel_selector.get_selected_channels(),
+            "method": self.method_combo.currentText(),
+            "bins": int(self.bins_spin.value()),
+            "density": self.density_checkbox.isChecked(),
+            "plot_legend": self.plot_legend_checkbox.isChecked(),
+        }
+
+    def set_options(self, options):
+        if "channel_indices" in options:
+            self.channel_selector.set_selected_channels(options["channel_indices"])
+        if "method" in options:
+            idx = self.method_combo.findText(options["method"])
+            if idx >= 0:
+                self.method_combo.setCurrentIndex(idx)
+        if "bins" in options:
+            try:
+                self.bins_spin.setValue(int(options["bins"]))
+            except Exception as e:
+                # If bins value is invalid, log the error and set to default (30)
+                logging.warning(f"Invalid bins value in set_options: {options.get('bins')!r} ({e}) - using default 30")
+                self.bins_spin.setValue(30)
+        if "density" in options:
+            self.density_checkbox.setChecked(bool(options["density"]))
+        if "plot_legend" in options:
+            self.plot_legend_checkbox.setChecked(bool(options["plot_legend"]))
+
+
 class AverageSessionReflexOptions(BasePlotOptions):
     def create_options(self):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -465,7 +539,7 @@ class MMaxOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)
@@ -510,7 +584,7 @@ class MaxHReflexOptions(BasePlotOptions):
         form = self.create_form_layout()
 
         self.method_combo = ResponsiveComboBox()
-        self.method_combo.addItems(["rms", "average_rectified", "average_unrectified", "peak_to_trough"])
+        self.method_combo.addItems(CALCULATION_METHODS)
         self.method_combo.setCurrentIndex(0)  # Set the initial selection to "rms"
         self.method_combo.setToolTip("Method used to calculate the average reflex amplitude.")
         form.addRow("Reflex Calc. Method:", self.method_combo)

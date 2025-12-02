@@ -3,9 +3,9 @@
 import logging
 import os
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFont, QPixmap
-from PyQt6.QtWidgets import QLabel, QSplashScreen, QVBoxLayout
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QPixmap
+from PySide6.QtWidgets import QLabel, QSplashScreen, QVBoxLayout
 
 if __name__ == "__main__":
     import sys
@@ -83,7 +83,7 @@ class SplashScreen(QSplashScreen):
 if __name__ == "__main__":
     import sys
 
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
     splash = SplashScreen()

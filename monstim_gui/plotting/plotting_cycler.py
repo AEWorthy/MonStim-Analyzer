@@ -1,7 +1,8 @@
+import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtGui import QValidator
-from PyQt6.QtWidgets import (
+from PySide6.QtGui import QValidator
+from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -16,7 +17,7 @@ from PyQt6.QtWidgets import (
 from monstim_signals.core import get_main_window
 
 if TYPE_CHECKING:
-    from monstim_gui import MonstimGUI  # noqa: F401
+    from monstim_gui.gui_main import MonstimGUI
 
 
 class CustomSpinBox(QSpinBox):
@@ -72,14 +73,14 @@ class RecordingCyclerWidget(QGroupBox):
     def __init__(self, parent):
         super().__init__("Recording Cycler", parent)
 
-        self.main_gui = get_main_window()  # type: MonstimGUI
-        if not self.main_gui.current_session:
-            self.maximum_recordings = 0
+        self.gui: "MonstimGUI" = get_main_window()
+        if not self.gui.current_session:
+            self.max_recording_idxs = 0
         else:
-            self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
+            self.max_recording_idxs = self.gui.current_session.num_all_recordings - 1
 
         # Set size policy to be fixed height
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
 
         self.layout = QGridLayout()  # type: QGridLayout
         self.layout.setSpacing(6)  # Increased spacing for better appearance
@@ -94,12 +95,12 @@ class RecordingCyclerWidget(QGroupBox):
 
         # Set up the recording spinbox
         self.recording_spinbox.setMinimum(0)
-        self.recording_spinbox.setMaximum(self.maximum_recordings)
+        self.recording_spinbox.setMaximum(self.max_recording_idxs)
         self.recording_spinbox.setWrapping(True)
 
         # Set up the step size spinbox
         self.step_size.setMinimum(1)
-        self.step_size.setMaximum(self.maximum_recordings)
+        self.step_size.setMaximum(self.max_recording_idxs)
         self.step_size.setValue(1)
 
         # Simple horizontal layout
@@ -137,13 +138,22 @@ class RecordingCyclerWidget(QGroupBox):
         self.recording_spinbox.valueChanged.connect(self.on_recording_changed)
 
     def reset_max_recordings(self):
-        if not self.main_gui.current_session:
-            self.maximum_recordings = 0
+        if not self.gui.current_session:
+            self.max_recording_idxs = 0
         else:
-            self.maximum_recordings = self.main_gui.current_session.num_recordings - 1
-        self.recording_spinbox.setMaximum(self.maximum_recordings)
-        if self.recording_spinbox.value() > self.maximum_recordings:
-            self.recording_spinbox.setValue(self.maximum_recordings)
+            self.max_recording_idxs = max(0, self.gui.current_session.num_recordings - 1)
+        # Block signals so we don't trigger plot updates with transient invalid values
+        self.recording_spinbox.blockSignals(True)
+        old_val = self.recording_spinbox.value()
+        self.recording_spinbox.setMaximum(self.max_recording_idxs)
+        if old_val > self.max_recording_idxs:
+            # Wrap to 0 (expected UX) rather than clamping to last
+            self.recording_spinbox.setValue(0 if self.max_recording_idxs >= 0 else 0)
+        new_val = self.recording_spinbox.value()
+        self.recording_spinbox.blockSignals(False)
+        # If the value actually changed while signals were blocked, manually propagate
+        if new_val != old_val:
+            self.on_recording_changed(new_val)
 
     def on_previous(self):
         if self.recording_spinbox.value() - self.step_size.value() < 0:
@@ -158,23 +168,48 @@ class RecordingCyclerWidget(QGroupBox):
             self.recording_spinbox.setValue(self.recording_spinbox.value() + self.step_size.value())
 
     def on_exclude(self):
-        selected_recording_id = self.main_gui.current_session.recordings[self.recording_spinbox.value()].id
-        if selected_recording_id in self.main_gui.current_session.excluded_recordings:
+        selected_recording_id = self.gui.current_session.all_recordings[self.recording_spinbox.value()].id
+        logging.info(f"Excluding/including recording ID {selected_recording_id}")
+        logging.info(f"Current excluded recordings: {self.gui.current_session.excluded_recordings}")
+        if selected_recording_id in self.gui.current_session.excluded_recordings:
             self.exclude_button.setText("Exclude")
-            self.main_gui.restore_recording(selected_recording_id)
+            self.gui.restore_recording(selected_recording_id)
+            logging.info(f"Restored recording ID {selected_recording_id}")
         else:
             self.exclude_button.setText("Include")
-            self.main_gui.exclude_recording(selected_recording_id)
+            self.gui.exclude_recording(selected_recording_id)
+            logging.info(f"Excluded recording ID {selected_recording_id}")
 
     def on_recording_changed(self, value):
-        if value in self.main_gui.current_session.excluded_recordings:
-            self.exclude_button.setText("Include")
+        max_val = self.recording_spinbox.maximum()
+        if max_val >= 0 and value > max_val:
+            self.recording_spinbox.blockSignals(True)
+            self.recording_spinbox.setValue(max_val)
+            self.recording_spinbox.blockSignals(False)
+            value = max_val
+        self._refresh_exclude_button(value)
+
+        self.gui.plot_controller.plot_data()
+
+    def _refresh_exclude_button(self, recording_index):
+        if self.gui.current_session and self.gui.current_session.all_recordings:
+            # Translate index -> recording id before checking exclusion list
+            if 0 <= recording_index < len(self.gui.current_session.all_recordings):
+                rec_id = self.gui.current_session.all_recordings[recording_index].id
+                if rec_id in self.gui.current_session.excluded_recordings:
+                    self.exclude_button.setText("Include")
+                else:
+                    self.exclude_button.setText("Exclude")
+            else:
+                # Out-of-range index: disable exclude button defensively
+                self.exclude_button.setEnabled(False)
+                logging.warning("Recording index %s out of range after change; disabling exclude button", recording_index)
         else:
-            self.exclude_button.setText("Exclude")
-        self.main_gui.plot_controller.plot_data()
+            # No active session or no recordings
+            self.exclude_button.setEnabled(False)
 
     def get_current_recording(self):
         return self.recording_spinbox.value()
 
     def get_excluded_recordings(self):
-        return self.main_gui.current_session.excluded_recordings
+        return self.gui.current_session.excluded_recordings

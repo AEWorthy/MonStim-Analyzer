@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QStatusBar, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QStatusBar, QVBoxLayout, QWidget
 
 from ..core.ui_scaling import get_responsive_margins, get_responsive_spacing, ui_scaling
 from ..plotting import PlotPane, PlotWidget

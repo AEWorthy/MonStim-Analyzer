@@ -103,8 +103,21 @@ class Recording:
             except Exception:
                 pass
 
-            with h5py.File(raw_path_str, "r") as h5file:
-                self._raw = h5file["raw"][:]  # type: ignore
+            # Open file and keep the dataset handle for lazy, slice-based access
+            # NOTE: We intentionally do NOT read the whole dataset into memory.
+            #       Holding an h5py.Dataset allows efficient slicing during plotting/analysis.
+            #       The file handle will be closed in `close()`.
+            h5file = h5py.File(raw_path_str, "r")
+            try:
+                self._raw = h5file["raw"]  # type: ignore[assignment]
+            except Exception:
+                # Ensure file is closed if dataset access fails
+                try:
+                    h5file.close()
+                except Exception:
+                    logging.exception("Failed to close HDF5 file after dataset access failure.")
+                    pass
+                raise
             # Update num_samples in metadata in case it changed
             try:
                 self.meta.num_samples = int(self._raw.shape[0])

@@ -40,6 +40,25 @@ class BasePlotterPyQtGraph:
             "#17becf",
         ]
 
+        # Decimation configuration (for large datasets during plotting)
+        # Defaults can be overridden by config or caller after construction.
+        self.enable_decimation: bool = True
+        self.max_points_per_curve: int = 10000
+        self.decimation_strategy: str = "minmax"  # 'minmax' | 'mean' | 'subsample'
+        # Only decimate when series is significantly larger than the cap (skip work otherwise)
+        self.min_decimation_factor: int = 3  # require len(data) >= factor * max_points
+        # Attempt to pull overrides from emg_object config if present
+        try:
+            cfg = getattr(self.emg_object, "_config", None) or {}
+            plotting_cfg = cfg.get("plotting", {}) if isinstance(cfg, dict) else {}
+            self.enable_decimation = bool(plotting_cfg.get("enable_decimation", self.enable_decimation))
+            self.max_points_per_curve = int(plotting_cfg.get("max_points_per_curve", self.max_points_per_curve))
+            self.decimation_strategy = str(plotting_cfg.get("decimation_strategy", self.decimation_strategy))
+            self.min_decimation_factor = int(plotting_cfg.get("min_decimation_factor", self.min_decimation_factor))
+        except Exception:
+            # If errors, ignore overrides
+            pass
+
     def create_plot_layout(
         self, canvas: "PlotPane", channel_indices: List[int] = None
     ) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
@@ -351,6 +370,22 @@ class BasePlotterPyQtGraph:
 
         pen = pg.mkPen(color, width=line_width)
 
+        # Optional pre-plot decimation to reduce memory and draw time for very long series
+        try:
+            if (
+                self.enable_decimation
+                and self.max_points_per_curve > 0
+                and len(data) >= self.min_decimation_factor * self.max_points_per_curve
+            ):
+                from .decimation import decimate_series
+
+                time_axis, data = decimate_series(
+                    time_axis, data, max_points=self.max_points_per_curve, strategy=self.decimation_strategy
+                )
+        except Exception:
+            # Fail open: if decimation fails, plot the original data
+            pass
+
         curve = plot_item.plot(time_axis, data, pen=pen, name=label)
 
         # Enable performance optimizations
@@ -592,6 +627,54 @@ class BasePlotterPyQtGraph:
         # We only need to set it on the first plot since they're Y-linked
         if plot_items:
             plot_items[0].setYRange(padded_y_min, padded_y_max, padding=0)
+
+    def _resolve_to_scalar(self, value):
+        """
+        Resolve a possibly-array-like or numpy value to a Python scalar (float) or None.
+
+        Many domain methods may return numpy arrays, numpy scalars, lists, or None.
+        Using plain truthiness checks on numpy arrays raises "The truth value of an
+        array with more than one element is ambiguous.". This helper centralizes
+        the conversion to a safe scalar for plotting logic.
+
+        Rules:
+        - None -> None
+        - numpy scalar -> float
+        - numpy array or list: if it has size==0 -> None, if size==1 -> scalar value
+          else -> raise ValueError so callers decide how to handle multi-value cases
+        - other scalars -> float
+        """
+        import numpy as _np
+
+        if value is None:
+            return None
+
+        # numpy scalar
+        if isinstance(value, (_np.floating, _np.integer)):
+            return float(value)
+
+        # numpy array
+        if isinstance(value, _np.ndarray):
+            if value.size == 0:
+                return None
+            if value.size == 1:
+                return float(value.reshape(-1)[0])
+            # ambiguous multi-element array
+            raise ValueError("Ambiguous array with multiple elements cannot be resolved to scalar")
+
+        # list or tuple
+        if isinstance(value, (list, tuple)):
+            if len(value) == 0:
+                return None
+            if len(value) == 1:
+                return float(value[0])
+            raise ValueError("Ambiguous sequence with multiple elements cannot be resolved to scalar")
+
+        # fallback for other numeric-like types
+        try:
+            return float(value)
+        except Exception:
+            return None
 
 
 class UnableToPlotError(Exception):

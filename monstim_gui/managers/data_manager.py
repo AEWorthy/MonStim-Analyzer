@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
@@ -208,7 +208,7 @@ class DataManager:
             last_import_path = str(get_data_path())
 
         # Use QFileDialog to select multiple directories
-        from PyQt6.QtWidgets import QFileDialog
+        from PySide6.QtWidgets import QFileDialog
 
         root_path = QFileDialog.getExistingDirectory(
             self.gui,
@@ -259,7 +259,7 @@ class DataManager:
             return
 
         # Show selection dialog
-        from PyQt6.QtWidgets import (
+        from PySide6.QtWidgets import (
             QCheckBox,
             QDialog,
             QLabel,
@@ -302,7 +302,7 @@ class DataManager:
         layout.addWidget(scroll_area)
 
         # Add buttons
-        from PyQt6.QtWidgets import QHBoxLayout
+        from PySide6.QtWidgets import QHBoxLayout
 
         button_layout = QHBoxLayout()
         select_all_btn = QPushButton("Select All")
@@ -823,12 +823,17 @@ class DataManager:
         progress_dialog.setAutoReset(False)
         progress_dialog.setMinimumDuration(0)  # Show immediately
         progress_dialog.setMinimumWidth(450)  # Make it wider for better text visibility
-        progress_dialog.resize(450, 120)  # Set a specific size
+        progress_dialog.resize(450, 120)
+
+        # Show once to finalize size, then lock height to prevent jumpy resize on long messages
+        progress_dialog.show()
+        QApplication.processEvents()
+        fixed_height = progress_dialog.height()
+        progress_dialog.setFixedSize(450, fixed_height)
 
         # Simple initial message - let the loader provide specific time estimates
         initial_text = f"Initializing {experiment_name}..."
         progress_dialog.setLabelText(initial_text)
-        progress_dialog.show()
 
         # Force immediate display
         QApplication.processEvents()
@@ -955,6 +960,10 @@ class DataManager:
             del self.current_progress_dialog
 
     def load_dataset(self, index, auto_load_first_session=True):
+        # Set busy cursor if QApplication is available
+        if QApplication.instance() is not None:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
         if not self.gui.current_experiment:
             logging.debug("No current experiment to load dataset from.")
             return
@@ -1014,7 +1023,15 @@ class DataManager:
         else:
             self.gui.plot_widget.on_data_selection_changed()
 
+        # Restore normal cursor
+        if QApplication.instance() is not None:
+            QApplication.restoreOverrideCursor()
+
     def load_session(self, index):
+        # Set busy cursor if QApplication is available
+        if QApplication.instance() is not None:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
         if not self.gui.current_dataset:
             logging.debug("No current dataset to load session from.")
             return
@@ -1041,6 +1058,10 @@ class DataManager:
         if hasattr(self.gui.plot_widget.current_option_widget, "recording_cycler"):
             self.gui.plot_widget.current_option_widget.recording_cycler.reset_max_recordings()  # type: ignore
         self.gui.plot_widget.on_data_selection_changed()
+
+        # Restore normal cursor
+        if QApplication.instance() is not None:
+            QApplication.restoreOverrideCursor()
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -1069,8 +1090,8 @@ class DataManager:
 
         def get_user_choice_for_invalid_name(dataset_name, metadata):
             """Show dialog allowing user to rename, keep as-is, or cancel."""
-            if "PyQt6" in sys.modules:
-                from PyQt6.QtWidgets import (
+            if "PySide6" in sys.modules:
+                from PySide6.QtWidgets import (
                     QApplication,
                     QDialog,
                     QHBoxLayout,
@@ -1252,7 +1273,7 @@ class DataManager:
 
         if is_valid_format:
             # Name is already in correct format
-            logging.info(f"Dataset name '{original_dataset_name}' follows standard format.")
+            logging.debug(f"Dataset name '{original_dataset_name}' follows standard format.")
             return dataset_path, metadata
         else:
             # Name doesn't follow standard format - give user options
@@ -1281,6 +1302,13 @@ class DataManager:
                         f'Dataset folder renamed from "{dataset_path}" to "{validated_dataset_path}" using os.rename().'
                     )
 
+                # TODO: Smart rename UX
+                # - Consider adding a "Suggest Name" button that attempts to
+                #   auto-format common non-standard names (e.g., swapping delimiters,
+                #   filling missing year digits) and presents suggested renames
+                #   in batch for multi-dataset imports.
+                # - Add an option to apply the same rename rule across multiple
+                #   datasets (preview & confirm) during MultiExpt import.
                 return validated_dataset_path, new_metadata
 
             elif user_choice["action"] == "keep":

@@ -1,9 +1,10 @@
 import abc
 import copy
+import logging
 from collections import deque
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
@@ -36,7 +37,12 @@ class CommandInvoker:
         self.history.append(command)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
-        # Set self.parent._has_unsaved_changes to True if needed
+        # --> Set self.parent._has_unsaved_changes to True if needed <--
+        # Always refresh notice icons after a command executes so diagnostics stay in sync with domain state.
+        try:
+            self.parent.data_selection_widget.refresh_notice_icons()
+        except Exception as e:
+            logging.warning("Non-fatal: refresh_notice_icons failed after execute: %s", e, exc_info=True)
 
     def undo(self):
         if self.history:
@@ -44,7 +50,11 @@ class CommandInvoker:
             command.undo()
             self.redo_stack.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # Set self.parent._has_unsaved_changes to True if needed
+            # --> Set self.parent._has_unsaved_changes to True if needed <--
+            try:
+                self.parent.data_selection_widget.refresh_notice_icons()
+            except Exception as e:
+                logging.warning("Non-fatal: refresh_notice_icons failed after undo: %s", e, exc_info=True)
 
     def redo(self):
         if self.redo_stack:
@@ -52,7 +62,11 @@ class CommandInvoker:
             command.execute()
             self.history.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # Set self.parent._has_unsaved_changes to True if needed
+            # --> Set self.parent._has_unsaved_changes to True if needed <--
+            try:
+                self.parent.data_selection_widget.refresh_notice_icons()
+            except Exception as e:
+                logging.warning("Non-fatal: refresh_notice_icons failed after redo: %s", e, exc_info=True)
 
     def get_undo_command_name(self):
         if self.history:
@@ -140,9 +154,44 @@ class ExcludeSessionCommand(Command):
         self.previous_dataset = self.gui.current_dataset  # Preserve dataset selection
 
         self.gui.current_dataset.exclude_session(self.session_id)
-        self.gui.current_session = None
-        # Update only the session list; keep dataset selection
+        # Determine new selection: try next session at same index, else previous.
+        new_current = None
+        remaining_sessions = self.gui.current_dataset.sessions
+        if remaining_sessions:
+            if self.idx < len(remaining_sessions):
+                new_current = remaining_sessions[self.idx]
+            else:
+                new_current = remaining_sessions[-1]
+        self.gui.current_session = new_current
+        # Update session list; keep dataset selection
         self.gui.data_selection_widget.update(levels=("session",))
+        # Reflect new selection in combo (block signals to avoid recursive loads)
+        if new_current:
+            try:
+                session_index = self.gui.current_dataset.sessions.index(new_current)
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except ValueError:
+                # Session not found in the list (may have been removed); safe to ignore.
+                # Session not found in the list (may have been removed); safe to ignore.
+                pass
+        else:
+            # No sessions left; clear plots
+            if hasattr(self.gui, "plot_widget"):
+                try:
+                    self.gui.plot_widget.on_data_selection_changed()
+                except Exception:
+                    logging.warning(
+                        "Plot refresh after session exclusion (no sessions left) failed (non-fatal).", exc_info=True
+                    )
+
+        # Always refresh plots after exclusion to reflect new session
+        if self.gui.current_session and hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception:
+                logging.warning("Plot refresh after session exclusion failed (non-fatal).", exc_info=True)
 
     def undo(self):
         self.gui.current_dataset.restore_session(self.session_id)
@@ -160,6 +209,12 @@ class ExcludeSessionCommand(Command):
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError:
                 pass  # Session not found in list
+        # Refresh plots to reflect restored session
+        if self.gui.current_session and hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception:
+                logging.warning("Plot refresh after session exclusion undo failed (non-fatal).", exc_info=True)
 
 
 class ExcludeDatasetCommand(Command):
@@ -174,35 +229,125 @@ class ExcludeDatasetCommand(Command):
         self.previous_experiment = None
 
     def execute(self):
+        # Capture state prior to exclusion
         self.removed_dataset = self.gui.current_dataset
-        self.dataset_id = self.gui.current_dataset.id
-        self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
+        self.dataset_id = self.gui.current_dataset.id if self.gui.current_dataset else None
+        self.idx = (
+            self.gui.current_experiment.datasets.index(self.gui.current_dataset)
+            if self.gui.current_dataset in self.gui.current_experiment.datasets
+            else None
+        )
         self.previous_experiment = self.gui.current_experiment  # Preserve experiment selection
 
-        self.gui.current_experiment.exclude_dataset(self.dataset_id)
-        self.gui.current_dataset = None
-        self.gui.current_session = None
-        # Update dataset and session lists while keeping experiment selection
-        self.gui.data_selection_widget.update()
+        # Perform exclusion in domain
+        if self.dataset_id is not None:
+            self.gui.current_experiment.exclude_dataset(self.dataset_id)
+
+        # Determine next dataset selection (next at same index if available, else previous, else none)
+        remaining = self.gui.current_experiment.datasets
+        new_dataset = None
+        if remaining:
+            if self.idx is not None and self.idx < len(remaining):
+                new_dataset = remaining[self.idx]
+            else:
+                new_dataset = remaining[-1]
+
+        self.gui.current_dataset = new_dataset
+        # Reset session selection relative to new dataset
+        if new_dataset:
+            sessions_attr = getattr(new_dataset, "sessions", None)
+            if isinstance(sessions_attr, (list, tuple)) and sessions_attr:
+                try:
+                    self.gui.current_session = sessions_attr[0]
+                except Exception:
+                    self.gui.current_session = None
+            else:
+                self.gui.current_session = None
+        else:
+            self.gui.current_session = None
+
+        # Update combos: dataset then session
+        self.gui.data_selection_widget.update(levels=("dataset",))
+        if new_dataset:
+            try:
+                ds_index = self.gui.current_experiment.datasets.index(new_dataset)
+                self.gui.data_selection_widget.dataset_combo.blockSignals(True)
+                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
+                self.gui.data_selection_widget.dataset_combo.blockSignals(False)
+            except ValueError as e:
+                logging.warning(f"Index error during dataset exclusion execute: {e}")
+        self.gui.data_selection_widget.update(levels=("session",))
+        if self.gui.current_session:
+            try:
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except Exception as e:
+                logging.warning(f"Non-fatal: session combo update failed after dataset exclusion: {e}", exc_info=True)
+
+        # Trigger downstream updates (plots etc.)
+        if hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception:
+                logging.debug("Plot refresh after dataset exclusion failed (non-fatal).", exc_info=True)
 
     def undo(self):
-        self.gui.current_experiment.restore_dataset(self.dataset_id)
-        self.gui.current_dataset = self.removed_dataset
-        # Ensure we maintain the correct experiment selection
+        # Restore dataset in domain
+        if self.dataset_id is not None:
+            self.gui.current_experiment.restore_dataset(self.dataset_id)
+
+        # Re-acquire restored dataset reference safely
+        try:
+            restored = next(ds for ds in self.gui.current_experiment.datasets if ds.id == self.dataset_id)
+        except StopIteration:
+            restored = self.removed_dataset  # fallback to prior object reference
+
+        # Maintain experiment selection
         if self.previous_experiment and self.gui.current_experiment != self.previous_experiment:
             self.gui.current_experiment = self.previous_experiment
-        # Update dataset list and set the correct selection
+
+        self.gui.current_dataset = restored
+
+        # Update dataset combo first
         self.gui.data_selection_widget.update(levels=("dataset",))
-        if self.removed_dataset:
+        if restored:
             try:
-                dataset_index = self.gui.current_experiment.datasets.index(self.removed_dataset)
+                ds_index = self.gui.current_experiment.datasets.index(restored)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(True)
-                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
+                self.gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
-            except ValueError:
-                pass  # Dataset not found in list
-        # Update session list since dataset changed
+            except ValueError as e:
+                logging.warning(f"Index error during dataset exclusion undo: {e}")
+
+        # Update sessions and select first session (consistent with RestoreDatasetCommand)
         self.gui.data_selection_widget.update(levels=("session",))
+        if restored:
+            sessions_attr = getattr(restored, "sessions", None)
+            if isinstance(sessions_attr, (list, tuple)) and sessions_attr:
+                try:
+                    self.gui.current_session = sessions_attr[0]
+                except Exception as e:
+                    self.gui.current_session = None
+                    logging.warning(f"Non-fatal: session selection failed after dataset exclusion undo: {e}", exc_info=True)
+            else:
+                self.gui.current_session = None
+        else:
+            self.gui.current_session = None
+        if self.gui.current_session:
+            try:
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except Exception as e:
+                logging.warning(f"Non-fatal: session combo update failed after dataset exclusion undo: {e}", exc_info=True)
+
+        # Trigger downstream updates
+        if hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception:
+                logging.debug("Plot refresh after dataset exclusion undo failed (non-fatal).", exc_info=True)
 
 
 class RestoreSessionCommand(Command):
@@ -230,13 +375,26 @@ class RestoreSessionCommand(Command):
                 self.gui.data_selection_widget.session_combo.blockSignals(True)
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
-            except ValueError:
-                pass  # Session not found in list
+            except ValueError as e:
+                logging.warning(f"Session index error during session restore: {e}")
+
+        # Refresh plots since restored session becomes active
+        if self.gui.current_session and hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception as e:
+                logging.warning(f"Plot refresh after session restore failed (non-fatal): {e}", exc_info=True)
 
     def undo(self):
         self.gui.current_dataset.exclude_session(self.session_id)
         self.gui.current_session = None
         self.gui.data_selection_widget.update(levels=("session",))
+        # Refresh plots to clear session-dependent displays
+        if hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception as e:
+                logging.warning(f"Plot refresh after session restore undo failed (non-fatal): {e}", exc_info=True)
 
 
 class RestoreDatasetCommand(Command):
@@ -249,31 +407,65 @@ class RestoreDatasetCommand(Command):
         self.dataset_obj = None
 
     def execute(self):
-        self.dataset_obj = next(
-            (ds for ds in self.gui.current_experiment._all_datasets if ds.id == self.dataset_id),
-            None,
-        )
+        # Restore the dataset in the domain model first
         self.gui.current_experiment.restore_dataset(self.dataset_id)
+
+        # Re-acquire the (now restored) dataset object from the active experiment's current datasets list
+        try:
+            self.dataset_obj = next(ds for ds in self.gui.current_experiment.datasets if ds.id == self.dataset_id)
+        except StopIteration:
+            self.dataset_obj = None
+
+        # Set current_dataset explicitly to the restored object
         self.gui.current_dataset = self.dataset_obj
-        # Update dataset list and sync its selection
+
+        # Update dataset list (do not touch sessions yet) so combo has restored entry
         self.gui.data_selection_widget.update(levels=("dataset",))
+
         if self.dataset_obj:
-            # Find the index of the restored dataset
             try:
                 dataset_index = self.gui.current_experiment.datasets.index(self.dataset_obj)
+                # Block signals so we avoid triggering a redundant load (we'll do it manually below)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(True)
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
-            except ValueError:
-                pass  # Dataset not found in list
-        # Update session list since dataset changed
+            except ValueError as e:
+                logging.warning(f"Dataset index error during dataset restore: {e}")
+
+        # Now refresh the session list for this dataset
         self.gui.data_selection_widget.update(levels=("session",))
+
+        # Choose a current session (first available) to keep internal state consistent with UI
+        if self.gui.current_dataset and self.gui.current_dataset.sessions:
+            self.gui.current_session = self.gui.current_dataset.sessions[0]
+            # Reflect selection in session combo
+            try:
+                self.gui.data_selection_widget.session_combo.blockSignals(True)
+                self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
+                self.gui.data_selection_widget.session_combo.blockSignals(False)
+            except Exception as e:
+                logging.warning(f"Non-fatal: session combo update failed after dataset restore: {e}", exc_info=True)
+        else:
+            self.gui.current_session = None
+
+        # Trigger downstream updates that normally occur via combo change handlers
+        if hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception as e:
+                logging.warning(f"Plot widget refresh after dataset restore failed (non-fatal): {e}", exc_info=True)
 
     def undo(self):
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
         self.gui.current_dataset = None
         self.gui.current_session = None
         self.gui.data_selection_widget.update(levels=("dataset", "session"))
+        # Clear plots / dependent UI since selection is now empty
+        if hasattr(self.gui, "plot_widget"):
+            try:
+                self.gui.plot_widget.on_data_selection_changed()
+            except Exception as e:
+                logging.warning(f"Plot widget refresh after dataset undo failed (non-fatal): {e}", exc_info=True)
 
 
 class InvertChannelPolarityCommand(Command):
@@ -509,6 +701,64 @@ class MoveDatasetCommand(Command):
 
     def get_description(self) -> str:
         return f"Moved dataset '{self.dataset_name}' from '{self.from_exp}' to '{self.to_exp}'"
+
+
+class MoveDatasetsCommand(Command):
+    """Batched move of multiple datasets executed as a single undoable command."""
+
+    def __init__(self, gui, moves: list[tuple]):
+        """
+        moves: list of tuples (dataset_id, dataset_name, from_exp, to_exp)
+        """
+        self.gui: "MonstimGUI" = gui
+        self.moves = list(moves)
+        self.command_name = f"Move {len(self.moves)} datasets"
+        # Will record only the moves that actually succeeded during execute()
+        self._succeeded = []
+
+    def execute(self):
+        """Execute all moves sequentially. Record successes for undo."""
+        try:
+            for ds_id, ds_name, from_exp, to_exp in self.moves:
+                try:
+                    self.gui.data_manager.move_dataset(ds_id, ds_name, from_exp, to_exp)
+                    self._succeeded.append((ds_id, ds_name, from_exp, to_exp))
+                except Exception as e:
+                    logging.error(f"Failed to move dataset '{ds_name}' from '{from_exp}' to '{to_exp}': {e}")
+
+            # Refresh the data curation manager if it's open
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                try:
+                    self.gui._data_curation_manager.load_data()
+                except Exception:
+                    # Best-effort; do not fail the entire command if refresh errors
+                    logging.exception("Failed to refresh Data Curation Manager after batched move")
+
+        except Exception as e:
+            raise Exception(f"Failed to execute batched dataset moves: {str(e)}")
+
+    def undo(self):
+        """Undo by moving succeeded items back in reverse order."""
+        try:
+            for ds_id, ds_name, from_exp, to_exp in reversed(self._succeeded):
+                try:
+                    # Move back from to_exp -> from_exp
+                    self.gui.data_manager.move_dataset(ds_id, ds_name, to_exp, from_exp)
+                except Exception as e:
+                    logging.error(f"Failed to undo move of dataset '{ds_name}' from '{to_exp}' back to '{from_exp}': {e}")
+
+            # Refresh once after undo
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                try:
+                    self.gui._data_curation_manager.load_data()
+                except Exception:
+                    logging.exception("Failed to refresh Data Curation Manager after undoing batched move")
+
+        except Exception as e:
+            raise Exception(f"Failed to undo batched dataset moves: {str(e)}")
+
+    def get_description(self) -> str:
+        return f"Moved {len(self._succeeded)} dataset(s) in batch"
 
 
 class CopyDatasetCommand(Command):

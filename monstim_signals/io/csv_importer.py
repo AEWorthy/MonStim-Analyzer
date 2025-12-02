@@ -213,16 +213,16 @@ def import_experiment(
     logging.info("Processing complete.")
 
 
-from PyQt6.QtCore import QThread, pyqtSignal  # noqa: E402
+from PySide6.QtCore import QThread, Signal  # noqa: E402
 
 
 class GUIExptImportingThread(QThread):
     """Threaded wrapper to import an experiment from the GUI."""
 
-    progress = pyqtSignal(int)
-    finished = pyqtSignal()
-    error = pyqtSignal(Exception)
-    canceled = pyqtSignal()
+    progress = Signal(int)
+    finished = Signal()
+    error = Signal(Exception)
+    canceled = Signal()
 
     def __init__(
         self,
@@ -284,11 +284,11 @@ class GUIExptImportingThread(QThread):
 class MultiExptImportingThread(QThread):
     """Threaded wrapper to import multiple experiments from the GUI."""
 
-    progress = pyqtSignal(int)
-    status_update = pyqtSignal(str)
-    finished = pyqtSignal(int)  # Emits count of successfully imported experiments
-    error = pyqtSignal(Exception)
-    canceled = pyqtSignal()
+    progress = Signal(int)
+    status_update = Signal(str)
+    finished = Signal(int)  # Emits count of successfully imported experiments
+    error = Signal(Exception)
+    canceled = Signal()
 
     def __init__(
         self,

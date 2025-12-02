@@ -97,7 +97,7 @@ def parse_dataset_name(dataset_name: str, preferred_date_format: str = None) -> 
 
         if isinstance(parsed_date, datetime):
             formatted_date = parsed_date.strftime("%Y-%m-%d")
-            logging.info(f"Date: {formatted_date}, Format: {format_info}, Animal ID: {animal_id}, Condition: {condition}")
+            logging.debug(f"Date: {formatted_date} ({format_info}), Animal ID: {animal_id}, Condition: {condition}")
             return formatted_date, animal_id, condition
         else:
             logging.error(

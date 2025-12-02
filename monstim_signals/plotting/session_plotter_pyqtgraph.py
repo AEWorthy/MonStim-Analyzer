@@ -131,12 +131,16 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Use default color cycling
             color = self.default_colors[channel_index % len(self.default_colors)]
 
-        # Plot the data with PyQtGraph built-in performance optimizations
-        curve = plot_item.plot(time_segment, data_segment, pen=pg.mkPen(color=color, width=1.5))
+        # Plot via base helper (adds optional decimation and pyqtgraph optimizations)
+        curve = self.plot_time_series(
+            plot_item,
+            time_segment,
+            data_segment,
+            color=color,
+            line_width=1.5,
+        )
 
-        # Enable PyQtGraph's built-in performance optimizations
-        curve.setClipToView(True)  # Only render visible portions
-        curve.setDownsampling(auto=True)  # Auto-downsample when zoomed out
+        curve.setClipToView(True)  # Optimize rendering by clipping to view
 
         # Store curve reference for dynamic colormap updates
         if norm is not None:
@@ -471,8 +475,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Get EMG recordings
         emg_recordings = self.get_emg_recordings(data_type)
 
-        if recording_index >= len(emg_recordings):
-            raise ValueError(f"Recording index {recording_index} out of range")
+        # Strict recording index validation: never auto-wrap or coerce silently.
+        # Rationale: Silent wrapping can mask upstream logic errors (e.g., stale cached
+        # counts after exclusions). By raising an UnableToPlotError we surface the
+        # problematic index to the GUI layer, which can log and handle it explicitly.
+        if not emg_recordings:
+            raise UnableToPlotError("No recordings available to plot in this session")
+        if recording_index < 0 or recording_index >= len(emg_recordings):
+            raise UnableToPlotError(f"Recording index {recording_index} out of range (0-{len(emg_recordings)-1})")
 
         # Calculate fixed y-axis limits if needed
         y_min, y_max = None, None
@@ -568,6 +578,36 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 max(self.emg_object.stimulus_voltages),
             )
             self.add_colormap_scalebar(layout, plot_items, value_range)
+
+        # Add an info bubble showing the primary stimulus amplitude (formatted like dataset/experiment inlays)
+        # This inlay mirrors the pg.TextItem usage in dataset/experiment plotters
+        # TODO: Make bubble move with zoom/pan
+        try:
+            info_text = f"Stimulus: {stimulus_v:.2f} V"
+            # Use same styling as other plotters' inlay TextItem
+            text_item = pg.TextItem(
+                info_text,
+                anchor=(1, 0),
+                color="white",
+                border=pg.mkPen("w"),
+                fill=pg.mkBrush(255, 255, 255, 200),
+            )
+            # Position the text in the top-right of the first plot item
+            first_plot = plot_items[0]
+            # Determine a reasonable position: x near right edge, y near top of visible range
+            vb = first_plot.vb
+            view_range = vb.viewRange()
+            # viewRange returns [[xMin,xMax],[yMin,yMax]]
+            x_min, x_max = view_range[0]
+            y_min, y_max = view_range[1]
+            # Place text slightly inset from top-right corner
+            x_pos = x_max - 0.02 * (x_max - x_min)
+            y_pos = y_max - 0.02 * (y_max - y_min)
+            text_item.setPos(x_pos, y_pos)
+            first_plot.addItem(text_item)
+        except Exception:
+            # Fail silently for non-critical UI addition
+            logging.error("Failed to add stimulus info inlay to single EMG plot", exc_info=True)
 
         if not fixed_y_axis:
             # Auto-range Y-axis for all linked plots
@@ -1341,3 +1381,163 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         self.plotted_curves.clear()
         self.curve_stimulus_voltages.clear()
         self.colorbar_item = None
+
+    def plot_latency_window_distribution(
+        self,
+        channel_indices: List[int] = None,
+        method: str = None,
+        bins: int | np.ndarray = 30,
+        density: bool = False,
+        plot_legend: bool = True,
+        canvas: "PlotPane" = None,
+    ):
+        """Plot distribution (histogram) of latency-window reflex amplitudes for a SESSION.
+
+        Similar semantics to the dataset-level plot: x = binned EMG amplitudes, y = counts or
+        probability density. Each latency window is shown as a dot plot with connecting lines.
+
+        Returns a pandas.DataFrame indexed by (channel_index, window_label, bin_center) with
+        column 'value'.
+        """
+        # TODO: Ensure the probability density calculation is correct for this and the dataset-level plot
+        if canvas is None:
+            raise UnableToPlotError("Canvas must be provided for PyQtGraph plotting")
+
+        if method is None:
+            method = self.emg_object.default_method
+
+        if channel_indices is None:
+            channel_indices = list(range(self.emg_object.num_channels))
+
+        if len(self.emg_object.latency_windows) == 0:
+            raise ValueError("No latency windows found. Add some to plot distributions.")
+
+        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+
+        # Unlink X-axes so each channel can auto-range independently
+        for _pi in plot_items:
+            try:
+                _pi.setXLink(None)
+            except Exception:
+                pass
+
+        raw_data_dict = {
+            "channel_index": [],
+            "window_label": [],
+            "bin_left": [],
+            "bin_right": [],
+            "bin_center": [],
+            "value": [],
+        }
+
+        # Per-channel plotting
+        for plot_item, channel_index in zip(plot_items, channel_indices):
+            if channel_index >= self.emg_object.num_channels:
+                continue
+
+            # Gather window objects
+            windows = self.emg_object.latency_windows
+
+            # Collect amplitudes across windows to compute common bin edges
+            all_amps = []
+            window_to_amps: dict[str, np.ndarray] = {}
+            for w in windows:
+                amps = self.emg_object.get_lw_reflex_amplitudes(method=method, channel_index=channel_index, window=w)
+                amps_arr = np.array(amps) if amps is not None else np.array([])
+                amps_arr = amps_arr[~np.isnan(amps_arr)] if amps_arr.size > 0 else np.array([])
+                window_to_amps[getattr(w, "label", str(w))] = amps_arr
+                if amps_arr.size > 0:
+                    all_amps.extend(amps_arr.tolist())
+
+            if len(all_amps) == 0:
+                # Nothing to plot for this channel
+                self.set_labels(
+                    plot_item, title=f"{self.emg_object.channel_names[channel_index]}", x_label="EMG Amp.", y_label="Frequency"
+                )
+                plot_item.showGrid(True, True)
+                continue
+
+            all_amps = np.array(all_amps)
+
+            # Determine bin edges
+            if isinstance(bins, int):
+                bin_edges = np.histogram_bin_edges(all_amps, bins=bins)
+            else:
+                bin_edges = np.asarray(bins)
+
+            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+
+            # Add legend container if requested
+            if plot_legend:
+                try:
+                    plot_item.addLegend()
+                except Exception:
+                    pass
+
+            # Plot each window
+            for window_label, amps in window_to_amps.items():
+                if amps.size == 0:
+                    continue
+                try:
+                    if density:
+                        counts, _ = np.histogram(amps, bins=bin_edges, density=True)
+                    else:
+                        counts, _ = np.histogram(amps, bins=bin_edges)
+
+                    for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts):
+                        raw_data_dict["channel_index"].append(channel_index)
+                        raw_data_dict["window_label"].append(window_label)
+                        raw_data_dict["bin_left"].append(float(left))
+                        raw_data_dict["bin_right"].append(float(right))
+                        raw_data_dict["bin_center"].append(float(center))
+                        raw_data_dict["value"].append(float(freq))
+
+                    # Choose color from window object if possible
+                    color_hex = None
+                    try:
+                        # Find window object by label
+                        for w in windows:
+                            if getattr(w, "label", str(w)) == window_label:
+                                color_hex = w.color
+                                break
+                    except Exception:
+                        pass
+                    if color_hex is None:
+                        color_hex = "white"
+
+                    color = self._convert_matplotlib_color(color_hex)
+
+                    plot_item.plot(
+                        bin_centers,
+                        counts,
+                        pen=pg.mkPen(color=color, width=2),
+                        symbol="o",
+                        symbolSize=6,
+                        symbolBrush=color,
+                        name=window_label if plot_legend else None,
+                    )
+                except Exception:
+                    # Skip window on error
+                    continue
+
+            # Ensure each plot auto-ranges its X axis independently
+            try:
+                plot_item.enableAutoRange(axis="x", enable=True)
+            except Exception:
+                pass
+
+            self.set_labels(
+                plot_item,
+                title=f"{self.emg_object.channel_names[channel_index]}",
+                x_label="EMG Amp. (binned)",
+                y_label=("Probability Density" if density else "Frequency"),
+            )
+            plot_item.showGrid(True, True)
+
+        # Auto-range Y-axis across linked plots
+        self.auto_range_y_axis_linked_plots(plot_items)
+
+        raw_data_df = pd.DataFrame(raw_data_dict)
+        if not raw_data_df.empty:
+            raw_data_df.set_index(["channel_index", "window_label", "bin_center"], inplace=True)
+        return raw_data_df

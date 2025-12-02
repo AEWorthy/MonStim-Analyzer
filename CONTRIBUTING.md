@@ -21,7 +21,7 @@ Thank you for your interest in contributing to MonStim Analyzer! This project ai
 ### Prerequisites
 - Python 3.8 or later
 - Git for version control
-- PyQt6 and scientific computing libraries
+- PySide6 and scientific computing libraries
 
 ### Installation Steps
 

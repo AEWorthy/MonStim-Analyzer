@@ -4,24 +4,41 @@ Allows users to manage experiments and datasets with create/import/delete/rename
 and drag-and-drop dataset organization between experiments.
 """
 
+# TODOs: Data Curation Manager feature roadmap
+# - Thumbnail / quick-preview column: show a small sparkline or thumbnail per-dataset
+#   (representative session trace) to help visually triage datasets before moving/deleting.
+# - Search / filter box: add a text input above the tree to filter experiments/datasets by
+#   name, date, animal_id, condition, or tags.
+# - Dry-run / preview modal for batch move/copy/delete: show affected items, conflicts,
+#   and allow skip/overwrite/rename decisions before executing changes.
+# - Multi-select drag & drop ghosting: when dragging multiple checked datasets, show a
+#   drag ghost with count and optionally a preview to make multi-drag operations clear.
+# - Batch rename tooling: pattern-based renaming (tokens or regex) with a preview before applying.
+# - Recycle bin / safe-delete: move datasets to a hidden .trash instead of immediate permanent deletion,
+#   add restore & purge UI, and schedule automatic purge after configurable retention.
+# - Inline / bulk metadata editor: allow editing dataset metadata (date/animal/condition) from the tree
+#   or an edit pane; support bulk edits and preview.
+# - Validation & consistency checker: validate selected datasets for missing files, mismatched channels,
+#   missing latency windows, etc., and provide quick-fix suggestions.
+# - Background workers and progress/cancellation: run long operations (move/copy/import) in background
+#   threads with progress dialogs and per-item error reporting.
+# - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
+# - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
+
 import logging
 from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QFont
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMenu,
     QMessageBox,
     QPushButton,
-    QSplitter,
-    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -42,21 +59,26 @@ def auto_refresh(method):
     def wrapper(self, *args, **kwargs):
         try:
             # For PyQt signal connections, filter out unexpected boolean arguments
-            # that can be passed by clicked signals
-            filtered_args = []
-            for arg in args:
-                # Skip boolean arguments that are often passed by PyQt signals
-                if not isinstance(arg, bool):
-                    filtered_args.append(arg)
+            # that can be passed by clicked signals ONLY if:
+            # 1. There's exactly one argument
+            # 2. That argument is a boolean
+            # This prevents filtering out legitimate boolean parameters when multiple args exist
+            filtered_args = args
+            if len(args) == 1 and isinstance(args[0], bool):
+                # This is likely a spurious signal argument (e.g., from clicked signal)
+                # that should be filtered out
+                filtered_args = ()
 
             result = method(self, *filtered_args, **kwargs)
-            # Only refresh if the method completed successfully
-            self.load_data()
+            # Only refresh if the method completed successfully and auto-refresh is not suppressed
+            if not getattr(self, "_suppress_autorefresh", False):
+                self.load_data()
             return result
         except Exception as e:
             # If there was an error, still refresh to ensure UI consistency
             try:
-                self.load_data()
+                if not getattr(self, "_suppress_autorefresh", False):
+                    self.load_data()
             except Exception as refresh_error:
                 logging.error(f"Failed to refresh data after error in {method.__name__}: {refresh_error}")
             # Re-raise the original exception
@@ -68,12 +90,236 @@ def auto_refresh(method):
 class DatasetTreeWidget(QTreeWidget):
     """Custom QTreeWidget that handles dataset drag-and-drop operations."""
 
-    dataset_moved = pyqtSignal(str, str, str, str)  # dataset_id, formatted_name, source_exp, target_exp
+    dataset_moved = Signal(str, str, str, str)  # dataset_id, formatted_name, source_exp, target_exp
+    dataset_move_batch_start = Signal()
+    dataset_moved_batch = Signal(int, str)  # count, target_exp_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setDragDropMode(QTreeWidget.DragDropMode.InternalMove)
+        # Enable automatic scrolling when dragging near the viewport edges
+        try:
+            self.setAutoScroll(True)
+            # Margin in pixels to start autoscroll when cursor approaches edge
+            self._auto_scroll_margin = 30
+            try:
+                # Use built-in setter if available
+                self.setAutoScrollMargin(self._auto_scroll_margin)
+            except Exception:
+                # Non-fatal: setAutoScrollMargin may not be available on all platforms/PyQt versions
+                pass
+        except Exception:
+            # Non-fatal if attributes aren't present on the platform
+            self._auto_scroll_margin = 30
+
+    def startDrag(self, supportedActions):
+        """Create a custom drag pixmap when dragging multiple dataset items.
+
+        Shows a small collage of up to 3 dataset names and a count badge when
+        multiple dataset items are selected so users can see how many items
+        they're moving.
+        """
+        # Prefer datasets that are checked (checkboxes) as the dragged set. If
+        # none are checked, fall back to the selected items. Only include
+        # dataset children (items with a parent).
+        checked_items = []
+        for i in range(self.topLevelItemCount()):
+            exp_item = self.topLevelItem(i)
+            for j in range(exp_item.childCount()):
+                ds_item = exp_item.child(j)
+                try:
+                    if ds_item.checkState(0) == Qt.CheckState.Checked:
+                        checked_items.append(ds_item)
+                except Exception:
+                    # Some items may not support checkState (e.g., corrupted or custom widgets).
+                    # Safe to ignore and skip these items for drag selection.
+                    pass
+
+        if checked_items:
+            items = checked_items
+        else:
+            # Use selection as a fallback
+            items = [it for it in self.selectedItems() if it and it.parent()]
+
+        # If still nothing, fallback to default behavior
+        if not items:
+            return super().startDrag(supportedActions)
+
+        # Build pixmap for drag feedback
+        try:
+            pix = self._create_drag_pixmap(items)
+        except Exception:
+            pix = QPixmap()  # empty fallback
+
+        # Create a QDrag and build mime data from the model indexes for each item
+        drag = QDrag(self)
+        try:
+            idxs = []
+            for it in items:
+                try:
+                    idx = self.indexFromItem(it)
+                    if idx.isValid():
+                        idxs.append(idx)
+                except Exception:
+                    # Ignore items that cannot be converted to valid indexes (e.g., corrupted or non-standard items).
+                    pass
+
+            if idxs:
+                mime = self.model().mimeData(idxs)
+                drag.setMimeData(mime)
+        except Exception:
+            # Fall back to widget-selected indexes if building mime from items fails
+            try:
+                mime = self.model().mimeData([idx for idx in self.selectedIndexes()])
+                drag.setMimeData(mime)
+            except Exception as e:
+                # Safe to ignore: drag will proceed without mime data if this fails.
+                logging.debug("Failed to set mime data from selected indexes: %r", e)
+
+        if not pix.isNull():
+            drag.setPixmap(pix)
+            try:
+                # Place the pixmap's top-left corner at the cursor click point
+                drag.setHotSpot(pix.rect().topLeft())
+            except Exception as e:
+                logging.debug("Failed to set drag hotspot for pixmap: %r", e)
+                # Safe to ignore: drag will proceed without custom hotspot
+
+        # Execute the drag using the supported actions passed in
+        drag.exec(supportedActions)
+
+    def dragMoveEvent(self, event):
+        """During drag, pan the viewport when cursor approaches the edges.
+
+        This provides a smooth click-and-drag panning experience inside the
+        scroll box so users can move items to targets that are outside the
+        initially visible area.
+        """
+        try:
+            pos = event.position().toPoint()
+            vp_rect = self.viewport().rect()
+            margin = getattr(self, "_auto_scroll_margin", 30)
+
+            vsb = self.verticalScrollBar()
+            hsb = self.horizontalScrollBar()
+
+            # Reduce pan speed: use a smaller fraction of pageStep for smooth, slow panning
+            scroll_amount_v = max(1, int(vsb.pageStep() * 0.05)) if vsb is not None else 5
+            scroll_amount_h = max(1, int(hsb.pageStep() * 0.05)) if hsb is not None else 5
+
+            # Vertical scrolling
+            if pos.y() < vp_rect.top() + margin:
+                try:
+                    vsb.setValue(vsb.value() - scroll_amount_v)
+                except Exception as e:
+                    # Safe to ignore: vertical auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll up: %r", e)
+            elif pos.y() > vp_rect.bottom() - margin:
+                try:
+                    vsb.setValue(vsb.value() + scroll_amount_v)
+                except Exception as e:
+                    # Safe to ignore: vertical auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll down: %r", e)
+
+            # Horizontal scrolling (if needed)
+            if pos.x() < vp_rect.left() + margin:
+                try:
+                    hsb.setValue(hsb.value() - scroll_amount_h)
+                except Exception as e:
+                    # Safe to ignore: horizontal auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll left: %r", e)
+            elif pos.x() > vp_rect.right() - margin:
+                try:
+                    hsb.setValue(hsb.value() + scroll_amount_h)
+                except Exception as e:
+                    # Safe to ignore: horizontal auto-scroll is a convenience feature.
+                    logging.debug("Failed to auto-scroll right: %r", e)
+        except Exception:
+            # Don't let autoscroll failures block drag
+            pass
+
+        # Continue with normal handling
+        try:
+            super().dragMoveEvent(event)
+        except Exception:
+            event.accept()
+
+    def _create_drag_pixmap(self, items):
+        """Create a compact pixmap representing the selected datasets.
+
+        items: list of QTreeWidgetItem
+        Returns QPixmap
+        """
+        # Limit the number of preview names shown
+        max_preview = 3
+        names = [it.text(0) for it in items[:max_preview]]
+        count = len(items)
+
+        # Pixmap sizing
+        width = 260
+        line_height = 18
+        padding = 8
+        height = padding * 2 + max(1, len(names)) * line_height
+
+        pix = QPixmap(width, height)
+        pix.fill(QColor(0, 0, 0, 0))  # transparent
+
+        painter = QPainter(pix)
+        try:
+            # Background rounded rect
+            pen = QPen(QColor(120, 120, 120, 200))
+            painter.setPen(pen)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setBrush(QColor(245, 245, 245, 230))
+            rect = pix.rect().adjusted(0, 0, -1, -1)
+            painter.drawRoundedRect(rect, 6, 6)
+
+            # Draw dataset name previews
+            font = QFont()
+            font.setPointSize(9)
+            painter.setFont(font)
+            metrics = QFontMetrics(font)
+            text_x = padding
+            y = padding + metrics.ascent()
+            elide_width = width - padding * 3 - 28
+
+            for nm in names:
+                elided = metrics.elidedText(nm, Qt.TextElideMode.ElideRight, elide_width)
+                painter.setPen(QColor(30, 30, 30))
+                painter.drawText(text_x, y, elided)
+                y += line_height
+
+            # If there are more items than shown, indicate with a trailing "+N"
+            if count > max_preview:
+                more_text = f"+{count - max_preview} more"
+                painter.setPen(QColor(110, 110, 110))
+                painter.drawText(text_x, y, more_text)
+
+            # Draw circular count badge in top-right
+            badge_d = 28
+            badge_x = width - badge_d - padding
+            badge_y = padding
+            painter.setBrush(QColor(0, 120, 215))
+            painter.setPen(QPen(Qt.GlobalColor.transparent))
+            painter.drawEllipse(badge_x, badge_y, badge_d, badge_d)
+
+            # Badge text
+            badge_font = QFont()
+            badge_font.setPointSize(9)
+            badge_font.setBold(True)
+            painter.setFont(badge_font)
+            painter.setPen(QColor(255, 255, 255))
+            fm = QFontMetrics(badge_font)
+            txt = str(count)
+            tx = badge_x + (badge_d - fm.horizontalAdvance(txt)) // 2
+            ty = badge_y + (badge_d + fm.ascent() - fm.descent()) // 2
+            painter.drawText(tx, ty, txt)
+
+        finally:
+            painter.end()
+
+        return pix
 
     def dropEvent(self, event):
         """Handle drop events for moving datasets between experiments."""
@@ -102,19 +348,53 @@ class DatasetTreeWidget(QTreeWidget):
             event.ignore()
             return
 
-        # Get the dragged dataset items
-        selected_items = self.selectedItems()
-        for item in selected_items:
-            item_data = item.data(0, Qt.ItemDataRole.UserRole)
-            if item_data and item_data.get("type") == "dataset":
-                source_exp_id = item_data.get("experiment_id")
-                ds_metadata = item_data.get("metadata", {})
+        # Determine which dataset items to move. Copy their identifying metadata first
+        # to avoid referencing QTreeWidgetItem objects that may be deleted during move operations.
+        items_info = []  # list of (dataset_id, formatted_name, source_exp_id)
 
-                # Don't move if it's already in the target experiment
-                if source_exp_id != target_exp_id:
-                    self.dataset_moved.emit(
-                        ds_metadata.get("id", ""), ds_metadata.get("formatted_name", ""), source_exp_id, target_exp_id
-                    )
+        # Notify listeners that a batch move is starting so the UI can prepare
+        try:
+            self.dataset_move_batch_start.emit()
+        except Exception:
+            # If anything goes wrong emitting the signal, continue gracefully
+            pass
+
+        # Collect checked dataset children across all experiments
+        for i in range(self.topLevelItemCount()):
+            exp_item = self.topLevelItem(i)
+            for j in range(exp_item.childCount()):
+                ds_item = exp_item.child(j)
+                try:
+                    if ds_item.checkState(0) == Qt.CheckState.Checked:
+                        data = ds_item.data(0, Qt.ItemDataRole.UserRole)
+                        if data and data.get("type") == "dataset":
+                            ds_meta = data.get("metadata", {})
+                            items_info.append(
+                                (ds_meta.get("id", ""), ds_meta.get("formatted_name", ""), data.get("experiment_id"))
+                            )
+                except Exception:
+                    # skip items that don't support check state
+                    pass
+
+        # If no checked items, fall back to the current selection
+        if not items_info:
+            for sel in self.selectedItems():
+                data = sel.data(0, Qt.ItemDataRole.UserRole)
+                if data and data.get("type") == "dataset":
+                    ds_meta = data.get("metadata", {})
+                    items_info.append((ds_meta.get("id", ""), ds_meta.get("formatted_name", ""), data.get("experiment_id")))
+
+        moved_count = 0
+        # Emit move for each dataset item found (supports items from different source experiments)
+        for ds_id, ds_name, source_exp_id in items_info:
+            # Don't move if it's already in the target experiment
+            if source_exp_id != target_exp_id:
+                self.dataset_moved.emit(ds_id, ds_name, source_exp_id, target_exp_id)
+                moved_count += 1
+
+        # Emit batch-complete signal so the UI can show a single consolidated message
+        if moved_count > 0:
+            self.dataset_moved_batch.emit(moved_count, target_exp_id)
 
         event.accept()
 
@@ -125,7 +405,7 @@ class DataCurationManager(QDialog):
     Uses preview/apply pattern with separate tabs for different operations.
     """
 
-    data_structure_changed = pyqtSignal()  # Signal emitted when data structure changes
+    data_structure_changed = Signal()  # Signal emitted when data structure changes
 
     def __init__(self, parent: "MonstimGUI"):
         super().__init__(parent)
@@ -137,6 +417,11 @@ class DataCurationManager(QDialog):
 
             # Track if any changes were made during this session
             self._changes_made = False
+
+            # Batch move counters and suppression flag for auto-refresh
+            self._batch_successful_moves = 0
+            self._batch_processed_moves = 0
+            self._suppress_autorefresh = False
 
             self.setup_ui()
             self.load_data()
@@ -157,28 +442,24 @@ class DataCurationManager(QDialog):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(5)
 
-        # Create tab widget
-        self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
-
-        # Create tabs
-        self.experiment_tab = self.create_experiment_management_tab()
-        self.dataset_tab = self.create_dataset_management_tab()
-
-        self.tab_widget.addTab(self.experiment_tab, "Experiment Management")
-        self.tab_widget.addTab(self.dataset_tab, "Dataset Organization")
+        self.data_management_tab = self.create_data_management_tab()
+        main_layout.addWidget(self.data_management_tab, 1)
 
         # Button layout
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        self.reset_button = QPushButton("Reset All")
-        self.reset_button.clicked.connect(self.reset_all_changes)
-        button_layout.addWidget(self.reset_button)
-
-        # Add some spacing
+        # Add some spacing (push remaining controls to the right)
         button_layout.addStretch()
 
+        # Undo last change button - will be placed next to Undo All for proximity
+        self.undo_last_button = QPushButton("Undo Last Change")
+        self.undo_last_button.clicked.connect(self.undo_last_change)
+        self.undo_last_button.setEnabled(False)
+        self.undo_last_button.setToolTip("No changes to undo")
+        button_layout.addWidget(self.undo_last_button)
+
+        # Undo all and close buttons
         self.cancel_button = QPushButton("Undo All Changes")
         self.cancel_button.clicked.connect(self.cancel_all_changes)
         button_layout.addWidget(self.cancel_button)
@@ -189,114 +470,24 @@ class DataCurationManager(QDialog):
 
         main_layout.addLayout(button_layout)
 
-    def create_experiment_management_tab(self) -> QWidget:
-        """Create the experiment management tab."""
-        tab_widget = QWidget()
-        layout = QVBoxLayout(tab_widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-
-        # Header
-        header_label = QLabel("Experiment Management")
-        header_label.setStyleSheet("font-weight: bold; font-size: 11pt; margin-bottom: 0px;")
-        layout.addWidget(header_label)
-
-        # Create horizontal splitter - this should take up all remaining space
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        layout.addWidget(splitter, 1)  # Give splitter stretch factor of 1
-
-        # Left side: Experiment list and operations
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(0, 0, 5, 0)
-        left_layout.setSpacing(5)
-
-        # Operations buttons
-        ops_layout = QHBoxLayout()
-        ops_layout.setSpacing(4)
-
-        self.create_experiment_button = QPushButton("Create Empty")
-        self.create_experiment_button.clicked.connect(self.create_experiment)
-        self.create_experiment_button.setMaximumHeight(30)
-        ops_layout.addWidget(self.create_experiment_button)
-
-        self.import_experiment_button = QPushButton("Import")
-        self.import_experiment_button.clicked.connect(self.import_experiment)
-        self.import_experiment_button.setMaximumHeight(30)
-        ops_layout.addWidget(self.import_experiment_button)
-
-        self.rename_experiment_button = QPushButton("Rename")
-        self.rename_experiment_button.clicked.connect(self.rename_experiment)
-        self.rename_experiment_button.setEnabled(False)
-        self.rename_experiment_button.setMaximumHeight(30)
-        ops_layout.addWidget(self.rename_experiment_button)
-
-        self.delete_experiment_button = QPushButton("Delete")
-        self.delete_experiment_button.clicked.connect(self.delete_experiment)
-        self.delete_experiment_button.setEnabled(False)
-        self.delete_experiment_button.setMaximumHeight(30)
-        ops_layout.addWidget(self.delete_experiment_button)
-
-        left_layout.addLayout(ops_layout)
-
-        # Experiment list - make sure it expands to fill space
-        self.experiment_list = QListWidget()
-        self.experiment_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        self.experiment_list.itemSelectionChanged.connect(self.on_experiment_selection_changed)
-        self.experiment_list.setMinimumWidth(280)
-        self.experiment_list.setMaximumWidth(350)
-        left_layout.addWidget(self.experiment_list, 1)  # Give list stretch factor
-
-        splitter.addWidget(left_widget)
-
-        # Right side: Preview area
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(5, 0, 0, 0)
-        right_layout.setSpacing(5)
-
-        preview_label = QLabel("Preview")
-        preview_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
-        right_layout.addWidget(preview_label)
-
-        self.experiment_preview = QLabel("Select an experiment to see details")
-        self.experiment_preview.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.experiment_preview.setStyleSheet(
-            """
-            border: 1px solid #666;
-            background-color: #2d2d2d;
-            padding: 10px;
-            font-size: 11px;
-            color: #cccccc;
-        """
-        )
-        self.experiment_preview.setWordWrap(True)
-        self.experiment_preview.setMinimumHeight(100)
-        right_layout.addWidget(self.experiment_preview, 1)  # Give preview stretch factor
-
-        splitter.addWidget(right_widget)
-        # Set proportional sizes
-        splitter.setSizes([330, 670])  # More space to preview
-        splitter.setStretchFactor(0, 0)  # Fixed left panel size
-        splitter.setStretchFactor(1, 1)  # Allow right panel to stretch
-        splitter.setCollapsible(0, False)  # Don't allow left panel to collapse
-        splitter.setCollapsible(1, False)  # Don't allow right panel to collapse
-
-        return tab_widget
-
-    def create_dataset_management_tab(self) -> QWidget:
-        """Create the dataset organization tab with drag-and-drop functionality."""
+    def create_data_management_tab(self) -> QWidget:
+        """Create the data management tab with drag-and-drop functionality."""
         tab_widget = QWidget()
         layout = QVBoxLayout(tab_widget)
 
+        # TODO: Search/filter UI
+        # - Add a QLineEdit here to filter the tree by dataset/experiment name, date,
+        #   animal_id, condition, or tags. Implement tokenized matching and optionally
+        #   highlight matched substrings in the tree.
+
         # Header
-        header_label = QLabel("Dataset Organization")
+        header_label = QLabel("Data Management")
         header_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
         layout.addWidget(header_label)
 
         # Instructions
         instructions = QLabel(
-            "Drag datasets between experiments to reorganize your data structure. Use checkboxes for batch operations."
+            "Right-click to access context menus. Drag datasets between experiments to reorganize your data structure. Use checkboxes for batch operations."
         )
         instructions.setWordWrap(True)
         instructions.setStyleSheet("color: #666; margin-bottom: 10px;")
@@ -310,6 +501,19 @@ class DataCurationManager(QDialog):
         self.create_blank_experiment_button.clicked.connect(self.create_experiment)
         self.create_blank_experiment_button.setToolTip("Create a new empty experiment for organizing datasets")
         batch_layout.addWidget(self.create_blank_experiment_button)
+
+        # Import new experiment button (to the right of Create Blank Experiment)
+        self.import_new_experiment_button = QPushButton("Import New Experiment")
+        self.import_new_experiment_button.clicked.connect(self.import_experiment)
+        self.import_new_experiment_button.setToolTip("Import a new experiment using the standard import workflow")
+        self.import_new_experiment_button.setMaximumHeight(self.create_blank_experiment_button.maximumHeight())
+        batch_layout.addWidget(self.import_new_experiment_button)
+
+        # TODO: Batch operations - add buttons for additional curation tools
+        # - Batch Rename
+        # - Validate Selected
+        # - Move to Trash / Restore (Trash view)
+        # These should be inserted here aligned with the existing batch controls.
 
         batch_layout.addStretch()
 
@@ -347,6 +551,8 @@ class DataCurationManager(QDialog):
         self.dataset_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.dataset_tree.customContextMenuRequested.connect(self.show_dataset_context_menu)
         self.dataset_tree.dataset_moved.connect(self.on_dataset_dragged)
+        self.dataset_tree.dataset_moved_batch.connect(self.on_dataset_dragged_batch)
+        self.dataset_tree.dataset_move_batch_start.connect(self.on_dataset_drag_start)
 
         # Configure column widths - make first column stretch to fill available space
         header = self.dataset_tree.header()
@@ -361,7 +567,97 @@ class DataCurationManager(QDialog):
         self.dataset_summary.setStyleSheet("border: 1px solid gray; padding: 5px;")
         layout.addWidget(self.dataset_summary)
 
+        # TODO: Consider adding a small 'Views' / 'Saved Filters' pane here in the future
+        # to let users save common filter criteria or tag-based views for fast access.
+
         return tab_widget
+
+    def on_dataset_drag_start(self):
+        """Called before a batch of dataset moves begins."""
+        # Reset counters and suppress auto-refresh while individual moves execute
+        self._batch_successful_moves = 0
+        self._batch_processed_moves = 0
+        self._suppress_autorefresh = True
+        # Track pending moves for batch execution
+        self._in_batch_move = True
+        self._pending_batch_moves = []
+        # Show busy cursor while batch move is in progress to indicate work
+        try:
+            from PySide6.QtWidgets import QApplication
+
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        except Exception as e:
+            # Setting the busy cursor is cosmetic; ignore failures but log for debugging.
+            logging.debug(f"Failed to set busy cursor during batch move: {e}")
+
+    def on_dataset_dragged_batch(self, moved_count: int, target_exp_id: str):
+        """Called after a batch of dataset moves completes.
+
+        Shows a single consolidated message and refreshes the dataset tree.
+        """
+        # We're done with the batch: execute buffered moves as a single command (atomic undo/redo)
+        self._suppress_autorefresh = False
+
+        pending = getattr(self, "_pending_batch_moves", []) or []
+
+        # If there are buffered moves, execute them as a single batched command
+        if pending:
+            try:
+                from monstim_gui.commands import MoveDatasetCommand, MoveDatasetsCommand
+
+                if len(pending) == 1:
+                    # Single move: use the existing single-dataset command for consistency
+                    ds_id, ds_name, from_exp, to_exp = pending[0]
+                    cmd = MoveDatasetCommand(self.gui, ds_id, ds_name, from_exp, to_exp)
+                else:
+                    # Multiple moves: use the new batched command
+                    # Normalize the tuples to (id, name, from_exp, to_exp)
+                    moves = [(p[0], p[1], p[2], target_exp_id) if len(p) == 3 else p for p in pending]
+                    cmd = MoveDatasetsCommand(self.gui, moves)
+
+                # Execute and record command
+                try:
+                    cmd.execute()
+                    self.session_commands.append(cmd)
+                    self._changes_made = True
+                except Exception as e:
+                    logging.error(f"Batched move command failed: {e}")
+                    QMessageBox.critical(self, "Move Failed", f"Failed to move datasets:\n{str(e)}")
+
+                # Determine how many moves were successful
+                succeeded = getattr(cmd, "_succeeded", None)
+                success_count = len(succeeded) if succeeded is not None else (1 if len(pending) == 1 else moved_count)
+
+                if success_count > 0:
+                    QMessageBox.information(
+                        self,
+                        "Datasets Moved",
+                        f"{success_count} dataset(s) moved to '{target_exp_id}' successfully.",
+                    )
+
+            finally:
+                # Clear pending and batch flags
+                self._pending_batch_moves = []
+                self._in_batch_move = False
+                # Restore cursor now that batch processing has completed
+                try:
+                    from PySide6.QtWidgets import QApplication
+
+                    QApplication.restoreOverrideCursor()
+                except Exception:
+                    # Ignore errors restoring cursor: non-critical UI cleanup.
+                    pass
+
+        # Refresh dataset tree now that batch operations are done
+        try:
+            self.load_data()
+        except Exception:
+            # fallback to explicit update
+            try:
+                self.update_dataset_tree()
+            except Exception as e:
+                # Fallback failed; log the error but do not raise, as this is a non-critical UI update
+                logging.error(f"Failed to update dataset tree in Data Curation Manager fallback: {e}")
 
     def load_data(self):
         """Load current experiment and dataset data."""
@@ -373,8 +669,7 @@ class DataCurationManager(QDialog):
             # Store original state
             self.original_experiments = dict(self.gui.expts_dict)
 
-            # Populate experiment list
-            self.update_experiment_list()
+            # Populate experiment tree
             self.update_dataset_tree()
 
             # Initialize button states
@@ -385,21 +680,6 @@ class DataCurationManager(QDialog):
         except Exception as e:
             logging.error(f"Failed to load data in Data Curation Manager: {e}")
             QMessageBox.critical(self, "Data Loading Error", f"Failed to load experiment data:\n{str(e)}")
-
-    def update_experiment_list(self):
-        """Update the experiment list widget."""
-        logging.debug("Updating experiment list...")
-        self.experiment_list.clear()
-
-        exp_count = 0
-        for exp_id in self.gui.expts_dict_keys:
-            item = QListWidgetItem(exp_id)
-            item.setData(Qt.ItemDataRole.UserRole, exp_id)
-            self.experiment_list.addItem(item)
-            exp_count += 1
-            logging.debug(f"Added experiment to list: {exp_id}")
-
-        logging.debug(f"Experiment list updated with {exp_count} experiments")
 
     def _save_tree_expansion_state(self):
         """Save the current expansion state of tree items."""
@@ -436,7 +716,7 @@ class DataCurationManager(QDialog):
             if exp_id in expansion_state:
                 exp_item.setExpanded(expansion_state[exp_id])
             else:
-                exp_item.setExpanded(True)  # Default to expanded for new experiments
+                exp_item.setExpanded(False)  # Default to collapsed for new experiments
 
             # Restore dataset selections
             for j in range(exp_item.childCount()):
@@ -548,74 +828,6 @@ class DataCurationManager(QDialog):
                 "error": str(e),
             }
 
-    def on_experiment_selection_changed(self):
-        """Handle experiment selection changes."""
-        try:
-            current_item = self.experiment_list.currentItem()
-            has_selection = current_item is not None
-
-            self.rename_experiment_button.setEnabled(has_selection)
-            self.delete_experiment_button.setEnabled(has_selection)
-
-            if has_selection:
-                exp_id = current_item.data(Qt.ItemDataRole.UserRole)
-
-                try:
-                    # Use lightweight metadata instead of loading full experiment
-                    from pathlib import Path
-
-                    exp_path = Path(self.gui.expts_dict[exp_id])
-                    exp_metadata = self._get_experiment_metadata(exp_path)
-
-                    self.update_experiment_preview_from_metadata(exp_id, exp_metadata)
-
-                except Exception as e:
-                    logging.error(f"Failed to load experiment '{exp_id}' metadata for preview: {e}")
-                    self.experiment_preview.setText(
-                        f"<b>Experiment:</b> {exp_id}<br><br><i>Error loading experiment details</i>"
-                    )
-            else:
-                self.experiment_preview.setText("Select an experiment to see details")
-
-        except Exception as e:
-            logging.error(f"Error in experiment selection changed: {e}")
-            self.experiment_preview.setText("Error loading experiment details")
-
-    def update_experiment_preview_from_metadata(self, exp_id: str, exp_metadata: dict):
-        """Update the experiment preview area using lightweight metadata."""
-        try:
-            preview_text = f"<b>Experiment:</b> {exp_id}<br><br>"
-
-            dataset_count = exp_metadata.get("dataset_count", 0)
-            preview_text += f"<b>Datasets:</b> {dataset_count}<br><br>"
-
-            datasets = exp_metadata.get("datasets", [])
-            if datasets:
-                preview_text += "<b>Dataset Details:</b><br>"
-                for ds_metadata in datasets:
-                    try:
-                        ds_name = ds_metadata.get("formatted_name", ds_metadata.get("id", "Unknown"))
-                        session_count = ds_metadata.get("session_count", 0)
-                        is_completed = ds_metadata.get("is_completed", False)
-                        status = "✓" if is_completed else "○"
-                        preview_text += f"• {status} {ds_name} ({session_count} sessions)<br>"
-                    except Exception as e:
-                        logging.warning(f"Error processing dataset metadata for preview: {e}")
-                        ds_name = ds_metadata.get("id", "Unknown")
-                        preview_text += f"• ? {ds_name} (error loading details)<br>"
-            else:
-                preview_text += "<i>No datasets in this experiment</i>"
-
-            # Add experiment path info
-            exp_path = exp_metadata.get("path", "Unknown")
-            preview_text += f"<br><small><b>Path:</b> {exp_path}</small>"
-
-            self.experiment_preview.setText(preview_text)
-
-        except Exception as e:
-            logging.error(f"Error updating experiment preview from metadata: {e}")
-            self.experiment_preview.setText(f"<b>Experiment:</b> {exp_id}<br><br><i>Error loading preview</i>")
-
     def on_dataset_checkbox_changed(self, item, column):
         """Handle dataset checkbox changes in the tree."""
         # Only respond to checkbox changes on column 0 and only for dataset items (not experiments)
@@ -651,9 +863,51 @@ class DataCurationManager(QDialog):
         else:
             self.dataset_summary.setText("No datasets selected")
 
+        # Refresh Undo Last button state & tooltip
+        try:
+            self._refresh_undo_last_button()
+        except Exception:
+            # Non-fatal; ensure UI still updates
+            pass
+
+    def _refresh_undo_last_button(self):
+        """Enable/disable the Undo Last button and set its tooltip to the last command name."""
+        try:
+            btn = getattr(self, "undo_last_button", None)
+            if btn is None:
+                return
+
+            if not self.session_commands:
+                btn.setEnabled(False)
+                btn.setToolTip("No changes to undo")
+                return
+
+            # Last command is the most recently appended
+            last_cmd = self.session_commands[-1]
+            # Prefer a human-friendly command_name attribute if present
+            cmd_name = getattr(last_cmd, "command_name", None) or last_cmd.__class__.__name__
+            btn.setEnabled(True)
+            btn.setToolTip(f"Undo last: {cmd_name}")
+        except Exception as e:
+            logging.error(f"Failed to refresh Undo Last button: {e}")
+
     @auto_refresh
     def on_dataset_dragged(self, dataset_id, formatted_name, source_exp_id, target_exp_id):
         """Handle dataset drag-and-drop operations."""
+        # If we're in a batch move, accumulate move descriptors and defer execution until batch completion.
+        if getattr(self, "_in_batch_move", False):
+            try:
+                self._pending_batch_moves.append((dataset_id, formatted_name, source_exp_id, target_exp_id))
+                # Track processed moves for batch reporting
+                try:
+                    self._batch_processed_moves += 1
+                except Exception:
+                    self._batch_processed_moves = 1
+            except Exception as e:
+                logging.error(f"Failed to buffer pending dataset move: {e}")
+            return
+
+        # Execute the move command but do not announce success here; announcements occur after the full batch.
         try:
             from monstim_gui.commands import MoveDatasetCommand
 
@@ -664,22 +918,26 @@ class DataCurationManager(QDialog):
             self.session_commands.append(command)
             self._changes_made = True
 
-            # Show success message
-            QMessageBox.information(
-                self,
-                "Dataset Moved",
-                f"Dataset '{formatted_name}' has been moved from '{source_exp_id}' to '{target_exp_id}'.",
-            )
+            # Track successful move for batch summary
+            try:
+                self._batch_successful_moves += 1
+            except Exception:
+                self._batch_successful_moves = 1
 
         except Exception as e:
             logging.error(f"Failed to move dataset via drag-and-drop: {e}")
+            # Track processed move even on failure for accurate batch reporting
+            try:
+                self._batch_processed_moves += 1
+            except Exception:
+                self._batch_processed_moves = 1
             QMessageBox.critical(self, "Move Failed", f"Failed to move dataset '{formatted_name}':\n{str(e)}")
 
     @auto_refresh
     def create_experiment(self):
         """Create a new empty experiment immediately."""
         try:
-            from PyQt6.QtWidgets import QInputDialog
+            from PySide6.QtWidgets import QInputDialog
 
             from monstim_gui.commands import CreateExperimentCommand
 
@@ -712,105 +970,124 @@ class DataCurationManager(QDialog):
 
     @auto_refresh
     def import_experiment(self):
-        """Import experiment using existing functionality."""
-        try:
-            # Check for unsaved changes
-            if self.gui.has_unsaved_changes:
-                reply = QMessageBox.question(
-                    self,
-                    "Unsaved Changes",
-                    "You have unsaved changes. Save them before importing?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
-                )
+        """Import experiment using existing functionality (minimal wrapper).
 
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.gui.data_manager.save_experiment()
-                elif reply == QMessageBox.StandardButton.Cancel:
-                    return
+        This uses the application's DataManager.import_expt_data() method and
+        preserves the existing confirmation for unsaved changes.
+        """
 
-            # Use existing import functionality
+        # Helper to disable/enable dataset UI during long operations
+        def _set_dataset_ui_enabled(enabled: bool):
             try:
-                self.gui.data_manager.import_expt_data()
-                QMessageBox.information(self, "Import Complete", "Experiment imported successfully. Data has been refreshed.")
-            except Exception as e:
-                logging.error(f"Failed to import experiment: {e}")
-                QMessageBox.critical(self, "Import Error", f"Failed to import experiment:\n{str(e)}")
-                raise  # Let decorator handle the refresh
+                self.dataset_tree.setEnabled(enabled)
+            except Exception:
+                # Ignore errors if the widget is missing or in a transient state; safe to skip in UI enable/disable.
+                pass
 
-        except Exception as e:
-            logging.error(f"Error in import_experiment: {e}")
-            QMessageBox.critical(self, "Error", f"Unexpected error during import:\n{str(e)}")
-            raise  # Let decorator handle the refresh
+            for btn_name in (
+                "create_blank_experiment_button",
+                "import_new_experiment_button",
+                "select_all_button",
+                "clear_selection_button",
+                "move_selected_button",
+                "copy_selected_button",
+                "delete_selected_button",
+            ):
+                btn = getattr(self, btn_name, None)
+                if btn is not None:
+                    try:
+                        btn.setEnabled(enabled)
+                    except Exception as e:
+                        # It is safe to ignore errors here (e.g., widget may be deleted during teardown),
+                        # but log them for debugging purposes.
+                        logging.error(f"Failed to set enabled state for {btn_name}: {e}")
 
-    @auto_refresh
-    def rename_experiment(self):
-        """Rename selected experiment using command pattern."""
-        from PyQt6.QtWidgets import QInputDialog
+        # Disable dataset UI to 'pause' dataset management while importing
+        _set_dataset_ui_enabled(False)
+        from PySide6.QtWidgets import QApplication
 
-        from monstim_gui.commands import RenameExperimentCommand
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
-        current_item = self.experiment_list.currentItem()
-        if not current_item:
-            return
+        # Suppress auto-refresh until import completes (may run in background thread)
+        self._suppress_autorefresh = True
 
-        old_name = current_item.data(Qt.ItemDataRole.UserRole)
+        # Check for unsaved changes
+        if getattr(self.gui, "has_unsaved_changes", False):
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes to data. Save them before importing?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            )
 
-        # Get new name from user
-        new_name, ok = QInputDialog.getText(
-            self, "Rename Experiment", f"Enter new name for experiment '{old_name}':", text=old_name
-        )
-
-        if ok and new_name.strip() and new_name.strip() != old_name:
-            new_name = new_name.strip()
-
-            # Check for naming conflicts
-            if new_name in self.gui.expts_dict_keys:
-                QMessageBox.warning(self, "Name Conflict", f"An experiment named '{new_name}' already exists.")
+            if reply == QMessageBox.StandardButton.Yes:
+                # Use DataManager save if available
+                try:
+                    self.gui.data_manager.save_experiment()
+                except Exception as e:
+                    logging.error(f"Failed to save before import: {e}")
+            elif reply == QMessageBox.StandardButton.Cancel:
+                # Restore UI and cursor
+                try:
+                    QApplication.restoreOverrideCursor()
+                except Exception as e:
+                    logging.warning(f"Failed to restore cursor: {e}")
+                _set_dataset_ui_enabled(True)
+                self._suppress_autorefresh = False
                 return
 
-            # Execute command immediately
-            command = RenameExperimentCommand(self.gui, old_name, new_name)
+        # Use existing import functionality
+        try:
+            self.gui.data_manager.import_expt_data()
+        except Exception as e:
+            logging.error(f"Failed to start import: {e}")
+            QMessageBox.critical(self, "Import Error", f"Failed to start import:\n{str(e)}")
+            # Restore UI and cursor
             try:
-                command.execute()
-                self.session_commands.append(command)
-                self._changes_made = True  # Mark that changes were made
-                QMessageBox.information(
-                    self, "Experiment Renamed", f"Experiment '{old_name}' has been renamed to '{new_name}'."
-                )
+                QApplication.restoreOverrideCursor()
             except Exception as e:
-                QMessageBox.critical(self, "Rename Error", f"Failed to rename experiment:\n{str(e)}")
-                raise  # Let decorator handle the refresh
+                logging.error(f"Failed to restore cursor after import error: {e}")
+            _set_dataset_ui_enabled(True)
+            self._suppress_autorefresh = False
+            raise
 
-    @auto_refresh
-    def delete_experiment(self):
-        """Delete selected experiment immediately."""
-        from monstim_gui.commands import DeleteExperimentCommand
+        # If importation started a background thread, re-enable UI only after it finishes
+        dm = getattr(self.gui, "data_manager", None)
+        thread = getattr(dm, "thread", None) if dm is not None else None
 
-        current_item = self.experiment_list.currentItem()
-        if not current_item:
-            return
-
-        exp_id = current_item.data(Qt.ItemDataRole.UserRole)
-
-        reply = QMessageBox.question(
-            self,
-            "Confirm Experiment Deletion",
-            f"Are you sure you want to delete experiment '{exp_id}'?\n\n"
-            "This will permanently remove all datasets and files in this experiment.\n\n"
-            "WARNING: This action cannot be undone!",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            command = DeleteExperimentCommand(self.gui, exp_id)
+        def _finish_import():
             try:
-                command.execute()
-                self.session_commands.append(command)
-                QMessageBox.information(self, "Experiment Deleted", f"Experiment '{exp_id}' has been permanently deleted.")
+                QApplication.restoreOverrideCursor()
+            except Exception:
+                # Ignore errors restoring cursor; not critical if cursor was not set
+                pass
+            try:
+                _set_dataset_ui_enabled(True)
             except Exception as e:
-                QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{str(e)}")
-                raise  # Let decorator handle the refresh
+                # Non-critical: UI may already be disabled or window closed. Log for debugging.
+                logging.error("Failed to re-enable dataset UI: %s", e)
+            # clear suppression and perform a single refresh
+            self._suppress_autorefresh = False
+            try:
+                self.load_data()
+            except Exception:
+                try:
+                    self.update_dataset_tree()
+                except Exception as e:
+                    # Suppress all errors here to avoid crashing the UI; log for diagnostics.
+                    logging.warning(f"Failed to update dataset tree after import: {e}")
+
+        if thread is not None and getattr(thread, "isRunning", lambda: False)():
+            # Connect finish handlers
+            try:
+                thread.finished.connect(_finish_import)
+                thread.canceled.connect(_finish_import)
+            except Exception:
+                # If connecting fails, finish immediately
+                _finish_import()
+        else:
+            # No background thread started; finish now
+            _finish_import()
 
     def select_all_datasets(self):
         """Select all datasets in the tree."""
@@ -831,7 +1108,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def move_selected_datasets(self):
         """Move selected datasets to another experiment immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import MoveDatasetCommand
 
@@ -881,7 +1158,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def copy_selected_datasets(self):
         """Copy selected datasets to another experiment immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import CopyDatasetCommand
 
@@ -1057,7 +1334,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_move_dataset(self, dataset_data):
         """Move a single dataset via context menu immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import MoveDatasetCommand
 
@@ -1089,7 +1366,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_copy_dataset(self, dataset_data):
         """Copy a single dataset via context menu immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import CopyDatasetCommand
 
@@ -1121,7 +1398,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_duplicate_dataset(self, dataset_data):
         """Duplicate a dataset within the same experiment immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import CopyDatasetCommand
 
@@ -1216,7 +1493,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_rename_experiment(self, exp_name):
         """Rename an experiment via context menu."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import RenameExperimentCommand
 
@@ -1271,29 +1548,39 @@ class DataCurationManager(QDialog):
                 QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{str(e)}")
                 raise  # Let decorator handle the refresh
 
-    def reset_all_changes(self):
-        """Reset/clear all session commands - used by reset button."""
-        if self.session_commands:
-            reply = QMessageBox.question(
-                self,
-                "Reset Changes",
-                f"This will clear the record of {len(self.session_commands)} operation(s) from this session.\n\n"
-                "The changes will remain applied, but you won't be able to undo them using 'Cancel All Changes'.\n\n"
-                "Are you sure?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                self.session_commands.clear()
-                QMessageBox.information(self, "Reset Complete", "Session command history has been cleared.")
-
-        QMessageBox.information(self, "Changes Reset", "All pending changes have been cleared.")
-
-    def cancel_all_changes(self):
-        """Undo all changes made during this session."""
+    @auto_refresh
+    def undo_last_change(self):
+        """Undo the most recently recorded command and remove it from session_commands."""
         if not self.session_commands:
-            self.reject()
+            QMessageBox.information(self, "Nothing to Undo", "There are no recorded changes to undo.")
+            return
+
+        # Pop the last command and attempt to undo it. If undo fails, re-add it.
+        cmd = self.session_commands.pop()
+        cmd_name = getattr(cmd, "command_name", None) or cmd.__class__.__name__
+        try:
+            cmd.undo()
+            QMessageBox.information(self, "Undo Last Change", f"Undid last operation: {cmd_name}")
+
+            # If no remaining commands, mark no outstanding changes
+            self._changes_made = len(self.session_commands) > 0
+
+        except Exception as e:
+            # Re-insert to preserve history since undo failed
+            try:
+                self.session_commands.append(cmd)
+            except Exception as append_error:
+                # Failed to re-insert command into history; log and continue.
+                logging.error(f"Failed to re-insert command into session_commands after undo failure: {append_error}")
+            QMessageBox.critical(self, "Undo Failed", f"Failed to undo last change '{cmd_name}':\n{str(e)}")
+            # Re-raise to let auto_refresh ensure a refresh and to surface the error
+            raise
+
+    @auto_refresh
+    def cancel_all_changes(self):
+        """Undo all changes made during this session and keep the dialog open."""
+        if not self.session_commands:
+            QMessageBox.information(self, "No Changes", "There are no recorded changes to undo.")
             return
 
         reply = QMessageBox.question(
@@ -1309,38 +1596,100 @@ class DataCurationManager(QDialog):
             try:
                 # Undo all commands in reverse order
                 for command in reversed(self.session_commands):
-                    command.undo()
+                    try:
+                        command.undo()
+                    except Exception as e:
+                        logging.exception("Undo failed for a command during Undo All: %s", e)
 
                 QMessageBox.information(
                     self, "Changes Undone", f"All {len(self.session_commands)} operation(s) have been successfully undone."
                 )
 
+                # Clear command history so there are no duplicate undos later
+                self.session_commands.clear()
+                self._changes_made = False
+                try:
+                    self._refresh_undo_last_button()
+                except Exception as e:
+                    logging.exception("Failed to refresh undo/last button after undoing all changes: %s", e)
+
             except Exception as e:
                 QMessageBox.critical(
                     self,
                     "Error Undoing Changes",
-                    f"An error occurred while undoing changes:\n{str(e)}\n\n" "Some changes may not have been fully reversed.",
+                    f"An error occurred while undoing changes:\n{str(e)}\n\nSome changes may not have been fully reversed.",
                 )
-                raise  # Let decorator handle the refresh
-            finally:
-                self.reject()
+        # Keep dialog open for user to resolve
 
     def accept(self):
-        """Override accept to emit signal if changes were made."""
-        # Track if any changes were made during this session
-        changes_made = hasattr(self, "_changes_made") and self._changes_made
+        """On close via Done, prompt to apply/undo if there are pending changes."""
+        if getattr(self, "session_commands", None):
+            choice = self._confirm_close_with_pending_changes()
+            if choice == "cancel":
+                return  # keep dialog open
+            if choice == "undo":
+                # Undo all then close
+                try:
+                    for cmd in reversed(self.session_commands):
+                        try:
+                            cmd.undo()
+                        except Exception as e:
+                            logging.exception("Undo failed during close: %s", e)
+                    self.session_commands.clear()
+                    self._changes_made = False
+                except Exception as e:
+                    # Suppress unexpected errors during undo to avoid crashing the dialog,
+                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
+                    logging.exception("Unexpected error during undo-all in accept(): %s", e)
 
-        if changes_made:
+        # Emit change signal if there were changes this session
+        if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()
 
         super().accept()
 
     def reject(self):
-        """Override reject to emit signal if changes were made."""
-        # Track if any changes were made during this session
-        changes_made = hasattr(self, "_changes_made") and self._changes_made
+        """Intercept window close to confirm pending changes before exiting."""
+        if getattr(self, "session_commands", None):
+            choice = self._confirm_close_with_pending_changes()
+            if choice == "cancel":
+                return  # abort close
+            if choice == "undo":
+                try:
+                    for cmd in reversed(self.session_commands):
+                        try:
+                            cmd.undo()
+                        except Exception as e:
+                            logging.exception("Undo failed during close: %s", e)
+                    self.session_commands.clear()
+                    self._changes_made = False
+                except Exception:
+                    # Suppress unexpected errors during undo to avoid crashing the dialog,
+                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
+                    logging.exception("Unexpected error during undo-all in reject()")
 
-        if changes_made:
+        if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()
 
         super().reject()
+
+    def _confirm_close_with_pending_changes(self) -> str:
+        """Prompt the user when there are pending changes. Returns 'keep', 'undo', or 'cancel'."""
+        try:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Pending Changes")
+            msg.setText("You have changes from this session. What would you like to do?")
+            keep_btn = msg.addButton("Keep Changes and Close", QMessageBox.ButtonRole.AcceptRole)
+            undo_btn = msg.addButton("Undo All and Close", QMessageBox.ButtonRole.DestructiveRole)
+            _ = msg.addButton(QMessageBox.StandardButton.Cancel)
+            msg.exec()
+            clicked = msg.clickedButton()
+            if clicked == keep_btn:
+                return "keep"
+            if clicked == undo_btn:
+                return "undo"
+            return "cancel"
+        except Exception:
+            # Fallback: cancel if prompt fails
+            return "cancel"

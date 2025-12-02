@@ -114,9 +114,111 @@ class Experiment:
 
     @property
     def latency_windows(self) -> List[LatencyWindow]:
+        """Return representative latency windows (legacy behavior).
+
+        NOTE: Historically returns the windows list of the dataset with the maximum number of
+        windows. Retained for legacy code. For heterogeneous-aware logic prefer:
+
+            - unique_latency_window_names()
+            - dataset_window_presence_map()
+            - has_heterogeneous_latency_windows
+        """
         if not self.datasets:
             return []
         return max((ds.latency_windows for ds in self.datasets), key=len)
+
+    # ------------------------------------------------------------------
+    # Heterogeneous latency window inspection helpers
+    # ------------------------------------------------------------------
+    def unique_latency_window_names(self) -> List[str]:
+        name_map: dict[str, str] = {}
+        for ds in self.datasets:
+            for sess in ds.sessions:
+                for w in getattr(sess.annot, "latency_windows", []):
+                    low = (w.name or "").lower()
+                    if low and low not in name_map:
+                        name_map[low] = w.name
+        return [name_map[k] for k in sorted(name_map.keys())]
+
+    def dataset_window_presence_map(self) -> dict[str, List[str]]:
+        """Return mapping window name -> list of dataset IDs that contain it (any session)."""
+        presence: dict[str, List[str]] = {n: [] for n in self.unique_latency_window_names()}
+        for ds in self.datasets:
+            ds_names = set()
+            for sess in ds.sessions:
+                ds_names.update(w.name for w in getattr(sess.annot, "latency_windows", []))
+            for n in presence.keys():
+                if n in ds_names:
+                    presence[n].append(ds.id)
+        return presence
+
+    @property
+    def has_heterogeneous_latency_windows(self) -> bool:
+        """True if datasets differ in their ordered window name lists OR any dataset has heterogeneous sessions."""
+        if len(self.datasets) <= 1:
+            # Check nested session-level heterogeneity anyway
+            return any(ds.has_heterogeneous_latency_windows for ds in self.datasets)
+        first = [w.name for w in self.datasets[0].latency_windows]
+        for ds in self.datasets[1:]:
+            if [w.name for w in ds.latency_windows] != first or ds.has_heterogeneous_latency_windows:
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Diagnostic / notice helpers
+    # ------------------------------------------------------------------
+    def collect_notices(self) -> list[dict[str, str]]:
+        """Return structured notices about experiment-level heterogeneity or issues.
+
+        Notice dict fields: level (warning|info), code, message.
+        """
+        notices: list[dict[str, str]] = []
+        try:
+            if self.has_heterogeneous_latency_windows:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "heterogeneous_latency_windows",
+                        "message": "Datasets/sessions have differing latency window sets.",
+                    }
+                )
+            if len({ds.scan_rate for ds in self.datasets if ds.scan_rate is not None}) > 1:
+                notices.append(
+                    {
+                        "level": "info",
+                        "code": "mixed_scan_rates",
+                        "message": "Datasets have differing scan rates; normalization may be required.",
+                    }
+                )
+            # Missing M-wave latency window across entire experiment
+            if not any(
+                any(
+                    (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"}
+                    for w in sess.latency_windows
+                )
+                for ds in self.datasets
+                for sess in ds.sessions
+            ):
+                notices.append(
+                    {
+                        "level": "info",
+                        "code": "missing_m_wave_window",
+                        "message": "No dataset/session in this experiment has an M-wave latency window.",
+                    }
+                )
+
+            # No active datasets
+            if len(self.datasets) == 0:
+                notices.append(
+                    {
+                        "level": "warning",
+                        "code": "no_active_datasets",
+                        "message": "Experiment has no active datasets.",
+                    }
+                )
+        except Exception as e:
+            logging.debug(f"Notice collection error (experiment {self.id}): {e}")
+        return notices
 
     @property
     def stimulus_voltages(self) -> np.ndarray:
@@ -246,6 +348,61 @@ class Experiment:
         std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         return np.array(avg), np.array(std)
 
+    # ------------------------------------------------------------------
+    # Heterogeneous latency window aggregation (per-window reflex curves)
+    # ------------------------------------------------------------------
+    def get_average_lw_reflex_curve(
+        self, method: str, channel_index: int, window: str | LatencyWindow
+    ) -> dict[str, np.ndarray]:
+        """Aggregate average reflex amplitudes for a latency window across datasets/sessions.
+
+        This mirrors Dataset.get_average_lw_reflex_curve but traverses all datasets/sessions.
+        Only sessions containing the requested window contribute.
+        Returns dict with voltages, means, stdevs, n_sessions.
+        """
+        if not self.datasets:
+            return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
+
+        window_name = window.name if isinstance(window, LatencyWindow) else str(window)
+
+        # Collect amplitudes keyed by voltage
+        voltages_union = self.stimulus_voltages
+        bin_amplitudes: dict[float, list[float]] = {v: [] for v in voltages_union}
+        contrib_counts: dict[float, int] = {v: 0 for v in voltages_union}
+
+        for ds in self.datasets:
+            for sess in ds.sessions:
+                # Reuse dataset helper for session-level resolution if available
+                lw = ds.get_session_latency_window(sess, window_name) if hasattr(ds, "get_session_latency_window") else None
+                if lw is None:
+                    continue
+                try:
+                    amps = sess.get_lw_reflex_amplitudes(method, channel_index, window_name)
+                except Exception:
+                    continue
+                binned = np.round(np.array(sess.stimulus_voltages) / self.bin_size) * self.bin_size
+                seen_bins: set[float] = set()
+                for v, amp in zip(binned, amps):
+                    if v in bin_amplitudes:
+                        bin_amplitudes[v].append(amp)
+                        seen_bins.add(v)
+                for v in seen_bins:
+                    contrib_counts[v] += 1
+
+        if not any(bin_amplitudes[v] for v in bin_amplitudes):
+            return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
+
+        sorted_volts = sorted(bin_amplitudes.keys())
+        means = [float(np.mean(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in sorted_volts]
+        stdevs = [float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in sorted_volts]
+        n_sessions = [contrib_counts[v] for v in sorted_volts]
+        return {
+            "voltages": np.array(sorted_volts),
+            "means": np.array(means),
+            "stdevs": np.array(stdevs),
+            "n_sessions": np.array(n_sessions),
+        }
+
     def get_h_wave_amplitude_avgs_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
         amps = []
         for ds in self.datasets:
@@ -329,13 +486,6 @@ class Experiment:
     # 1) Update annotation parameters
     # ──────────────────────────────────────────────────────────────────
     def update_latency_window_parameters(self):
-        for window in self.latency_windows:
-            if window.name == "M-wave":
-                self.m_start = window.start_times
-                self.m_duration = window.durations
-            elif window.name == "H-reflex":
-                self.h_start = window.start_times
-                self.h_duration = window.durations
         for ds in self.datasets:
             ds.update_latency_window_parameters()
 
