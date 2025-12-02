@@ -33,6 +33,8 @@ jobs:
         set -o pipefail
         echo "Conda info:"
         conda info
+        echo "Ensuring base env with matrix Python version"
+        mamba create -n alv_lab python=${{ matrix.python-version }} -y || true
         echo "Attempting: mamba env update -n alv_lab -f environment.ci.yml --prune -v"
         mamba env update -n alv_lab -f environment.ci.yml --prune -v || {
           echo "conda env update failed, printing debug info and attempting full create"
@@ -52,6 +54,8 @@ jobs:
       run: |
         Write-Host "Conda info:"
         conda info
+        Write-Host "Ensuring base env with matrix Python version"
+        mamba create -n alv_lab python=${{ matrix.python-version }} -y; if ($LASTEXITCODE -ne 0) { Write-Host "Env likely exists already, continuing" }
         Write-Host "Attempting: mamba env update -n alv_lab -f environment.yml --prune -v"
         mamba env update -n alv_lab -f environment.yml --prune -v
         if ($LASTEXITCODE -ne 0) {
@@ -86,6 +90,19 @@ jobs:
         conda run --name alv_lab python -m pip install -r requirements.txt
         conda run --name alv_lab python -m pip install pytest pytest-qt
         conda run --name alv_lab python -m pip install -e . --no-deps
+
+    - name: Verify Qt packages and fallback install (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        set -e
+        echo "Checking for PySide6 in conda env"
+        conda run --name alv_lab python -c "import PySide6, sys; print('PySide6 found:', PySide6.__version__)" || {
+          echo "PySide6 not found via conda, installing via pip fallback"
+          conda run --name alv_lab python -m pip install "PySide6==6.9.*"
+          conda run --name alv_lab python -c "import PySide6, sys; print('PySide6 installed (pip):', PySide6.__version__)"
+        }
+        echo "Listing Qt-related packages"
+        conda run --name alv_lab conda list | grep -i -E "pyside6|qt|pyqtgraph" || true
 
     - name: Lint with flake8
       run: |
