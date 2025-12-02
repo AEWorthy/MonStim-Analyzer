@@ -12,11 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
-        python-version: ['3.10', '3.11', '3.12']
-        exclude:
-          # Reduce matrix size - test only critical combinations on macOS
-          - os: macos-latest
-            python-version: '3.11'
+        python-version: ['3.13.9']
 
     steps:
     - uses: actions/checkout@v6
