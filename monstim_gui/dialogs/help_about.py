@@ -14,8 +14,9 @@ from PySide6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
 WEB_ENGINE_AVAILABLE = False
 try:
     import importlib
-    _we = importlib.import_module('PySide6.QtWebEngineWidgets')
-    QWebEngineView = getattr(_we, 'QWebEngineView')
+
+    _we = importlib.import_module("PySide6.QtWebEngineWidgets")
+    QWebEngineView = getattr(_we, "QWebEngineView")
     WEB_ENGINE_AVAILABLE = QWebEngineView is not None
 except Exception:
     QWebEngineView = None
@@ -77,6 +78,7 @@ class LatexHelpWindow(QWidget):
             """
             # Load with base URL so MathJax can resolve local resources
             from PySide6.QtCore import QUrl
+
             base_dir = os.path.dirname(mathjax_path) + "/"
             self.web_view.setHtml(full_html, baseUrl=QUrl.fromLocalFile(base_dir))
         else:
