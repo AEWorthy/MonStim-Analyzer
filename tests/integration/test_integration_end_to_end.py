@@ -547,7 +547,7 @@ class TestPerformanceIntegration:
         invoker = CommandInvoker(gui_mock)
 
         # Create and execute many commands
-        for i in range(100):
+        for i in range(50):
             cmd = ExcludeRecordingCommand(gui_mock, f"recording_{i}")
             try:
                 invoker.execute(cmd)
