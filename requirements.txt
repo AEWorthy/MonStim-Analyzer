@@ -13,8 +13,8 @@ Markdown==3.10
 python_markdown_math==0.9
 pytest==9.0.0
 setuptools==80.9.0
-PyQt6>=6,<7
 
-# NOTE: This `requirements.txt` is generated from `environment.yml`.
-# If you add/remove pinned versions in `environment.yml`, run the
-# sync workflow or `tools/sync_env_from_requirements.py` to update this file.
+ # NOTE: This `requirements.txt` is generated from `environment.yml`.
+ # Keep PyQt packages managed by conda (do NOT list PyQt6 here).
+ # If you add/remove pinned versions in `environment.yml`, run the
+ # sync workflow or `tools/sync_env_from_requirements.py` to update this file.
