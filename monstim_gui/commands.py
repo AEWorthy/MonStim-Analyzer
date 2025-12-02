@@ -29,12 +29,22 @@ class Command(abc.ABC):
 class CommandInvoker:
     def __init__(self, parent: "MonstimGUI"):
         self.parent = parent  # type: MonstimGUI
+        # Limit history to avoid unbounded memory growth in long-running sessions
+        # Default max history retains the most recent 50 commands (configurable)
+        self.max_history = 50
         self.history = deque()  # type: deque[Command]
         self.redo_stack = deque()  # type: deque[Command]
 
     def execute(self, command: Command):
         command.execute()
         self.history.append(command)
+        # Trim oldest history entries if we exceed max_history
+        try:
+            while self.max_history is not None and len(self.history) > self.max_history:
+                self.history.popleft()
+        except Exception:
+            logging.warning("Non-fatal: Command history trimming failed.", exc_info=True)
+            pass
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
         # --> Set self.parent._has_unsaved_changes to True if needed <--
