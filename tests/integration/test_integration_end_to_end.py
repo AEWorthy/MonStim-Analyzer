@@ -557,7 +557,18 @@ class TestPerformanceIntegration:
                 # Commands may fail with mock - focus on memory behavior
                 pass
 
-        # Force garbage collection
+        # Explicit cleanup of strong references retained by invoker/commands
+        try:
+            invoker.history.clear()
+            invoker.redo_stack.clear()
+        except Exception:
+            pass
+
+        # Drop local references that may keep objects alive
+        del gui_mock
+        del invoker
+
+        # Force garbage collection after cleanup
         gc.collect()
         final_objects = len(gc.get_objects())
 
