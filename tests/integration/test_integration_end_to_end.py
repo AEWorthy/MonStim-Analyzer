@@ -566,9 +566,7 @@ class TestPerformanceIntegration:
         # Subtract baseline environmental churn to focus on command system impact
         net_growth = max(0, object_growth - baseline_noise)
         # Allow some headroom for Python object churn under GC
-        assert net_growth < 5000, (
-            f"Too many objects created (net after baseline): {net_growth}"
-        )
+        assert net_growth < 5000, f"Too many objects created (net after baseline): {net_growth}"
 
 
 class TestConfigurationIntegration:
