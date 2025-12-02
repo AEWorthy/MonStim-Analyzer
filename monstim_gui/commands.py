@@ -4,7 +4,7 @@ import logging
 from collections import deque
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI

@@ -37,7 +37,7 @@ updates:
   #         - "h5py*"
   #     gui-framework:
   #       patterns:
-  #         - "PyQt6*"
+  #         - "PySide6*"
   #         - "pyqtgraph*"
   #     utility-libraries:
   #       patterns:

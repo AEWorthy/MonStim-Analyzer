@@ -13,8 +13,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 # Import Qt before other imports to ensure proper initialization
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QComboBox, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QWidget
 
 from monstim_gui.core.application_state import ApplicationState
 from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
@@ -484,7 +484,7 @@ class TestSessionRestoration:
         # Restoration flag should be cleared
         assert clean_app_state._is_restoring_session is False
 
-    @patch("PyQt6.QtCore.QTimer")
+    @patch("PySide6.QtCore.QTimer")
     def test_restore_last_session_nested_restoration(self, mock_timer, clean_app_state, mock_gui, mock_experiment_structure):
         """Test nested dataset/session restoration with timing."""
         clean_app_state.settings.setValue("ProgramPreferences/track_session_restoration", True)
@@ -1031,7 +1031,7 @@ class TestGUIStateIntegration:
         def mock_single_shot(delay, callback):
             callback()
 
-        with patch("PyQt6.QtCore.QTimer.singleShot", side_effect=mock_single_shot):
+        with patch("PySide6.QtCore.QTimer.singleShot", side_effect=mock_single_shot):
             # Restore session
             result = clean_app_state.restore_last_session(mock_gui)
             assert result is True

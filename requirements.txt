@@ -15,6 +15,6 @@ pytest==9.0.0
 setuptools==80.9.0
 
  # NOTE: This `requirements.txt` is generated from `environment.yml`.
- # Keep PyQt packages managed by conda (do NOT list PyQt6 here).
+ # Keep PyQt packages managed by conda (do NOT list PySide6 here).
  # If you add/remove pinned versions in `environment.yml`, run the
  # sync workflow or `tools/sync_env_from_requirements.py` to update this file.

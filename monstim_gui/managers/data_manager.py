@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
@@ -208,7 +208,7 @@ class DataManager:
             last_import_path = str(get_data_path())
 
         # Use QFileDialog to select multiple directories
-        from PyQt6.QtWidgets import QFileDialog
+        from PySide6.QtWidgets import QFileDialog
 
         root_path = QFileDialog.getExistingDirectory(
             self.gui,
@@ -259,7 +259,7 @@ class DataManager:
             return
 
         # Show selection dialog
-        from PyQt6.QtWidgets import (
+        from PySide6.QtWidgets import (
             QCheckBox,
             QDialog,
             QLabel,
@@ -302,7 +302,7 @@ class DataManager:
         layout.addWidget(scroll_area)
 
         # Add buttons
-        from PyQt6.QtWidgets import QHBoxLayout
+        from PySide6.QtWidgets import QHBoxLayout
 
         button_layout = QHBoxLayout()
         select_all_btn = QPushButton("Select All")
@@ -1090,8 +1090,8 @@ class DataManager:
 
         def get_user_choice_for_invalid_name(dataset_name, metadata):
             """Show dialog allowing user to rename, keep as-is, or cancel."""
-            if "PyQt6" in sys.modules:
-                from PyQt6.QtWidgets import (
+            if "PySide6" in sys.modules:
+                from PySide6.QtWidgets import (
                     QApplication,
                     QDialog,
                     QHBoxLayout,

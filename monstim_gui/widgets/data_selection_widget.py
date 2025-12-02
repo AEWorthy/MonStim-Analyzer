@@ -1,9 +1,9 @@
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QRect, Qt
-from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QRect, Qt
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QGroupBox,
@@ -133,7 +133,7 @@ class DataSelectionWidget(QGroupBox):
         self.session_notice_label = _make_notice("sessionNotice")
 
         # Row builders
-        from PyQt6.QtWidgets import QHBoxLayout, QWidget
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
 
         def _row(widget, icon):
             container = QWidget()
@@ -756,12 +756,12 @@ class DataSelectionWidget(QGroupBox):
 
         except ImportError as e:
             logging.error(f"Failed to import Data Curation Manager: {e}")
-            from PyQt6.QtWidgets import QMessageBox
+            from PySide6.QtWidgets import QMessageBox
 
             QMessageBox.warning(self, "Error", "Data Curation Manager is not available.")
         except Exception as e:
             logging.error(f"Failed to open data curation manager: {e}")
-            from PyQt6.QtWidgets import QMessageBox
+            from PySide6.QtWidgets import QMessageBox
 
             QMessageBox.warning(self, "Error", f"Failed to open data manager:\n{str(e)}")
 

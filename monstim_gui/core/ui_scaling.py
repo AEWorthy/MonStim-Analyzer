@@ -4,8 +4,8 @@ UI scaling utilities for handling different screen resolutions and DPI settings.
 
 from typing import Tuple
 
-from PyQt6.QtCore import QRect
-from PyQt6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QRect
+from PySide6.QtWidgets import QApplication, QWidget
 
 
 class UIScaling:
@@ -132,7 +132,7 @@ class UIScaling:
 
     def apply_responsive_sizing(self, widget: QWidget):
         """Apply responsive sizing policies to a widget."""
-        from PyQt6.QtWidgets import QSizePolicy
+        from PySide6.QtWidgets import QSizePolicy
 
         # Set size policies that allow for flexible sizing
         widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)

@@ -26,9 +26,9 @@ datas += collect_data_files('docs')
 datas += collect_data_files('numpy')
 datas += collect_data_files('scipy')
 datas += collect_data_files('matplotlib')
-datas += collect_data_files('pyqt6')
+datas += collect_data_files('PySide6')
 
-hiddenimports = ['numpy', 'scipy', 'matplotlib', 'pyqt6']
+hiddenimports = ['numpy', 'scipy', 'matplotlib', 'PySide6']
 
 a = Analysis( # type: ignore  # noqa: F821
     ['main.py'],
@@ -74,7 +74,7 @@ coll = COLLECT( # type: ignore
     a.binaries,
     a.datas,
     upx=True,
-    upx_exclude=['PyQt6', 'Qt6Core.dll', 'Qt6Widgets.dll'],
+    upx_exclude=['PySide6', 'Qt6Core.dll', 'Qt6Widgets.dll'],
     name=DIST_NAME
 )
 

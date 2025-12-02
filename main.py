@@ -6,8 +6,8 @@ import sys
 import traceback
 from logging.handlers import RotatingFileHandler
 
-from PyQt6.QtCore import QStandardPaths, QTimer
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtCore import QStandardPaths, QTimer
+from PySide6.QtWidgets import QApplication
 
 from monstim_gui.core.splash import SPLASH_INFO
 
@@ -62,7 +62,7 @@ def setup_logging(debug: bool, log_dir: str | None = None) -> str:
         root.addHandler(console_h)
 
     logging.captureWarnings(True)  # Capture any Python warnings and log them too.
-    logging.getLogger("PyQt6").setLevel(logging.WARNING)
+    logging.getLogger("PySide6").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     root.info(f"Logging to {log_path} (debug={debug})")
     return target_dir

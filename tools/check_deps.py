@@ -14,8 +14,8 @@ DEV_EXCLUDE = {"pytest", "setuptools", "flake8", "black", "isort", "bandit", "sa
 
 # Known name equivalences between pip and conda naming
 NAME_MAP = {
-    "pyqt6": "pyqt",
-    "pyqt": "pyqt6",
+    "PySide6": "pyqt",
+    "pyqt": "PySide6",
 }
 
 

@@ -31,7 +31,7 @@ System requirements are categorized below using the MoSCoW prioritization model.
   * Define latency windows for reflex analysis.
 * Support undo/redo via a command pattern.
 * Persist unsaved changes warning on close.
-* Use PyQt6 for GUI implementation.
+* Use PySide6 for GUI implementation.
 
 === Should Have
 
@@ -237,7 +237,7 @@ This pattern ensures loose coupling and future extensibility, and supports futur
 === Modularity
 
 * `monstim_gui` has no direct file I/O logic: all data is accessed through repositories and managers (`DataManager`, `ReportManager`).
-* `monstim_signals` has no PyQt6 dependencies.
+* `monstim_signals` has no PySide6 dependencies.
 * Plotting is handled by `PlotController` and `PlotWidget`, which work through `SessionPlotters` in `Session` domain objects (and similar for Dataset/Experiment levels).
 * Widgets are managed via a layout system in `MonstimGUI`, not always as direct attributes.
 
@@ -253,7 +253,7 @@ Implementation can be structured in stages:
    * Implement corresponding repositories for load/save with folder-based hierarchy.
    * Design command base class and integrate undo/redo stack.
 
-2. **GUI Setup (PyQt6)**
+2. **GUI Setup (PySide6)**
 
    * Implement `EMGAnalysisGUI` and primary widgets (`PlotPane`, `MenuBar`, `DataSelectionWidget`).
    * Wire command execution buttons and status bar updates.

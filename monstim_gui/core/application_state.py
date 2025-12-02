@@ -7,7 +7,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Dict, List
 
-from PyQt6.QtCore import QSettings
+from PySide6.QtCore import QSettings
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
@@ -284,7 +284,7 @@ class ApplicationState:
             # Wait for experiment to load, then restore dataset/session
             if dataset_id or session_id:
                 # Schedule dataset/session restoration for after experiment loads
-                from PyQt6.QtCore import QTimer
+                from PySide6.QtCore import QTimer
 
                 def restore_nested():
                     if gui.current_experiment and gui.current_experiment.id == experiment_id:

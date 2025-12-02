@@ -30,9 +30,9 @@ from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -90,9 +90,9 @@ def auto_refresh(method):
 class DatasetTreeWidget(QTreeWidget):
     """Custom QTreeWidget that handles dataset drag-and-drop operations."""
 
-    dataset_moved = pyqtSignal(str, str, str, str)  # dataset_id, formatted_name, source_exp, target_exp
-    dataset_move_batch_start = pyqtSignal()
-    dataset_moved_batch = pyqtSignal(int, str)  # count, target_exp_id
+    dataset_moved = Signal(str, str, str, str)  # dataset_id, formatted_name, source_exp, target_exp
+    dataset_move_batch_start = Signal()
+    dataset_moved_batch = Signal(int, str)  # count, target_exp_id
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -405,7 +405,7 @@ class DataCurationManager(QDialog):
     Uses preview/apply pattern with separate tabs for different operations.
     """
 
-    data_structure_changed = pyqtSignal()  # Signal emitted when data structure changes
+    data_structure_changed = Signal()  # Signal emitted when data structure changes
 
     def __init__(self, parent: "MonstimGUI"):
         super().__init__(parent)
@@ -583,7 +583,7 @@ class DataCurationManager(QDialog):
         self._pending_batch_moves = []
         # Show busy cursor while batch move is in progress to indicate work
         try:
-            from PyQt6.QtWidgets import QApplication
+            from PySide6.QtWidgets import QApplication
 
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         except Exception as e:
@@ -641,7 +641,7 @@ class DataCurationManager(QDialog):
                 self._in_batch_move = False
                 # Restore cursor now that batch processing has completed
                 try:
-                    from PyQt6.QtWidgets import QApplication
+                    from PySide6.QtWidgets import QApplication
 
                     QApplication.restoreOverrideCursor()
                 except Exception:
@@ -937,7 +937,7 @@ class DataCurationManager(QDialog):
     def create_experiment(self):
         """Create a new empty experiment immediately."""
         try:
-            from PyQt6.QtWidgets import QInputDialog
+            from PySide6.QtWidgets import QInputDialog
 
             from monstim_gui.commands import CreateExperimentCommand
 
@@ -1004,7 +1004,7 @@ class DataCurationManager(QDialog):
 
         # Disable dataset UI to 'pause' dataset management while importing
         _set_dataset_ui_enabled(False)
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
 
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
@@ -1108,7 +1108,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def move_selected_datasets(self):
         """Move selected datasets to another experiment immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import MoveDatasetCommand
 
@@ -1158,7 +1158,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def copy_selected_datasets(self):
         """Copy selected datasets to another experiment immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import CopyDatasetCommand
 
@@ -1334,7 +1334,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_move_dataset(self, dataset_data):
         """Move a single dataset via context menu immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import MoveDatasetCommand
 
@@ -1366,7 +1366,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_copy_dataset(self, dataset_data):
         """Copy a single dataset via context menu immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import CopyDatasetCommand
 
@@ -1398,7 +1398,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_duplicate_dataset(self, dataset_data):
         """Duplicate a dataset within the same experiment immediately."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import CopyDatasetCommand
 
@@ -1493,7 +1493,7 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def context_rename_experiment(self, exp_name):
         """Rename an experiment via context menu."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         from monstim_gui.commands import RenameExperimentCommand
 

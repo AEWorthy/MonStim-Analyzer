@@ -1,9 +1,9 @@
 import logging
 from typing import TYPE_CHECKING, List
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIntValidator
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIntValidator
+from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QGridLayout,

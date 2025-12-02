@@ -101,7 +101,7 @@ jobs:
     - name: Test import capabilities
       run: |
         conda run --name alv_lab python -c "import sys; print('Python version:', sys.version)"
-        conda run --name alv_lab python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 import successful')"
+        conda run --name alv_lab python -c "from PySide6.QtWidgets import QApplication; print('PySide6 import successful')"
         conda run --name alv_lab python -c "import pandas as pd; print('Pandas version:', pd.__version__)"
         conda run --name alv_lab python -c "import numpy as np; print('NumPy version:', np.__version__)"
         conda run --name alv_lab python -c "import matplotlib; print('Matplotlib version:', matplotlib.__version__)"
@@ -111,15 +111,15 @@ jobs:
       run: |
         export QT_QPA_PLATFORM=offscreen
         if [ "$RUNNER_OS" = "Linux" ]; then
-          xvfb-run -a conda run --name alv_lab bash -lc "python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print(\"GUI initialization successful\")'"
+          xvfb-run -a conda run --name alv_lab bash -lc "python -c 'import sys; from PySide6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print(\"GUI initialization successful\")'"
         else
-          conda run -n alv_lab python -c "import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print('GUI initialization successful')"
+          conda run -n alv_lab python -c "import sys; from PySide6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print('GUI initialization successful')"
         fi
 
     - name: Test basic application startup (Windows)
       if: runner.os == 'Windows'
       run: |
-          conda run --name alv_lab python -c 'import sys; from PyQt6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
+          conda run --name alv_lab python -c 'import sys; from PySide6.QtWidgets import QApplication; from monstim_gui.gui_main import MonstimGUI; app = QApplication(sys.argv); window = MonstimGUI(); print("GUI initialization successful")'
 
     - name: Test core signal processing modules
       run: |

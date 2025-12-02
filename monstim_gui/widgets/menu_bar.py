@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
-from PyQt6.QtGui import QFont, QKeySequence
-from PyQt6.QtWidgets import QMenuBar, QMessageBox
+from PySide6.QtGui import QFont, QKeySequence
+from PySide6.QtWidgets import QMenuBar, QMessageBox
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI

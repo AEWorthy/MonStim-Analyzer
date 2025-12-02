@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import pyqtgraph as pg
-from PyQt6.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout
 
 from monstim_gui.core.application_state import app_state
 

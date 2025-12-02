@@ -2,8 +2,8 @@ import os
 import sys
 
 import pandas as pd
-from PyQt6.QtCore import QAbstractTableModel, Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,

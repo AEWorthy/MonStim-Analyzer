@@ -19,7 +19,7 @@ If automation (like Copilot) attempts to run tests without activation, STOP and 
 
 ## Architecture Overview
 
-**Two-Package Structure**: The codebase is split into domain logic (`monstim_signals`) and GUI logic (`monstim_gui`). Never import PyQt6 in `monstim_signals` - it must remain GUI-agnostic.
+**Two-Package Structure**: The codebase is split into domain logic (`monstim_signals`) and GUI logic (`monstim_gui`). Never import PySide6 in `monstim_signals` - it must remain GUI-agnostic.
 
 **Hierarchical Data Model**: `Experiment` → `Dataset` → `Session` → `Recording`. This hierarchy drives all UI organization and data operations. Each level has its own repository class for persistence and annotation overlay system.
 

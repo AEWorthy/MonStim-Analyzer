@@ -1,8 +1,8 @@
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtGui import QValidator
-from PyQt6.QtWidgets import (
+from PySide6.QtGui import QValidator
+from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,

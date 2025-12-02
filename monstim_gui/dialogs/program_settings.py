@@ -6,8 +6,8 @@ performance, and data tracking settings.
 
 import logging
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDoubleSpinBox,
@@ -27,7 +27,7 @@ from monstim_gui.core.ui_scaling import ui_scaling
 
 
 class ProgramSettingsDialog(QDialog):
-    settings_changed = pyqtSignal()  # Signal emitted when settings change
+    settings_changed = Signal()  # Signal emitted when settings change
 
     def __init__(self, parent=None):
         super().__init__(parent)

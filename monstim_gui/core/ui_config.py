@@ -5,8 +5,8 @@ Configuration file for UI scaling and responsive design settings.
 import logging
 from typing import TYPE_CHECKING, Any, Dict
 
-from PyQt6.QtCore import QSettings
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QApplication
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
@@ -91,8 +91,8 @@ class UIConfig:
 
         # Set font DPI scaling
         if hasattr(app, "setHighDpiScaleFactorRoundingPolicy"):
-            # PyQt6 specific
-            from PyQt6.QtCore import Qt
+            # PySide6 specific
+            from PySide6.QtCore import Qt
 
             app.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 

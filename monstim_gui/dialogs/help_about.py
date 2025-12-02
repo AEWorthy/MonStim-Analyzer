@@ -5,28 +5,26 @@ from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 from mdx_math import MathExtension
-from PyQt6.QtCore import Qt, QUrl, pyqtSlot
-from PyQt6.QtGui import QDesktopServices, QFont, QIcon, QPixmap
-from PyQt6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
 
-# Conditional imports for WebEngine (not available in all PyQt6 installations)
+# Optional WebEngine for LaTeX via MathJax (graceful fallback).
+# Note: Only used if the QtWebEngine module is present at runtime.
+WEB_ENGINE_AVAILABLE = False
 try:
-    from PyQt6.QtWebChannel import QWebChannel
-    from PyQt6.QtWebEngineCore import QWebEngineScript
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-
-    WEB_ENGINE_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without PyQt6-WebEngine
-    QWebChannel = None
-    QWebEngineScript = None
+    import importlib
+    _we = importlib.import_module('PySide6.QtWebEngineWidgets')
+    QWebEngineView = getattr(_we, 'QWebEngineView')
+    WEB_ENGINE_AVAILABLE = QWebEngineView is not None
+except Exception:
     QWebEngineView = None
-    WEB_ENGINE_AVAILABLE = False
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
 
-from .base import WebEnginePage
+# WebEngine-based rendering was removed for simplicity since
+# the application does not require dynamic JS bridging here.
 
 
 class HelpWindow(QWidget):
@@ -52,149 +50,45 @@ class LatexHelpWindow(QWidget):
 
         layout = QVBoxLayout(self)
 
-        if not WEB_ENGINE_AVAILABLE:
-            # Fallback to simple text browser if WebEngine is not available
-            self.text_browser = QTextBrowser()
-            self.text_browser.setHtml(self.markdown_to_html(markdown_content))
-            layout.addWidget(self.text_browser)
-            return
+        if WEB_ENGINE_AVAILABLE:
+            # Minimal WebEngine view with local MathJax for LaTeX rendering
+            self.web_view = QWebEngineView()
+            layout.addWidget(self.web_view)
 
-        self.web_view = QWebEngineView()
-        layout.addWidget(self.web_view)
-
-        # Set custom WebEnginePage to handle JavaScript messages
-        self.page = WebEnginePage(self.web_view)
-        self.web_view.setPage(self.page)
-
-        # Process and display the markdown content
-        self.process_content(markdown_content)
-
-    def process_content(self, markdown_content):
-        if not WEB_ENGINE_AVAILABLE:
-            return
-
-        # Convert markdown to HTML
-        html_content = self.markdown_to_html(markdown_content)
-
-        # Get the path to your local MathJax installation
-        mathjax_path = os.path.abspath(os.path.join(get_source_path(), "mathjax", "es5", "tex-mml-chtml.js"))
-
-        # Full HTML content
-        full_html = f"""
-        <!DOCTYPE html>
+            html_content = self.markdown_to_html(markdown_content)
+            mathjax_path = os.path.abspath(os.path.join(get_source_path(), "mathjax", "es5", "tex-mml-chtml.js"))
+            full_html = f"""
+            <!DOCTYPE html>
             <html>
             <head>
+                <meta charset=\"utf-8\">
                 <script id=\"MathJax-script\" async src=\"file:///{mathjax_path}\"></script>
                 <script>
-                    MathJax = {{
-                        tex: {{
-                            inlineMath: [['$', '$']]
-                        }}
-                    }};
+                    window.MathJax = {{ tex: {{ inlineMath: [['$', '$'], ['\\(', '\\)']] }} }};
                 </script>
                 <style>
-                    body {{
-                        font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif;
-                        font-size: 14px;
-                        line-height: 1.5;
-                        margin: 0;
-                        padding: 10px;
-                        transition: background-color 0.5s, color 0.5s;
-                        overflow-y: auto;
-                    }}
-                    body.light-mode {{
-                        background-color: #ffffff;
-                        color: #000000;
-                    }}
-                    body.dark-mode {{
-                        background-color: #2b2b2b;
-                        color: #ffffff;
-                    }}
-                    a {{
-                        color: #0000ff;
-                        text-decoration: none;
-                    }}
-                    a:hover {{
-                        text-decoration: underline;
-                    }}
-                    pre {{
-                        background-color: #f0f0f0;
-                        border: 1px solid #ccc;
-                        border-radius: 4px;
-                        padding: 10px;
-                        white-space: pre-wrap;
-                        word-wrap: break-word;
-                    }}
-                    body.dark-mode pre {{
-                        background-color: #3c3c3c;
-                        border-color: #555;
-                    }}
-                    table {{
-                        border-collapse: collapse;
-                        margin-bottom: 10px;
-                    }}
-                    th, td {{
-                        border: 1px solid #ccc;
-                        padding: 5px;
-                    }}
-                    body.dark-mode th, body.dark-mode td {{
-                        border-color: #555;
-                    }}
+                    body {{ font-family: -apple-system, Segoe UI, Roboto, Arial; margin: 0; padding: 10px; }}
                 </style>
-                <script>
-                    document.addEventListener("DOMContentLoaded", function() {{
-                        const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                        document.body.classList.toggle('dark-mode', isDarkMode);
-                        document.body.classList.toggle('light-mode', !isDarkMode);
-
-                        // Add click event listener to all links
-                        document.querySelectorAll('a').forEach(link => {{
-                            link.addEventListener('click', function(event) {{
-                                event.preventDefault();
-                                window.pyqt.linkClicked(this.href);
-                            }});
-                        }});
-                    }});
-                </script>
             </head>
             <body>
                 {html_content}
             </body>
             </html>
-        """
-
-        # Add the bridge object
-        bridge_script = QWebEngineScript()
-        bridge_script.setName("pyqt_bridge")
-        bridge_script.setSourceCode(
             """
-            var pyqt = {
-                linkClicked: function(url) {
-                    new QWebChannel(qt.webChannelTransport, function(channel) {
-                        channel.objects.pyqt.linkClicked(url);
-                    });
-                }
-            };
-        """
-        )
-        bridge_script.setWorldId(QWebEngineScript.ScriptWorldId.ApplicationWorld)
-        bridge_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
-        bridge_script.setRunsOnSubFrames(False)
-        self.page.scripts().insert(bridge_script)
+            # Load with base URL so MathJax can resolve local resources
+            from PySide6.QtCore import QUrl
+            base_dir = os.path.dirname(mathjax_path) + "/"
+            self.web_view.setHtml(full_html, baseUrl=QUrl.fromLocalFile(base_dir))
+        else:
+            # Simple QTextBrowser fallback (no LaTeX rendering, plain HTML)
+            self.text_browser = QTextBrowser()
+            self.text_browser.setOpenExternalLinks(True)
+            self.text_browser.setHtml(self.markdown_to_html(markdown_content))
+            layout.addWidget(self.text_browser)
 
-        # Convert the file path to a QUrl object
-        base_url = QUrl.fromLocalFile(os.path.dirname(mathjax_path) + "/")
-        self.web_view.setHtml(full_html, baseUrl=base_url)
-
-        # Set up channel to handle link clicks
-        self.channel = QWebChannel()
-        self.page.setWebChannel(self.channel)
-        self.channel.registerObject("pyqt", self)
-
-    @pyqtSlot(str)
-    def linkClicked(self, url):
-        if WEB_ENGINE_AVAILABLE:
-            QDesktopServices.openUrl(QUrl(url))
+    def process_content(self, markdown_content):
+        # Deprecated: no-op after removal of WebEngine.
+        return
 
     def markdown_to_html(self, markdown_content):
         md = markdown.Markdown(

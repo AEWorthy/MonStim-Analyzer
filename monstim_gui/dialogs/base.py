@@ -2,7 +2,7 @@ from matplotlib import colors as mcolors
 
 # Conditional import for WebEngine
 try:
-    from PyQt6.QtWebEngineCore import QWebEnginePage
+    from PySide6.QtWebEngineCore import QWebEnginePage
 
     WEB_ENGINE_AVAILABLE = True
 except ImportError:

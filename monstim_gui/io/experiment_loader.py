@@ -4,7 +4,7 @@ import logging
 import traceback
 from pathlib import Path
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from monstim_gui.core.application_state import app_state
 from monstim_signals.io.data_migrations import scan_annotation_versions
@@ -15,10 +15,10 @@ class ExperimentLoadingThread(QThread):
     """Thread for loading experiments asynchronously."""
 
     # Signals
-    finished = pyqtSignal(object)  # Emits the loaded experiment
-    error = pyqtSignal(str)  # Emits error message
-    progress = pyqtSignal(int)  # Emits progress percentage
-    status_update = pyqtSignal(str)  # Emits status message
+    finished = Signal(object)  # Emits the loaded experiment
+    error = Signal(str)  # Emits error message
+    progress = Signal(int)  # Emits progress percentage
+    status_update = Signal(str)  # Emits status message
 
     def __init__(self, experiment_path: str, config: dict):
         super().__init__()

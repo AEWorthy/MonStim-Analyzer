@@ -21,7 +21,7 @@ def load_install_requires(req_path="requirements.txt", exclude=None):
             "bandit",
             "safety",
             "pytest-qt",
-            "pyqt6",
+            "PySide6",
             "pyqt",
         }
 

@@ -9,9 +9,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Set
 
 import numpy as np
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -42,7 +42,7 @@ class RecordingExclusionEditor(QDialog):
     Currently supports stimulus amplitude thresholds, designed for future expansion.
     """
 
-    exclusions_applied = pyqtSignal()  # Signal emitted when exclusions are applied
+    exclusions_applied = Signal()  # Signal emitted when exclusions are applied
 
     def __init__(self, parent: "MonstimGUI"):
         super().__init__(parent)

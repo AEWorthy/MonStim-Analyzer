@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from monstim_signals.core import format_report
 
