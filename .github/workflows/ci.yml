@@ -20,15 +20,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
-    - name: Install Miniforge (setup conda) only
+    - name: Install Miniforge (setup conda/mamba)
       uses: conda-incubator/setup-miniconda@v2
       with:
-        # Install Miniforge so conda is available on the hosted runner.
-        # We do NOT let the action auto-create the env so we can run
-        # an explicit `conda env update` and capture solver logs.
         miniforge-version: 'latest'
         auto-update-conda: true
-        use-mamba: false
+        use-mamba: true
 
     - name: Create/update conda env (Linux/macOS)
       if: runner.os != 'Windows'
@@ -36,14 +33,14 @@ jobs:
         set -o pipefail
         echo "Conda info:"
         conda info
-        echo "Attempting: conda env update -n alv_lab -f environment.yml --prune -v"
-        conda env update -n alv_lab -f environment.yml --prune -v || {
+        echo "Attempting: mamba env update -n alv_lab -f environment.ci.yml --prune -v"
+        mamba env update -n alv_lab -f environment.ci.yml --prune -v || {
           echo "conda env update failed, printing debug info and attempting full create"
           conda config --show-sources || true
           conda info -a || true
           conda clean --all --yes || true
-          echo "Attempting: conda env create -n alv_lab -f environment.yml -v"
-          conda env create -n alv_lab -f environment.yml -v || {
+          echo "Attempting: mamba env create -n alv_lab -f environment.ci.yml -v"
+          mamba env create -n alv_lab -f environment.ci.yml -v || {
             echo "conda env create also failed. Exiting with error."
             exit 1
           }
@@ -55,14 +52,14 @@ jobs:
       run: |
         Write-Host "Conda info:"
         conda info
-        Write-Host "Attempting: conda env update -n alv_lab -f environment.yml --prune -v"
-        conda env update -n alv_lab -f environment.yml --prune -v
+        Write-Host "Attempting: mamba env update -n alv_lab -f environment.yml --prune -v"
+        mamba env update -n alv_lab -f environment.yml --prune -v
         if ($LASTEXITCODE -ne 0) {
           Write-Host "conda env update failed, printing debug info and attempting full create"
           conda config --show-sources
           conda info -a
           conda clean --all --yes
-          conda env create -n alv_lab -f environment.yml -v
+          mamba env create -n alv_lab -f environment.yml -v
           if ($LASTEXITCODE -ne 0) { throw "conda env create failed" }
         }
 
