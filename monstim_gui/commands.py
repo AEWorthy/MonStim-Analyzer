@@ -30,8 +30,8 @@ class CommandInvoker:
     def __init__(self, parent: "MonstimGUI"):
         self.parent = parent  # type: MonstimGUI
         # Limit history to avoid unbounded memory growth in long-running sessions
-        # Default max history retains the most recent 50 commands (configurable)
-        self.max_history = 50
+        # Default max history retains the most recent 100 commands (configurable)
+        self.max_history = 100
         self.history = deque()  # type: deque[Command]
         self.redo_stack = deque()  # type: deque[Command]
 
