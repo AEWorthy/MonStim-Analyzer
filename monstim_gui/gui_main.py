@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     )
     from PySide6.QtWidgets import QStatusBar
 
-import markdown
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -42,10 +41,8 @@ from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.dialogs import (
     AboutDialog,
     ChangeChannelNamesDialog,
-    HelpWindow,
     InvertChannelPolarityDialog,
     LatencyWindowsDialog,
-    LatexHelpWindow,
 )
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
@@ -616,16 +613,13 @@ class MonstimGUI(QMainWindow):
         dialog = AboutDialog(self)
         dialog.show()
 
-    def show_help_dialog(self, topic=None, latex=False):
+    def show_help_dialog(self, topic=None):
         """Show help dialog using HelpFileRepository."""
         file = "readme.md" if topic is None else topic
         markdown_content = self.help_repo.read_help_file(file)
-        if latex:
-            # Pass raw Markdown so LatexHelpWindow can convert with math support
-            self.help_window = LatexHelpWindow(markdown_content, topic)
-        else:
-            html_content = markdown.markdown(markdown_content)
-            self.help_window = HelpWindow(html_content, topic)
+        from monstim_gui.dialogs.help_about import create_help_window
+
+        self.help_window = create_help_window(markdown_content, title=topic, parent=self)
         self.help_window.show()
 
     def _get_effective_config(self):
@@ -679,6 +673,21 @@ class MonstimGUI(QMainWindow):
         session.set_config(config)
         self.current_session = session
 
+    def _cleanup_on_close(self):
+        """Cleanup resources before closing.
+
+        Saves the window state and attempts to clear the math cache.
+        Any errors while clearing the cache are logged at info level.
+        """
+        from monstim_gui.core.ui_config import ui_config
+        from monstim_gui.dialogs import clear_math_cache
+
+        ui_config.save_window_state(self)
+        try:
+            clear_math_cache()
+        except Exception as e:
+            logging.info(f"Cache clear failed: {e}")
+
     def closeEvent(self, event):
         """Handle application close event - save current session state."""
         from monstim_gui.core.application_state import app_state
@@ -708,35 +717,24 @@ class MonstimGUI(QMainWindow):
 
                 if reply == QMessageBox.StandardButton.Save:
                     if self.data_manager.save_experiment():
-                        # Save window state before closing
-                        from monstim_gui.core.ui_config import ui_config
-
-                        ui_config.save_window_state(self)
+                        self._cleanup_on_close()
                         event.accept()
                     else:
                         event.ignore()
                 elif reply == QMessageBox.StandardButton.Discard:
-                    # Save window state before closing
-                    from monstim_gui.core.ui_config import ui_config
-
-                    ui_config.save_window_state(self)
+                    self._cleanup_on_close()
                     event.accept()
                 else:  # Cancel
                     event.ignore()
             else:
-                # Save window state before closing
-                from monstim_gui.core.ui_config import ui_config
-
-                ui_config.save_window_state(self)
+                self._cleanup_on_close()
                 event.accept()
 
         except Exception as e:
             logging.error(f"Error during application close: {e}")
             # Still save window state and allow closing even if other operations fail
             try:
-                from monstim_gui.core.ui_config import ui_config
-
-                ui_config.save_window_state(self)
+                self._cleanup_on_close()
             except Exception as e2:
                 logging.error(f"Error saving window state: {e2}")
             event.accept()

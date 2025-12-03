@@ -1,6 +1,6 @@
 from .channel import ChangeChannelNamesDialog, InvertChannelPolarityDialog
 from .dataset_metadata_editor import DatasetMetadataEditor
-from .help_about import AboutDialog, HelpWindow, LatexHelpWindow
+from .help_about import AboutDialog, HelpWindow, clear_math_cache
 from .latency import LatencyWindowsDialog
 from .preferences import PreferencesDialog
 from .program_settings import ProgramSettingsDialog
@@ -13,8 +13,8 @@ __all__ = [
     "CopyableReportDialog",
     "PreferencesDialog",
     "HelpWindow",
-    "LatexHelpWindow",
     "AboutDialog",
+    "clear_math_cache",
     "LatencyWindowsDialog",
     "ProgramSettingsDialog",
 ]

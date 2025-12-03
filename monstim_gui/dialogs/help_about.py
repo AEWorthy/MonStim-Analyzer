@@ -1,111 +1,277 @@
+import hashlib
+import io
+import logging
 import os
 import re
+from pathlib import Path
 
 import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
+from matplotlib import pyplot as plt
 from mdx_math import MathExtension
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QIcon, QPixmap
-from PySide6.QtWidgets import QLabel, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer
+from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
 
-# Optional WebEngine for LaTeX via MathJax (graceful fallback).
-# Note: Only used if the QtWebEngine module is present at runtime.
-WEB_ENGINE_AVAILABLE = False
-try:
-    import importlib
-
-    _we = importlib.import_module("PySide6.QtWebEngineWidgets")
-    QWebEngineView = getattr(_we, "QWebEngineView")
-    WEB_ENGINE_AVAILABLE = QWebEngineView is not None
-except Exception:
-    QWebEngineView = None
+# Cache stores tuples of (path, render_w, render_h, display_w, display_h)
+_IMG_CACHE: dict[str, tuple[str, int, int, int, int]] = {}
 
 
-# WebEngine-based rendering was removed for simplicity since
-# the application does not require dynamic JS bridging here.
+# Persist math images in a user-specific cache directory
+def _get_cache_dir() -> Path:
+    cache_location = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)
+    cache_dir = Path(cache_location) / "monstim_math_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
 
 
-class HelpWindow(QWidget):
+_CACHE_DIR = _get_cache_dir()
+
+
+# Render DPI - higher = sharper images
+_RENDER_DPI = 300
+
+
+# Reference DPI for sizing (images rendered at _RENDER_DPI will be scaled to display as if at this DPI)
+def _get_display_dpi() -> int:
+    """Detect the system's display DPI, fallback to 100 if unavailable."""
+    app = QApplication.instance()
+    screen = app.primaryScreen() if app else None
+    if screen is not None:
+        dpi = int(screen.logicalDotsPerInch())
+        # Clamp to reasonable range
+        return max(72, min(600, dpi))
+    return 100
+
+
+_DISPLAY_DPI = _get_display_dpi()
+# Scale factor to convert from render size to display size
+_DPI_SCALE = _DISPLAY_DPI / _RENDER_DPI
+
+
+def _is_dark_mode() -> bool:
+    """Detect if the application is in dark mode based on window background color."""
+    app = QApplication.instance()
+    if app:
+        palette = app.palette()
+        bg_color = palette.color(QPalette.ColorRole.Window)
+        # Consider dark mode if background luminance is low
+        # Using simple luminance formula: 0.299*R + 0.587*G + 0.114*B
+        luminance = 0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()
+        return luminance < 128
+    return False
+
+
+def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) -> tuple[str, int, int, int, int]:
+    """Render TeX to a high-DPI PNG and return (path, render_w, render_h, display_w, display_h).
+
+    Renders at high DPI for quality, but returns display dimensions scaled down
+    so the visual size matches what you'd get at _DISPLAY_DPI.
+
+    Args:
+        tex: LaTeX math string
+        fontsize: Font size for rendering
+        dark_mode: If True, render in white color for dark backgrounds
+    """
+    key = f"{tex}|{fontsize}|{_RENDER_DPI}|{'dark' if dark_mode else 'light'}"
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    out_path = _CACHE_DIR / f"mtx_{h}.png"
+
+    if key in _IMG_CACHE and out_path.exists():
+        return _IMG_CACHE[key]
+
+    # Consistent math font
+    plt.rcParams["mathtext.fontset"] = "stix"
+    plt.rcParams["font.family"] = "DejaVu Sans"
+    plt.rcParams["font.size"] = fontsize
+
+    fig = plt.figure(figsize=(0.01, 0.01), dpi=_RENDER_DPI)
+    fig.patch.set_alpha(0)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axis("off")
+
+    # Use white text for dark mode, black for light mode
+    text_color = "white" if dark_mode else "black"
+    ax.text(0.5, 0.5, f"${tex}$", ha="center", va="center", fontsize=fontsize, color=text_color)
+
+    buf = io.BytesIO()
+    try:
+        fig.savefig(buf, format="png", dpi=_RENDER_DPI, transparent=True, bbox_inches="tight", pad_inches=0.01)
+    finally:
+        plt.close(fig)
+
+    png_bytes = buf.getvalue()
+    out_path.write_bytes(png_bytes)
+
+    # Get actual image dimensions (at render DPI)
+    img = QImage()
+    img.loadFromData(png_bytes)
+    render_w, render_h = img.width(), img.height()
+
+    # Calculate display dimensions (scaled down by DPI ratio)
+    display_w = int(render_w * _DPI_SCALE)
+    display_h = int(render_h * _DPI_SCALE)
+
+    logging.debug(f"math-img render: {out_path.name} ({render_w}x{render_h}px -> display {display_w}x{display_h}px)")
+    result = (str(out_path), render_w, render_h, display_w, display_h)
+    _IMG_CACHE[key] = result
+    return result
+
+
+def _make_img_tag(tex: str, is_display: bool, scale: float = 1.0, dark_mode: bool = False) -> str:
+    """Create an <img> tag for math with proper pixel sizing.
+
+    Args:
+        tex: The LaTeX content
+        is_display: True for display math (centered), False for inline
+        scale: Zoom scale factor (1.0 = 100%)
+        dark_mode: If True, render in white color for dark backgrounds
+    """
+    # Base fontsizes that look good at scale=1.0
+    base_fontsize = 14 if not is_display else 18
+    render_fontsize = int(base_fontsize * scale)
+    render_fontsize = max(8, min(72, render_fontsize))  # Clamp to reasonable range
+
+    img_path, render_w, render_h, display_w, display_h = _render_tex_to_img(tex, fontsize=render_fontsize, dark_mode=dark_mode)
+
+    # Use proper file:// URI formatting for cross-platform compatibility
+    try:
+        img_url = Path(img_path).as_uri()
+    except Exception:
+        # Fallback: ensure forward slashes and basic quoting
+        img_url = f'file:///{str(img_path).replace(chr(92), "/")}'
+
+    # Use the display dimensions (scaled down from high-DPI render)
+    if is_display:
+        return f'<div align="center"><img src="{img_url}" width="{display_w}" height="{display_h}"/></div>'
+    else:
+        return f'<img src="{img_url}" width="{display_w}" height="{display_h}" align="middle"/>'
+
+
+def _replace_math_with_placeholders(html: str) -> tuple[str, list[tuple[str, bool]]]:
+    """Replace math with placeholders and return list of (tex, is_display) tuples."""
+    math_items: list[tuple[str, bool]] = []
+
+    def _sub_script(m):
+        mode = m.group("mode") or ""
+        content = m.group("content")
+        is_display = "display" in mode
+        idx = len(math_items)
+        math_items.append((content, is_display))
+        return f"<!--MATH:{idx}-->"
+
+    html = re.sub(
+        r"<script\s+type=[\'\"]math/tex(?:;\s*mode=(?P<mode>display))?[\'\"]>(?P<content>.*?)</script>",
+        _sub_script,
+        html,
+        flags=re.DOTALL,
+    )
+
+    def _sub_display(m):
+        content = m.group("content")
+        idx = len(math_items)
+        math_items.append((content, True))
+        return f"<!--MATH:{idx}-->"
+
+    html = re.sub(r"\$\$(?P<content>.*?)\$\$", _sub_display, html, flags=re.DOTALL)
+
+    def _sub_inline(m):
+        content = m.group("content")
+        idx = len(math_items)
+        math_items.append((content, False))
+        return f"<!--MATH:{idx}-->"
+
+    html = re.sub(r"(?<!\$)\$(?P<content>[^$]+)\$(?!\$)", _sub_inline, html, flags=re.DOTALL)
+
+    return html, math_items
+
+
+def _replace_placeholders_with_images(
+    html: str, math_items: list[tuple[str, bool]], scale: float = 1.0, dark_mode: bool = False
+) -> str:
+    """Replace math placeholders with actual image tags at the given scale."""
+
+    def _sub(m):
+        idx = int(m.group(1))
+        tex, is_display = math_items[idx]
+        return _make_img_tag(tex, is_display, scale, dark_mode)
+
+    return re.sub(r"<!--MATH:(\d+)-->", _sub, html)
+
+
+class HelpWindow(QDialog):
+    """Help window that renders Markdown with LaTeX math as images.
+
+    Supports Ctrl+wheel zoom which scales both text and math images together.
+    """
+
     def __init__(self, markdown_content, title=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(title if title else "Help Window")
+        self.setWindowTitle(title if title else "Help")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), "info.png")))
-        self.resize(600, 400)
+        self.resize(650, 550)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
 
-        layout = QVBoxLayout()
-        self.text_browser = QTextBrowser()
-        self.text_browser.setHtml(markdown_content)
-        layout.addWidget(self.text_browser)
-        self.setLayout(layout)
+        # Store for zoom re-rendering
+        self._markdown_content = markdown_content
+        self._zoom_scale = 1.0
+        # Accumulate discrete zoom steps during rapid scrolling (debounced)
+        # Positive = zoom in steps, Negative = zoom out steps
+        self._pending_zoom_steps = 0
+        self._text_zoom_level = 0  # Track text zoom level (0 = default)
+        self._pending_text_zoom_delta = 0  # Accumulated text zoom delta
+        self._html_template = ""  # HTML with placeholders
+        self._math_items: list[tuple[str, bool]] = []
+        self._dark_mode = _is_dark_mode()  # Cache dark mode state
 
+        # Listen for application palette changes so we can update math images
+        # if the user toggles system theme while the help window is open.
+        # Use the `paletteChanged` signal when available instead of installing
+        # an application event filter (avoids QObject lifetime issues).
+        app = QApplication.instance()
+        self._app_palette_connected = False
+        if app and hasattr(app, "paletteChanged"):
+            try:
+                app.paletteChanged.connect(self._on_app_palette_changed)
+                self._app_palette_connected = True
+            except Exception:
+                self._app_palette_connected = False
+                logging.error("Failed to connect paletteChanged signal on HelpWindow.")
 
-class LatexHelpWindow(QWidget):
-    def __init__(self, markdown_content, title=None, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(title if title else "LaTeX Help Window")
-        self.setWindowIcon(QIcon(os.path.join(get_source_path(), "info.png")))
-        self.resize(600, 400)
+        # Debounce timer for zoom - waits for user to stop scrolling
+        self._zoom_timer = QTimer(self)
+        self._zoom_timer.setSingleShot(True)
+        self._zoom_timer.setInterval(50)  # 50ms debounce
+        self._zoom_timer.timeout.connect(self._apply_pending_zoom)
 
         layout = QVBoxLayout(self)
 
-        if WEB_ENGINE_AVAILABLE:
-            # Minimal WebEngine view with local MathJax for LaTeX rendering
-            self.web_view = QWebEngineView()
-            layout.addWidget(self.web_view)
+        # Create text browser
+        self.text_browser = QTextBrowser()
+        self.text_browser.setOpenExternalLinks(True)
 
-            html_content = self.markdown_to_html(markdown_content)
-            mathjax_path = os.path.abspath(os.path.join(get_source_path(), "mathjax", "es5", "tex-mml-chtml.js"))
-            full_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset=\"utf-8\">
-                <script>
-                    window.MathJax = {{
-                        tex: {{ inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$','$$']] }},
-                        options: {{ skipHtmlTags: ['script','noscript','style','textarea','pre'] }}
-                    }};
-                </script>
-                <script id=\"MathJax-script\" async src=\"file:///{mathjax_path}\"></script>
-                <script>
-                    document.addEventListener('DOMContentLoaded', function() {{
-                        if (window.MathJax && window.MathJax.typesetPromise) {{
-                            window.MathJax.typesetPromise();
-                        }}
-                    }});
-                </script>
-                <style>
-                    body {{ font-family: -apple-system, Segoe UI, Roboto, Arial; margin: 0; padding: 10px; }}
-                </style>
-            </head>
-            <body>
-                {html_content}
-            </body>
-            </html>
-            """
-            # Load with base URL so MathJax can resolve local resources
-            from PySide6.QtCore import QUrl
+        # Install event filter on the viewport (where wheel events actually go)
+        self.text_browser.viewport().installEventFilter(self)
 
-            base_dir = os.path.dirname(mathjax_path) + "/"
-            self.web_view.setHtml(full_html, baseUrl=QUrl.fromLocalFile(base_dir))
-        else:
-            # Simple QTextBrowser fallback: render HTML converted from Markdown
-            # (math markers are preserved so a future WebEngine view could typeset them).
-            self.text_browser = QTextBrowser()
-            self.text_browser.setOpenExternalLinks(True)
-            self.text_browser.setHtml(self.markdown_to_html(markdown_content))
-            layout.addWidget(self.text_browser)
+        self._initial_render()
+        layout.addWidget(self.text_browser)
 
-    def process_content(self, markdown_content):
-        # Deprecated: no-op after removal of WebEngine.
-        return
+        # Close button
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.close)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
 
-    def markdown_to_html(self, markdown_content):
+    def _initial_render(self):
+        """Initial render of markdown content (called once on init)."""
+        # Convert markdown and get math placeholders
         md = markdown.Markdown(
             extensions=[
                 TableExtension(),
@@ -114,28 +280,128 @@ class LatexHelpWindow(QWidget):
                 MathExtension(enable_dollar_delimiter=True),
             ]
         )
-        html = md.convert(markdown_content)
+        html = md.convert(self._markdown_content)
 
-        # mdx_math may emit math in <script type="math/tex">...</script>
-        # Script tags are not displayed by QTextBrowser. For the QTextBrowser
-        # fallback we convert those back into visible TeX delimiters so the
-        # user still sees the math source. When a WebEngine view is used,
-        # MathJax will still recognise the $...$ / $$...$$ delimiters.
-        def _replace_math_script(m):
-            mode = m.group("mode") or ""
-            content = m.group("content")
-            if "display" in mode:
-                return f"$$${content}$$$".replace("$$$", "$$")
-            else:
-                return f"${content}$"
+        # Extract math and replace with placeholders (only done once)
+        self._html_template, self._math_items = _replace_math_with_placeholders(html)
 
-        html = re.sub(
-            r"<script\s+type=[\'\"]math/tex(?:;\s*mode=(?P<mode>display))?[\'\"]>(?P<content>.*?)</script>",
-            _replace_math_script,
-            html,
-            flags=re.DOTALL,
+        # Render at current scale
+        self._update_html()
+
+    def _update_html(self):
+        """Update HTML with math images at current scale."""
+        final_html = _replace_placeholders_with_images(
+            self._html_template, self._math_items, self._zoom_scale, self._dark_mode
         )
-        return html
+
+        # Store scroll position (as fraction of total)
+        scrollbar = self.text_browser.verticalScrollBar()
+        scroll_max = scrollbar.maximum() if scrollbar else 0
+        scroll_frac = scrollbar.value() / scroll_max if scroll_max > 0 else 0
+
+        self.text_browser.setHtml(final_html)
+
+        # Restore scroll position (as fraction of new total)
+        if scrollbar:
+            new_max = scrollbar.maximum()
+            scrollbar.setValue(int(scroll_frac * new_max))
+
+    def _update_zoom(self, delta: int):
+        """Queue a zoom update (debounced to prevent lag during rapid scrolling).
+
+        Instead of multiplying an accumulated scale (which compounds on
+        rapid successive wheel events), accumulate discrete steps. When the
+        debounce timer fires we apply 1.15 ** steps to the current scale,
+        producing predictable behaviour regardless of scroll speed.
+        """
+        # Each wheel step corresponds to one discrete zoom step
+        if delta > 0:
+            self._pending_zoom_steps += 1
+            self._pending_text_zoom_delta += 1
+        else:
+            self._pending_zoom_steps -= 1
+            self._pending_text_zoom_delta -= 1
+
+        # Restart the debounce timer
+        self._zoom_timer.start()
+
+    def _apply_pending_zoom(self):
+        """Apply the accumulated zoom after debounce delay."""
+        if self._pending_zoom_steps != 0:
+            # Compute new scale as current scale multiplied by 1.15^steps
+            new_scale = self._zoom_scale * (1.15**self._pending_zoom_steps)
+            # Clamp to allowed range
+            self._zoom_scale = max(0.4, min(3.0, new_scale))
+
+            # Apply accumulated text zoom
+            if self._pending_text_zoom_delta > 0:
+                self.text_browser.zoomIn(self._pending_text_zoom_delta)
+            elif self._pending_text_zoom_delta < 0:
+                self.text_browser.zoomOut(-self._pending_text_zoom_delta)
+
+            self._text_zoom_level += self._pending_text_zoom_delta
+            self._pending_text_zoom_delta = 0
+
+            # Reset pending step counter
+            self._pending_zoom_steps = 0
+
+            logging.debug(f"Zoom applied: {self._zoom_scale:.2f}")
+            self._update_html()
+
+    def eventFilter(self, watched, event):
+        """Intercept Ctrl+wheel events on the text browser viewport."""
+        # Note: application palette changes are handled via the
+        # `paletteChanged` signal when available. Keep this method focused on
+        # intercepting Ctrl+wheel on the text browser viewport.
+
+        # Then handle Ctrl+wheel for zooming inside the text browser viewport.
+        if watched is self.text_browser.viewport():
+            if event.type() == QEvent.Type.Wheel:
+                modifiers = event.modifiers()
+                if modifiers & Qt.KeyboardModifier.ControlModifier:
+                    self._update_zoom(event.angleDelta().y())
+                    return True  # Consume the event
+
+        return super().eventFilter(watched, event)
+
+    def closeEvent(self, event):
+        """Cleanup any installed application event filter on close."""
+        app = QApplication.instance()
+        if app and getattr(self, "_app_palette_connected", False):
+            try:
+                app.paletteChanged.disconnect(self._on_app_palette_changed)
+            except Exception:
+                logging.error("Failed to disconnect paletteChanged signal on HelpWindow close.")
+        return super().closeEvent(event)
+
+    def _on_app_palette_changed(self):
+        """Slot called when the application palette changes."""
+        new_dark = _is_dark_mode()
+        if new_dark != self._dark_mode:
+            self._dark_mode = new_dark
+            logging.debug(f"Palette changed (signal), dark_mode={self._dark_mode}")
+            self._update_html()
+
+
+def create_help_window(markdown_content, title=None, parent=None):
+    """Create a help window that renders Markdown with LaTeX math as images.
+
+    Supports Ctrl+wheel zoom.
+    """
+    return HelpWindow(markdown_content, title=title, parent=parent)
+
+
+def clear_math_cache():
+    try:
+        if _CACHE_DIR.exists():
+            for p in list(_CACHE_DIR.glob("mtx_*.png")):
+                try:
+                    p.unlink()
+                except Exception as e:
+                    logging.info(f"Failed to remove cache file {p}: {e}")
+            logging.info("Cleared math image cache.")
+    except Exception as e:
+        logging.info(f"Failed to clear math cache: {e}")
 
 
 class AboutDialog(QWidget):
