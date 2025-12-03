@@ -674,6 +674,21 @@ class MonstimGUI(QMainWindow):
         session.set_config(config)
         self.current_session = session
 
+    def _cleanup_on_close(self):
+        """Cleanup resources before closing.
+
+        Saves the window state and attempts to clear the math cache.
+        Any errors while clearing the cache are logged at info level.
+        """
+        from monstim_gui.core.ui_config import ui_config
+        from monstim_gui.dialogs import clear_math_cache
+
+        ui_config.save_window_state(self)
+        try:
+            clear_math_cache()
+        except Exception as e:
+            logging.info(f"Cache clear failed: {e}")
+
     def closeEvent(self, event):
         """Handle application close event - save current session state."""
         from monstim_gui.core.application_state import app_state
@@ -703,55 +718,24 @@ class MonstimGUI(QMainWindow):
 
                 if reply == QMessageBox.StandardButton.Save:
                     if self.data_manager.save_experiment():
-                        # Save window state before closing
-                        from monstim_gui.core.ui_config import ui_config
-                        from monstim_gui.dialogs.help_about import clear_math_cache
-
-                        ui_config.save_window_state(self)
-                        try:
-                            clear_math_cache()
-                        except Exception as e:
-                            logging.info(f"Cache clear failed: {e}")
+                        self._cleanup_on_close()
                         event.accept()
                     else:
                         event.ignore()
                 elif reply == QMessageBox.StandardButton.Discard:
-                    # Save window state before closing
-                    from monstim_gui.core.ui_config import ui_config
-                    from monstim_gui.dialogs.help_about import clear_math_cache
-
-                    ui_config.save_window_state(self)
-                    try:
-                        clear_math_cache()
-                    except Exception as e:
-                        logging.info(f"Cache clear failed: {e}")
+                    self._cleanup_on_close()
                     event.accept()
                 else:  # Cancel
                     event.ignore()
             else:
-                # Save window state before closing
-                from monstim_gui.core.ui_config import ui_config
-                from monstim_gui.dialogs.help_about import clear_math_cache
-
-                ui_config.save_window_state(self)
-                try:
-                    clear_math_cache()
-                except Exception as e:
-                    logging.info(f"Cache clear failed: {e}")
+                self._cleanup_on_close()
                 event.accept()
 
         except Exception as e:
             logging.error(f"Error during application close: {e}")
             # Still save window state and allow closing even if other operations fail
             try:
-                from monstim_gui.core.ui_config import ui_config
-                from monstim_gui.dialogs.help_about import clear_math_cache
-
-                ui_config.save_window_state(self)
-                try:
-                    clear_math_cache()
-                except Exception as e2:
-                    logging.info(f"Cache clear failed: {e2}")
+                self._cleanup_on_close()
             except Exception as e2:
                 logging.error(f"Error saving window state: {e2}")
             event.accept()
