@@ -22,8 +22,6 @@ dependencies:
   - traitlets=5.14.3
   - pillow=12.0.0
   - pyside6=6.9.3
-  - pyside6-addons=6.9.3
-  - qt6-webengine=6.9.*
   - pyqtgraph=0.14.0
   - pip
   - pip:

@@ -5,6 +5,7 @@
 /.OLD_DATA
 /.pytest-tmp-golden-check
 
+/old_environment.yml
 docs/config-user.yml
 
 # Obtained from https://github.com/github/gitignore/blob/main/Python.gitignore
