@@ -562,6 +562,7 @@ class TestPerformanceIntegration:
             invoker.history.clear()
             invoker.redo_stack.clear()
         except Exception:
+            # Ignore cleanup errors in test context; focus is on memory behavior, not command stack integrity.
             pass
 
         # Drop local references that may keep objects alive
