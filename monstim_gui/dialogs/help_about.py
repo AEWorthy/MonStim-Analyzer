@@ -220,7 +220,9 @@ class HelpWindow(QDialog):
         # Store for zoom re-rendering
         self._markdown_content = markdown_content
         self._zoom_scale = 1.0
-        self._pending_zoom_scale = 1.0  # Accumulated zoom before debounce fires
+        # Accumulate discrete zoom steps during rapid scrolling (debounced)
+        # Positive = zoom in steps, Negative = zoom out steps
+        self._pending_zoom_steps = 0
         self._text_zoom_level = 0  # Track text zoom level (0 = default)
         self._pending_text_zoom_delta = 0  # Accumulated text zoom delta
         self._html_template = ""  # HTML with placeholders
@@ -291,13 +293,19 @@ class HelpWindow(QDialog):
             scrollbar.setValue(int(scroll_frac * new_max))
 
     def _update_zoom(self, delta: int):
-        """Queue a zoom update (debounced to prevent lag during rapid scrolling)."""
-        # Accumulate the zoom scale change
+        """Queue a zoom update (debounced to prevent lag during rapid scrolling).
+
+        Instead of multiplying an accumulated scale (which compounds on
+        rapid successive wheel events), accumulate discrete steps. When the
+        debounce timer fires we apply 1.15 ** steps to the current scale,
+        producing predictable behaviour regardless of scroll speed.
+        """
+        # Each wheel step corresponds to one discrete zoom step
         if delta > 0:
-            self._pending_zoom_scale = min(3.0, self._pending_zoom_scale * 1.15)
+            self._pending_zoom_steps += 1
             self._pending_text_zoom_delta += 1
         else:
-            self._pending_zoom_scale = max(0.4, self._pending_zoom_scale / 1.15)
+            self._pending_zoom_steps -= 1
             self._pending_text_zoom_delta -= 1
 
         # Restart the debounce timer
@@ -305,8 +313,11 @@ class HelpWindow(QDialog):
 
     def _apply_pending_zoom(self):
         """Apply the accumulated zoom after debounce delay."""
-        if self._pending_zoom_scale != self._zoom_scale:
-            self._zoom_scale = self._pending_zoom_scale
+        if self._pending_zoom_steps != 0:
+            # Compute new scale as current scale multiplied by 1.15^steps
+            new_scale = self._zoom_scale * (1.15**self._pending_zoom_steps)
+            # Clamp to allowed range
+            self._zoom_scale = max(0.4, min(3.0, new_scale))
 
             # Apply accumulated text zoom
             if self._pending_text_zoom_delta > 0:
@@ -316,6 +327,9 @@ class HelpWindow(QDialog):
 
             self._text_zoom_level += self._pending_text_zoom_delta
             self._pending_text_zoom_delta = 0
+
+            # Reset pending step counter
+            self._pending_zoom_steps = 0
 
             logging.debug(f"Zoom applied: {self._zoom_scale:.2f}")
             self._update_html()
