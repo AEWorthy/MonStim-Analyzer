@@ -32,7 +32,17 @@ _CACHE_DIR.mkdir(exist_ok=True)
 # Render DPI - higher = sharper images
 _RENDER_DPI = 300
 # Reference DPI for sizing (images rendered at _RENDER_DPI will be scaled to display as if at this DPI)
-_DISPLAY_DPI = 100
+def _get_display_dpi() -> int:
+    """Detect the system's display DPI, fallback to 100 if unavailable."""
+    app = QApplication.instance()
+    screen = app.primaryScreen() if app else None
+    if screen is not None:
+        dpi = int(screen.logicalDotsPerInch())
+        # Clamp to reasonable range
+        return max(72, min(600, dpi))
+    return 100
+
+_DISPLAY_DPI = _get_display_dpi()
 # Scale factor to convert from render size to display size
 _DPI_SCALE = _DISPLAY_DPI / _RENDER_DPI
 
