@@ -617,7 +617,6 @@ class MonstimGUI(QMainWindow):
         """Show help dialog using HelpFileRepository."""
         file = "readme.md" if topic is None else topic
         markdown_content = self.help_repo.read_help_file(file)
-        # Route all help dialogs through the math-aware pipeline; no WebEngine required
         from monstim_gui.dialogs.help_about import create_help_window
 
         self.help_window = create_help_window(markdown_content, title=topic, parent=self)
