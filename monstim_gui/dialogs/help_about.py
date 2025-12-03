@@ -6,27 +6,30 @@ import re
 from pathlib import Path
 
 import markdown
-import matplotlib
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 from matplotlib import pyplot as plt
 from mdx_math import MathExtension
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer, QStandardPaths
 from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
 
-# Force headless rendering backend
-matplotlib.use("Agg")
 
 # Cache stores tuples of (path, render_w, render_h, display_w, display_h)
 _IMG_CACHE: dict[str, tuple[str, int, int, int, int]] = {}
-# Persist math images in a repository-local cache directory
-_CACHE_DIR = Path(get_source_path()) / "math_cache"
-_CACHE_DIR.mkdir(exist_ok=True)
+
+# Persist math images in a user-specific cache directory
+def _get_cache_dir() -> Path:
+    cache_location = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)
+    cache_dir = Path(cache_location) / "monstim_math_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+_CACHE_DIR = _get_cache_dir()
 
 
 # Render DPI - higher = sharper images
@@ -72,7 +75,7 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
         dark_mode: If True, render in white color for dark backgrounds
     """
     key = f"{tex}|{fontsize}|{_RENDER_DPI}|{'dark' if dark_mode else 'light'}"
-    h = hashlib.sha1(key.encode("utf-8")).hexdigest()
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
     out_path = _CACHE_DIR / f"mtx_{h}.png"
 
     if key in _IMG_CACHE and out_path.exists():
