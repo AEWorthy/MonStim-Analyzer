@@ -11,16 +11,16 @@ from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 from matplotlib import pyplot as plt
 from mdx_math import MathExtension
-from PySide6.QtCore import QEvent, Qt, QTimer, QStandardPaths
+from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
 
-
 # Cache stores tuples of (path, render_w, render_h, display_w, display_h)
 _IMG_CACHE: dict[str, tuple[str, int, int, int, int]] = {}
+
 
 # Persist math images in a user-specific cache directory
 def _get_cache_dir() -> Path:
@@ -29,11 +29,14 @@ def _get_cache_dir() -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
+
 _CACHE_DIR = _get_cache_dir()
 
 
 # Render DPI - higher = sharper images
 _RENDER_DPI = 300
+
+
 # Reference DPI for sizing (images rendered at _RENDER_DPI will be scaled to display as if at this DPI)
 def _get_display_dpi() -> int:
     """Detect the system's display DPI, fallback to 100 if unavailable."""
@@ -44,6 +47,7 @@ def _get_display_dpi() -> int:
         # Clamp to reasonable range
         return max(72, min(600, dpi))
     return 100
+
 
 _DISPLAY_DPI = _get_display_dpi()
 # Scale factor to convert from render size to display size
@@ -135,11 +139,18 @@ def _make_img_tag(tex: str, is_display: bool, scale: float = 1.0, dark_mode: boo
 
     img_path, render_w, render_h, display_w, display_h = _render_tex_to_img(tex, fontsize=render_fontsize, dark_mode=dark_mode)
 
+    # Use proper file:// URI formatting for cross-platform compatibility
+    try:
+        img_url = Path(img_path).as_uri()
+    except Exception:
+        # Fallback: ensure forward slashes and basic quoting
+        img_url = f'file:///{str(img_path).replace(chr(92), "/")}'
+
     # Use the display dimensions (scaled down from high-DPI render)
     if is_display:
-        return f'<div align="center"><img src="file:///{img_path}" width="{display_w}" height="{display_h}"/></div>'
+        return f'<div align="center"><img src="{img_url}" width="{display_w}" height="{display_h}"/></div>'
     else:
-        return f'<img src="file:///{img_path}" width="{display_w}" height="{display_h}" align="middle"/>'
+        return f'<img src="{img_url}" width="{display_w}" height="{display_h}" align="middle"/>'
 
 
 def _replace_math_with_placeholders(html: str) -> tuple[str, list[tuple[str, bool]]]:
