@@ -229,6 +229,20 @@ class HelpWindow(QDialog):
         self._math_items: list[tuple[str, bool]] = []
         self._dark_mode = _is_dark_mode()  # Cache dark mode state
 
+        # Listen for application palette changes so we can update math images
+        # if the user toggles system theme while the help window is open.
+        # Use the `paletteChanged` signal when available instead of installing
+        # an application event filter (avoids QObject lifetime issues).
+        app = QApplication.instance()
+        self._app_palette_connected = False
+        if app and hasattr(app, "paletteChanged"):
+            try:
+                app.paletteChanged.connect(self._on_app_palette_changed)
+                self._app_palette_connected = True
+            except Exception:
+                self._app_palette_connected = False
+                logging.error("Failed to connect paletteChanged signal on HelpWindow.")
+
         # Debounce timer for zoom - waits for user to stop scrolling
         self._zoom_timer = QTimer(self)
         self._zoom_timer.setSingleShot(True)
@@ -336,13 +350,37 @@ class HelpWindow(QDialog):
 
     def eventFilter(self, watched, event):
         """Intercept Ctrl+wheel events on the text browser viewport."""
+        # Note: application palette changes are handled via the
+        # `paletteChanged` signal when available. Keep this method focused on
+        # intercepting Ctrl+wheel on the text browser viewport.
+
+        # Then handle Ctrl+wheel for zooming inside the text browser viewport.
         if watched is self.text_browser.viewport():
             if event.type() == QEvent.Type.Wheel:
                 modifiers = event.modifiers()
                 if modifiers & Qt.KeyboardModifier.ControlModifier:
                     self._update_zoom(event.angleDelta().y())
                     return True  # Consume the event
+
         return super().eventFilter(watched, event)
+
+    def closeEvent(self, event):
+        """Cleanup any installed application event filter on close."""
+        app = QApplication.instance()
+        if app and getattr(self, "_app_palette_connected", False):
+            try:
+                app.paletteChanged.disconnect(self._on_app_palette_changed)
+            except Exception:
+                logging.error("Failed to disconnect paletteChanged signal on HelpWindow close.")
+        return super().closeEvent(event)
+
+    def _on_app_palette_changed(self):
+        """Slot called when the application palette changes."""
+        new_dark = _is_dark_mode()
+        if new_dark != self._dark_mode:
+            self._dark_mode = new_dark
+            logging.debug(f"Palette changed (signal), dark_mode={self._dark_mode}")
+            self._update_html()
 
 
 def create_help_window(markdown_content, title=None, parent=None):
