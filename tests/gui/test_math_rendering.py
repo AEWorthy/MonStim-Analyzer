@@ -54,8 +54,10 @@ def test_dark_mode_produces_different_images():
     assert os.path.exists(light[0])
     assert os.path.exists(dark[0])
 
-    b1 = open(light[0], "rb").read()
-    b2 = open(dark[0], "rb").read()
+    with open(light[0], "rb") as f:
+        b1 = f.read()
+    with open(dark[0], "rb") as f:
+        b2 = f.read()
     # The bytes should differ because text color changes for dark mode
     assert b1 != b2
 
