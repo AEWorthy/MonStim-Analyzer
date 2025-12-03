@@ -1,12 +1,22 @@
 {
-  "extends": ["config:base"],
-  "labels": ["dependencies", "renovate"],
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
   "timezone": "UTC",
   "prConcurrentLimit": 6,
-  "regexManagers": [
+  "customManagers": [
     {
-      "fileMatch": ["^environment\\.yml$"],
-      "matchStrings": ["-\\s*(?:[^:\\s]+::)?([^=\\s]+)=([^\\s]+)"],
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^environment\\.yml$/"
+      ],
+      "matchStrings": [
+        "-\\s*(?:[^:\\s]+::)?([^=\\s]+)=([^\\s]+)"
+      ],
       "depNameTemplate": "$1",
       "packageNameTemplate": "$1",
       "currentValueTemplate": "$2",
@@ -14,8 +24,13 @@
       "versioningTemplate": "conda"
     },
     {
-      "fileMatch": ["^environment\\.yml$"],
-      "matchStrings": ["-\\s*([^=\\s]+)==([^\\s]+)"],
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^environment\\.yml$/"
+      ],
+      "matchStrings": [
+        "-\\s*([^=\\s]+)==([^\\s]+)"
+      ],
       "depNameTemplate": "$1",
       "packageNameTemplate": "$1",
       "currentValueTemplate": "$2",
@@ -25,19 +40,29 @@
   ],
   "packageRules": [
     {
-      "matchDatasources": ["conda"],
+      "matchDatasources": [
+        "conda"
+      ],
       "groupName": "conda dependencies",
-      "schedule": ["before 5am on saturday"],
+      "schedule": [
+        "before 5am on saturday"
+      ],
       "automerge": false
     },
     {
-      "matchDatasources": ["pypi"],
+      "matchDatasources": [
+        "pypi"
+      ],
       "groupName": "pip dependencies",
-      "schedule": ["before 6am on sunday"],
+      "schedule": [
+        "before 6am on sunday"
+      ],
       "automerge": false
     },
     {
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "automerge": true,
       "automergeType": "pr"
     }
