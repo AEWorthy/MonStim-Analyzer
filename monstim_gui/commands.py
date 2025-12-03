@@ -44,7 +44,6 @@ class CommandInvoker:
                 self.history.popleft()
         except Exception:
             logging.warning("Non-fatal: Command history trimming failed.", exc_info=True)
-            pass
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
         # --> Set self.parent._has_unsaved_changes to True if needed <--
