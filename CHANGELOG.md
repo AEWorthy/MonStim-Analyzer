@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## [0.5.0] - 2025-12-01
+## [0.5.0] - 2025-12-03
 
 ### Added
 - Windows distributable and installer artifacts: `MonStim Analyzer v0.5.0.exe` and `MonStim_Analyzer_v0.5.0-WIN.zip` (packaging managed via `win-main.spec`).
@@ -22,26 +22,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation overhaul: expanded Quickstart, installation instructions, and the M-max algorithm documentation in `docs/`.
 - Packaging: updated PyInstaller spec (`win-main.spec`) to include documentation and QUICKSTART files in the distributable and to use a consistent EXE/DIST naming convention.
 - Data handling: retained `DATA_VERSION = "2.0.1"` while ensuring migration hooks remain available for future changes.
-- Migrate GUI framework from **PyQt6** to **PySide6** (add fallback handling in CI and dependency manifests).
-- Refactor help dialog and math rendering pipeline: removed MathJax/WebEngine, improved Markdown math rendering and image URI handling, and added explicit cache clearing API.
-- Refactor zoom handling and close-event cleanup logic in multiple GUI dialogs.
-- Improve experiment plotter, CSV importer, and related plotting/backend import organization; moved matplotlib backend setup where needed.
+- Migrated GUI framework from **PyQt6** to **PySide6** (add fallback handling in CI and dependency manifests).
+- Refactored help dialog and math rendering pipeline: removed MathJax/WebEngine, improved Markdown math rendering and image URI handling, and added explicit cache clearing API.
+- Refactored zoom handling and close-event cleanup logic in multiple GUI dialogs.
+- Improved experiment plotter, CSV importer, and related plotting/backend import organization; moved matplotlib backend setup where needed.
 - CI and packaging updates: switch CI to use `environment.ci.yml` with `mamba`/`conda` changes, add PySide6 fallback, reorganize Renovate/Dependabot configs, and adjust GitHub Actions setup.
-- Refactor imports and move some tooling (e.g. `setup.py` to `tools/`) for repository organization.
-- Limit `CommandInvoker` history size and increase default command history limit to 100 to reduce unbounded growth.
+- Refactored imports and moved some tooling (e.g. `setup.py` to `tools/`) for repository organization.
+- Limited `CommandInvoker` history size and increase default command history limit to 100 to reduce unbounded growth.
 
 ### Fixed
 - Various stability and UI issues discovered during release QA: improved startup reliability, settings persistence, and plot refresh behavior across several widgets.
 - Resolved packaging path and data inclusion issues so documentation and sample files are present in the distributable.
-- Close resource/file-handle leaks surfaced in tests (fixes for `test_dark_mode_produces_different_images` and other tests).
+- Closed resource/file-handle leaks surfaced in tests (fixes for `test_dark_mode_produces_different_images` and other tests).
 - Explicit cleanup added before forced garbage collection in tests to avoid object growth during test runs.
 - Improved error handling for plotting configuration and safer backend fallback behavior.
 
 ### Testing
 - Expanded pytest-based automated tests and golden fixtures under the `tests/` tree to improve coverage and regression protection.
 - Test configuration and CI-related updates included to better exercise packaging and GUI smoke checks (`pytest.ini`, `pyproject.toml`).
-- Add and update integration tests and GUI-related tests (math rendering, integration end-to-end), and improve test robustness for GC/object growth and performance tests.
-- Update CI to use `environment.ci.yml` and modernize test environment setup.
+- Added and updated integration tests and GUI-related tests (math rendering, integration end-to-end), and improved test robustness for GC/object growth and performance tests.
+- Updated CI to use `environment.ci.yml` and modernized test environment setup.
 
 ### Dependencies
 - Small dependency bumps and housekeeping in `requirements.txt`/`pyproject.toml` to keep CI and packaging stable.
