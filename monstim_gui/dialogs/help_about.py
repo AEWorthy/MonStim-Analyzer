@@ -1,27 +1,26 @@
+import hashlib
 import io
+import logging
 import os
 import re
+from pathlib import Path
 
 import markdown
 import matplotlib
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
-from mdx_math import MathExtension
-
-# Force headless rendering backend
-matplotlib.use("Agg")
-import hashlib
-import logging
-from pathlib import Path
-
 from matplotlib import pyplot as plt
+from mdx_math import MathExtension
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
+
+# Force headless rendering backend
+matplotlib.use("Agg")
 
 # Cache stores tuples of (path, render_w, render_h, display_w, display_h)
 _IMG_CACHE: dict[str, tuple[str, int, int, int, int]] = {}
