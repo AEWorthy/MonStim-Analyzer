@@ -141,7 +141,8 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
         loaded = False
 
     if not loaded:
-        logging.error(f"Failed to load generated math PNG for tex='{tex[:40]}...' from data or file {out_path}")
+        tex_display = f"{tex[:40]}..." if len(tex) > 40 else tex  
+        logging.error(f"Failed to load generated math PNG for tex='{tex_display}' from data or file {out_path}")
 
     render_w, render_h = img.width(), img.height()
 
