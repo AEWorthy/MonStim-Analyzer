@@ -9,6 +9,7 @@
       "matchStrings": ["-\\s*(?:[^:\\s]+::)?([^=\\s]+)=([^\\s]+)"],
       "depNameTemplate": "$1",
       "packageNameTemplate": "$1",
+      "currentValueTemplate": "$2",
       "datasourceTemplate": "conda",
       "versioningTemplate": "conda"
     },
@@ -17,6 +18,7 @@
       "matchStrings": ["-\\s*([^=\\s]+)==([^\\s]+)"],
       "depNameTemplate": "$1",
       "packageNameTemplate": "$1",
+      "currentValueTemplate": "$2",
       "datasourceTemplate": "pypi",
       "versioningTemplate": "pep440"
     }
