@@ -613,7 +613,7 @@ class MonstimGUI(QMainWindow):
         dialog = AboutDialog(self)
         dialog.show()
 
-    def show_help_dialog(self, topic=None, latex=False):
+    def show_help_dialog(self, topic=None):
         """Show help dialog using HelpFileRepository."""
         file = "readme.md" if topic is None else topic
         markdown_content = self.help_repo.read_help_file(file)

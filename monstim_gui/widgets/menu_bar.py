@@ -153,7 +153,7 @@ class MenuBar(QMenuBar):
 
         # Show EMG processing info button
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
-        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog("Transform_EMG.md", latex=True))
+        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog("Transform_EMG.md"))
 
         # Show Experiment Import Info button
         data_import_action = help_menu.addAction("Show Experiment Import Info")
