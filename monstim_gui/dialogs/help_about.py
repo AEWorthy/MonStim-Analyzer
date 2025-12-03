@@ -11,7 +11,7 @@ from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 from matplotlib import pyplot as plt
 from mdx_math import MathExtension
-from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
@@ -100,24 +100,55 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
     ax.text(0.5, 0.5, f"${tex}$", ha="center", va="center", fontsize=fontsize, color=text_color)
 
     buf = io.BytesIO()
+    png_bytes = b""
     try:
-        fig.savefig(buf, format="png", dpi=_RENDER_DPI, transparent=True, bbox_inches="tight", pad_inches=0.01)
+        try:
+            fig.savefig(buf, format="png", dpi=_RENDER_DPI, transparent=True, bbox_inches="tight", pad_inches=0.01)
+            png_bytes = buf.getvalue()
+            out_path.write_bytes(png_bytes)
+        except Exception as e:
+            # If matplotlib backend or fonts fail in frozen app, log and fall back
+            logging.exception(f"Failed to save math image via matplotlib: {e}")
+            # Create a minimal transparent PNG using QImage as a safe fallback
+            try:
+                qimg = QImage(1, 1, QImage.Format_ARGB32)
+                qimg.fill(0)  # fully transparent
+                saved = qimg.save(str(out_path), "PNG")
+                if saved:
+                    logging.debug(f"Wrote fallback transparent image to {out_path}")
+                    # Load the raw bytes from the file for downstream processing
+                    png_bytes = out_path.read_bytes()
+                else:
+                    logging.error("Failed to save fallback QImage PNG.")
+            except Exception as ee:
+                logging.exception(f"Fallback QImage save also failed: {ee}")
     finally:
         plt.close(fig)
 
-    png_bytes = buf.getvalue()
-    out_path.write_bytes(png_bytes)
-
     # Get actual image dimensions (at render DPI)
     img = QImage()
-    img.loadFromData(png_bytes)
+    loaded = False
+    try:
+        if png_bytes:
+            loaded = img.loadFromData(png_bytes)
+        if not loaded:
+            # As a fallback try loading directly from the saved file
+            try:
+                loaded = img.load(str(out_path))
+            except Exception:
+                loaded = False
+    except Exception:
+        loaded = False
+
+    if not loaded:
+        logging.error(f"Failed to load generated math PNG for tex='{tex[:40]}...' from data or file {out_path}")
+
     render_w, render_h = img.width(), img.height()
 
     # Calculate display dimensions (scaled down by DPI ratio)
     display_w = int(render_w * _DPI_SCALE)
     display_h = int(render_h * _DPI_SCALE)
 
-    logging.debug(f"math-img render: {out_path.name} ({render_w}x{render_h}px -> display {display_w}x{display_h}px)")
     result = (str(out_path), render_w, render_h, display_w, display_h)
     _IMG_CACHE[key] = result
     return result
@@ -140,11 +171,14 @@ def _make_img_tag(tex: str, is_display: bool, scale: float = 1.0, dark_mode: boo
     img_path, render_w, render_h, display_w, display_h = _render_tex_to_img(tex, fontsize=render_fontsize, dark_mode=dark_mode)
 
     # Use proper file:// URI formatting for cross-platform compatibility
+    # Use QUrl.fromLocalFile for reliable file:// URIs (works with frozen apps)
     try:
-        img_url = Path(img_path).as_uri()
+        img_url = QUrl.fromLocalFile(str(img_path)).toString()
     except Exception:
-        # Fallback: ensure forward slashes and basic quoting
-        img_url = f'file:///{str(img_path).replace(chr(92), "/")}'
+        try:
+            img_url = Path(img_path).resolve().as_uri()
+        except Exception:
+            img_url = f'file:///{str(img_path).replace(chr(92), "/")}'
 
     # Use the display dimensions (scaled down from high-DPI render)
     if is_display:
