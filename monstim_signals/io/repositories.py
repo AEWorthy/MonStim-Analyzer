@@ -154,6 +154,10 @@ class RecordingRepository:
         Only rewrite the annot JSON (we assume meta/raw never change).
         This is called when the user edits the recording's annotation.
         """
+        try:
+            recording.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+        except Exception:
+            logging.debug("Failed to set date_modified on RecordingAnnot", exc_info=True)
         self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
 
     def rename(self, new_stem: Path, attempts: int = 3, wait: float = 0.5) -> None:
@@ -316,6 +320,10 @@ class SessionRepository:
         return session
 
     def save(self, session: Session) -> None:
+        try:
+            session.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+        except Exception:
+            logging.debug("Failed to set date_modified on SessionAnnot", exc_info=True)
         self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
         for rec in session.recordings:
             rec.repo.save(rec)
@@ -473,6 +481,10 @@ class DatasetRepository:
         (If I want dataset‐level annotations in the future, write them here.)
         This is called when the user edits any session's recordings.
         """
+        try:
+            dataset.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+        except Exception:
+            logging.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
         for session in dataset.sessions:
             session.repo.save(session)
@@ -592,6 +604,8 @@ class DatasetRepository:
                 "animal_id": dataset_annot.animal_id,
                 "date": dataset_annot.date,
                 "condition": dataset_annot.condition,
+                "date_added": dataset_annot.date_added,
+                "date_modified": dataset_annot.date_modified,
             }
 
         except Exception as e:
@@ -806,6 +820,8 @@ class ExperimentRepository:
                 "is_completed": annot.is_completed,
                 "excluded_datasets": annot.excluded_datasets,
                 "data_version": annot.data_version,
+                "date_added": annot.date_added,
+                "date_modified": annot.date_modified,
             }
 
         except Exception as e:
@@ -827,6 +843,10 @@ class ExperimentRepository:
         If I want experiment‐level annotations in the future, write them here.
         This is called when the user edits any dataset's sessions.
         """
+        try:
+            expt.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+        except Exception:
+            logging.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
         self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))
         for ds in expt.datasets:
             ds.repo.save(ds)
