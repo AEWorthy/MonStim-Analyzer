@@ -1261,8 +1261,8 @@ class DataCurationManager(QDialog):
         try:
             box.setStyleSheet(
                 """
-                QGroupBox { 
-                    padding: 6px; 
+                QGroupBox {
+                    padding: 6px;
                     border: 1px solid rgba(200,200,200,60);
                     border-radius: 6px;
                     margin-top: 12px; /* space for title */
