@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QColor, QPainter, QCursor
+from PySide6.QtGui import QColor, QCursor, QPainter
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -474,13 +474,19 @@ class DataSelectionWidget(QGroupBox):
                 }.get(level)
                 if source_widget is not None:
                     global_pos = source_widget.mapToGlobal(pos)
-                    logging.debug("Failed to map context menu position from Sender. Mapped context menu position from combo box for level '%s' instead.", level)
+                    logging.debug(
+                        "Failed to map context menu position from Sender. Mapped context menu position from combo box for level '%s' instead.",
+                        level,
+                    )
             except Exception:
                 global_pos = None
-        
+
         # Final fallback: use current cursor position
         if global_pos is None:
-            logging.debug("Failed to map context menu position from Sender or combo box. Using cursor position for level '%s' instead.", level)
+            logging.debug(
+                "Failed to map context menu position from Sender or combo box. Using cursor position for level '%s' instead.",
+                level,
+            )
             global_pos = QCursor.pos()
 
         selected = menu.exec(global_pos)
