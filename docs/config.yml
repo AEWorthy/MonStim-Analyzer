@@ -54,7 +54,7 @@ latency_window_presets:
       duration: 1.5
       color: 'tab:blue'
       linestyle: ':'
-  vibration_H:
+  vibration_H_4:
     - name: "H1"
       start: -103.5
       duration: 8.5
@@ -75,4 +75,39 @@ latency_window_presets:
       duration: 8.5
       color: 'tab:orange'
       linestyle: ':'
-
+  vibration_H_7:
+  - color: tab:blue
+    duration: 4.0
+    linestyle: ':'
+    name: H1
+    start: -255.0
+  - color: tab:blue
+    duration: 4.0
+    linestyle: ':'
+    name: H2
+    start: -105.0
+  - color: tab:red
+    duration: 4.0
+    linestyle: ':'
+    name: H3*
+    start: 45.0
+  - color: tab:red
+    duration: 4.0
+    linestyle: ':'
+    name: H4*
+    start: 195.0
+  - color: tab:orange
+    duration: 4.0
+    linestyle: ':'
+    name: H5
+    start: 345.0
+  - color: tab:orange
+    duration: 4.0
+    linestyle: ':'
+    name: H6
+    start: 495.0
+  - color: tab:orange
+    duration: 4.0
+    linestyle: ':'
+    name: H7
+    start: 645.0
