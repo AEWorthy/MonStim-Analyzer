@@ -201,11 +201,36 @@ def migrate_2_0_0_to_2_0_1(data: dict) -> dict:
     return data
 
 
+def migrate_2_0_1_to_2_1_0(data: dict) -> dict:
+    """Add date_added/date_modified fields and bump version to 2.1.0.
+
+    Applies to all annotation levels (recording/session/dataset/experiment).
+    - Preserve existing date_added if present; otherwise set to now (ISO, seconds).
+    - Always set/refresh date_modified to now (ISO, seconds).
+    - Set data_version to 2.1.0.
+
+    Idempotence: This step only runs when starting at 2.0.1; once at 2.1.0 it
+    will not run again. Within a single run, repeated application would simply
+    refresh date_modified.
+    """
+    import datetime as _dt
+
+    now = _dt.datetime.now().isoformat(timespec="seconds")
+    if not data.get("date_added"):
+        data["date_added"] = now
+    # Always update modified to reflect migration time
+    data["date_modified"] = now
+    data["data_version"] = "2.1.0"
+    return data
+
+
 # Register initial step only if current version is >= target (guard for future refactors)
 if parse_version_tuple(CURRENT_DATA_VERSION) >= (2, 0, 0):
     MIGRATIONS.append(MigrationStep("1.0.0", "2.0.0", migrate_1_0_0_to_2_0_0))
 if parse_version_tuple(CURRENT_DATA_VERSION) >= (2, 0, 1):
     MIGRATIONS.append(MigrationStep("2.0.0", "2.0.1", migrate_2_0_0_to_2_0_1))
+if parse_version_tuple(CURRENT_DATA_VERSION) >= (2, 1, 0):
+    MIGRATIONS.append(MigrationStep("2.0.1", "2.1.0", migrate_2_0_1_to_2_1_0))
 
 
 def _build_step_map(migrations: List[MigrationStep]) -> Dict[str, MigrationStep]:

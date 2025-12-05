@@ -26,6 +26,7 @@ and drag-and-drop dataset organization between experiments.
 # - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
 
 import logging
+import re
 from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -34,11 +35,17 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSplitter,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -399,6 +406,9 @@ class DatasetTreeWidget(QTreeWidget):
         event.accept()
 
 
+# HighlightDelegate removed
+
+
 class DataCurationManager(QDialog):
     """
     Modal dialog for comprehensive data curation including experiment and dataset management.
@@ -475,14 +485,13 @@ class DataCurationManager(QDialog):
         tab_widget = QWidget()
         layout = QVBoxLayout(tab_widget)
 
-        # TODO: Search/filter UI
-        # - Add a QLineEdit here to filter the tree by dataset/experiment name, date,
-        #   animal_id, condition, or tags. Implement tokenized matching and optionally
-        #   highlight matched substrings in the tree.
-
         # Header
         header_label = QLabel("Data Management")
         header_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        try:
+            header_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        except Exception:
+            pass
         layout.addWidget(header_label)
 
         # Instructions
@@ -491,6 +500,10 @@ class DataCurationManager(QDialog):
         )
         instructions.setWordWrap(True)
         instructions.setStyleSheet("color: #666; margin-bottom: 10px;")
+        try:
+            instructions.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        except Exception:
+            pass
         layout.addWidget(instructions)
 
         # Batch operations
@@ -544,9 +557,48 @@ class DataCurationManager(QDialog):
 
         layout.addLayout(batch_layout)
 
+        # Search/filter box for quick filtering of datasets
+        search_layout = QHBoxLayout()
+        search_label = QLabel("Search:")
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search by name, id, animal, condition, date, date_added...")
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.textChanged.connect(self.on_search_text_changed)
+        # Make search box expand enough to fit its placeholder text
+        try:
+            fm = self.search_box.fontMetrics()
+            ph = self.search_box.placeholderText()
+            w = fm.horizontalAdvance(ph) + 24  # padding for icon/clear button
+            self.search_box.setMinimumWidth(w)
+            self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        except Exception:
+            pass
+
+        # Filter builder button opens advanced filter dialog
+        self.filter_button = QPushButton("Filter")
+        self.filter_button.setToolTip("Open filter builder")
+        self.filter_button.clicked.connect(self.open_filter_dialog)
+
+        search_layout.addWidget(self.filter_button)
+        search_layout.addStretch(1)
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_box)
+        layout.addLayout(search_layout)
+
         # Tree widget for hierarchical display
         self.dataset_tree = DatasetTreeWidget()
-        self.dataset_tree.setHeaderLabels(["Experiment / Dataset", "Sessions", "Status"])
+        # Add Date columns so users can see/import timestamps and sort by them
+        self.dataset_tree.setHeaderLabels(
+            [
+                "Name",
+                "Contents",
+                "Status",
+                "Date Added",
+                "Date Modified",
+            ]
+        )
+        # Enable sorting by clicking column headers
+        self.dataset_tree.setSortingEnabled(True)
         self.dataset_tree.itemChanged.connect(self.on_dataset_checkbox_changed)
         self.dataset_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.dataset_tree.customContextMenuRequested.connect(self.show_dataset_context_menu)
@@ -557,15 +609,70 @@ class DataCurationManager(QDialog):
         # Configure column widths - make first column stretch to fill available space
         header = self.dataset_tree.header()
         # header.setStretchLastSection(False)  # Don't auto-stretch the last column
-        header.setSectionResizeMode(0, header.ResizeMode.ResizeToContents)  # Experiment/Dataset column
-        header.setSectionResizeMode(1, header.ResizeMode.ResizeToContents)  # Sessions column
+        # Let the first column stretch to take remaining space and keep date columns compact
+        try:
+            # Allow user to drag-resize the first column interactively
+            header.setSectionResizeMode(0, header.ResizeMode.Interactive)
+            header.setSectionResizeMode(1, header.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, header.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(3, header.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(4, header.ResizeMode.ResizeToContents)
+            # Set an initial width for the Name column for readability
+            try:
+                header.resizeSection(0, 420)
+            except Exception:
+                pass
+        except Exception:
+            # Fallback for older Qt versions
+            header.setSectionResizeMode(0, header.Interactive)
+            header.setSectionResizeMode(1, header.ResizeToContents)
+            header.setSectionResizeMode(2, header.ResizeToContents)
+            header.setSectionResizeMode(3, header.ResizeToContents)
+            header.setSectionResizeMode(4, header.ResizeToContents)
 
-        layout.addWidget(self.dataset_tree)
+        # Place tree and details pane side-by-side using a splitter for resizable/minimizable behavior
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(True)
+        splitter.setHandleWidth(6)
+        splitter.addWidget(self.dataset_tree)
+        # Details pane shows metadata for selected item
+        self.details_pane = self._create_details_pane()
+        splitter.addWidget(self.details_pane)
+        # Ensure the details pane expands vertically to fill available space
+        try:
+            self.details_pane.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        except Exception:
+            pass
+        # Favor the tree horizontally, but let both panes expand
+        try:
+            splitter.setStretchFactor(0, 3)
+            splitter.setStretchFactor(1, 2)
+        except Exception:
+            pass
+        # Set initial sizes: favor tree and set details pane to its minimum collapse width
+        try:
+            min_w = self.details_pane.minimumWidth()
+            splitter.setSizes([max(700, 2 * min_w), min_w])
+        except Exception:
+            pass
+        # Make the splitter region dictate vertical growth; remove excess blank space above
+        layout.addWidget(splitter, 1)
+
+        # Wire selection changed to update details pane
+        try:
+            self.dataset_tree.itemSelectionChanged.connect(self.on_tree_selection_changed)
+        except Exception:
+            logging.debug("Failed to connect selection change handler for dataset_tree", exc_info=True)
 
         # Summary area
         self.dataset_summary = QLabel("No pending changes")
         self.dataset_summary.setStyleSheet("border: 1px solid gray; padding: 5px;")
         layout.addWidget(self.dataset_summary)
+        # Ensure summary bar does not consume vertical space
+        try:
+            self.dataset_summary.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        except Exception:
+            pass
 
         # TODO: Consider adding a small 'Views' / 'Saved Filters' pane here in the future
         # to let users save common filter criteria or tag-based views for fast access.
@@ -745,24 +852,60 @@ class DataCurationManager(QDialog):
                     # Get experiment metadata using repository method
                     exp_metadata = self._get_experiment_metadata(exp_path)
 
-                    # Create experiment node
+                    # Create experiment node with status and dates
                     dataset_count = exp_metadata.get("dataset_count", 0)
-                    exp_item = QTreeWidgetItem([exp_id, f"{dataset_count} datasets", ""])
+                    is_completed = bool(exp_metadata.get("is_completed", False))
+                    exp_status = "Complete" if is_completed else "Incomplete"
+                    exp_date_added = exp_metadata.get("date_added") or ""
+                    exp_date_modified = exp_metadata.get("date_modified") or ""
+                    exp_item = QTreeWidgetItem(
+                        [
+                            exp_id,
+                            f"{dataset_count} datasets",
+                            exp_status,
+                            self._format_date(exp_date_added),
+                            self._format_date(exp_date_modified),
+                        ]
+                    )
                     exp_item.setData(
                         0, Qt.ItemDataRole.UserRole, {"type": "experiment", "id": exp_id, "metadata": exp_metadata}
                     )
                     exp_item.setFlags(exp_item.flags() | Qt.ItemFlag.ItemIsDropEnabled)
+                    # Bold experiment row to differentiate from datasets
+                    try:
+                        for _col in range(5):
+                            fexp = exp_item.font(_col)
+                            fexp.setBold(True)
+                            exp_item.setFont(_col, fexp)
+                    except Exception:
+                        pass
+                    # Tooltip shows full experiment name
+                    try:
+                        exp_item.setData(0, Qt.ItemDataRole.ToolTipRole, exp_id)
+                    except Exception:
+                        pass
 
                     # Add dataset children using metadata
                     for ds_metadata in exp_metadata.get("datasets", []):
                         ds_name = ds_metadata.get("formatted_name", ds_metadata.get("id", "Unknown"))
                         session_count = ds_metadata.get("session_count", 0)
-                        status = "Complete" if ds_metadata.get("is_completed", False) else "Incomplete"
+                        is_completed = bool(ds_metadata.get("is_completed", False))
+                        status = "Complete" if is_completed else "Incomplete"
                         is_excluded = ds_metadata.get("id") in exp_metadata.get("excluded_datasets", [])
                         if is_excluded:
                             status = f"Excluded ({status})"
 
-                        ds_item = QTreeWidgetItem([ds_name, f"{session_count} sessions", status])
+                        date_added = ds_metadata.get("date_added") or ""
+                        date_modified = ds_metadata.get("date_modified") or ""
+                        ds_item = QTreeWidgetItem(
+                            [
+                                ds_name,
+                                f"{session_count} sessions",
+                                status,
+                                self._format_date(date_added),
+                                self._format_date(date_modified),
+                            ]
+                        )
                         ds_item.setData(
                             0, Qt.ItemDataRole.UserRole, {"type": "dataset", "experiment_id": exp_id, "metadata": ds_metadata}
                         )
@@ -773,11 +916,16 @@ class DataCurationManager(QDialog):
                             | Qt.ItemFlag.ItemIsSelectable
                         )
                         ds_item.setCheckState(0, Qt.CheckState.Unchecked)
+                        # Tooltip shows full dataset name
+                        try:
+                            ds_item.setData(0, Qt.ItemDataRole.ToolTipRole, ds_name)
+                        except Exception:
+                            pass
 
                         # Light styling for excluded datasets: italic + gray text
                         if is_excluded:
                             gray = QBrush(QColor(170, 170, 170))  # a soft gray
-                            for col in range(3):
+                            for col in range(5):
                                 ds_item.setForeground(col, gray)
                                 f = ds_item.font(col) if hasattr(ds_item, "font") else QFont()
                                 f.setItalic(True)
@@ -800,14 +948,146 @@ class DataCurationManager(QDialog):
             # Restore expansion state and selections after all items are added
             self._restore_tree_expansion_state(expansion_state, selected_datasets)
 
+            # Apply active filter immediately so tree respects search box after reload
+            try:
+                txt = self.search_box.text() if hasattr(self, "search_box") else ""
+                if txt:
+                    self.on_search_text_changed(txt)
+            except Exception:
+                pass
+
             # Update button states after restoring selections (without triggering signals)
             self._update_button_states()
 
             logging.debug(f"Dataset tree updated with {tree_items} experiments")
 
+            # Resize the Name column based on the longest experiment title up to a reasonable max
+            try:
+                header = self.dataset_tree.header()
+                fm = (
+                    self.dataset_tree.fontMetrics()
+                    if hasattr(self.dataset_tree, "fontMetrics")
+                    else QFontMetrics(self.dataset_tree.font())
+                )
+                max_text = ""
+                for i in range(self.dataset_tree.topLevelItemCount()):
+                    t = self.dataset_tree.topLevelItem(i).text(0)
+                    if len(t) > len(max_text):
+                        max_text = t
+                width = fm.horizontalAdvance(max_text) + 40  # padding for icon/checkbox
+                # cap to a reasonable maximum
+                width = min(max(300, width), 600)
+                header.resizeSection(0, width)
+            except Exception:
+                pass
+
         except Exception as e:
             logging.error(f"Failed to update dataset tree: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load dataset information:\n{str(e)}")
+
+    def _collect_filter_terms(self) -> dict:
+        """Collect unique values WITH counts for filter dialog from current experiments/datasets.
+
+        Returns mapping key -> {value -> count}
+        Excludes name (unique) by design for dialog.
+        """
+        terms: dict = {
+            "id": {},
+            "animal": {},
+            "condition": {},
+            "date": {},
+            "added": {},
+            "modified": {},
+            "status": {},
+            "experiment": {},
+        }
+        try:
+            for exp_id in self.gui.expts_dict_keys:
+                terms["experiment"][exp_id] = terms["experiment"].get(exp_id, 0) + 1
+                # Pull experiment metadata
+                exp_path = Path(self.gui.expts_dict[exp_id])
+                exp_meta = self._get_experiment_metadata(exp_path)
+                if exp_meta:
+                    for k in ("date_added", "date_modified"):
+                        v = exp_meta.get(k)
+                        if v:
+                            key = "added" if k == "date_added" else "modified"
+                            val = self._format_date(v)
+                            terms[key][val] = terms[key].get(val, 0) + 1
+                    status = "Complete" if exp_meta.get("is_completed") else "Incomplete"
+                    terms["status"][status] = terms["status"].get(status, 0) + 1
+                # Dataset metadata
+                for ds in exp_meta.get("datasets") or []:
+                    if ds.get("id"):
+                        val = str(ds.get("id"))
+                        terms["id"][val] = terms["id"].get(val, 0) + 1
+                    if ds.get("animal_id"):
+                        val = str(ds.get("animal_id"))
+                        terms["animal"][val] = terms["animal"].get(val, 0) + 1
+                    if ds.get("condition"):
+                        val = str(ds.get("condition"))
+                        terms["condition"][val] = terms["condition"].get(val, 0) + 1
+                    if ds.get("date"):
+                        val = str(ds.get("date"))
+                        terms["date"][val] = terms["date"].get(val, 0) + 1
+                    if ds.get("date_added"):
+                        val = self._format_date(ds.get("date_added"))
+                        terms["added"][val] = terms["added"].get(val, 0) + 1
+                    if ds.get("date_modified"):
+                        val = self._format_date(ds.get("date_modified"))
+                        terms["modified"][val] = terms["modified"].get(val, 0) + 1
+                    st = "Complete" if ds.get("is_completed") else "Incomplete"
+                    if ds.get("id") in (exp_meta.get("excluded_datasets") or []):
+                        st = f"Excluded ({st})"
+                    terms["status"][st] = terms["status"].get(st, 0) + 1
+        except Exception:
+            pass
+        return terms
+
+    def open_filter_dialog(self):
+        """Open the advanced filter builder and apply selections to the search box."""
+        try:
+            from monstim_gui.dialogs.filter_dialog import FilterDialog
+        except Exception as e:
+            logging.error(f"Failed to import FilterDialog: {e}")
+            return
+
+        qualifiers = [
+            # Name and ID excluded
+            ("animal", "Animal"),
+            ("condition", "Condition"),
+            ("date", "Date (dataset)"),
+            ("added", "Date Added"),
+            ("modified", "Date Modified"),
+            ("status", "Status"),
+            ("experiment", "Experiment"),
+        ]
+        terms_with_counts = self._collect_filter_terms()
+        dlg = FilterDialog(qualifiers, terms_with_counts, parent=self)
+        if dlg.exec():
+            q = dlg.result_query()
+            if q:
+                self.search_box.setText(q)
+
+    def _format_date(self, text: str) -> str:
+        """Format a date/time string to 'YYYY-MM-DD HH:MM'. Returns original if parsing fails or empty."""
+        try:
+            if not text:
+                return ""
+            s = str(text)
+            # Normalize common formats like '2025-12-04T12:35:14' or '2025-12-04 12:35:14'
+            s = s.replace("T", " ")
+            # Keep up to minutes
+            # Expected 'YYYY-MM-DD HH:MM:SS' or longer
+            parts = s.split()
+            if len(parts) >= 2:
+                date_part = parts[0]
+                time_part = parts[1]
+                hm = time_part[:5] if len(time_part) >= 5 else time_part
+                return f"{date_part} {hm}"
+            return s
+        except Exception:
+            return text
 
     def _get_experiment_metadata(self, exp_path: Path) -> dict:
         """Get lightweight metadata about an experiment using repository method."""
@@ -827,6 +1107,527 @@ class DataCurationManager(QDialog):
                 "is_completed": False,
                 "error": str(e),
             }
+
+    def _create_details_pane(self) -> QWidget:
+        """Create a details pane widget that shows metadata for the selected experiment or dataset.
+        The pane is constrained in width to avoid causing the window/splitter to expand when long text appears.
+        """
+        # Outer group box
+        box = QGroupBox("Details")
+        box_layout = QVBoxLayout()
+        # Slightly reduced left margin to tighten title alignment
+        box_layout.setContentsMargins(4, 6, 6, 6)
+        box_layout.setSpacing(4)
+
+        # Scrollable content to prevent vertical overflow while keeping width fixed
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # Let the scroll area grow vertically with the dialog
+        try:
+            scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        except Exception:
+            pass
+
+        # Inner content: wrap form in vertical and horizontal layouts
+        content = QWidget()
+        content_vbox = QVBoxLayout()
+        # Reduce left buffer inside the content area as well
+        content_vbox.setContentsMargins(2, 4, 2, 4)
+        content_vbox.setSpacing(4)
+        content_vbox.setSpacing(4)
+        form = QFormLayout()
+        # Tight margins and spacing; explicit label widgets for consistent alignment
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setHorizontalSpacing(6)
+        form.setVerticalSpacing(3)
+        form.setContentsMargins(0, 0, 0, 0)
+        try:
+            # Keep label and field on the same row; allow the field widget to wrap its text
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        except Exception:
+            pass
+
+        def _mk_label():
+            lbl = QLabel("")
+            lbl.setWordWrap(True)
+            # Allow labels to wrap within available width and grow vertically to avoid clipping
+            lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+            try:
+                lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            except Exception:
+                pass
+            return lbl
+
+        self.detail_type = _mk_label()
+        self.detail_id = _mk_label()
+        self.detail_name = _mk_label()
+        self.detail_path = _mk_label()
+        self.detail_sessions = _mk_label()
+        self.detail_status = _mk_label()
+        self.detail_date = _mk_label()
+        self.detail_date_added = _mk_label()
+        self.detail_date_modified = _mk_label()
+
+        # Monospace font for all value fields for consistent alignment
+        try:
+            mono_candidates = ["Consolas", "Courier New", "Monospace"]
+
+            def _apply_mono(lbl: QLabel):
+                f = lbl.font()
+                for fam in mono_candidates:
+                    try:
+                        f.setFamily(fam)
+                        break
+                    except Exception:
+                        continue
+                lbl.setFont(f)
+
+            for _lbl in (
+                self.detail_type,
+                self.detail_id,
+                self.detail_name,
+                self.detail_path,
+                self.detail_sessions,
+                self.detail_status,
+                self.detail_date,
+                self.detail_date_added,
+                self.detail_date_modified,
+            ):
+                _apply_mono(_lbl)
+        except Exception:
+            pass
+
+        # Improve path readability: use monospace and allow soft wrapping at separators
+        try:
+            f = self.detail_path.font()
+            f.setFamily("Consolas")
+            self.detail_path.setFont(f)
+        except Exception:
+            pass
+        # Prefer a minimum-expanding vertical policy for path block to prevent clipping
+        try:
+            self.detail_path.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        except Exception:
+            pass
+
+        # Helper: build right-aligned, fixed-width label
+        def _mk_title(text: str) -> QLabel:
+            lbl = QLabel(text)
+            try:
+                f = lbl.font()
+                f.setBold(True)
+                lbl.setFont(f)
+            except Exception:
+                pass
+            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            # Narrower title width to reduce left buffer and keep values closer to titles
+            lbl.setMinimumWidth(90)
+            lbl.setMaximumWidth(120)
+            lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            return lbl
+
+        # Add rows with explicit title labels to ensure consistent alignment
+        form.addRow(_mk_title("Type:"), self.detail_type)
+        form.addRow(_mk_title("ID:"), self.detail_id)
+        form.addRow(_mk_title("Name:"), self.detail_name)
+        form.addRow(_mk_title("Path:"), self.detail_path)
+        form.addRow(_mk_title("Sessions:"), self.detail_sessions)
+        form.addRow(_mk_title("Status:"), self.detail_status)
+        form.addRow(_mk_title("Date (dataset):"), self.detail_date)
+        form.addRow(_mk_title("Date Added:"), self.detail_date_added)
+        form.addRow(_mk_title("Date Modified:"), self.detail_date_modified)
+
+        # Add a vertical stretch to push form rows to the top
+        content_vbox.addLayout(form)
+        content_vbox.addStretch(1)
+        content.setLayout(content_vbox)
+
+        # Wrap content in an HBox and add a right-side stretch to keep left alignment
+        hwrap = QWidget()
+        hbox = QHBoxLayout()
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(0)
+        hbox.addWidget(content)
+        hbox.addStretch(1)
+        hwrap.setLayout(hbox)
+
+        scroll.setWidget(hwrap)
+        box_layout.addWidget(scroll)
+        box.setLayout(box_layout)
+        # Style title to avoid clipping and look nicer
+        try:
+            box.setStyleSheet(
+                """
+                QGroupBox {
+                    padding: 6px;
+                    border: 1px solid rgba(200,200,200,60);
+                    border-radius: 6px;
+                    margin-top: 12px; /* space for title */
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    padding: 0 6px;
+                    color: palette(window-text);
+                }
+                QLabel { padding-left: 0px; margin-left: 0px; }
+                """
+            )
+        except Exception:
+            pass
+
+        # Constrain width so long text doesn't expand the splitter/window
+        try:
+            box.setMinimumWidth(260)
+            box.setMaximumWidth(380)
+        except Exception:
+            pass
+
+        return box
+
+    def on_tree_selection_changed(self):
+        """Populate details pane when tree selection changes."""
+        try:
+            sels = self.dataset_tree.selectedItems()
+            if not sels:
+                # Clear details
+                self.detail_type.setText("")
+                self.detail_id.setText("")
+                self.detail_name.setText("")
+                self.detail_path.setText("")
+                self.detail_sessions.setText("")
+                self.detail_status.setText("")
+                self.detail_date.setText("")
+                self.detail_date_added.setText("")
+                self.detail_date_modified.setText("")
+                return
+
+            item = sels[0]
+            data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+
+            # Helper: insert zero-width spaces to encourage wrapping at path separators
+            def _wrap_path(text: str) -> str:
+                if not text:
+                    return ""
+                t = str(text)
+                # Insert soft wrap points after common separators
+                t = t.replace("\\", "\\\u200b").replace("/", "/\u200b")
+                t = t.replace("-", "-\u200b").replace("_", "_\u200b")
+                return t
+
+            if data.get("type") == "dataset":
+                meta = data.get("metadata", {})
+                self.detail_type.setText("Dataset")
+                self.detail_id.setText(str(meta.get("id", "")))
+                self.detail_name.setText(str(meta.get("formatted_name", "")))
+                self.detail_path.setText(_wrap_path(meta.get("path", "")))
+                self.detail_sessions.setText(str(meta.get("session_count", "")))
+                self.detail_status.setText("Complete" if meta.get("is_completed") else "Incomplete")
+                self.detail_date.setText(str(meta.get("date", "")))
+                self.detail_date_added.setText(str(meta.get("date_added", "")))
+                self.detail_date_modified.setText(str(meta.get("date_modified", "")))
+            elif data.get("type") == "experiment":
+                meta = data.get("metadata", {})
+                self.detail_type.setText("Experiment")
+                self.detail_id.setText(str(meta.get("id", "")))
+                self.detail_name.setText(str(meta.get("id", "")))
+                self.detail_path.setText(_wrap_path(meta.get("path", "")))
+                self.detail_sessions.setText(str(meta.get("dataset_count", "")))
+                self.detail_status.setText("Complete" if meta.get("is_completed") else "Incomplete")
+                self.detail_date.setText("")
+                self.detail_date_added.setText(str(meta.get("date_added", "")))
+                self.detail_date_modified.setText(str(meta.get("date_modified", "")))
+            else:
+                # Unknown item: clear details
+                self.detail_type.setText("")
+                self.detail_id.setText("")
+                self.detail_name.setText("")
+                self.detail_path.setText("")
+                self.detail_sessions.setText("")
+                self.detail_status.setText("")
+                self.detail_date.setText("")
+                self.detail_date_added.setText("")
+                self.detail_date_modified.setText("")
+
+        except Exception as e:
+            logging.error(f"Failed to populate details pane: {e}")
+
+    def on_search_text_changed(self, text: str):
+        """Filter tree items by search text with intelligent token matching.
+
+        Supports:
+        - plain tokens across name/id/animal/condition/date/added/modified
+        - quoted phrases: "rev light"
+        - field qualifiers: animal:WT, cond:rev-light, id:123, date:2025, added:2024-12, modified:2025
+        Tokens are ANDed. Matching is case-insensitive and substring-based.
+        """
+        try:
+            q = (text or "").strip()
+            token_pattern = r"\w+:[^\s\"]+|\"[^\"]+\"|[^\s]+"
+            tokens = re.findall(token_pattern, q)
+
+            def norm(s):
+                return str(s or "").strip().lower()
+
+            key_map = {
+                "name": "name",
+                "id": "id",
+                "animal": "animal_id",
+                "animal_id": "animal_id",
+                "cond": "condition",
+                "condition": "condition",
+                "date": "date",
+                "added": "date_added",
+                "date_added": "date_added",
+                "modified": "date_modified",
+                "date_modified": "date_modified",
+                "experiment": "experiment_id",
+                "exp": "experiment_id",
+                "status": "status",
+            }
+
+            # Token match helper includes status based on metadata or column text
+            def token_matches(meta: dict, name_text: str, token: str, ds_data: dict, status_text: str) -> bool:
+                t = token.strip()
+                if not t:
+                    return True
+                if t.startswith('"') and t.endswith('"'):
+                    phrase = norm(t[1:-1])
+                    fields = [norm(name_text)] + [
+                        norm(meta.get(k))
+                        for k in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
+                    ]
+                    # include status column text and experiment id for phrase matching
+                    fields.append(norm(status_text))
+                    # include experiment id/name for phrase matching
+                    fields.append(norm(ds_data.get("experiment_id")))
+                    return any(phrase in v for v in fields)
+                if ":" in t:
+                    k, v = t.split(":", 1)
+                    fkey = key_map.get(k.lower())
+                    if not fkey:
+                        tt = norm(t)
+                        fields = [norm(name_text)] + [
+                            norm(meta.get(x))
+                            for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
+                        ]
+                        fields.append(norm(status_text))
+                        fields.append(norm(ds_data.get("experiment_id")))
+                        return any(tt in f for f in fields)
+                    # experiment qualifier matches against dataset's experiment_id
+                    if fkey == "experiment_id":
+                        return norm(v) in norm(ds_data.get("experiment_id"))
+                    # status qualifier should match meta status or column text
+                    if fkey == "status":
+                        mv = norm(meta.get("status"))
+                        sv = norm(status_text)
+                        return norm(v) in mv or norm(v) in sv
+                    return norm(v) in norm(meta.get(fkey))
+                tt = norm(t)
+                fields = [norm(name_text)] + [
+                    norm(meta.get(x))
+                    for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
+                ]
+                fields.append(norm(status_text))
+                fields.append(norm(ds_data.get("experiment_id")))
+                return any(tt in f for f in fields)
+
+            any_visible_overall = False
+            for i in range(self.dataset_tree.topLevelItemCount()):
+                exp_item = self.dataset_tree.topLevelItem(i)
+                any_child_visible = False
+                # Evaluate experiment-level matching
+                exp_data = exp_item.data(0, Qt.ItemDataRole.UserRole) or {}
+                exp_meta = exp_data.get("metadata") or {}
+                exp_name = exp_item.text(0) or ""
+                exp_cols = [
+                    exp_name,
+                    exp_item.text(1) or "",
+                    exp_item.text(2) or "",
+                    exp_item.text(3) or "",
+                    exp_item.text(4) or "",
+                ]
+
+                def exp_token_matches(token: str) -> bool:
+                    t = token.strip()
+                    if not t:
+                        return True
+
+                    def get_exp_field(key: str):
+                        # Map qualifiers to experiment metadata fields
+                        kmap = {
+                            "name": "id",
+                            "id": "id",
+                            "experiment": "id",
+                            "exp": "id",
+                            "path": "path",
+                            "date": "date",  # if present
+                            "added": "date_added",
+                            "date_added": "date_added",
+                            "modified": "date_modified",
+                            "date_modified": "date_modified",
+                        }
+                        fk = kmap.get(key)
+                        return exp_meta.get(fk) if fk else None
+
+                    if t.startswith('"') and t.endswith('"'):
+                        phrase = norm(t[1:-1])
+                        fields = [norm(exp_name)] + [
+                            norm(exp_meta.get(k)) for k in ("id", "path", "date", "date_added", "date_modified")
+                        ]
+                        return any(phrase in v for v in fields)
+                    if ":" in t:
+                        k, v = t.split(":", 1)
+                        val = norm(v)
+                        fv = norm(get_exp_field(k.lower()))
+                        if fv:
+                            return val in fv
+                        # Unknown qualifier: treat as plain token
+                        tt = norm(t)
+                        fields = [norm(exp_name)] + [
+                            norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")
+                        ]
+                        return any(tt in f for f in fields)
+                    # Plain token
+                    tt = norm(t)
+                    fields = [norm(exp_name)] + [
+                        norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")
+                    ]
+                    return any(tt in f for f in fields)
+
+                exp_visible = True if not tokens else all(exp_token_matches(t) for t in tokens)
+                # Build highlighted HTML per column for experiment
+                if q:
+                    exp_html_cols = self._build_highlight_html(exp_cols, tokens)
+                    for col in range(min(5, len(exp_html_cols))):
+                        exp_item.setData(col, Qt.ItemDataRole.UserRole + 3, exp_html_cols[col])
+                else:
+                    for col in range(5):
+                        exp_item.setData(col, Qt.ItemDataRole.UserRole + 3, None)
+                # Highlighting removed; no HTML injection
+                for j in range(exp_item.childCount()):
+                    ds_item = exp_item.child(j)
+                    ds_data = ds_item.data(0, Qt.ItemDataRole.UserRole) or {}
+                    meta = ds_data.get("metadata", {})
+                    name_text = ds_item.text(0) or ""
+                    # Prefer status from metadata; fallback to column text
+                    status_text = ds_item.text(2) or ""
+                    # Merge status into meta for downstream checks if missing
+                    if not meta.get("status") and status_text:
+                        meta = dict(meta)
+                        meta["status"] = status_text
+                    visible = (
+                        True if not tokens else all(token_matches(meta, name_text, t, ds_data, status_text) for t in tokens)
+                    )
+                    ds_item.setHidden(not visible)
+                    # Highlighting removed; no HTML injection
+                    if visible:
+                        any_child_visible = True
+
+                # If an experiment qualifier is present and matches, show all its datasets
+                has_experiment_token = any(t.split(":", 1)[0].lower() in ("experiment", "exp") for t in tokens if ":" in t)
+                if has_experiment_token and exp_visible:
+                    for j in range(exp_item.childCount()):
+                        ds_item = exp_item.child(j)
+                        ds_item.setHidden(False)
+                    any_child_visible = True
+
+                # Keep experiment visible if it matches or has visible children
+                exp_item.setHidden(not (exp_visible or any_child_visible))
+                if exp_visible or any_child_visible:
+                    any_visible_overall = True
+
+            # After filtering, clear selection and details if selection hidden
+            sels = self.dataset_tree.selectedItems()
+            if sels:
+                sel = sels[0]
+                if sel.isHidden():
+                    self.dataset_tree.clearSelection()
+                    self.on_tree_selection_changed()
+
+            # Update summary status for active filter
+            if q:
+                if not any_visible_overall:
+                    self.dataset_summary.setText("No results for filter")
+                else:
+                    visible_count = 0
+                    for i in range(self.dataset_tree.topLevelItemCount()):
+                        exp_item = self.dataset_tree.topLevelItem(i)
+                        for j in range(exp_item.childCount()):
+                            ds_item = exp_item.child(j)
+                            if not ds_item.isHidden():
+                                visible_count += 1
+                    self.dataset_summary.setText(f"Filter active: {visible_count} dataset(s) visible")
+
+        except Exception as e:
+            logging.error(f"Failed to filter dataset tree: {e}")
+
+    def _build_highlight_html(self, texts, tokens):
+        """Return a list of HTML strings with matched substrings highlighted.
+
+        tokens: already-parsed tokens including quoted phrases and qualifiers; qualifiers highlight their value.
+        """
+        try:
+
+            def norm(s):
+                return str(s or "")
+
+            # Extract highlight words from tokens (handle quoted and key:value)
+            highlights = []
+            for t in tokens:
+                t = t.strip()
+                if not t:
+                    continue
+                if t.startswith('"') and t.endswith('"'):
+                    highlights.append(t[1:-1])
+                elif ":" in t:
+                    _, v = t.split(":", 1)
+                    if v:
+                        highlights.append(v)
+                else:
+                    highlights.append(t)
+
+            def highlight_text(text):
+                s = norm(text)
+                if not s or not highlights:
+                    return s
+                # Build case-insensitive replacements with span; avoid overlapping by scanning
+                lower = s.lower()
+                ranges = []
+                for h in highlights:
+                    hl = str(h).lower()
+                    start = 0
+                    while True:
+                        idx = lower.find(hl, start)
+                        if idx == -1:
+                            break
+                        ranges.append((idx, idx + len(hl)))
+                        start = idx + len(hl)
+                # Merge overlapping ranges
+                ranges.sort()
+                merged = []
+                for st, en in ranges:
+                    if not merged or st > merged[-1][1]:
+                        merged.append((st, en))
+                    else:
+                        merged[-1] = (merged[-1][0], max(merged[-1][1], en))
+                # Build HTML
+                out = []
+                last = 0
+                for st, en in merged:
+                    out.append(s[last:st])
+                    span = s[st:en]
+                    out.append(f"<span style='background-color:#ffec99;color:#000;'>{span}</span>")
+                    last = en
+                out.append(s[last:])
+                return "".join(out)
+
+            return [highlight_text(t) for t in texts]
+        except Exception:
+            return texts
 
     def on_dataset_checkbox_changed(self, item, column):
         """Handle dataset checkbox changes in the tree."""

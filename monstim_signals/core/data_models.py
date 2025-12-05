@@ -155,13 +155,18 @@ class RecordingAnnot:
 
     cache: Dict[str, Any] = field(default_factory=dict)
     data_version: str = "0.0.0"
+    date_added: str | None = None
+    date_modified: str | None = None
 
     @staticmethod
     def create_empty() -> "RecordingAnnot":
         """
         Create an empty RecordingAnnot with default values.
         """
-        return RecordingAnnot(data_version=DATA_VERSION, cache={})
+        import datetime as _dt
+
+        now = _dt.datetime.now().isoformat(timespec="seconds")
+        return RecordingAnnot(data_version=DATA_VERSION, cache={}, date_added=now, date_modified=now)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "RecordingAnnot":
@@ -204,12 +209,17 @@ class SessionAnnot:
     m_max_values: List[float] = field(default_factory=list)
     is_completed: bool = False
     data_version: str = "0.0.0"
+    date_added: str | None = None
+    date_modified: str | None = None
 
     @staticmethod
     def create_empty(num_channels: int = 0) -> "SessionAnnot":
         """
         Create an empty SessionAnnot with default values.
         """
+        import datetime as _dt
+
+        now = _dt.datetime.now().isoformat(timespec="seconds")
         return SessionAnnot(
             excluded_recordings=[],
             latency_windows=[],
@@ -217,6 +227,8 @@ class SessionAnnot:
             m_max_values=[],
             is_completed=False,
             data_version=DATA_VERSION,
+            date_added=now,
+            date_modified=now,
         )
 
     @classmethod
@@ -273,13 +285,20 @@ class DatasetAnnot:
     excluded_sessions: List[str] = field(default_factory=list)
     is_completed: bool = False
     data_version: str = "0.0.0"
+    date_added: str | None = None
+    date_modified: str | None = None
 
     @staticmethod
     def create_empty(num_channels: int = 0) -> "DatasetAnnot":
         """
         Create an empty DatasetAnnot with default values.
         """
-        return DatasetAnnot(excluded_sessions=[], is_completed=False, data_version=DATA_VERSION)
+        import datetime as _dt
+
+        now = _dt.datetime.now().isoformat(timespec="seconds")
+        return DatasetAnnot(
+            excluded_sessions=[], is_completed=False, data_version=DATA_VERSION, date_added=now, date_modified=now
+        )
 
     @classmethod
     def from_ds_name(cls, dataset_name: str) -> "DatasetAnnot":
@@ -297,6 +316,9 @@ class DatasetAnnot:
         except ValueError:
             date = animal_id = condition = None
 
+        import datetime as _dt
+
+        now = _dt.datetime.now().isoformat(timespec="seconds")
         return DatasetAnnot(
             date=date,
             animal_id=animal_id,
@@ -304,6 +326,8 @@ class DatasetAnnot:
             excluded_sessions=[],
             is_completed=False,
             data_version=DATA_VERSION,
+            date_added=now,
+            date_modified=now,
         )
 
     @classmethod
@@ -333,11 +357,18 @@ class ExperimentAnnot:
     excluded_datasets: List[str] = field(default_factory=list)
     is_completed: bool = False
     data_version: str = DATA_VERSION
+    date_added: str | None = None
+    date_modified: str | None = None
 
     @staticmethod
     def create_empty() -> "ExperimentAnnot":
         """Return a blank annotation object."""
-        return ExperimentAnnot(excluded_datasets=[], is_completed=False, data_version=DATA_VERSION)
+        import datetime as _dt
+
+        now = _dt.datetime.now().isoformat(timespec="seconds")
+        return ExperimentAnnot(
+            excluded_datasets=[], is_completed=False, data_version=DATA_VERSION, date_added=now, date_modified=now
+        )
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ExperimentAnnot":
