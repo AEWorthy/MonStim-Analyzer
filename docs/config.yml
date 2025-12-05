@@ -76,38 +76,38 @@ latency_window_presets:
       color: 'tab:orange'
       linestyle: ':'
   vibration_H_7:
-  - color: tab:blue
-    duration: 4.0
-    linestyle: ':'
-    name: H1
-    start: -255.0
-  - color: tab:blue
-    duration: 4.0
-    linestyle: ':'
-    name: H2
-    start: -105.0
-  - color: tab:red
-    duration: 4.0
-    linestyle: ':'
-    name: H3*
-    start: 45.0
-  - color: tab:red
-    duration: 4.0
-    linestyle: ':'
-    name: H4*
-    start: 195.0
-  - color: tab:orange
-    duration: 4.0
-    linestyle: ':'
-    name: H5
-    start: 345.0
-  - color: tab:orange
-    duration: 4.0
-    linestyle: ':'
-    name: H6
-    start: 495.0
-  - color: tab:orange
-    duration: 4.0
-    linestyle: ':'
-    name: H7
-    start: 645.0
+    - color: 'tab:blue'
+      duration: 4.0
+      linestyle: ':'
+      name: "H1"
+      start: -255.0
+    - color: 'tab:blue'
+      duration: 4.0
+      linestyle: ':'
+      name: "H2"
+      start: -105.0
+    - color: 'tab:red'
+      duration: 4.0
+      linestyle: ':'
+      name: "H3*"
+      start: 45.0
+    - color: 'tab:red'
+      duration: 4.0
+      linestyle: ':'
+      name: "H4*"
+      start: 195.0
+    - color: 'tab:orange'
+      duration: 4.0
+      linestyle: ':'
+      name: "H5"
+      start: 345.0
+    - color: 'tab:orange'
+      duration: 4.0
+      linestyle: ':'
+      name: "H6"
+      start: 495.0
+    - color: 'tab:orange'
+      duration: 4.0
+      linestyle: ':'
+      name: "H7"
+      start: 645.0
