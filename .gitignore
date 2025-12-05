@@ -4,6 +4,7 @@
 /.EXAMPLE_DATA
 /.OLD_DATA
 /.pytest-tmp-golden-check
+/TEST_MIGR
 
 /old_environment.yml
 docs/config-user.yml
