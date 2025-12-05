@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QPainter, QCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -455,7 +455,35 @@ class DataSelectionWidget(QGroupBox):
             for item_id in excluded_ids:
                 restore_menu.addAction(item_id)
 
-        selected = menu.exec(self.sender().mapToGlobal(pos))
+        global_pos = None
+        try:
+            sender = self.sender()
+            if sender is not None:
+                global_pos = sender.mapToGlobal(pos)
+        except Exception:
+            global_pos = None
+
+        # Fallback: try mapping from the relevant combo box
+        if global_pos is None:
+            try:
+                # Determine widget to anchor the context menu; avoid None sender
+                source_widget = {
+                    "experiment": self.experiment_combo,
+                    "dataset": self.dataset_combo,
+                    "session": self.session_combo,
+                }.get(level)
+                if source_widget is not None:
+                    global_pos = source_widget.mapToGlobal(pos)
+                    logging.debug("Failed to map context menu position from Sender. Mapped context menu position from combo box for level '%s' instead.", level)
+            except Exception:
+                global_pos = None
+        
+        # Final fallback: use current cursor position
+        if global_pos is None:
+            logging.debug("Failed to map context menu position from Sender or combo box. Using cursor position for level '%s' instead.", level)
+            global_pos = QCursor.pos()
+
+        selected = menu.exec(global_pos)
 
         # If the user dismissed the menu without a selection, do nothing
         if selected is None:
