@@ -76,7 +76,7 @@ class Session:
         self.m_max_args = _config["m_max_args"]
         self.butter_filter_args = _config["butter_filter_args"]
         self.default_method: str = _config["default_method"]
-        self.default_channel_names: List[str] = _config["default_channel_names"]
+        self.default_channel_names: List[str] = _config.get("default_channel_names", [])
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------

@@ -235,6 +235,19 @@ def is_index_stale(index: ExperimentIndex) -> bool:
             s_path = Path(s.path)
             if not s_path.exists():
                 return True
+            # Directory-level change detection: new or removed recordings
+            try:
+                current_items = sorted(s_path.iterdir())
+
+                def is_recording_item(p: Path) -> bool:
+                    return (p.is_file() and p.suffix.lower() in {".h5", ".hdf5", ".npy", ".npz", ".csv"}) or p.is_dir()
+
+                current_recordings = [p for p in current_items if is_recording_item(p)]
+                if len(current_recordings) != len(s.recordings):
+                    return True
+            except Exception:
+                # If we cannot list, assume stale to be safe
+                return True
             # Check a subset of recordings to keep it fast; if any mismatch, rebuild
             for r in s.recordings[:50]:  # sample up to 50
                 r_path = Path(r.path)
