@@ -237,6 +237,14 @@ class ProgramSettingsDialog(QDialog):
         self.parallel_load_checkbox.toggled.connect(self._on_parallel_toggled)
         self.lazy_open_checkbox.toggled.connect(self._on_lazy_toggled)
 
+        # Build index during experiment load (new)
+        self.build_index_on_load_checkbox = QCheckBox()
+        self.build_index_on_load_checkbox.setToolTip(
+            "When enabled, the experiment index (.index.json) will be built/refreshed during load if missing or stale. "
+            "Disabling avoids extra work during load; repositories will fall back to filesystem discovery."
+        )
+        layout.addRow("Build index during load:", self.build_index_on_load_checkbox)
+
         return group
 
     def create_display_group(self):
@@ -329,6 +337,10 @@ class ProgramSettingsDialog(QDialog):
         # New performance settings
         self.lazy_open_checkbox.setChecked(self.app_state.should_use_lazy_open_h5())
         self.parallel_load_checkbox.setChecked(self.app_state.should_use_parallel_loading())
+        try:
+            self.build_index_on_load_checkbox.setChecked(self.app_state.should_build_index_on_load())
+        except Exception:
+            self.build_index_on_load_checkbox.setChecked(True)
 
         # Tracking settings
         self.session_tracking_checkbox.setChecked(self.app_state.should_track_session_restoration())
@@ -354,6 +366,10 @@ class ProgramSettingsDialog(QDialog):
         self.app_state.set_setting("use_opengl_acceleration", self.opengl_checkbox.isChecked())
         self.app_state.set_setting("use_lazy_open_h5", self.lazy_open_checkbox.isChecked())
         self.app_state.set_setting("enable_parallel_loading", self.parallel_load_checkbox.isChecked())
+        try:
+            self.app_state.set_build_index_on_load(self.build_index_on_load_checkbox.isChecked())
+        except Exception:
+            logging.debug("Failed to save build_index_on_load setting", exc_info=True)
 
         # Save tracking settings
         self.app_state.set_setting("track_session_restoration", self.session_tracking_checkbox.isChecked())
@@ -414,6 +430,8 @@ class ProgramSettingsDialog(QDialog):
                 self.lazy_open_checkbox.setChecked(True)
             if hasattr(self, "parallel_load_checkbox"):
                 self.parallel_load_checkbox.setChecked(True)
+            if hasattr(self, "build_index_on_load_checkbox"):
+                self.build_index_on_load_checkbox.setChecked(True)
 
             # Reset tracking settings to defaults
             self.session_tracking_checkbox.setChecked(True)

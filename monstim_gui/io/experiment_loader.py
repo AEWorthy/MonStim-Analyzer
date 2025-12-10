@@ -7,7 +7,9 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from monstim_gui.core.application_state import app_state
-from monstim_signals.io.data_migrations import scan_annotation_versions
+
+# Note: skip preflight migration scans during load for performance.
+# Post-load migrations can be initiated separately in a background task.
 from monstim_signals.io.repositories import ExperimentRepository
 
 
@@ -136,43 +138,48 @@ class ExperimentLoadingThread(QThread):
             # This is the slow part - the actual repo.load() call
             if is_first_load:
                 self.status_update.emit(
-                    f"First-time loading '{self.experiment_name}'...\n\nCreating {missing_annotations} annotation files.\nEstimated time: {estimated_time} seconds."
+                    f"First-time load detected for '{self.experiment_name}'.\n\nCreating {missing_annotations} annotation files and building indexes.\nEstimated time: {estimated_time} seconds."
                 )
             elif files_to_load > 5000:
                 self.status_update.emit(
-                    f"Loading '{self.experiment_name}'...\n\nLarge experiment with {files_to_load} recordings.\nThis may take several seconds."
+                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected ({files_to_load} files). Building indexes and applying migrations may take longer."
                 )
             else:
                 self.status_update.emit("Reading experiment metadata...")
             self.progress.emit(20)
 
-            # Preflight migration scan (before heavy load) so we can communicate wait time.
-            self.status_update.emit("Scanning annotations for required migrations...")
-            try:
-                scan_results = scan_annotation_versions(exp_path)
-                outdated = [r for r in scan_results if r.get("needs_migration")]
-                if outdated:
-                    # Rough heuristic: each migration step per file is tiny, but IO dominates. Estimate ~2ms per file.
-                    est_ms = max(50, int(len(outdated) * 2))
-                    msg = (
-                        f"{len(outdated)} annotation files require migration (e.g. {outdated[0]['path']}).\n"
-                        f"Planned steps example: {', '.join(outdated[0]['planned_steps'])}.\n"
-                        f"This may add ~{est_ms/1000:.2f}s to load time."
-                    )
-                    logging.info("Experiment preflight: %s", msg.replace("\n", " "))
-                    self.status_update.emit("Annotation migrations pending...\n" + msg)
-                else:
-                    logging.debug("Experiment preflight: all annotation files current.")
-            except Exception as e:  # pragma: no cover
-                logging.debug(f"Annotation preflight scan failed (non-fatal): {e}")
+            # Skipped: Preflight migration scan moved to post-load background task.
 
             self.progress.emit(30)
-            self.status_update.emit("Loading experiment repository...")
+            # Show a distinct "Indexing..." step only when needed
+            try:
+                from monstim_signals.io.experiment_index import is_index_stale, load_experiment_index
+
+                idx = load_experiment_index(exp_path)
+                needs_index = idx is None or is_index_stale(idx)
+            except Exception:
+                needs_index = False
+
+            from monstim_gui.core.application_state import app_state as _app
+
+            if needs_index and _app.should_build_index_on_load():
+                self.status_update.emit("Indexing experiment folders...")
+            else:
+                self.status_update.emit("Loading experiment repository...")
 
             # Load experiment - this can take a long time for large experiments
             # Map dataset iteration progress (callback driven) into progress range 30-85.
+            # Rate-limit progress updates to ~10/sec to reduce GUI churn.
+            _last_emit_ts = 0.0
+
             def _progress_cb(level: str, index: int, total: int, name: str):
+                nonlocal _last_emit_ts
+                import time as _t
+
                 if level == "dataset" and total > 0:
+                    now = _t.monotonic()
+                    if now - _last_emit_ts < 0.1:
+                        return
                     # Reserve 55% of the bar (30 -> 85) for dataset loading.
                     base = 30
                     span = 55
@@ -185,6 +192,15 @@ class ExperimentLoadingThread(QThread):
                         name_display = name
                     self.progress.emit(pct)
                     self.status_update.emit(f"Loading dataset {index}/{total}: '{name_display}' ...")
+                    _last_emit_ts = now
+                elif level == "index" and total > 0:
+                    # Map index progress into 20-30% range before dataset load
+                    try:
+                        pct = 20 + int(10 * (index / total))
+                        self.progress.emit(pct)
+                        self.status_update.emit(f"Building index {index}/{total}: '{name}' ...")
+                    except Exception:
+                        pass
 
             # Overlay application preferences (QSettings) for loading:
             cfg = dict(self.config or {})
@@ -199,7 +215,19 @@ class ExperimentLoadingThread(QThread):
                 else:
                     cfg["load_workers"] = 1
 
-            experiment = repo.load(config=cfg, progress_callback=_progress_cb)
+            # Enforce read-only load: do not write annotations or migrate on load.
+            # For first-time loads (missing annotations), we must load recordings eagerly
+            # so sessions have valid data; otherwise lazy loading is fine.
+            # Ensure sessions materialize recordings during load to avoid
+            # "no recordings" errors from strict domain checks. Lazy
+            # access can still be applied at the HDF5 level via
+            # `lazy_open_h5` in config.
+            experiment = repo.load(
+                config=cfg,
+                progress_callback=_progress_cb,
+                allow_write=False,
+                load_recordings=False,
+            )
 
             self.progress.emit(90)
             self.status_update.emit("Finalizing experiment structure...")

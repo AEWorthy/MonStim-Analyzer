@@ -2,6 +2,7 @@ import abc
 import copy
 import logging
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QMessageBox
@@ -659,6 +660,15 @@ class CreateExperimentCommand(Command):
         """Create the experiment immediately."""
         try:
             self.gui.data_manager.create_experiment(self.exp_name)
+            # Refresh index for the newly created experiment
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                exp_path = Path(self.gui.expts_dict.get(self.exp_name, ""))
+                if exp_path and exp_path.exists():
+                    ensure_fresh_index(self.exp_name, exp_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after experiment create failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -669,6 +679,7 @@ class CreateExperimentCommand(Command):
         """Delete the created experiment."""
         try:
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
+            # No index refresh needed; experiment was removed
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -692,6 +703,18 @@ class MoveDatasetCommand(Command):
         """Move the dataset immediately."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
+            # Refresh index for both source and destination experiments
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                src_path = Path(self.gui.expts_dict.get(self.from_exp, ""))
+                dst_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
+                if src_path and src_path.exists():
+                    ensure_fresh_index(self.from_exp, src_path)
+                if dst_path and dst_path.exists():
+                    ensure_fresh_index(self.to_exp, dst_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after dataset move failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -702,6 +725,18 @@ class MoveDatasetCommand(Command):
         """Move the dataset back to original location."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
+            # Refresh index for both experiments after undo
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                dst_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
+                src_path = Path(self.gui.expts_dict.get(self.from_exp, ""))
+                if dst_path and dst_path.exists():
+                    ensure_fresh_index(self.to_exp, dst_path)
+                if src_path and src_path.exists():
+                    ensure_fresh_index(self.from_exp, src_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after dataset move undo failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -735,6 +770,21 @@ class MoveDatasetsCommand(Command):
                 except Exception as e:
                     logging.error(f"Failed to move dataset '{ds_name}' from '{from_exp}' to '{to_exp}': {e}")
 
+            # Refresh index for all affected experiments (unique)
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                affected = set()
+                for ds_id, ds_name, from_exp, to_exp in self._succeeded:
+                    affected.add(from_exp)
+                    affected.add(to_exp)
+                for exp in affected:
+                    exp_path = Path(self.gui.expts_dict.get(exp, ""))
+                    if exp_path and exp_path.exists():
+                        ensure_fresh_index(exp, exp_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after batched move failed.", exc_info=True)
+
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 try:
@@ -755,6 +805,21 @@ class MoveDatasetsCommand(Command):
                     self.gui.data_manager.move_dataset(ds_id, ds_name, to_exp, from_exp)
                 except Exception as e:
                     logging.error(f"Failed to undo move of dataset '{ds_name}' from '{to_exp}' back to '{from_exp}': {e}")
+
+            # Refresh index for all affected experiments after undo
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                affected = set()
+                for ds_id, ds_name, from_exp, to_exp in self._succeeded:
+                    affected.add(from_exp)
+                    affected.add(to_exp)
+                for exp in affected:
+                    exp_path = Path(self.gui.expts_dict.get(exp, ""))
+                    if exp_path and exp_path.exists():
+                        ensure_fresh_index(exp, exp_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after batched move undo failed.", exc_info=True)
 
             # Refresh once after undo
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
@@ -803,6 +868,15 @@ class CopyDatasetCommand(Command):
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
+            # Refresh index for destination experiment
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
+                if to_exp_path and to_exp_path.exists():
+                    ensure_fresh_index(self.to_exp, to_exp_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after dataset copy failed.", exc_info=True)
         except Exception as e:
             raise Exception(f"Failed to copy dataset: {str(e)}")
 
@@ -814,6 +888,15 @@ class CopyDatasetCommand(Command):
                 # Refresh the data curation manager if it's open
                 if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                     self.gui._data_curation_manager.load_data()
+                # Refresh index for destination experiment after deletion
+                try:
+                    from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                    to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
+                    if to_exp_path and to_exp_path.exists():
+                        ensure_fresh_index(self.to_exp, to_exp_path)
+                except Exception:
+                    logging.debug("Non-fatal: index refresh after undo dataset copy failed.", exc_info=True)
         except Exception as e:
             raise Exception(f"Failed to undo dataset copy: {str(e)}")
 
@@ -842,6 +925,7 @@ class DeleteExperimentCommand(Command):
             # For now, we'll use the existing delete method from data manager
             # Note: This is irreversible, so undo will show a warning
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
+            # No index refresh needed; experiment removed
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -872,6 +956,15 @@ class RenameExperimentCommand(Command):
         """Rename the experiment immediately."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
+            # Refresh index for the renamed experiment (new path) and clean up old if present
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                new_path = Path(self.gui.expts_dict.get(self.new_name, ""))
+                if new_path and new_path.exists():
+                    ensure_fresh_index(self.new_name, new_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after experiment rename failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -882,6 +975,15 @@ class RenameExperimentCommand(Command):
         """Rename back to original name."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
+            # Refresh index for the restored original experiment
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                old_path = Path(self.gui.expts_dict.get(self.old_name, ""))
+                if old_path and old_path.exists():
+                    ensure_fresh_index(self.old_name, old_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after experiment rename undo failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -908,6 +1010,15 @@ class DeleteDatasetCommand(Command):
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
+            # Refresh index for the experiment after dataset deletion
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                exp_path = Path(self.gui.expts_dict.get(self.exp_id, ""))
+                if exp_path and exp_path.exists():
+                    ensure_fresh_index(self.exp_id, exp_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after dataset deletion failed.", exc_info=True)
         except Exception as e:
             raise Exception(f"Failed to delete dataset: {str(e)}")
 

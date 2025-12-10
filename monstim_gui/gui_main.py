@@ -164,6 +164,22 @@ class MonstimGUI(QMainWindow):
 
         self.status_bar.showMessage(f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000)
 
+        # Migration banner (hidden by default)
+        try:
+            from monstim_gui.widgets.migration_banner import MigrationBanner
+
+            self.migration_banner = MigrationBanner(self)
+            # Place the banner just above the status bar in main layout if available
+            main = self.centralWidget()
+            if main and hasattr(main, "layout") and callable(getattr(main, "layout")):
+                lay = main.layout()
+                if hasattr(lay, "addWidget"):
+                    lay.addWidget(self.migration_banner)
+            # Wire button to trigger background migrations
+            self.migration_banner.run_clicked.connect(self._run_background_migrations)
+        except Exception:
+            logging.debug("Failed to create migration banner (non-fatal).", exc_info=True)
+
     @staticmethod
     def handle_qt_error_logs():
         # Install Qt message handler to suppress QPainter warnings during resize operations
@@ -389,6 +405,59 @@ class MonstimGUI(QMainWindow):
             logging.error(traceback.format_exc())
             # Clear problematic state
             app_state.clear_session_state()
+
+    def _run_background_migrations(self):
+        try:
+            if self.current_experiment and self.current_experiment.repo:
+                from monstim_gui.io.migration_runner import MigrationRunner
+
+                runner = MigrationRunner(str(self.current_experiment.repo.folder))
+                from PySide6.QtWidgets import QProgressDialog
+
+                dlg = QProgressDialog("Migrating annotations...", "Cancel", 0, 100, self)
+                dlg.setWindowTitle("Background Migration")
+                dlg.setWindowModality(Qt.WindowModality.WindowModal)
+                dlg.setAutoClose(True)
+                dlg.setAutoReset(True)
+                runner.progress.connect(dlg.setValue)
+                runner.status_update.connect(dlg.setLabelText)
+                runner.finished.connect(dlg.close)
+                runner.finished.connect(lambda n: self.status_bar.showMessage(f"Migrations complete: {n} files.", 5000))
+                runner.error.connect(lambda e: QMessageBox.critical(self, "Migration Error", e))
+                runner.error.connect(dlg.close)
+
+                # Hide banner on completion and re-scan to decide future visibility
+                def _on_migrations_complete(_n: int):
+                    try:
+                        if hasattr(self, "migration_banner"):
+                            self.migration_banner.hide()
+                        # Trigger a quick background re-scan; banner will only reappear if new work exists
+                        from monstim_gui.io.migration_runner import MigrationScanThread
+
+                        scan = MigrationScanThread(str(self.current_experiment.repo.folder))
+
+                        def _on_scan(has_work: bool, count: int):
+                            if has_work and hasattr(self, "migration_banner"):
+                                msg = f"Annotation migrations detected ({count}). Run now to update files."
+                                self.migration_banner.show_message(msg)
+                            else:
+                                if hasattr(self, "migration_banner"):
+                                    self.migration_banner.hide()
+
+                        scan.has_work.connect(_on_scan)
+                        scan.error.connect(lambda e: logging.debug(f"Migration re-scan error: {e}"))
+                        # Keep a reference to avoid GC during run
+                        self._migration_rescan = scan
+                        scan.start()
+                    except Exception:
+                        logging.debug("Failed to hide banner / rescan after migrations.", exc_info=True)
+
+                runner.finished.connect(_on_migrations_complete)
+                self._migration_runner = runner
+                dlg.show()
+                runner.start()
+        except Exception:
+            logging.debug("Failed to start background migrations.", exc_info=True)
 
     # Command functions
     def undo(self):

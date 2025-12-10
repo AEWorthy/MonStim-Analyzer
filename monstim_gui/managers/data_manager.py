@@ -724,6 +724,16 @@ class DataManager:
         """Handle completion of import operations by refreshing the experiments list."""
         if hasattr(self.gui, "data_selection_widget"):
             self.gui.data_selection_widget.refresh()
+        # Refresh index after import to speed up first load
+        try:
+            if hasattr(self.gui, "current_experiment") and self.gui.current_experiment is not None:
+                exp_path = self.gui.current_experiment.repo.folder if self.gui.current_experiment.repo else None
+                if exp_path:
+                    from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                    ensure_fresh_index(self.gui.current_experiment.id, exp_path)
+        except Exception:
+            logging.debug("Non-fatal: index refresh after import failed.", exc_info=True)
 
     # ------------------------------------------------------------------
     def show_preferences_window(self):
@@ -910,6 +920,17 @@ class DataManager:
 
             self.gui.status_bar.showMessage(status_msg, 5000)
             logging.info(status_msg)
+
+            # Ensure index is fresh after load
+            try:
+                if hasattr(self.gui, "current_experiment") and self.gui.current_experiment is not None:
+                    exp_path = self.gui.current_experiment.repo.folder if self.gui.current_experiment.repo else None
+                    if exp_path:
+                        from monstim_signals.io.experiment_index import ensure_fresh_index
+
+                        ensure_fresh_index(self.gui.current_experiment.id, exp_path)
+            except Exception:
+                logging.debug("Non-fatal: index refresh after load failed.", exc_info=True)
         except Exception as e:
             logging.error(f"Error setting loaded experiment: {e}")
             QMessageBox.critical(self.gui, "Error", f"Error setting loaded experiment: {e}")
@@ -1044,6 +1065,14 @@ class DataManager:
 
         logging.debug(f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'.")
         session = self.gui.current_dataset.sessions[index]
+        # On-demand materialization of recordings for lazy-loaded sessions
+        try:
+            if session and session.repo and not session.recordings:
+                session = session.repo.materialize_recordings(
+                    session, config=self.gui.config_repo.read_config(), allow_write=False
+                )
+        except Exception:
+            logging.debug("Non-fatal: error materializing recordings on session selection.", exc_info=True)
         self.gui.set_current_session(session)
 
         # Save complete session state for restoration

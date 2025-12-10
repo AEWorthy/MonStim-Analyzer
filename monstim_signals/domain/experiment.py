@@ -465,8 +465,6 @@ class Experiment:
 
         if reset_caches:
             self.reset_all_caches()
-        if self.repo is not None:
-            self.repo.save(self)
         logging.info(f"Preferences successfully applied to experiment '{self.id}'.")
 
     def set_config(self, config: dict) -> None:
