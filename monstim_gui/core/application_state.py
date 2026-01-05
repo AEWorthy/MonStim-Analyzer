@@ -458,6 +458,14 @@ class ApplicationState:
         except Exception:
             return 1
 
+    def should_build_index_on_load(self) -> bool:
+        """Check whether experiment indexes should be (re)built during load."""
+        return self.get_preference("build_index_on_load", True)
+
+    def set_build_index_on_load(self, enabled: bool):
+        """Set preference for building experiment indexes during load."""
+        self.set_setting("build_index_on_load", bool(enabled))
+
     def clear_all_tracked_data(self):
         """Clear all tracked user data."""
         # Clear session restoration data

@@ -215,9 +215,9 @@ class ExperimentLoadingThread(QThread):
                 else:
                     cfg["load_workers"] = 1
 
-            # Enforce read-only load: do not write annotations or migrate on load.
-            # For first-time loads (missing annotations), we must load recordings eagerly
-            # so sessions have valid data; otherwise lazy loading is fine.
+            # For first-time loads (missing annotations), we must allow writing
+            # to persist newly created annotation files. For subsequent loads,
+            # we can use read-only mode to avoid accidental modifications during load.
             # Ensure sessions materialize recordings during load to avoid
             # "no recordings" errors from strict domain checks. Lazy
             # access can still be applied at the HDF5 level via
@@ -225,12 +225,23 @@ class ExperimentLoadingThread(QThread):
             experiment = repo.load(
                 config=cfg,
                 progress_callback=_progress_cb,
-                allow_write=False,
+                allow_write=is_first_load,
                 load_recordings=False,
             )
 
             self.progress.emit(90)
             self.status_update.emit("Finalizing experiment structure...")
+
+            # Check if any datasets were skipped and inform user
+            expected_datasets = len([p for p in exp_path.iterdir() if p.is_dir()])
+            loaded_datasets = len(experiment.datasets)
+
+            if loaded_datasets < expected_datasets:
+                skipped = expected_datasets - loaded_datasets
+                logging.warning(
+                    f"{skipped} dataset(s) could not be loaded from '{self.experiment_name}'. "
+                    f"Check the log for details about validation errors or data inconsistencies."
+                )
 
             self.progress.emit(100)
             logging.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
