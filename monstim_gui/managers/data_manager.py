@@ -857,6 +857,7 @@ class DataManager:
         self.loading_thread.status_update.connect(progress_dialog.setLabelText)
         self.loading_thread.finished.connect(self._on_experiment_loaded)
         self.loading_thread.error.connect(self._on_experiment_load_error)
+        self.loading_thread.datasets_skipped.connect(self._on_datasets_skipped)
         self.loading_thread.finished.connect(progress_dialog.close)
         self.loading_thread.error.connect(progress_dialog.close)
 
@@ -953,6 +954,35 @@ class DataManager:
             del self.loading_thread
         if hasattr(self, "current_progress_dialog"):
             del self.current_progress_dialog
+
+    def _on_datasets_skipped(self, skipped_list):
+        """Handle warning about skipped datasets during load."""
+        from PySide6.QtWidgets import QMessageBox
+
+        if not skipped_list:
+            return
+
+        # Build warning message
+        num_skipped = len(skipped_list)
+        message = f"{num_skipped} dataset(s) could not be loaded due to data validation errors:\n\n"
+
+        # Show up to 5 datasets in the message
+        for i, (dataset_name, error) in enumerate(skipped_list[:5]):
+            message += f"• {dataset_name}\n  Error: {error}\n\n"
+
+        if num_skipped > 5:
+            message += f"... and {num_skipped - 5} more dataset(s).\n\n"
+
+        message += "Please review these datasets and fix the data inconsistencies.\n"
+        message += "Check the application log for complete details."
+
+        # Show warning dialog
+        msg_box = QMessageBox(self.gui)
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setWindowTitle("Dataset Load Warnings")
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QMessageBox.Ok)
+        msg_box.exec()
 
     def _on_experiment_load_canceled(self):
         """Handle experiment loading cancellation."""

@@ -894,6 +894,17 @@ class ExperimentRepository:
                             try:
                                 ds_obj = f.result()
                                 datasets.append(ds_obj)
+                            except ValueError as e:
+                                # Handle data validation errors (e.g., inconsistent channels) gracefully
+                                if "Inconsistent" in str(e):
+                                    # Note: Update regex in experiment_loader.py if this message changes
+                                    logging.warning(
+                                        f"Dataset '{ds_folder.name}' skipped due to validation error: {e}\n"
+                                        f"This dataset has inconsistent data and cannot be loaded. "
+                                        f"Please check the recording files in this dataset."
+                                    )
+                                else:
+                                    logging.exception("Dataset load failed (ignored): %s", ds_folder)
                             except Exception:
                                 logging.exception("Dataset load failed (ignored): %s", ds_folder)
                                 # Skip/continue on failure; caller should handle missing datasets.
@@ -907,13 +918,44 @@ class ExperimentRepository:
                         progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
                     except Exception:  # pragma: no cover - defensive
                         logging.debug("Progress callback errored (ignored)", exc_info=True)
-                ds_obj = DatasetRepository(ds_folder).load(
-                    config=config,
-                    strict_version=strict_version,
-                    allow_write=allow_write,
-                    load_recordings=load_recordings,
+                try:
+                    ds_obj = DatasetRepository(ds_folder).load(
+                        config=config,
+                        strict_version=strict_version,
+                        allow_write=allow_write,
+                        load_recordings=load_recordings,
+                    )
+                    datasets.append(ds_obj)
+                except ValueError as e:
+                    # Handle data validation errors (e.g., inconsistent channels) gracefully
+                    # Note: Update regex in experiment_loader.py if this message changes
+                    if "Inconsistent" in str(e):
+                        logging.warning(
+                            f"Dataset '{ds_folder.name}' skipped due to validation error: {e}\n"
+                            f"This dataset has inconsistent data and cannot be loaded. "
+                            f"Please check the recording files in this dataset."
+                        )
+                    else:
+                        logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                except Exception:
+                    logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                    # Skip/continue on failure; caller should handle missing datasets.
+
+        # Log summary of loaded datasets
+        if datasets:
+            loaded_count = len(datasets)
+            total_count = len(dataset_folders)
+            if loaded_count < total_count:
+                skipped = total_count - loaded_count
+                logging.warning(
+                    f"Experiment '{self.folder.name}' loaded with {loaded_count}/{total_count} datasets. "
+                    f"{skipped} dataset(s) were skipped due to errors (see warnings above)."
                 )
-                datasets.append(ds_obj)
+            else:
+                logging.info(f"Experiment '{self.folder.name}' loaded successfully with {loaded_count} dataset(s).")
+        else:
+            logging.error(f"No datasets could be loaded from experiment '{self.folder.name}'.")
+
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
         if self.expt_js.exists():
             try:

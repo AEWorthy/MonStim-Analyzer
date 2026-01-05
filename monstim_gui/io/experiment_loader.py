@@ -1,6 +1,7 @@
 """Asynchronous experiment loading functionality."""
 
 import logging
+import re
 import traceback
 from pathlib import Path
 
@@ -13,6 +14,24 @@ from monstim_gui.core.application_state import app_state
 from monstim_signals.io.repositories import ExperimentRepository
 
 
+class DatasetSkipLogHandler(logging.Handler):
+    """Logging handler to capture dataset skip warnings during load."""
+
+    def __init__(self):
+        super().__init__()
+        self.skipped_datasets = []
+
+    def emit(self, record):
+        if record.levelno == logging.WARNING and "skipped due to validation error" in record.getMessage():
+            # Parse dataset name and error from log message
+            msg = record.getMessage()
+            match = re.search(r"Dataset '([^']+)' skipped due to validation error: (.+)", msg)
+            if match:
+                dataset_name = match.group(1)
+                error_detail = match.group(2).split("\n")[0]  # Get first line only
+                self.skipped_datasets.append((dataset_name, error_detail))
+
+
 class ExperimentLoadingThread(QThread):
     """Thread for loading experiments asynchronously."""
 
@@ -21,6 +40,7 @@ class ExperimentLoadingThread(QThread):
     error = Signal(str)  # Emits error message
     progress = Signal(int)  # Emits progress percentage
     status_update = Signal(str)  # Emits status message
+    datasets_skipped = Signal(list)  # Emits list of (dataset_name, error_msg) tuples for skipped datasets
 
     def __init__(self, experiment_path: str, config: dict):
         super().__init__()
@@ -28,6 +48,7 @@ class ExperimentLoadingThread(QThread):
         self.config = config
         self.experiment_name = Path(experiment_path).name
         self._is_first_load = None  # Will be determined during analysis
+        self._skipped_datasets = []  # Track skipped datasets
         self._estimated_time = None
 
     def _analyze_load_requirements(self, exp_path: Path) -> tuple[bool, int, int]:
@@ -96,6 +117,12 @@ class ExperimentLoadingThread(QThread):
 
     def run(self):
         """Load the experiment in a separate thread."""
+        # Set up logging handler to capture dataset skip warnings
+        skip_handler = DatasetSkipLogHandler()
+        skip_handler.setLevel(logging.WARNING)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(skip_handler)
+
         try:
             logging.debug(f"Starting async load of experiment: '{self.experiment_name}'")
             self.status_update.emit(f"Loading experiment: '{self.experiment_name}'")
@@ -242,6 +269,10 @@ class ExperimentLoadingThread(QThread):
                     f"{skipped} dataset(s) could not be loaded from '{self.experiment_name}'. "
                     f"Check the log for details about validation errors or data inconsistencies."
                 )
+                # Emit the skipped datasets information for GUI warning
+                if skip_handler.skipped_datasets:
+                    self._skipped_datasets = skip_handler.skipped_datasets
+                    self.datasets_skipped.emit(self._skipped_datasets)
 
             self.progress.emit(100)
             logging.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
@@ -263,3 +294,6 @@ class ExperimentLoadingThread(QThread):
             logging.error(error_msg)
             logging.error(traceback.format_exc())
             self.error.emit(error_msg)
+        finally:
+            # Clean up logging handler
+            root_logger.removeHandler(skip_handler)
