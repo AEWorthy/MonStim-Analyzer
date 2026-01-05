@@ -1,5 +1,7 @@
 import os
+import re
 import sys
+from datetime import datetime
 
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, Qt
@@ -15,6 +17,124 @@ from PySide6.QtWidgets import (
 
 from monstim_gui.core.application_state import app_state
 from monstim_signals.core import get_base_path
+
+
+def _sanitize_filename(name: str) -> str:
+    # Remove characters invalid on Windows and collapse whitespace
+    if not name:
+        return ""
+    # replace path separators and forbidden chars with underscore
+    name = re.sub(r'[<>:"/\\|?*]+', "_", name)
+    # replace any sequence of non-alphanum._- with underscore
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+    # trim
+    return name.strip(" _-")
+
+
+def make_export_filename(df: pd.DataFrame) -> str:
+    """Create a descriptive, auto-named filename for DataFrame exports.
+
+    Uses recent application selection (experiment/dataset/session) and
+    optional DataFrame attributes to produce a human-readable filename.
+    """
+    parts = []
+
+    # Determine the data level to include: prefer explicit DataFrame attr
+    try:
+        data_level_attr = df.attrs.get("data_level") if hasattr(df, "attrs") else None
+    except Exception:
+        data_level_attr = None
+
+    # Infer session state from app_state as fallback
+    session_state = app_state.get_last_session_state() if hasattr(app_state, "get_last_session_state") else {}
+    sel = app_state.get_last_selection() if hasattr(app_state, "get_last_selection") else {}
+
+    exp_from_state = session_state.get("experiment") or sel.get("experiment") or sel.get("experiment_id")
+    ds_from_state = session_state.get("dataset") or sel.get("dataset") or sel.get("dataset_id")
+    sess_from_state = session_state.get("session") or sel.get("session") or sel.get("session_id")
+
+    # Allow DataFrame attrs to override specific ids
+    try:
+        exp_attr = df.attrs.get("experiment") if hasattr(df, "attrs") else None
+        ds_attr = df.attrs.get("dataset") if hasattr(df, "attrs") else None
+        sess_attr = df.attrs.get("session") if hasattr(df, "attrs") else None
+    except Exception:
+        exp_attr = ds_attr = sess_attr = None
+
+    exp = exp_attr or exp_from_state
+    ds = ds_attr or ds_from_state
+    sess = sess_attr or sess_from_state
+
+    # Decide which single level to include. Respect explicit df.attrs['data_level'] when set.
+    level = None
+    if data_level_attr:
+        level = data_level_attr.lower()
+    else:
+        # infer: prefer session if available, then dataset, then experiment
+        if sess:
+            level = "session"
+        elif ds:
+            level = "dataset"
+        elif exp:
+            level = "experiment"
+
+    if level == "session" and sess:
+        parts.append(str(sess))
+    elif level == "dataset" and ds:
+        parts.append(str(ds))
+    elif level == "experiment" and exp:
+        parts.append(str(exp))
+
+    # Prefer explicit DataFrame attributes for plot type and data level
+    # Resolve plot type (prefer short aliases)
+    PLOT_TYPE_ALIASES = {
+        "Average Reflex:Stimulus Curves": "avg_reflex",
+        "Average Reflex Stimulus Curves": "avg_reflex",
+        "M-max Report (RMS)": "mmax_rms",
+        "Session Info. Report": "session_info",
+        "Dataset Info. Report": "dataset_info",
+        "Experiment Info. Report": "experiment_info",
+    }
+
+    def _short_plot_key(s: str) -> str:
+        if not s:
+            return None
+        if s in PLOT_TYPE_ALIASES:
+            return PLOT_TYPE_ALIASES[s]
+        # fallback: slugify/shorten
+        key = re.sub(r"[^A-Za-z0-9]+", "_", s).strip("_")
+        return key[:40]
+
+    try:
+        raw_plot = None
+        if hasattr(df, "attrs"):
+            for k in ("plot_type", "plot", "plot_name"):
+                raw_plot = raw_plot or df.attrs.get(k)
+        raw_plot = raw_plot or getattr(df, "name", None)
+    except Exception:
+        raw_plot = None
+    plot_key = _short_plot_key(raw_plot)
+
+    # Append the plot type key (preferred) or a DataFrame name hint
+    dfname = None
+    try:
+        dfname = getattr(df, "name", None) or (df.attrs.get("name") if hasattr(df, "attrs") else None)
+    except Exception:
+        dfname = None
+
+    if plot_key:
+        parts.append(str(plot_key))
+    elif dfname:
+        parts.append(str(dfname))
+
+    # Timestamp for uniqueness
+    parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
+
+    filename = "__".join(parts)
+    filename = _sanitize_filename(filename)
+    if not filename:
+        filename = f"export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    return f"{filename}.csv"
 
 
 class PandasModel(QAbstractTableModel):
@@ -51,9 +171,11 @@ class PandasModel(QAbstractTableModel):
 
 
 class DataFrameDialog(QDialog):
-    def __init__(self, df: pd.DataFrame, parent=None):
+    def __init__(self, df: pd.DataFrame, parent=None, plot_type: str = None, data_level: str = None):
         super().__init__(parent)
         self.df = df
+        self.plot_type = plot_type
+        self.data_level = data_level
         self.setWindowTitle("Data Preview")
         self.resize(800, 400)
 
@@ -88,8 +210,21 @@ class DataFrameDialog(QDialog):
         if not last_export_path or not os.path.isdir(last_export_path):
             last_export_path = str(get_base_path())
 
-        default_name = os.path.join(last_export_path, "exported_data.csv")
-        path, _ = QFileDialog.getSaveFileName(self, "Export DataFrame", default_name, "CSV Files (*.csv);;All Files (*)")
+        # Set DataFrame attrs with plot metadata for filename generation
+        if self.plot_type:
+            self.df.attrs["plot_type"] = self.plot_type
+        if self.data_level:
+            self.df.attrs["data_level"] = self.data_level
+
+        # Build a descriptive default filename based on context
+        suggested = make_export_filename(self.df)
+        default_name = os.path.join(last_export_path, suggested)
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export DataFrame",
+            default_name,
+            "CSV Files (*.csv);;All Files (*)",
+        )
         if path:
             # Save the directory for next time
             app_state.save_last_export_path(os.path.dirname(path))

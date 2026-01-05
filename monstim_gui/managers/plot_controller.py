@@ -215,7 +215,11 @@ class PlotController:
             return
 
         if raw_data is not None:
-            dialog = DataFrameDialog(raw_data, self.gui)
+            # Get current plot configuration for metadata
+            config = self.get_plot_configuration()
+            level, _ = self.get_plot_level_and_object()
+
+            dialog = DataFrameDialog(raw_data, self.gui, plot_type=config["plot_type_raw"], data_level=level)
             dialog.exec()
         else:
             QMessageBox.warning(self.gui, "Warning", "No data to display.")
