@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING, List, Tuple
 
 import numpy as np
@@ -593,20 +594,28 @@ class BasePlotterPyQtGraph:
         if not plot_items:
             return
 
-        # Calculate the overall data range across all plots
+        # Calculate the overall data range across all plots by examining actual data
         overall_y_min = float("inf")
         overall_y_max = float("-inf")
 
         for plot_item in plot_items:
-            # Get the data range for this plot
-            data_bounds = plot_item.vb.childrenBounds()
-            if data_bounds is not None and len(data_bounds) == 2:
-                y_bounds = data_bounds[1]  # y-bounds are the second element
-                if y_bounds is not None and len(y_bounds) == 2:
-                    y_min, y_max = y_bounds
-                    if not (np.isnan(y_min) or np.isnan(y_max) or np.isinf(y_min) or np.isinf(y_max)):
-                        overall_y_min = min(overall_y_min, y_min)
-                        overall_y_max = max(overall_y_max, y_max)
+            # Get all data items in this plot (PlotDataItem, ScatterPlotItem, etc.)
+            for item in plot_item.listDataItems():
+                # Get the actual y-data directly from the item
+                try:
+                    x_data, y_data = item.getData()
+                    if y_data is not None and len(y_data) > 0:
+                        # Filter out NaN and Inf values
+                        valid_data = y_data[~(np.isnan(y_data) | np.isinf(y_data))]
+                        if len(valid_data) > 0:
+                            y_min = np.min(valid_data)
+                            y_max = np.max(valid_data)
+                            overall_y_min = min(overall_y_min, y_min)
+                            overall_y_max = max(overall_y_max, y_max)
+                except (AttributeError, TypeError, ValueError):
+                    # Item doesn't have getData() or data is invalid, skip it
+                    logging.warning(f"Unable to extract data from item {item} in plot {plot_item}")
+                    continue
 
         # Check if we found valid bounds
         if overall_y_min == float("inf") or overall_y_max == float("-inf"):
