@@ -217,7 +217,7 @@ def load_experiment_index(exp_path: Path) -> Optional[ExperimentIndex]:
 
 def is_index_stale(index: ExperimentIndex) -> bool:
     # Compare stored sizes/mtimes against current filesystem
-    
+
     # First, check if the number of datasets on filesystem matches the index
     exp_path = Path(index.path)
     try:
@@ -226,7 +226,7 @@ def is_index_stale(index: ExperimentIndex) -> bool:
             return True  # Dataset added or removed
     except Exception:
         return True  # Can't list directory, assume stale
-    
+
     for ds in index.datasets:
         ds_meta = Path(ds.meta_path) if ds.meta_path else None
         if ds_meta and ds.size is not None and ds.mtime is not None:
