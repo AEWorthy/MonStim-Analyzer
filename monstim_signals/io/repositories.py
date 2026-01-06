@@ -425,7 +425,8 @@ class SessionRepository:
         except Exception:
             logging.debug("Failed to set date_modified on SessionAnnot", exc_info=True)
         self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
-        for rec in session.recordings:
+        # Save ALL recordings including excluded ones to persist their state
+        for rec in session._all_recordings:
             rec.repo.save(rec)
 
     def rename(self, new_folder: Path, attempts: int = 3, wait: float = 0.5) -> None:
@@ -630,7 +631,8 @@ class DatasetRepository:
         except Exception:
             logging.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
-        for session in dataset.sessions:
+        # Save ALL sessions including excluded ones to persist their state
+        for session in dataset._all_sessions:
             session.repo.save(session)
 
     def rename(self, new_folder: Path, dataset=None, attempts: int = 3, wait: float = 0.5) -> None:
@@ -1072,5 +1074,6 @@ class ExperimentRepository:
         except Exception:
             logging.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
         self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))
-        for ds in expt.datasets:
+        # Save ALL datasets including excluded ones to persist their state
+        for ds in expt._all_datasets:
             ds.repo.save(ds)

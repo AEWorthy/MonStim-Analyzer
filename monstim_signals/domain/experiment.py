@@ -97,10 +97,6 @@ class Experiment:
         return [ds for ds in self._all_datasets if ds.id not in self.excluded_datasets]
 
     @property
-    def emg_datasets(self) -> List[Dataset]:
-        return self.datasets
-
-    @property
     def num_channels(self) -> int:
         if not self.datasets:
             return 0
