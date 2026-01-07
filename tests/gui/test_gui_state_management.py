@@ -552,12 +552,12 @@ class TestPreferencesManagement:
 
     def test_opengl_acceleration_preference(self, clean_app_state):
         """Test OpenGL acceleration preference."""
-        # Default should be True
-        assert clean_app_state.should_use_opengl_acceleration() is True
-
-        # Test setting to False
-        clean_app_state.set_setting("use_opengl_acceleration", False)
+        # Default should be False
         assert clean_app_state.should_use_opengl_acceleration() is False
+
+        # Test setting to True
+        clean_app_state.set_setting("use_opengl_acceleration", True)
+        assert clean_app_state.should_use_opengl_acceleration() is True
 
 
 class TestRecentItemsManagement:
