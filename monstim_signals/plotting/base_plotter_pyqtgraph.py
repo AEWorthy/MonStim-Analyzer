@@ -529,10 +529,28 @@ class BasePlotterPyQtGraph:
         return legend
 
     def clear_current_plots(self, canvas: "PlotPane"):
-        """Clear all current plot items and regions."""
-        self.current_plot_items = []
-        self.current_regions = []
-        canvas.clear_plots()
+        """Clear all current plot items and regions with memory safety."""
+
+        try:
+            logging.debug(
+                f"Clearing current plots. Items: {len(self.current_plot_items)}, Regions: {len(self.current_regions)}"
+            )
+
+            # Clear local references
+            self.current_plot_items = []
+            self.current_regions = []
+
+            # Clear canvas plots
+            if canvas is not None:
+                canvas.clear_plots()
+                logging.debug("Canvas plots cleared successfully.")
+            else:
+                logging.warning("Canvas is None, skipping canvas.clear_plots()")
+
+        except Exception as e:
+            logging.error(f"Error clearing plots: {e}", exc_info=True)
+            # Re-raise as UnableToPlotError so it's handled properly upstream
+            raise UnableToPlotError(f"Failed to clear existing plots: {e}")
 
     def _convert_matplotlib_color(self, mpl_color):
         """Convert matplotlib color names to PyQtGraph-compatible colors."""

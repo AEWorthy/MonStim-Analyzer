@@ -1,4 +1,5 @@
 import copy
+import gc
 import logging
 import traceback
 from typing import TYPE_CHECKING
@@ -6,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from monstim_signals.plotting import UnableToPlotError
@@ -27,6 +28,14 @@ class PlotController:
     def __init__(self, gui: "MonstimGUI"):
         self.gui: "MonstimGUI" = gui
         self._validated = False
+
+        # Diagnostic tracking for extended sessions
+        self._plot_count = 0
+        self._total_memory_freed = 0.0
+
+        # Safety flag: disable automatic GC if it causes crashes
+        # Can be set to False if deferred GC still causes issues on certain systems
+        self._enable_auto_gc = True
 
         # Hook system for extensibility
         self._pre_plot_hooks = []
@@ -87,6 +96,10 @@ class PlotController:
             return None, None
 
     def plot_data(self, return_raw_data: bool = False):
+        # Increment plot counter for extended session diagnostics
+        self._plot_count += 1
+        logging.debug(f"=== Starting plot operation #{self._plot_count} ===")
+
         try:
             self._validate_gui_components()
             self.gui.plot_pane.show()
@@ -160,15 +173,27 @@ class PlotController:
             except Exception as hook_error:
                 logging.warning(f"Error in pre-plot hook: {hook_error}")
 
+        # Thread safety check: Ensure we're on the main GUI thread
+        from PySide6.QtCore import QThread
+
+        if QThread.currentThread() != QApplication.instance().thread():
+            error_msg = "CRITICAL: Plotting attempted from non-main thread! This can cause crashes."
+            logging.error(error_msg)
+            logging.error(f"Current thread: {QThread.currentThread()}")
+            logging.error(f"Main thread: {QApplication.instance().thread()}")
+            raise RuntimeError(error_msg)
+
         try:
             # Use the possibly modified copy from hooks for plotting
             final_plot_options = plot_context.get("plot_options", plot_options_for_hooks)
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            logging.debug(f"Starting plot rendering for {plot_type} at {level} level...")
             raw_data = level_object.plot(
                 plot_type=plot_type,
                 **final_plot_options,
                 canvas=self.gui.plot_pane,
             )
+            logging.debug("Plot rendering completed successfully.")
         except UnableToPlotError as e:
             self.handle_unable_to_plot_error(e, plot_type, plot_options)
             return None
@@ -179,15 +204,26 @@ class PlotController:
             QApplication.restoreOverrideCursor()
 
         logging.info(f"Plot Created. level: {level} type: {plot_type}, return_raw_data: {return_raw_data}.")
+        logging.debug("Plot creation completed successfully. Beginning post-plot operations.")
 
-        # Update plot pane with error handling
-        try:
-            if hasattr(self.gui.plot_pane, "layout") and self.gui.plot_pane.layout:
-                self.gui.plot_pane.layout.update()
-        except (AttributeError, RuntimeError) as e:
-            logging.warning(f"Could not update plot pane layout: {e}")
+        # Defer layout update to avoid immediate Qt/graphics driver issues
+        # Uses QTimer.singleShot to push the update to the next event loop iteration
+        def safe_layout_update():
+            """Safely update plot pane layout with comprehensive error handling."""
+            try:
+                logging.debug("Attempting deferred layout update...")
+                if hasattr(self.gui.plot_pane, "layout") and self.gui.plot_pane.layout:
+                    self.gui.plot_pane.layout.update()
+                    logging.debug("Layout update completed successfully.")
+            except (AttributeError, RuntimeError) as e:
+                logging.warning(f"Could not update plot pane layout: {e}")
+            except Exception as e:
+                logging.error(f"Unexpected error during layout update: {e}", exc_info=True)
 
-        # Call post-plot hooks
+        # Schedule layout update for next event loop iteration (safer timing)
+        QTimer.singleShot(0, safe_layout_update)
+
+        # Call post-plot hooks with enhanced error tracking
         plot_result = {
             "level": level,
             "plot_type": plot_type,
@@ -195,13 +231,67 @@ class PlotController:
             "return_raw_data": return_raw_data,
         }
 
-        for hook in self._post_plot_hooks:
+        logging.debug(f"Executing {len(self._post_plot_hooks)} post-plot hooks...")
+        for i, hook in enumerate(self._post_plot_hooks):
             try:
+                logging.debug(f"Executing post-plot hook {i+1}/{len(self._post_plot_hooks)}...")
                 hook(plot_result)
+                logging.debug(f"Post-plot hook {i+1} completed successfully.")
             except Exception as hook_error:
-                logging.warning(f"Error in post-plot hook: {hook_error}")
+                logging.warning(f"Error in post-plot hook {i+1}: {hook_error}", exc_info=True)
+
+        # Memory management: Defer garbage collection to avoid Qt/graphics driver issues
+        # This helps with memory accumulation during extended sessions
+        # CRITICAL: GC must happen AFTER Qt has fully processed all graphics events
+        # Immediate GC can crash if Qt objects with native handles are collected
+        # Can be disabled by setting self._enable_auto_gc = False if it causes issues
+        if self._enable_auto_gc:
+            logging.debug("Scheduling deferred garbage collection (500ms delay)...")
+
+            def deferred_gc():
+                """Safely perform garbage collection after Qt events are fully processed."""
+                try:
+                    logging.debug("Starting deferred garbage collection...")
+
+                    # Get memory usage before collection (if psutil available)
+                    mem_before = None
+                    try:
+                        import psutil
+
+                        process = psutil.Process()
+                        mem_before = process.memory_info().rss / 1024 / 1024  # MB
+                        logging.debug(f"Memory usage before GC: {mem_before:.2f} MB")
+                    except ImportError:
+                        pass  # psutil not available, skip memory monitoring
+
+                    collected = gc.collect()
+                    logging.debug(f"Garbage collection completed. Collected {collected} objects.")
+
+                    # Get memory usage after collection
+                    if mem_before is not None:
+                        try:
+                            mem_after = process.memory_info().rss / 1024 / 1024  # MB
+                            mem_freed = mem_before - mem_after
+                            self._total_memory_freed += max(0, mem_freed)  # Track cumulative freed memory
+                            logging.debug(f"Memory usage after GC: {mem_after:.2f} MB (freed: {mem_freed:.2f} MB)")
+                            logging.debug(
+                                f"Session totals: {self._plot_count} plots, {self._total_memory_freed:.2f} MB freed cumulatively"
+                            )
+                        except Exception:
+                            pass
+
+                except Exception as gc_error:
+                    logging.warning(f"Deferred garbage collection failed: {gc_error}", exc_info=True)
+
+            # Schedule GC for 500ms later - gives Qt plenty of time to finish all operations
+            QTimer.singleShot(500, deferred_gc)
+        else:
+            logging.debug("Automatic garbage collection disabled (potential stability issue).")
+
+        logging.info("Plot operation completed successfully. Returning control to GUI.")
 
         if return_raw_data:
+            logging.debug(f"Returning raw data with {len(raw_data) if raw_data else 0} entries.")
             return raw_data
         return None
 
@@ -316,3 +406,33 @@ class PlotController:
         ]:
             if hook_func in hook_list:
                 hook_list.remove(hook_func)
+
+    def force_memory_cleanup(self):
+        """Manually trigger aggressive memory cleanup for extended sessions.
+
+        This can be called periodically (e.g., every N plots) or when the user
+        notices performance degradation during extended sessions.
+        """
+        logging.info("Forcing aggressive memory cleanup...")
+        try:
+            # Clear current plots
+            if hasattr(self.gui, "plot_pane") and self.gui.plot_pane:
+                self.gui.plot_pane.clear_plots()
+                logging.debug("Plot pane cleared.")
+
+            # Process pending Qt events
+            QApplication.processEvents()
+
+            # Run garbage collection multiple times for thorough cleanup
+            for generation in range(3):
+                collected = gc.collect(generation)
+                logging.debug(f"GC generation {generation}: collected {collected} objects")
+
+            # Log session statistics
+            logging.info(
+                f"Session statistics: {self._plot_count} plots created, "
+                f"{self._total_memory_freed:.2f} MB freed cumulatively"
+            )
+
+        except Exception as e:
+            logging.error(f"Error during forced memory cleanup: {e}", exc_info=True)

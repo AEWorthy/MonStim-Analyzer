@@ -57,12 +57,24 @@ class PlotPane(QGroupBox):
         logging.debug("PyQtGraph canvas created and added to layout.")
 
     def clear_plots(self):
-        """Clear all current plots"""
+        """Clear all current plots with comprehensive cleanup."""
         try:
+            logging.debug(f"Clearing plots. Current plot count: {len(self.current_plots)}")
+
+            # Clear references first to help garbage collector
+            self.current_plots = []
+            self.current_plot_items = []
+
+            # Clear the graphics layout
             if self.graphics_layout:
-                self.graphics_layout.clear()
-        except RuntimeError:
-            # Widget may have been destroyed
-            pass
-        self.current_plots = []
-        self.current_plot_items = []
+                try:
+                    self.graphics_layout.clear()
+                    logging.debug("Graphics layout cleared successfully.")
+                except RuntimeError as e:
+                    # Widget may have been destroyed
+                    logging.debug(f"Graphics layout already destroyed or invalid: {e}")
+                except Exception as e:
+                    logging.warning(f"Unexpected error clearing graphics layout: {e}", exc_info=True)
+
+        except Exception as e:
+            logging.error(f"Error in clear_plots: {e}", exc_info=True)
