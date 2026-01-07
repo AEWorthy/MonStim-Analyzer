@@ -406,7 +406,7 @@ class ApplicationState:
 
     def should_use_opengl_acceleration(self) -> bool:
         """Check if OpenGL acceleration should be used."""
-        return self.get_preference("use_opengl_acceleration", True)
+        return self.get_preference("use_opengl_acceleration", False)
 
     # === PERFORMANCE / LOADING PREFS ===
     def should_use_lazy_open_h5(self) -> bool:

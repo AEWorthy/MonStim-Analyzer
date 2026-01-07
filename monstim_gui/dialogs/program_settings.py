@@ -211,8 +211,8 @@ class ProgramSettingsDialog(QDialog):
         self.opengl_checkbox = QCheckBox()
         self.opengl_checkbox.setToolTip(
             "Use hardware-accelerated OpenGL for plot rendering to improve performance and responsiveness. "
-            "Recommended for most modern graphics cards. Disable if you experience visual glitches or crashes. "
-            "Changes require restarting the application to take effect."
+            "(Requires restart; may not be supported on all systems.)\n"
+            "Warning: Enabling OpenGL may increase instability and trigger silent crashes, especially on Windows or with certain graphics drivers. Use at your own risk."
         )
         layout.addRow("Use OpenGL acceleration:", self.opengl_checkbox)
 
