@@ -68,13 +68,18 @@ class PlotPane(QGroupBox):
             # Clear the graphics layout
             if self.graphics_layout:
                 try:
+                    logging.debug("Calling graphics_layout.clear()...")
                     self.graphics_layout.clear()
                     logging.debug("Graphics layout cleared successfully.")
                 except RuntimeError as e:
                     # Widget may have been destroyed
                     logging.debug(f"Graphics layout already destroyed or invalid: {e}")
+                except AttributeError as e:
+                    logging.debug(f"Graphics layout attribute error during clear: {e}")
                 except Exception as e:
                     logging.warning(f"Unexpected error clearing graphics layout: {e}", exc_info=True)
+            else:
+                logging.warning("Graphics layout is None, cannot clear")
 
         except Exception as e:
-            logging.error(f"Error in clear_plots: {e}", exc_info=True)
+            logging.error(f"CRITICAL: Error in clear_plots: {e}", exc_info=True)

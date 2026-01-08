@@ -751,6 +751,54 @@ class MonstimGUI(QMainWindow):
         from monstim_gui.core.ui_config import ui_config
         from monstim_gui.dialogs import clear_math_cache
 
+        # Stop any running background threads gracefully
+        logging.debug("Stopping background threads...")
+
+        # Stop loading thread if running
+        if hasattr(self.data_manager, "loading_thread") and self.data_manager.loading_thread.isRunning():
+            logging.info("Stopping experiment loading thread...")
+            self.data_manager.loading_thread.request_cancel()
+            if not self.data_manager.loading_thread.wait(3000):
+                logging.warning("Loading thread did not stop in time, forcing termination")
+                self.data_manager.loading_thread.terminate()
+                self.data_manager.loading_thread.wait()
+
+        # Stop import threads if running
+        if (
+            hasattr(self.data_manager, "thread")
+            and hasattr(self.data_manager.thread, "isRunning")
+            and self.data_manager.thread.isRunning()
+        ):
+            logging.info("Stopping import thread...")
+            self.data_manager.thread.cancel()
+            if not self.data_manager.thread.wait(3000):
+                logging.warning("Import thread did not stop in time")
+
+        if (
+            hasattr(self.data_manager, "multi_thread")
+            and hasattr(self.data_manager.multi_thread, "isRunning")
+            and self.data_manager.multi_thread.isRunning()
+        ):
+            logging.info("Stopping multi-import thread...")
+            self.data_manager.multi_thread.cancel()
+            if not self.data_manager.multi_thread.wait(3000):
+                logging.warning("Multi-import thread did not stop in time")
+
+        # Stop migration threads if running
+        if hasattr(self, "_migration_runner") and self._migration_runner.isRunning():
+            logging.info("Stopping migration runner...")
+            self._migration_runner.request_cancel()
+            if not self._migration_runner.wait(2000):
+                logging.warning("Migration runner did not stop in time")
+
+        if hasattr(self, "_migration_rescan") and self._migration_rescan.isRunning():
+            logging.debug("Stopping migration rescan...")
+            self._migration_rescan.request_cancel()
+            if not self._migration_rescan.wait(2000):
+                logging.warning("Migration rescan did not stop in time")
+
+        logging.debug("All background threads stopped.")
+
         ui_config.save_window_state(self)
         try:
             clear_math_cache()

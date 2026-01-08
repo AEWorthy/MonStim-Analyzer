@@ -287,6 +287,7 @@ class ApplicationState:
                 from PySide6.QtCore import QTimer
 
                 def restore_nested():
+                    _max_attempts = 20  # Try up to 20 times (10 seconds)
                     if gui.current_experiment and gui.current_experiment.id == experiment_id:
                         try:
                             # Restore dataset
@@ -342,18 +343,30 @@ class ApplicationState:
                                 profile_name=profile_name,
                             )
                     else:
-                        # Experiment not ready yet, try again in 500ms (but only up to 10 attempts = 5 seconds total)
+                        # Check if experiment loading was canceled - if so, stop waiting
+                        loading_canceled = not hasattr(gui.data_manager, "loading_thread")
+                        if loading_canceled:
+                            logging.info("Session restoration: Experiment loading was canceled, aborting restoration")
+                            self._is_restoring_session = False
+                            # Ensure combos are in correct state
+                            if gui.current_experiment and not gui.current_experiment.datasets:
+                                gui.data_selection_widget.update(levels=("dataset", "session"))
+                            return
+
+                        # Experiment not ready yet, try again in 500ms (but only up to '_max_attempts' attempts = 20 times, 10 seconds total)
                         if not hasattr(restore_nested, "attempt_count"):
                             restore_nested.attempt_count = 0
 
                         restore_nested.attempt_count += 1
-                        if restore_nested.attempt_count < 20:
+                        if restore_nested.attempt_count <= _max_attempts:
                             logging.debug(
-                                f"Session restoration: Waiting for experiment to load (attempt {restore_nested.attempt_count}/10)"
+                                f"Session restoration: Waiting for experiment to load (attempt {restore_nested.attempt_count}/{_max_attempts})"
                             )
                             QTimer.singleShot(500, restore_nested)
                         else:
-                            logging.warning("Session restoration: Gave up waiting for experiment to load after 5 seconds")
+                            logging.warning(
+                                f"Session restoration: Gave up waiting for experiment to load after {_max_attempts} attempt(s) ({int(_max_attempts * 0.5)} {'seconds' if _max_attempts * 0.5 > 1 else 'second'})"
+                            )
                             # Clear the restoration flag if we give up
                             self._is_restoring_session = False
                             # Ensure combos are in correct state for empty experiments

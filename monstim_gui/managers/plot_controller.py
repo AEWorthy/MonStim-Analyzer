@@ -36,6 +36,13 @@ class PlotController:
         # Safety flag: disable automatic GC if it causes crashes
         # Can be set to False if deferred GC still causes issues on certain systems
         self._enable_auto_gc = True
+        self._gc_failure_count = 0  # Track GC-related issues
+        self._max_gc_failures = 3  # Disable GC after this many issues
+
+        # Input blocking during critical graphics operations
+        # Prevents user interactions from interfering with screen refresh/layout updates
+        self._block_input_during_graphics_update = True  # Safety feature to prevent crashes
+        self._is_in_graphics_critical_section = False
 
         # Hook system for extensibility
         self._pre_plot_hooks = []
@@ -62,6 +69,26 @@ class PlotController:
         """Initialize the plot controller after GUI components are ready."""
         self._validate_gui_components()
         logging.debug("PlotController initialized successfully")
+
+    def _disable_plot_controls(self):
+        """Temporarily disable plot controls to prevent user input during critical graphics operations."""
+        try:
+            if hasattr(self.gui, "plot_widget") and self.gui.plot_widget:
+                self.gui.plot_widget.setEnabled(False)
+            if hasattr(self.gui, "data_selection_widget") and self.gui.data_selection_widget:
+                self.gui.data_selection_widget.setEnabled(False)
+        except Exception as e:
+            logging.warning(f"Could not disable plot controls: {e}")
+
+    def _enable_plot_controls(self):
+        """Re-enable plot controls after critical graphics operations complete."""
+        try:
+            if hasattr(self.gui, "plot_widget") and self.gui.plot_widget:
+                self.gui.plot_widget.setEnabled(True)
+            if hasattr(self.gui, "data_selection_widget") and self.gui.data_selection_widget:
+                self.gui.data_selection_widget.setEnabled(True)
+        except Exception as e:
+            logging.warning(f"Could not re-enable plot controls: {e}")
 
     def get_plot_configuration(self):
         """Get current plot configuration from GUI in a robust way."""
@@ -99,6 +126,13 @@ class PlotController:
         # Increment plot counter for extended session diagnostics
         self._plot_count += 1
         logging.debug(f"=== Starting plot operation #{self._plot_count} ===")
+
+        # Check if GC should be temporarily disabled due to previous issues
+        if self._plot_count > 100 and self._total_memory_freed < 1.0 and self._enable_auto_gc:
+            logging.warning(
+                f"Auto-GC not freeing memory after {self._plot_count} plots "
+                f"({self._total_memory_freed:.2f} MB freed total). Consider disabling if stability issues occur."
+            )
 
         try:
             self._validate_gui_components()
@@ -194,17 +228,42 @@ class PlotController:
                 canvas=self.gui.plot_pane,
             )
             logging.debug("Plot rendering completed successfully.")
+
+            # Ensure PyQtGraph graphics scene is fully updated before continuing
+            # This helps prevent crashes when Qt processes pending paint events
+            try:
+                if hasattr(self.gui.plot_pane, "graphics_layout"):
+                    self.gui.plot_pane.graphics_layout.update()
+                    logging.debug("Graphics layout update() called to stabilize scene")
+            except Exception as e:
+                logging.warning(f"Could not call update() on graphics layout: {e}")
+
         except UnableToPlotError as e:
             self.handle_unable_to_plot_error(e, plot_type, plot_options)
+            # Ensure controls are re-enabled on error
+            if self._is_in_graphics_critical_section:
+                self._enable_plot_controls()
+                self._is_in_graphics_critical_section = False
             return None
         except Exception as e:
             self.handle_plot_error(e, plot_type, plot_options)
+            # Ensure controls are re-enabled on error
+            if self._is_in_graphics_critical_section:
+                self._enable_plot_controls()
+                self._is_in_graphics_critical_section = False
             return None
         finally:
             QApplication.restoreOverrideCursor()
 
         logging.info(f"Plot Created. level: {level} type: {plot_type}, return_raw_data: {return_raw_data}.")
         logging.debug("Plot creation completed successfully. Beginning post-plot operations.")
+
+        # Block user input during critical graphics update phase to prevent crashes
+        # This prevents mouse/keyboard events from interfering with screen refresh
+        if self._block_input_during_graphics_update:
+            self._is_in_graphics_critical_section = True
+            self._disable_plot_controls()
+            logging.debug("User input blocked during graphics update phase")
 
         # Defer layout update to avoid immediate Qt/graphics driver issues
         # Uses QTimer.singleShot to push the update to the next event loop iteration
@@ -215,13 +274,23 @@ class PlotController:
                 if hasattr(self.gui.plot_pane, "layout") and self.gui.plot_pane.layout:
                     self.gui.plot_pane.layout.update()
                     logging.debug("Layout update completed successfully.")
+                else:
+                    logging.warning("Plot pane layout not available for update")
             except (AttributeError, RuntimeError) as e:
                 logging.warning(f"Could not update plot pane layout: {e}")
             except Exception as e:
-                logging.error(f"Unexpected error during layout update: {e}", exc_info=True)
+                logging.error(f"CRITICAL: Unexpected error during layout update: {e}", exc_info=True)
+            finally:
+                # Layout update is complete - this is a good time to re-enable input
+                # We'll still wait for the heartbeat before fully re-enabling
+                pass
 
         # Schedule layout update for next event loop iteration (safer timing)
-        QTimer.singleShot(0, safe_layout_update)
+        try:
+            QTimer.singleShot(0, safe_layout_update)
+            logging.debug("Layout update scheduled successfully")
+        except Exception as e:
+            logging.error(f"CRITICAL: Failed to schedule layout update: {e}", exc_info=True)
 
         # Call post-plot hooks with enhanced error tracking
         plot_result = {
@@ -263,7 +332,10 @@ class PlotController:
                         logging.debug(f"Memory usage before GC: {mem_before:.2f} MB")
                     except ImportError:
                         pass  # psutil not available, skip memory monitoring
+                    except Exception as e:
+                        logging.debug(f"Could not get memory info: {e}")
 
+                    logging.debug("Calling gc.collect()...")
                     collected = gc.collect()
                     logging.debug(f"Garbage collection completed. Collected {collected} objects.")
 
@@ -277,22 +349,59 @@ class PlotController:
                             logging.debug(
                                 f"Session totals: {self._plot_count} plots, {self._total_memory_freed:.2f} MB freed cumulatively"
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logging.debug(f"Could not calculate memory freed: {e}")
 
                 except Exception as gc_error:
-                    logging.warning(f"Deferred garbage collection failed: {gc_error}", exc_info=True)
+                    logging.error(f"CRITICAL: Deferred garbage collection failed: {gc_error}", exc_info=True)
 
             # Schedule GC for 500ms later - gives Qt plenty of time to finish all operations
-            QTimer.singleShot(500, deferred_gc)
+            try:
+                QTimer.singleShot(500, deferred_gc)
+                logging.debug("Deferred GC scheduled successfully")
+            except Exception as e:
+                logging.error(f"CRITICAL: Failed to schedule deferred GC: {e}", exc_info=True)
         else:
             logging.debug("Automatic garbage collection disabled (potential stability issue).")
 
         logging.info("Plot operation completed successfully. Returning control to GUI.")
 
+        # Diagnostic heartbeat: log when we successfully return to event loop
+        # This helps identify if crashes happen during the return or after
+        # Also re-enable user input after verifying graphics operations are stable
+        def heartbeat_check():
+            try:
+                logging.debug(f"Heartbeat: Plot #{self._plot_count} - GUI event loop responsive after plot completion")
+
+                # Re-enable user input after graphics operations are complete
+                if self._is_in_graphics_critical_section:
+                    self._enable_plot_controls()
+                    self._is_in_graphics_critical_section = False
+                    logging.debug("User input re-enabled after graphics update completion")
+            except Exception as e:
+                logging.error(f"Error in heartbeat check: {e}", exc_info=True)
+                # Ensure controls are re-enabled even if there's an error
+                try:
+                    self._enable_plot_controls()
+                    self._is_in_graphics_critical_section = False
+                except Exception:
+                    logging.error("Failed to re-enable plot controls in heartbeat error handling", exc_info=True)
+                    pass
+
+        try:
+            # Re-enable input after ~50ms (after layout update and GC are complete)
+            QTimer.singleShot(50, heartbeat_check)
+        except Exception as e:
+            logging.error(f"CRITICAL: Failed to schedule heartbeat check: {e}", exc_info=True)
+            # Emergency: re-enable controls immediately if scheduling fails
+            self._enable_plot_controls()
+            self._is_in_graphics_critical_section = False
+
         if return_raw_data:
             logging.debug(f"Returning raw data with {len(raw_data) if raw_data else 0} entries.")
             return raw_data
+
+        logging.debug("Returning None from plot_data()")
         return None
 
     def get_raw_data(self):

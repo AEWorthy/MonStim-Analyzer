@@ -76,8 +76,31 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def exception_hook(exc_type, exc_value, exc_traceback):
-    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    """Handle uncaught exceptions in Python code."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        # Call the default excepthook for KeyboardInterrupt
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logging.error("CRITICAL: Uncaught Python exception", exc_info=(exc_type, exc_value, exc_traceback))
+    logging.error(f"Exception type: {exc_type.__name__}")
+    logging.error(f"Exception value: {exc_value}")
+    logging.error(f"Traceback: {''.join(traceback.format_tb(exc_traceback))}")
     sys.exit(1)
+
+
+def qt_message_handler(mode, context, message):
+    """Handle Qt debug/warning/critical messages."""
+    if mode == 0:  # QtDebugMsg
+        logging.debug(f"Qt: {message}")
+    elif mode == 1:  # QtWarningMsg
+        logging.warning(f"Qt Warning: {message} (file: {context.file}, line: {context.line})")
+    elif mode == 2:  # QtCriticalMsg
+        logging.error(f"Qt CRITICAL: {message} (file: {context.file}, line: {context.line})")
+    elif mode == 3:  # QtFatalMsg
+        logging.critical(f"Qt FATAL: {message} (file: {context.file}, line: {context.line})")
+        logging.critical("Application will terminate due to Qt fatal error")
+    elif mode == 4:  # QtInfoMsg
+        logging.info(f"Qt Info: {message}")
 
 
 def main(is_frozen: bool) -> int:
@@ -90,6 +113,12 @@ def main(is_frozen: bool) -> int:
         app.setOrganizationName("WorthyLab")
         app.setApplicationName("MonStim Analyzer")
         app.setApplicationVersion(SPLASH_INFO["version"])
+
+        # Install Qt message handler to catch Qt internal errors
+        from PySide6.QtCore import qInstallMessageHandler
+
+        qInstallMessageHandler(qt_message_handler)
+        logging.debug("Qt message handler installed for comprehensive error logging")
 
         # Reinitialize app_state after QApplication is configured
         from monstim_gui.core.application_state import app_state

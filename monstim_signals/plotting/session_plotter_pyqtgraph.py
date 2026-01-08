@@ -924,9 +924,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 # Set range on first plot only since they're Y-linked
                 plot_items[0].setYRange(0, 1.1 * y_max)
 
-        # Display the plot
-        self.display_plot(canvas)
-
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(["channel_index"], inplace=True)

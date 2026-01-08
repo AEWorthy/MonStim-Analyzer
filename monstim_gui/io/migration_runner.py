@@ -17,10 +17,17 @@ class MigrationRunner(QThread):
     error = Signal(str)
     progress = Signal(int)
     status_update = Signal(str)
+    canceled = Signal()  # Emitted when canceled
 
     def __init__(self, experiment_path: str):
         super().__init__()
         self.experiment_path = experiment_path
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        """Request graceful cancellation of migration."""
+        logging.info("Cancellation requested for migration runner")
+        self._cancel_requested = True
 
     def run(self) -> None:
         try:
@@ -41,6 +48,12 @@ class MigrationRunner(QThread):
 
             # Apply migrations: open each file, migrate in-place, and write back.
             for i, item in enumerate(to_migrate, start=1):
+                # Check for cancellation
+                if self._cancel_requested:
+                    logging.info(f"Migration canceled after {migrated}/{total} files")
+                    self.canceled.emit()
+                    return
+
                 try:
                     path = Path(item["path"]) if "path" in item else None
                     if not path:
@@ -82,10 +95,20 @@ class MigrationScanThread(QThread):
     def __init__(self, experiment_path: str):
         super().__init__()
         self.experiment_path = experiment_path
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        """Request graceful cancellation of migration scan."""
+        logging.debug("Cancellation requested for migration scan")
+        self._cancel_requested = True
 
     def run(self) -> None:
         try:
+            if self._cancel_requested:
+                return
             results = scan_annotation_versions(Path(self.experiment_path))
+            if self._cancel_requested:
+                return
             to_migrate = [r for r in results if r.get("needs_migration")]
             self.has_work.emit(bool(to_migrate), len(to_migrate))
         except Exception as e:

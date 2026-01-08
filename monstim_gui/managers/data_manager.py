@@ -773,8 +773,13 @@ class DataManager:
         # Cancel any existing loading operation
         if hasattr(self, "loading_thread") and self.loading_thread.isRunning():
             logging.info("Cancelling previous experiment loading operation")
-            self.loading_thread.terminate()
-            self.loading_thread.wait()
+            # Use safe cancellation instead of terminate()
+            self.loading_thread.request_cancel()
+            # Wait with timeout (max 5 seconds for graceful shutdown)
+            if not self.loading_thread.wait(5000):
+                logging.warning("Loading thread did not stop gracefully, forcing termination")
+                self.loading_thread.terminate()
+                self.loading_thread.wait()
             self.loading_thread.deleteLater()
             if hasattr(self, "current_progress_dialog"):
                 self.current_progress_dialog.close()
@@ -994,8 +999,14 @@ class DataManager:
             return
 
         if hasattr(self, "loading_thread") and self.loading_thread.isRunning():
-            self.loading_thread.terminate()
-            self.loading_thread.wait()
+            logging.info("User canceled experiment loading")
+            # Use safe cancellation instead of terminate()
+            self.loading_thread.request_cancel()
+            # Wait with timeout (max 5 seconds for graceful shutdown)
+            if not self.loading_thread.wait(5000):
+                logging.warning("Loading thread did not stop gracefully after cancel, forcing termination")
+                self.loading_thread.terminate()
+                self.loading_thread.wait()
             self.loading_thread.deleteLater()
             del self.loading_thread
 

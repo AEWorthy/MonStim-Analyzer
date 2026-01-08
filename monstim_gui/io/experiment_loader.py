@@ -50,6 +50,12 @@ class ExperimentLoadingThread(QThread):
         self._is_first_load = None  # Will be determined during analysis
         self._skipped_datasets = []  # Track skipped datasets
         self._estimated_time = None
+        self._cancel_requested = False  # Flag for safe cancellation
+
+    def request_cancel(self):
+        """Request graceful cancellation of the loading operation."""
+        logging.info("Cancellation requested for experiment loading thread")
+        self._cancel_requested = True
 
     def _analyze_load_requirements(self, exp_path: Path) -> tuple[bool, int, int]:
         """
@@ -135,6 +141,11 @@ class ExperimentLoadingThread(QThread):
                 QThread.sleep(3)
                 return
 
+            # Check for cancellation early
+            if self._cancel_requested:
+                logging.info("Loading canceled before analysis")
+                return
+
             self.progress.emit(10)
             self.status_update.emit("Analyzing experiment structure...")
 
@@ -157,6 +168,11 @@ class ExperimentLoadingThread(QThread):
             elif files_to_load > 5000:
                 time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
                 logging.info(time_msg)
+
+            # Check for cancellation before repository creation
+            if self._cancel_requested:
+                logging.info("Loading canceled before repository creation")
+                return
 
             # Create repository
             repo = ExperimentRepository(exp_path)
@@ -202,6 +218,10 @@ class ExperimentLoadingThread(QThread):
             def _progress_cb(level: str, index: int, total: int, name: str):
                 nonlocal _last_emit_ts
                 import time as _t
+
+                # Check cancellation in callback
+                if self._cancel_requested:
+                    raise InterruptedError("Loading canceled by user")
 
                 if level == "dataset" and total > 0:
                     now = _t.monotonic()
@@ -249,12 +269,29 @@ class ExperimentLoadingThread(QThread):
             # "no recordings" errors from strict domain checks. Lazy
             # access can still be applied at the HDF5 level via
             # `lazy_open_h5` in config.
-            experiment = repo.load(
-                config=cfg,
-                progress_callback=_progress_cb,
-                allow_write=is_first_load,
-                load_recordings=False,
-            )
+
+            # Check for cancellation before starting the actual load
+            if self._cancel_requested:
+                logging.info("Loading canceled before repo.load()")
+                return
+
+            try:
+                experiment = repo.load(
+                    config=cfg,
+                    progress_callback=_progress_cb,
+                    allow_write=is_first_load,
+                    load_recordings=False,
+                )
+            except InterruptedError as e:
+                # Graceful cancellation from progress callback
+                logging.info(f"Loading interrupted: {e}")
+                self.status_update.emit("Loading canceled by user...")
+                return
+
+            # Check for cancellation after load completes
+            if self._cancel_requested:
+                logging.info("Loading canceled after repo.load()")
+                return
 
             self.progress.emit(90)
             self.status_update.emit("Finalizing experiment structure...")
@@ -297,3 +334,15 @@ class ExperimentLoadingThread(QThread):
         finally:
             # Clean up logging handler
             root_logger.removeHandler(skip_handler)
+
+            # If cancellation was requested, ensure cleanup
+            if self._cancel_requested:
+                logging.debug("Performing cleanup after canceled load")
+                try:
+                    # Force garbage collection to clean up any partially loaded objects
+                    import gc
+
+                    collected = gc.collect()
+                    logging.debug(f"Post-cancellation cleanup: collected {collected} objects")
+                except Exception as cleanup_error:
+                    logging.warning(f"Error during post-cancellation cleanup: {cleanup_error}")
