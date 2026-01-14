@@ -398,7 +398,7 @@ class PlotController:
             self._is_in_graphics_critical_section = False
 
         if return_raw_data:
-            logging.debug(f"Returning raw data with {len(raw_data) if raw_data else 0} entries.")
+            logging.debug(f"Returning raw data with {len(raw_data) if raw_data is not None else 0} entries.")
             return raw_data
 
         logging.debug("Returning None from plot_data()")
