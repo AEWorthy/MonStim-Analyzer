@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-from datetime import datetime
 
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, Qt
@@ -127,13 +126,10 @@ def make_export_filename(df: pd.DataFrame) -> str:
     elif dfname:
         parts.append(str(dfname))
 
-    # Timestamp for uniqueness
-    parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
-
     filename = "__".join(parts)
     filename = _sanitize_filename(filename)
     if not filename:
-        filename = f"export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        filename = "export"
     return f"{filename}.csv"
 
 
