@@ -592,6 +592,33 @@ class MonstimGUI(QMainWindow):
         self._latency_dialog.raise_()  # Bring to front
         self._latency_dialog.activateWindow()  # Give focus
 
+    def append_replace_latency_windows(self, level: str):
+        """Open specialized dialog for appending/replacing a single latency window."""
+        logging.debug(f"Opening append/replace latency window dialog for {level}.")
+        match level:
+            case "experiment":
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+                    return
+                emg_data = self.current_experiment
+            case "dataset":
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                emg_data = self.current_dataset
+            case "session":
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                emg_data = self.current_session
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for append/replace operation.")
+                return
+
+        from monstim_gui.dialogs.latency import AppendReplaceLatencyWindowDialog
+        dialog = AppendReplaceLatencyWindowDialog(emg_data, self)
+        dialog.exec()
+
     def invert_channel_polarity(self, level: str):
         logging.debug("Inverting channel polarity.")
 

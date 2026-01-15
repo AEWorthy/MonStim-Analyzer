@@ -555,6 +555,94 @@ class SetLatencyWindowsCommand(Command):
                 self.level.update_latency_window_parameters()
 
 
+class InsertSingleLatencyWindowCommand(Command):
+    """Insert or replace a single latency window by name across hierarchy.
+    
+    This command merges a single window into existing configurations without
+    replacing all windows. If a window with the same name exists, it's replaced;
+    otherwise the window is appended.
+    """
+
+    def __init__(self, gui, level: str, window, replace_mode: bool = True):
+        """
+        Args:
+            gui: The main GUI instance
+            level: "experiment", "dataset", or "session"
+            window: The LatencyWindow to insert/replace
+            replace_mode: If True and window name exists, replace it. If False, append with unique name.
+        """
+        self.command_name: str = f"Insert Window '{window.name}'"
+        self.gui: "MonstimGUI" = gui
+        self.replace_mode = replace_mode
+        
+        match level:
+            case "experiment":
+                self.level = self.gui.current_experiment
+                self.sessions = [s for ds in self.level.datasets for s in ds.sessions]
+            case "dataset":
+                self.level = self.gui.current_dataset
+                self.sessions = list(self.level.sessions)
+            case "session":
+                self.level = self.gui.current_session
+                self.sessions = [self.level]
+            case _:
+                raise ValueError(f"Invalid level: {level}")
+        
+        self.new_window = copy.deepcopy(window)
+        # Store old windows for each session for undo
+        self.old_windows = {s.id: copy.deepcopy(s.annot.latency_windows) for s in self.sessions}
+
+    def _merge_window(self, existing_windows, new_window):
+        """Merge a single window into existing windows, replacing by name if it exists."""
+        import copy
+        
+        result = []
+        replaced = False
+        
+        for w in existing_windows:
+            if w.name == new_window.name and self.replace_mode:
+                result.append(copy.deepcopy(new_window))
+                replaced = True
+            else:
+                result.append(copy.deepcopy(w))
+        
+        if not replaced:
+            result.append(copy.deepcopy(new_window))
+        
+        return result
+
+    def execute(self):
+        import copy
+        
+        for s in self.sessions:
+            s.annot.latency_windows = self._merge_window(s.annot.latency_windows, self.new_window)
+            s.update_latency_window_parameters()
+            if s.repo is not None:
+                s.repo.save(s)
+        
+        if hasattr(self.level, "update_latency_window_parameters"):
+            if isinstance(self.level, list):
+                for obj in self.level:
+                    obj.update_latency_window_parameters()
+            else:
+                self.level.update_latency_window_parameters()
+
+    def undo(self):
+        for s in self.sessions:
+            windows = self.old_windows[s.id]
+            s.annot.latency_windows = windows
+            s.update_latency_window_parameters()
+            if s.repo is not None:
+                s.repo.save(s)
+        
+        if hasattr(self.level, "update_latency_window_parameters"):
+            if isinstance(self.level, list):
+                for obj in self.level:
+                    obj.update_latency_window_parameters()
+            else:
+                self.level.update_latency_window_parameters()
+
+
 class ChangeChannelNamesCommand(Command):
     def __init__(self, gui, level: str, new_names: dict):
         self.command_name: str = "Change Channel Names"

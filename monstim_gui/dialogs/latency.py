@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from monstim_gui.commands import SetLatencyWindowsCommand
+from monstim_gui.commands import SetLatencyWindowsCommand, InsertSingleLatencyWindowCommand
 from monstim_gui.core.clipboard import LatencyWindowClipboard
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_signals.core import LatencyWindow, get_config_path
@@ -164,9 +164,9 @@ class LatencyWindowsDialog(QDialog):
         action_row.addWidget(copy_button)
 
         paste_button = QPushButton("Paste")
-        paste_button.setToolTip("Paste latency windows from clipboard, replacing current list")
+        paste_button.setToolTip("Paste from clipboard (handles both single and multiple windows)")
         paste_button.clicked.connect(self._paste_windows_from_clipboard)
-        paste_button.setEnabled(LatencyWindowClipboard.has())
+        paste_button.setEnabled(LatencyWindowClipboard.has_any())
         self._paste_button = paste_button  # store for state updates
         action_row.addWidget(paste_button)
 
@@ -342,6 +342,10 @@ class LatencyWindowsDialog(QDialog):
 
         # Action buttons
         button_layout = QHBoxLayout()
+        copy_btn = QPushButton("Copy")
+        copy_btn.setToolTip("Copy this latency window to clipboard for inserting elsewhere")
+        copy_btn.clicked.connect(lambda: self._copy_single_window(group))
+        button_layout.addWidget(copy_btn)
         remove_btn = QPushButton("Remove")
         remove_btn.setToolTip("Delete this latency window permanently")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
@@ -483,6 +487,7 @@ class LatencyWindowsDialog(QDialog):
             self._add_window_group(window)
         # After applying preset, any future paste is still valid
         self._update_paste_enabled()
+        self._reorganize_grid_layout()
 
     # ---------------- Clipboard Support -----------------
     def _copy_windows_to_clipboard(self):
@@ -514,19 +519,29 @@ class LatencyWindowsDialog(QDialog):
             )
             windows.append(win_copy)
         if windows:
-            LatencyWindowClipboard.set(windows)
+            LatencyWindowClipboard.set_multiple(windows)
             if self.gui and hasattr(self.gui, "status_bar"):
                 self.gui.status_bar.showMessage(f"Copied {len(windows)} latency window(s) to clipboard (transient).", 5000)
         self._update_paste_enabled()
 
     def _paste_windows_from_clipboard(self):
-        """Paste windows from clipboard, replacing current view."""
-        windows = LatencyWindowClipboard.get()
-        if not windows:
+        """Paste windows from clipboard (handles both single and multi-window clipboards)."""
+        # Get most recent clipboard data
+        mode, data = LatencyWindowClipboard.get_most_recent()
+        
+        if mode == "none":
             QMessageBox.information(self, "Clipboard Empty", "There are no latency windows in the clipboard.")
             self._update_paste_enabled()
             return
+        elif mode == "multiple":
+            # Handle multi-window paste (replace all)
+            self._paste_multi_windows(data)
+        elif mode == "single":
+            # Handle single-window paste (insert/replace by name)
+            self._paste_single_window(data)
 
+    def _paste_multi_windows(self, windows):
+        """Paste multiple windows, replacing all current windows."""
         # Confirm replacement if existing windows present
         if self.window_entries:
             resp = QMessageBox.question(
@@ -554,9 +569,89 @@ class LatencyWindowsDialog(QDialog):
         if self.gui and hasattr(self.gui, "status_bar"):
             self.gui.status_bar.showMessage(f"Pasted {len(windows)} latency window(s) from clipboard.", 5000)
 
+    def _paste_single_window(self, window):
+        """Paste a single window, appending or replacing by name in the dialog only."""
+        # Check for duplicate names in current dialog
+        existing_names = [name_edit.text().strip() for (_, _, name_edit, *_) in self.window_entries]
+        
+        if window.name in existing_names:
+            # Ask user what to do
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle("Window Name Exists")
+            msg.setText(f"A window named '{window.name}' already exists in this view.")
+            msg.setInformativeText("Would you like to replace it or insert with a new name?")
+            
+            replace_btn = msg.addButton("Replace Existing", QMessageBox.ButtonRole.AcceptRole)
+            rename_btn = msg.addButton("Insert as New", QMessageBox.ButtonRole.ActionRole)
+            cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
+            
+            msg.exec()
+            clicked = msg.clickedButton()
+            
+            if clicked == cancel_btn:
+                return
+            elif clicked == replace_btn:
+                # Find and remove the existing window with that name
+                for i, (grp, _, name_edit, *_) in enumerate(self.window_entries):
+                    if name_edit.text().strip() == window.name:
+                        self._remove_window_group(grp)
+                        break
+            elif clicked == rename_btn:
+                # Generate a unique name
+                base_name = window.name
+                counter = 1
+                while f"{base_name} ({counter})" in existing_names:
+                    counter += 1
+                window.name = f"{base_name} ({counter})"
+
+        # Add the window to dialog
+        self._add_window_group(window)
+        self._reorganize_grid_layout()
+        
+        if self.gui and hasattr(self.gui, "status_bar"):
+            self.gui.status_bar.showMessage(f"Pasted window '{window.name}' to dialog.", 3000)
+        self._update_paste_enabled()
+
     def _update_paste_enabled(self):
         if hasattr(self, "_paste_button"):
-            self._paste_button.setEnabled(LatencyWindowClipboard.has())
+            self._paste_button.setEnabled(LatencyWindowClipboard.has_any())
+
+    def _copy_single_window(self, group: QGroupBox):
+        """Copy a single window to the clipboard."""
+        # Find the window entry for this group
+        for (
+            grp,
+            window,
+            name_edit,
+            global_start_spin,
+            dur_spin,
+            color_combo,
+            global_radio,
+            per_channel_spins,
+        ) in self.window_entries:
+            if grp is group:
+                # Build a fresh LatencyWindow snapshot
+                num_channels = len(self.data.channel_names)
+                if global_radio.isChecked():
+                    start_times = [global_start_spin.value()] * num_channels
+                else:
+                    start_times = [spin.value() for spin in per_channel_spins]
+                durations = [dur_spin.value()] * num_channels
+                
+                win_copy = LatencyWindow(
+                    name=name_edit.text().strip() or "Window",
+                    start_times=start_times,
+                    durations=durations,
+                    color=color_combo.currentData(),
+                    linestyle=window.linestyle,
+                )
+                LatencyWindowClipboard.set_single(win_copy)
+                
+                if self.gui and hasattr(self.gui, "status_bar"):
+                    self.gui.status_bar.showMessage(f"Copied '{win_copy.name}' to clipboard.", 3000)
+                self._update_paste_enabled()
+                return
 
     def save_windows(self):
         new_windows = []
@@ -667,3 +762,215 @@ class LatencyWindowsDialog(QDialog):
         # Trigger replot to show changes
         if self.gui:
             self.gui.plot_controller.plot_data()
+
+
+class AppendReplaceLatencyWindowDialog(QDialog):
+    """Specialized dialog for appending or replacing a single latency window across hierarchy.
+    
+    This dialog applies changes immediately to the data (not just the UI), making it suitable
+    for quick single-window operations without needing to review all windows.
+    """
+
+    def __init__(self, data: Experiment | Dataset | Session, parent=None):
+        super().__init__(parent)
+        self.data = data
+        self.gui: MonstimGUI = parent
+        self.setModal(True)
+        self.setWindowTitle("Append/Replace Latency Window")
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        self.setMinimumWidth(400)
+
+        # Info label
+        info_label = QLabel(
+            "This action will append or replace latency window(s) across all "
+            "sessions at the current level and below. Changes are applied immediately."
+        )
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        # Clipboard status
+        clipboard_group = QGroupBox("Clipboard Status")
+        clipboard_layout = QVBoxLayout(clipboard_group)
+        
+        mode, data = LatencyWindowClipboard.get_most_recent()
+        
+        if mode == "single":
+            clipboard_layout.addWidget(QLabel(f"✓ Single window (most recent): '{data.name}'"))
+        elif mode == "multiple":
+            count = len(data)
+            names = ", ".join([w.name for w in data[:3]])
+            if count > 3:
+                names += f", ... ({count} total)"
+            clipboard_layout.addWidget(QLabel(f"✓ Multiple windows (most recent): {names}"))
+        else:
+            clipboard_layout.addWidget(QLabel("✗ No clipboard data available"))
+            clipboard_layout.addWidget(QLabel("Tip: Open the Latency Windows editor and use Copy or Copy All buttons"))
+        
+        layout.addWidget(clipboard_group)
+
+        # Action buttons
+        if mode != "none":
+            # Determine action based on clipboard mode
+            if mode == "single":
+                self._add_single_window_actions(layout, data)
+            else:  # mode == "multiple"
+                self._add_multiple_windows_actions(layout, data)
+
+        # Dialog buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel, self)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        # Show message if no clipboard data
+        if mode == "none":
+            layout.addWidget(QLabel("Please copy latency window(s) first."))
+
+    def _add_single_window_actions(self, layout, window: LatencyWindow):
+        """Add action buttons for single window mode."""
+        sessions_to_check = self._get_sessions_to_check()
+        window_exists = any(
+            any(w.name == window.name for w in s.annot.latency_windows)
+            for s in sessions_to_check
+        )
+
+        action_group = QGroupBox("Action")
+        action_layout = QVBoxLayout(action_group)
+
+        if window_exists:
+            action_layout.addWidget(QLabel(
+                f"Window '{window.name}' exists in one or more sessions. Choose action:"
+            ))
+            
+            replace_btn = QPushButton(f"Replace '{window.name}' Windows")
+            replace_btn.setToolTip(f"Replace all existing '{window.name}' windows with clipboard version")
+            replace_btn.clicked.connect(lambda: self._execute_single_window_action(window, True))
+            action_layout.addWidget(replace_btn)
+
+            append_btn = QPushButton("Insert as New Window")
+            append_btn.setToolTip("Add as a new window with a unique name, preserving existing windows")
+            append_btn.clicked.connect(lambda: self._execute_single_window_action(window, False))
+            action_layout.addWidget(append_btn)
+        else:
+            action_layout.addWidget(QLabel(
+                f"Window '{window.name}' does not exist. It will be appended to all sessions."
+            ))
+            
+            append_btn = QPushButton(f"Append '{window.name}'")
+            append_btn.setToolTip("Add this window to all sessions at the current level")
+            append_btn.clicked.connect(lambda: self._execute_single_window_action(window, True))
+            action_layout.addWidget(append_btn)
+
+        layout.addWidget(action_group)
+
+    def _add_multiple_windows_actions(self, layout, windows: list[LatencyWindow]):
+        """Add action buttons for multiple windows mode."""
+        sessions_to_check = self._get_sessions_to_check()
+        
+        # Check which windows exist
+        existing_windows = []
+        new_windows = []
+        
+        for w in windows:
+            exists = any(
+                any(sw.name == w.name for sw in s.annot.latency_windows)
+                for s in sessions_to_check
+            )
+            if exists:
+                existing_windows.append(w.name)
+            else:
+                new_windows.append(w.name)
+
+        action_group = QGroupBox("Action")
+        action_layout = QVBoxLayout(action_group)
+
+        # Show status
+        status_text = f"Processing {len(windows)} windows:\n"
+        if existing_windows:
+            status_text += f"  • {len(existing_windows)} will replace existing: {', '.join(existing_windows[:3])}"
+            if len(existing_windows) > 3:
+                status_text += "..."
+            status_text += "\n"
+        if new_windows:
+            status_text += f"  • {len(new_windows)} will be appended: {', '.join(new_windows[:3])}"
+            if len(new_windows) > 3:
+                status_text += "..."
+        
+        action_layout.addWidget(QLabel(status_text))
+        
+        apply_btn = QPushButton(f"Apply {len(windows)} Windows")
+        apply_btn.setToolTip("Apply all windows: replace existing by name, append new ones")
+        apply_btn.clicked.connect(lambda: self._execute_multiple_windows_action(windows))
+        action_layout.addWidget(apply_btn)
+
+        layout.addWidget(action_group)
+
+    def _get_sessions_to_check(self):
+        """Get all sessions that will be affected by this operation."""
+        if isinstance(self.data, Experiment):
+            return [s for ds in self.data.datasets for s in ds.sessions]
+        elif isinstance(self.data, Dataset):
+            return list(self.data.sessions)
+        else:
+            return [self.data]
+
+    def _execute_single_window_action(self, window: LatencyWindow, replace_mode: bool):
+        """Execute the append/replace action for a single window."""
+        # Determine level
+        if isinstance(self.data, Experiment):
+            level = "experiment"
+        elif isinstance(self.data, Dataset):
+            level = "dataset"
+        else:
+            level = "session"
+
+        # If not replacing, generate unique name
+        if not replace_mode:
+            sessions_to_check = self._get_sessions_to_check()
+            existing_names = set()
+            for s in sessions_to_check:
+                existing_names.update(w.name for w in s.annot.latency_windows)
+            
+            base_name = window.name
+            counter = 1
+            while f"{base_name} ({counter})" in existing_names:
+                counter += 1
+            window.name = f"{base_name} ({counter})"
+
+        # Execute command
+        command = InsertSingleLatencyWindowCommand(self.gui, level, window, replace_mode)
+        self.gui.command_invoker.execute(command)
+
+        # Trigger replot
+        if self.gui:
+            self.gui.plot_controller.plot_data()
+            if hasattr(self.gui, "status_bar"):
+                action = "replaced" if replace_mode else "appended"
+                self.gui.status_bar.showMessage(f"Window '{window.name}' {action} successfully.", 5000)
+
+        self.accept()
+
+    def _execute_multiple_windows_action(self, windows: list[LatencyWindow]):
+        """Execute append/replace for multiple windows."""
+        # Determine level
+        if isinstance(self.data, Experiment):
+            level = "experiment"
+        elif isinstance(self.data, Dataset):
+            level = "dataset"
+        else:
+            level = "session"
+
+        # Execute a command for each window (replace mode for all)
+        for window in windows:
+            command = InsertSingleLatencyWindowCommand(self.gui, level, window, replace_mode=True)
+            self.gui.command_invoker.execute(command)
+
+        # Trigger replot
+        if self.gui:
+            self.gui.plot_controller.plot_data()
+            if hasattr(self.gui, "status_bar"):
+                self.gui.status_bar.showMessage(f"{len(windows)} windows applied successfully.", 5000)
+
+        self.accept()
