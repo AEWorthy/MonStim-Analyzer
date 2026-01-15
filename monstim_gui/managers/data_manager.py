@@ -840,11 +840,9 @@ class DataManager:
         progress_dialog.setMinimumWidth(450)  # Make it wider for better text visibility
         progress_dialog.resize(450, 120)
 
-        # Show once to finalize size, then lock height to prevent jumpy resize on long messages
+        # Show dialog - don't set fixed size to allow dynamic resizing
         progress_dialog.show()
         QApplication.processEvents()
-        fixed_height = progress_dialog.height()
-        progress_dialog.setFixedSize(450, fixed_height)
 
         # Simple initial message - let the loader provide specific time estimates
         initial_text = f"Initializing {experiment_name}..."
@@ -857,9 +855,19 @@ class DataManager:
         config = self.gui.config_repo.read_config()
         self.loading_thread = ExperimentLoadingThread(exp_path, config)
 
+        # Create a lambda to handle dynamic resizing when status updates
+        def update_status_with_resize(text):
+            progress_dialog.setLabelText(text)
+            # Force dialog to recalculate size based on content
+            progress_dialog.adjustSize()
+            # Ensure width stays consistent
+            current_size = progress_dialog.size()
+            progress_dialog.resize(450, current_size.height())
+            QApplication.processEvents()
+
         # Connect signals
         self.loading_thread.progress.connect(progress_dialog.setValue)
-        self.loading_thread.status_update.connect(progress_dialog.setLabelText)
+        self.loading_thread.status_update.connect(update_status_with_resize)
         self.loading_thread.finished.connect(self._on_experiment_loaded)
         self.loading_thread.error.connect(self._on_experiment_load_error)
         self.loading_thread.datasets_skipped.connect(self._on_datasets_skipped)

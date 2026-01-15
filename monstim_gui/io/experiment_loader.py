@@ -166,7 +166,7 @@ class ExperimentLoadingThread(QThread):
                 time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created.\nEstimated time: {estimated_time} seconds for {annotations_required} annotations."
                 logging.info(time_msg)
             elif files_to_load > 5000:
-                time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
+                time_msg = f"Large experiment detected:\n{files_to_load} recordings.\nLoading may take several seconds."
                 logging.info(time_msg)
 
             # Check for cancellation before repository creation
@@ -185,7 +185,7 @@ class ExperimentLoadingThread(QThread):
                 )
             elif files_to_load > 5000:
                 self.status_update.emit(
-                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected ({files_to_load} files). Building indexes and applying migrations may take longer."
+                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found.\n\nBuilding indexes and applying migrations may take longer."
                 )
             else:
                 self.status_update.emit("Reading experiment metadata...")
