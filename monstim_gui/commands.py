@@ -612,7 +612,6 @@ class InsertSingleLatencyWindowCommand(Command):
         return result
 
     def execute(self):
-        import copy
 
         for s in self.sessions:
             s.annot.latency_windows = self._merge_window(s.annot.latency_windows, self.new_window)
