@@ -185,7 +185,7 @@ class ExperimentLoadingThread(QThread):
                 )
             elif files_to_load > 5000:
                 self.status_update.emit(
-                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found.\n\nBuilding indexes and applying migrations may take longer."
+                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found."
                 )
             else:
                 self.status_update.emit(f"Loading '{self.experiment_name}'...")
