@@ -2305,6 +2305,20 @@ class DataCurationManager(QDialog):
         if ok and new_name.strip() and new_name.strip() != exp_name:
             new_name = new_name.strip()
 
+            # Validate name for invalid directory characters
+            invalid_chars = r'<>:"/\\|?*'
+            found_invalid = [c for c in new_name if c in invalid_chars]
+            if found_invalid:
+                invalid_str = ", ".join(f"'{c}' ({ord(c)})" if c != "\\" else "'\\\\' (backslash)" for c in set(found_invalid))
+                QMessageBox.warning(
+                    self,
+                    "Invalid Characters",
+                    f"The experiment name contains invalid characters for a directory name:\n\n"
+                    f"Invalid characters found: {invalid_str}\n\n"
+                    f'The following characters are not allowed: < > : " / \\ | ? *',
+                )
+                return
+
             # Check for naming conflicts
             if new_name in self.gui.expts_dict_keys:
                 QMessageBox.warning(self, "Name Conflict", f"An experiment named '{new_name}' already exists.")

@@ -1581,8 +1581,17 @@ class DataManager:
 
         try:
             # Validate new name
-            if not new_name or any(c in r'<>:"/\\|?*' for c in new_name):
-                raise ValueError("Experiment name contains invalid characters for a directory name.")
+            if not new_name:
+                raise ValueError("Experiment name cannot be empty.")
+
+            invalid_chars = r'<>:"/\\|?*'
+            found_invalid = [c for c in new_name if c in invalid_chars]
+            if found_invalid:
+                invalid_list = ", ".join(repr(c) for c in set(found_invalid))
+                raise ValueError(
+                    f"Experiment name contains invalid characters: {invalid_list}. "
+                    f'The following characters are not allowed in directory names: < > : " / \\ | ? *'
+                )
 
             if old_name == new_name:
                 raise ValueError("The new experiment name is the same as the current one.")
@@ -1633,15 +1642,13 @@ class DataManager:
 
             logging.info(f"Renamed experiment '{old_name}' to '{new_name}'")
 
-        except ValueError as ve:
-            logging.error(f"Invalid experiment name: {ve}")
-            raise Exception(f"Invalid experiment name: {str(ve)}")
-        except FileExistsError as fe:
-            logging.error(f"Experiment name conflict: {fe}")
-            raise Exception(str(fe))
+        except (ValueError, FileExistsError) as e:
+            # Re-raise validation errors with their original type for better error handling
+            logging.error(f"Cannot rename experiment '{old_name}' to '{new_name}': {e}")
+            raise
         except Exception as e:
-            logging.error(f"Failed to rename experiment {old_name} to {new_name}: {e}")
-            raise Exception(f"Failed to rename experiment: {str(e)}")
+            logging.error(f"Failed to rename experiment '{old_name}' to '{new_name}': {e}", exc_info=True)
+            raise
 
     def move_dataset(self, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str):
         """Move a dataset from one experiment to another."""

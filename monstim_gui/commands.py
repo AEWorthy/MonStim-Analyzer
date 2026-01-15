@@ -1041,22 +1041,20 @@ class RenameExperimentCommand(Command):
 
     def execute(self):
         """Rename the experiment immediately."""
+        # Let exceptions from data_manager propagate with their original messages
+        self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
+        # Refresh index for the renamed experiment (new path) and clean up old if present
         try:
-            self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
-            # Refresh index for the renamed experiment (new path) and clean up old if present
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+            from monstim_signals.io.experiment_index import ensure_fresh_index
 
-                new_path = Path(self.gui.expts_dict.get(self.new_name, ""))
-                if new_path and new_path.exists():
-                    ensure_fresh_index(self.new_name, new_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after experiment rename failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
-        except Exception as e:
-            raise Exception(f"Failed to rename experiment: {str(e)}")
+            new_path = Path(self.gui.expts_dict.get(self.new_name, ""))
+            if new_path and new_path.exists():
+                ensure_fresh_index(self.new_name, new_path)
+        except Exception:
+            logging.debug("Non-fatal: index refresh after experiment rename failed.", exc_info=True)
+        # Refresh the data curation manager if it's open
+        if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+            self.gui._data_curation_manager.load_data()
 
     def undo(self):
         """Rename back to original name."""
