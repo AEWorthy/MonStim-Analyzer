@@ -1054,7 +1054,14 @@ class RenameExperimentCommand(Command):
             logging.debug("Non-fatal: index refresh after experiment rename failed.", exc_info=True)
         # Refresh the data curation manager if it's open
         if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-            self.gui._data_curation_manager.load_data()
+            try:
+                logging.debug(f"Refreshing data curation manager after rename from '{self.old_name}' to '{self.new_name}'")
+                self.gui._data_curation_manager.load_data()
+                logging.debug("Data curation manager refresh completed successfully")
+            except Exception as e:
+                logging.error(f"Failed to refresh data curation manager after rename: {e}", exc_info=True)
+                # Re-raise to prevent silent failures
+                raise
 
     def undo(self):
         """Rename back to original name."""
@@ -1071,7 +1078,16 @@ class RenameExperimentCommand(Command):
                 logging.debug("Non-fatal: index refresh after experiment rename undo failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+                try:
+                    logging.debug(
+                        f"Refreshing data curation manager after undo rename from '{self.new_name}' back to '{self.old_name}'"
+                    )
+                    self.gui._data_curation_manager.load_data()
+                    logging.debug("Data curation manager refresh after undo completed successfully")
+                except Exception as e:
+                    logging.error(f"Failed to refresh data curation manager after rename undo: {e}", exc_info=True)
+                    # Re-raise to prevent silent failures
+                    raise
         except Exception as e:
             raise Exception(f"Failed to undo experiment rename: {str(e)}")
 

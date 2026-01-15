@@ -1638,7 +1638,13 @@ class DataManager:
             # Refresh UI to reflect the changes
             self.unpack_existing_experiments()
             if hasattr(self.gui, "data_selection_widget"):
-                self.gui.data_selection_widget.update(levels=("experiment",))
+                try:
+                    logging.debug(f"Updating data_selection_widget after rename from '{old_name}' to '{new_name}'")
+                    self.gui.data_selection_widget.update(levels=("experiment",))
+                    logging.debug("data_selection_widget updated successfully")
+                except Exception as widget_error:
+                    logging.error(f"Failed to update data_selection_widget after rename: {widget_error}", exc_info=True)
+                    # Non-critical UI update failure, continue
 
             logging.info(f"Renamed experiment '{old_name}' to '{new_name}'")
 

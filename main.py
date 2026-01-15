@@ -81,10 +81,29 @@ def exception_hook(exc_type, exc_value, exc_traceback):
         # Call the default excepthook for KeyboardInterrupt
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-    logging.error("CRITICAL: Uncaught Python exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+    # Log the exception with full details
+    logging.error("=" * 80)
+    logging.error("CRITICAL: Uncaught Python exception - Application will terminate")
+    logging.error("=" * 80)
     logging.error(f"Exception type: {exc_type.__name__}")
     logging.error(f"Exception value: {exc_value}")
-    logging.error(f"Traceback: {''.join(traceback.format_tb(exc_traceback))}")
+    logging.error(f"Exception module: {exc_type.__module__}")
+
+    # Log the full traceback
+    tb_lines = traceback.format_tb(exc_traceback)
+    logging.error("Full traceback:")
+    for line in tb_lines:
+        logging.error(line.rstrip())
+
+    # Also log using exc_info for compatibility
+    logging.error("CRITICAL: Uncaught Python exception", exc_info=(exc_type, exc_value, exc_traceback))
+    logging.error("=" * 80)
+
+    # Flush log handlers to ensure everything is written
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+
     sys.exit(1)
 
 
