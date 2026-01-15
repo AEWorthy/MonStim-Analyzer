@@ -238,14 +238,14 @@ class ExperimentLoadingThread(QThread):
                     else:
                         name_display = name
                     self.progress.emit(pct)
-                    self.status_update.emit(f"Loading dataset {index}/{total}: '{name_display}' ...")
+                    self.status_update.emit(f"Loading dataset {index}/{total}:\n'{name_display}'")
                     _last_emit_ts = now
                 elif level == "index" and total > 0:
                     # Map index progress into 20-30% range before dataset load
                     try:
                         pct = 20 + int(10 * (index / total))
                         self.progress.emit(pct)
-                        self.status_update.emit(f"Building index {index}/{total}: '{name}' ...")
+                        self.status_update.emit(f"Building index {index}/{total}:\n'{name}'")
                     except Exception:
                         pass
 
