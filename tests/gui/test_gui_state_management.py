@@ -484,9 +484,8 @@ class TestSessionRestoration:
         # Restoration flag should be cleared
         assert clean_app_state._is_restoring_session is False
 
-    @patch("PySide6.QtCore.QTimer")
-    def test_restore_last_session_nested_restoration(self, mock_timer, clean_app_state, mock_gui, mock_experiment_structure):
-        """Test nested dataset/session restoration with timing."""
+    def test_restore_last_session_nested_restoration(self, clean_app_state, mock_gui, mock_experiment_structure):
+        """Test nested dataset/session restoration with pending state management."""
         clean_app_state.settings.setValue("ProgramPreferences/track_session_restoration", True)
         clean_app_state.settings.setValue("SessionRestore/experiment", "test_experiment")
         clean_app_state.settings.setValue("SessionRestore/dataset", "test_dataset")
@@ -496,21 +495,38 @@ class TestSessionRestoration:
         mock_gui.current_experiment = mock_experiment_structure["experiment"]
         mock_gui.current_dataset = mock_experiment_structure["dataset"]
 
-        # Mock timer to immediately call the callback
-        def mock_single_shot(delay, callback):
-            callback()
+        # Mock the data selection widget
+        mock_gui.data_selection_widget.experiment_combo.setCurrentIndex = Mock()
 
-        mock_timer.singleShot.side_effect = mock_single_shot
-
+        # Phase 1: restore_last_session sets up pending state
         result = clean_app_state.restore_last_session(mock_gui)
         assert result is True
 
-        # Timer should be used for nested restoration
-        mock_timer.singleShot.assert_called()
+        # Verify restoration flag was set
+        assert clean_app_state._is_restoring_session is True
 
-        # Data manager methods should be called for loading
-        mock_gui.data_manager.load_dataset.assert_called()
-        mock_gui.data_manager.load_session.assert_called()
+        # Verify pending state was stored for later restoration
+        assert clean_app_state._pending_experiment_id == "test_experiment"
+        assert clean_app_state._pending_dataset_id == "test_dataset"
+        assert clean_app_state._pending_session_id == "test_session"
+
+        # Verify experiment combo was set
+        mock_gui.data_selection_widget.experiment_combo.setCurrentIndex.assert_called_once_with(1)
+
+        # Phase 2: complete_session_restoration actually loads dataset/session
+        clean_app_state.complete_session_restoration(mock_gui)
+
+        # Data manager methods should now be called
+        mock_gui.data_manager.load_dataset.assert_called_once_with(0)
+        mock_gui.data_manager.load_session.assert_called_once_with(0)
+
+        # Restoration flag should be cleared after completion
+        assert clean_app_state._is_restoring_session is False
+
+        # Pending state should be cleared
+        assert clean_app_state._pending_experiment_id is None
+        assert clean_app_state._pending_dataset_id is None
+        assert clean_app_state._pending_session_id is None
 
 
 class TestPreferencesManagement:
