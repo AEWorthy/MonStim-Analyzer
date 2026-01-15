@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from monstim_gui.commands import SetLatencyWindowsCommand, InsertSingleLatencyWindowCommand
+from monstim_gui.commands import InsertSingleLatencyWindowCommand, SetLatencyWindowsCommand
 from monstim_gui.core.clipboard import LatencyWindowClipboard
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_signals.core import LatencyWindow, get_config_path
@@ -528,7 +528,7 @@ class LatencyWindowsDialog(QDialog):
         """Paste windows from clipboard (handles both single and multi-window clipboards)."""
         # Get most recent clipboard data
         mode, data = LatencyWindowClipboard.get_most_recent()
-        
+
         if mode == "none":
             QMessageBox.information(self, "Clipboard Empty", "There are no latency windows in the clipboard.")
             self._update_paste_enabled()
@@ -573,7 +573,7 @@ class LatencyWindowsDialog(QDialog):
         """Paste a single window, appending or replacing by name in the dialog only."""
         # Check for duplicate names in current dialog
         existing_names = [name_edit.text().strip() for (_, _, name_edit, *_) in self.window_entries]
-        
+
         if window.name in existing_names:
             # Ask user what to do
             msg = QMessageBox(self)
@@ -581,14 +581,14 @@ class LatencyWindowsDialog(QDialog):
             msg.setWindowTitle("Window Name Exists")
             msg.setText(f"A window named '{window.name}' already exists in this view.")
             msg.setInformativeText("Would you like to replace it or insert with a new name?")
-            
+
             replace_btn = msg.addButton("Replace Existing", QMessageBox.ButtonRole.AcceptRole)
             rename_btn = msg.addButton("Insert as New", QMessageBox.ButtonRole.ActionRole)
             cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
-            
+
             msg.exec()
             clicked = msg.clickedButton()
-            
+
             if clicked == cancel_btn:
                 return
             elif clicked == replace_btn:
@@ -608,7 +608,7 @@ class LatencyWindowsDialog(QDialog):
         # Add the window to dialog
         self._add_window_group(window)
         self._reorganize_grid_layout()
-        
+
         if self.gui and hasattr(self.gui, "status_bar"):
             self.gui.status_bar.showMessage(f"Pasted window '{window.name}' to dialog.", 3000)
         self._update_paste_enabled()
@@ -638,7 +638,7 @@ class LatencyWindowsDialog(QDialog):
                 else:
                     start_times = [spin.value() for spin in per_channel_spins]
                 durations = [dur_spin.value()] * num_channels
-                
+
                 win_copy = LatencyWindow(
                     name=name_edit.text().strip() or "Window",
                     start_times=start_times,
@@ -647,7 +647,7 @@ class LatencyWindowsDialog(QDialog):
                     linestyle=window.linestyle,
                 )
                 LatencyWindowClipboard.set_single(win_copy)
-                
+
                 if self.gui and hasattr(self.gui, "status_bar"):
                     self.gui.status_bar.showMessage(f"Copied '{win_copy.name}' to clipboard.", 3000)
                 self._update_paste_enabled()
@@ -766,7 +766,7 @@ class LatencyWindowsDialog(QDialog):
 
 class AppendReplaceLatencyWindowDialog(QDialog):
     """Specialized dialog for appending or replacing a single latency window across hierarchy.
-    
+
     This dialog applies changes immediately to the data (not just the UI), making it suitable
     for quick single-window operations without needing to review all windows.
     """
@@ -794,9 +794,9 @@ class AppendReplaceLatencyWindowDialog(QDialog):
         # Clipboard status
         clipboard_group = QGroupBox("Clipboard Status")
         clipboard_layout = QVBoxLayout(clipboard_group)
-        
+
         mode, data = LatencyWindowClipboard.get_most_recent()
-        
+
         if mode == "single":
             clipboard_layout.addWidget(QLabel(f"✓ Single window (most recent): '{data.name}'"))
         elif mode == "multiple":
@@ -808,7 +808,7 @@ class AppendReplaceLatencyWindowDialog(QDialog):
         else:
             clipboard_layout.addWidget(QLabel("✗ No clipboard data available"))
             clipboard_layout.addWidget(QLabel("Tip: Open the Latency Windows editor and use Copy or Copy All buttons"))
-        
+
         layout.addWidget(clipboard_group)
 
         # Action buttons
@@ -831,19 +831,14 @@ class AppendReplaceLatencyWindowDialog(QDialog):
     def _add_single_window_actions(self, layout, window: LatencyWindow):
         """Add action buttons for single window mode."""
         sessions_to_check = self._get_sessions_to_check()
-        window_exists = any(
-            any(w.name == window.name for w in s.annot.latency_windows)
-            for s in sessions_to_check
-        )
+        window_exists = any(any(w.name == window.name for w in s.annot.latency_windows) for s in sessions_to_check)
 
         action_group = QGroupBox("Action")
         action_layout = QVBoxLayout(action_group)
 
         if window_exists:
-            action_layout.addWidget(QLabel(
-                f"Window '{window.name}' exists in one or more sessions. Choose action:"
-            ))
-            
+            action_layout.addWidget(QLabel(f"Window '{window.name}' exists in one or more sessions. Choose action:"))
+
             replace_btn = QPushButton(f"Replace '{window.name}' Windows")
             replace_btn.setToolTip(f"Replace all existing '{window.name}' windows with clipboard version")
             replace_btn.clicked.connect(lambda: self._execute_single_window_action(window, True))
@@ -854,10 +849,8 @@ class AppendReplaceLatencyWindowDialog(QDialog):
             append_btn.clicked.connect(lambda: self._execute_single_window_action(window, False))
             action_layout.addWidget(append_btn)
         else:
-            action_layout.addWidget(QLabel(
-                f"Window '{window.name}' does not exist. It will be appended to all sessions."
-            ))
-            
+            action_layout.addWidget(QLabel(f"Window '{window.name}' does not exist. It will be appended to all sessions."))
+
             append_btn = QPushButton(f"Append '{window.name}'")
             append_btn.setToolTip("Add this window to all sessions at the current level")
             append_btn.clicked.connect(lambda: self._execute_single_window_action(window, True))
@@ -868,16 +861,13 @@ class AppendReplaceLatencyWindowDialog(QDialog):
     def _add_multiple_windows_actions(self, layout, windows: list[LatencyWindow]):
         """Add action buttons for multiple windows mode."""
         sessions_to_check = self._get_sessions_to_check()
-        
+
         # Check which windows exist
         existing_windows = []
         new_windows = []
-        
+
         for w in windows:
-            exists = any(
-                any(sw.name == w.name for sw in s.annot.latency_windows)
-                for s in sessions_to_check
-            )
+            exists = any(any(sw.name == w.name for sw in s.annot.latency_windows) for s in sessions_to_check)
             if exists:
                 existing_windows.append(w.name)
             else:
@@ -897,9 +887,9 @@ class AppendReplaceLatencyWindowDialog(QDialog):
             status_text += f"  • {len(new_windows)} will be appended: {', '.join(new_windows[:3])}"
             if len(new_windows) > 3:
                 status_text += "..."
-        
+
         action_layout.addWidget(QLabel(status_text))
-        
+
         apply_btn = QPushButton(f"Apply {len(windows)} Windows")
         apply_btn.setToolTip("Apply all windows: replace existing by name, append new ones")
         apply_btn.clicked.connect(lambda: self._execute_multiple_windows_action(windows))
@@ -932,7 +922,7 @@ class AppendReplaceLatencyWindowDialog(QDialog):
             existing_names = set()
             for s in sessions_to_check:
                 existing_names.update(w.name for w in s.annot.latency_windows)
-            
+
             base_name = window.name
             counter = 1
             while f"{base_name} ({counter})" in existing_names:

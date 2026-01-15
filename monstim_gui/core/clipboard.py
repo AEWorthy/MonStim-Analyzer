@@ -17,35 +17,35 @@ from __future__ import annotations
 
 import copy
 import time
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
 
 from monstim_signals.core import LatencyWindow
 
 
 class LatencyWindowClipboard:
     """Unified clipboard for latency windows (single or multiple).
-    
+
     Tracks both single-window and multi-window clipboard data along with
     timestamps to determine which was set most recently.
-    
+
     Usage:
         # Set single window
         LatencyWindowClipboard.set_single(window)
-        
+
         # Set multiple windows
         LatencyWindowClipboard.set_multiple(windows)
-        
+
         # Check what's available
         if LatencyWindowClipboard.has_single():
             win = LatencyWindowClipboard.get_single()
-        
+
         # Get most recent
         mode, data = LatencyWindowClipboard.get_most_recent()
     """
 
     _single_window: Optional[LatencyWindow] = None
     _single_timestamp: float = 0.0
-    
+
     _multiple_windows: Optional[list[LatencyWindow]] = None
     _multiple_timestamp: float = 0.0
 
@@ -113,7 +113,7 @@ class LatencyWindowClipboard:
     @classmethod
     def get_most_recent(cls) -> tuple[Literal["single", "multiple", "none"], LatencyWindow | list[LatencyWindow] | None]:
         """Get the most recently set clipboard data.
-        
+
         Returns:
             Tuple of (mode, data) where:
             - mode: "single", "multiple", or "none"
@@ -121,13 +121,13 @@ class LatencyWindowClipboard:
         """
         if not cls.has_any():
             return ("none", None)
-        
+
         if cls.has_single() and not cls.has_multiple():
             return ("single", cls.get_single())
-        
+
         if cls.has_multiple() and not cls.has_single():
             return ("multiple", cls.get_multiple())
-        
+
         # Both exist, return most recent
         if cls._single_timestamp > cls._multiple_timestamp:
             return ("single", cls.get_single())
@@ -138,4 +138,3 @@ class LatencyWindowClipboard:
     def count_multiple(cls) -> int:
         """Get count of windows in multi-window clipboard."""
         return len(cls._multiple_windows) if cls._multiple_windows else 0
-

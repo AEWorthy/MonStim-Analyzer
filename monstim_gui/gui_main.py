@@ -616,6 +616,7 @@ class MonstimGUI(QMainWindow):
                 return
 
         from monstim_gui.dialogs.latency import AppendReplaceLatencyWindowDialog
+
         dialog = AppendReplaceLatencyWindowDialog(emg_data, self)
         dialog.exec()
 
