@@ -163,10 +163,10 @@ class ExperimentLoadingThread(QThread):
             if is_first_load:
                 estimated_time = int(missing_annotations / 100 * 60)  # Rough estimate: 100 files per minute
                 self._estimated_time = estimated_time
-                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created.\nEstimated time: {estimated_time} seconds for {annotations_required} annotations."
+                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created. Estimated time: {estimated_time} seconds for {annotations_required} annotations."
                 logging.info(time_msg)
             elif files_to_load > 5000:
-                time_msg = f"Large experiment detected:\n{files_to_load} recordings.\nLoading may take several seconds."
+                time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
                 logging.info(time_msg)
 
             # Check for cancellation before repository creation
@@ -188,12 +188,9 @@ class ExperimentLoadingThread(QThread):
                     f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found.\n\nBuilding indexes and applying migrations may take longer."
                 )
             else:
-                self.status_update.emit("Reading experiment metadata...")
+                self.status_update.emit(f"Loading '{self.experiment_name}'...")
             self.progress.emit(20)
 
-            # Skipped: Preflight migration scan moved to post-load background task.
-
-            self.progress.emit(30)
             # Show a distinct "Indexing..." step only when needed
             try:
                 from monstim_signals.io.experiment_index import is_index_stale, load_experiment_index
@@ -207,8 +204,7 @@ class ExperimentLoadingThread(QThread):
 
             if needs_index and _app.should_build_index_on_load():
                 self.status_update.emit("Indexing experiment folders...")
-            else:
-                self.status_update.emit("Loading experiment repository...")
+                self.progress.emit(25)
 
             # Load experiment - this can take a long time for large experiments
             # Map dataset iteration progress (callback driven) into progress range 30-85.

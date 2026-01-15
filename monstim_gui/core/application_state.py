@@ -19,6 +19,10 @@ class ApplicationState:
     def __init__(self):
         self._settings = None
         self._is_restoring_session = False  # Flag to suppress saves during restoration
+        self._pending_dataset_id = None
+        self._pending_session_id = None
+        self._pending_profile_name = None
+        self._pending_experiment_id = None
 
         logging.debug(
             "Initializing ApplicationState"
@@ -271,113 +275,26 @@ class ApplicationState:
             # Set flag to suppress session state saves during restoration (including experiment loading)
             self._is_restoring_session = True
 
+            # Store restoration targets for after experiment loads
+            self._pending_experiment_id = experiment_id
+            self._pending_dataset_id = dataset_id
+            self._pending_session_id = session_id
+            self._pending_profile_name = profile_name
+
             # TODO: Robust restoration
             # - Prefer restoring by explicit IDs stored in combo UserRole instead of
             #   by index arithmetic (+1 placeholder). Where possible, always write
             #   and restore user-facing state by stable IDs to avoid fragile index
             #   based restoring when UI ordering or placeholders change.
 
-            # Restore experiment
-            exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
-            gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
-
-            # Wait for experiment to load, then restore dataset/session
-            if dataset_id or session_id:
-                # Schedule dataset/session restoration for after experiment loads
-                from PySide6.QtCore import QTimer
-
-                def restore_nested():
-                    _max_attempts = 20  # Try up to 20 times (10 seconds)
-                    if gui.current_experiment and gui.current_experiment.id == experiment_id:
-                        try:
-                            # Restore dataset
-                            if dataset_id:
-                                dataset_names = [ds.id for ds in gui.current_experiment.datasets]
-                                if dataset_id in dataset_names:
-                                    ds_index = dataset_names.index(dataset_id)
-                                    logging.info(f"Session restoration: Restoring dataset '{dataset_id}' at index {ds_index}")
-                                    # Load the dataset through data manager instead of just setting combo index
-                                    gui.data_manager.load_dataset(ds_index)
-
-                                    # Restore session
-                                    if session_id and gui.current_dataset:
-                                        session_names = [sess.id for sess in gui.current_dataset.sessions]
-                                        if session_id in session_names:
-                                            sess_index = session_names.index(session_id)
-                                            logging.info(
-                                                f"Session restoration: Restoring session '{session_id}' at index {sess_index}"
-                                            )
-                                            # Load the session through data manager instead of just setting combo index
-                                            gui.data_manager.load_session(sess_index)
-                                        else:
-                                            logging.warning(
-                                                f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'"
-                                            )
-                                    elif session_id:
-                                        logging.warning(
-                                            f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded"
-                                        )
-                                else:
-                                    logging.warning(
-                                        f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'"
-                                    )
-
-                            # After loading, ensure visual combo selections are synced with actual state
-                            gui.data_selection_widget.update()
-                        except Exception as e:
-                            logging.error(f"Error restoring dataset/session: {e}")
-                            import traceback
-
-                            logging.error(traceback.format_exc())
-                        finally:
-                            # Always clear the restoration flag when done
-                            self._is_restoring_session = False
-                            # For empty experiments, ensure combos show correct state after restoration
-                            if gui.current_experiment and not gui.current_experiment.datasets:
-                                gui.data_selection_widget.update(levels=("dataset", "session"))
-                            # Save the final restored state
-                            self.save_current_session_state(
-                                experiment_id=experiment_id,
-                                dataset_id=dataset_id,
-                                session_id=session_id,
-                                profile_name=profile_name,
-                            )
-                    else:
-                        # Check if experiment loading was canceled - if so, stop waiting
-                        loading_canceled = not hasattr(gui.data_manager, "loading_thread")
-                        if loading_canceled:
-                            logging.info("Session restoration: Experiment loading was canceled, aborting restoration")
-                            self._is_restoring_session = False
-                            # Ensure combos are in correct state
-                            if gui.current_experiment and not gui.current_experiment.datasets:
-                                gui.data_selection_widget.update(levels=("dataset", "session"))
-                            return
-
-                        # Experiment not ready yet, try again in 500ms (but only up to '_max_attempts' attempts = 20 times, 10 seconds total)
-                        if not hasattr(restore_nested, "attempt_count"):
-                            restore_nested.attempt_count = 0
-
-                        restore_nested.attempt_count += 1
-                        if restore_nested.attempt_count <= _max_attempts:
-                            logging.debug(
-                                f"Session restoration: Waiting for experiment to load (attempt {restore_nested.attempt_count}/{_max_attempts})"
-                            )
-                            QTimer.singleShot(500, restore_nested)
-                        else:
-                            logging.warning(
-                                f"Session restoration: Gave up waiting for experiment to load after {_max_attempts} attempt(s) ({int(_max_attempts * 0.5)} {'seconds' if _max_attempts * 0.5 > 1 else 'second'})"
-                            )
-                            # Clear the restoration flag if we give up
-                            self._is_restoring_session = False
-                            # Ensure combos are in correct state for empty experiments
-                            if gui.current_experiment and not gui.current_experiment.datasets:
-                                gui.data_selection_widget.update(levels=("dataset", "session"))
-
-                QTimer.singleShot(1000, restore_nested)  # Give experiment time to load
-
             logging.info(
                 f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}."
             )
+
+            # Restore experiment - this automatically triggers load_experiment() via signal
+            # The restoration of dataset/session will happen in the experiment loaded callback
+            exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
+            gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
             return True
 
         except Exception as e:
@@ -385,7 +302,88 @@ class ApplicationState:
             self.clear_session_state()
             # Make sure to clear the flag on error
             self._is_restoring_session = False
+            self._pending_dataset_id = None
+            self._pending_session_id = None
+            self._pending_profile_name = None
+            self._pending_experiment_id = None
             return False
+
+    def complete_session_restoration(self, gui: "MonstimGUI"):
+        """
+        Complete session restoration after experiment has loaded.
+        Called by data_manager after experiment loading finishes.
+        """
+        if not self._is_restoring_session:
+            return
+
+        try:
+            experiment_id = self._pending_experiment_id
+            dataset_id = self._pending_dataset_id
+            session_id = self._pending_session_id
+
+            # Verify experiment loaded correctly
+            if not gui.current_experiment or gui.current_experiment.id != experiment_id:
+                logging.warning(
+                    f"Session restoration: Experiment mismatch (expected '{experiment_id}', got '{gui.current_experiment.id if gui.current_experiment else 'None'}')"
+                )
+                return
+
+            # Restore dataset
+            if dataset_id:
+                dataset_names = [ds.id for ds in gui.current_experiment.datasets]
+                if dataset_id in dataset_names:
+                    ds_index = dataset_names.index(dataset_id)
+                    logging.info(f"Session restoration: Restoring dataset '{dataset_id}' at index {ds_index}")
+                    gui.data_manager.load_dataset(ds_index)
+
+                    # Restore session
+                    if session_id and gui.current_dataset:
+                        session_names = [sess.id for sess in gui.current_dataset.sessions]
+                        if session_id in session_names:
+                            sess_index = session_names.index(session_id)
+                            logging.info(f"Session restoration: Restoring session '{session_id}' at index {sess_index}")
+                            gui.data_manager.load_session(sess_index)
+                        else:
+                            logging.warning(f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'")
+                    elif session_id:
+                        logging.warning(f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded")
+                else:
+                    logging.warning(f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'")
+
+            # After loading, ensure visual combo selections are synced with actual state
+            gui.data_selection_widget.update()
+
+        except Exception as e:
+            logging.error(f"Error completing session restoration: {e}")
+            import traceback
+
+            logging.error(traceback.format_exc())
+        finally:
+            # Always clear the restoration flag and pending state when done
+            self._is_restoring_session = False
+            # For empty experiments, ensure combos show correct state after restoration
+            if gui.current_experiment and not gui.current_experiment.datasets:
+                gui.data_selection_widget.update(levels=("dataset", "session"))
+
+            # Save the final restored state
+            profile_name = self._pending_profile_name
+            experiment_id = self._pending_experiment_id
+            dataset_id = self._pending_dataset_id
+            session_id = self._pending_session_id
+
+            # Clear pending state
+            self._pending_dataset_id = None
+            self._pending_session_id = None
+            self._pending_profile_name = None
+            self._pending_experiment_id = None
+
+            # Save final state
+            self.save_current_session_state(
+                experiment_id=experiment_id,
+                dataset_id=dataset_id,
+                session_id=session_id,
+                profile_name=profile_name,
+            )
 
     # === PROGRAM PREFERENCES ===
     def get_preference(self, key: str, default_value=True) -> bool:

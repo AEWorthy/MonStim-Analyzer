@@ -919,10 +919,16 @@ class DataManager:
             # Enable/disable dataset combo based on whether experiment has datasets
             self.gui.data_selection_widget.dataset_combo.setEnabled(len(experiment.datasets) > 0)
 
-            # Automatically load the first dataset and session if available
-            if experiment.datasets:
-                logging.debug(f"Auto-loading first dataset from experiment '{experiment.id}'")
-                self.load_dataset(0, auto_load_first_session=True)  # This will load the first dataset and first session
+            # Check if we're in the middle of session restoration
+            if app_state._is_restoring_session:
+                # Complete the restoration by loading dataset/session
+                logging.debug("Completing session restoration after experiment load")
+                app_state.complete_session_restoration(self.gui)
+            else:
+                # Normal load: automatically load the first dataset and session if available
+                if experiment.datasets:
+                    logging.debug(f"Auto-loading first dataset from experiment '{experiment.id}'")
+                    self.load_dataset(0, auto_load_first_session=True)
 
             self.gui.plot_widget.on_data_selection_changed()
 
