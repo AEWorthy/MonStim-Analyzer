@@ -1012,6 +1012,17 @@ class DataManager:
                 del self.current_progress_dialog
             return
 
+        # If we're in the middle of session restoration, cancel it completely
+        from monstim_gui.core.application_state import ApplicationState
+        app_state = ApplicationState()
+        if app_state._is_restoring_session:
+            logging.info("Session restoration canceled by user - clearing restoration state")
+            app_state._is_restoring_session = False
+            app_state._pending_experiment_id = None
+            app_state._pending_dataset_id = None
+            app_state._pending_session_id = None
+            app_state._pending_profile_name = None
+
         if hasattr(self, "loading_thread") and self.loading_thread.isRunning():
             logging.info("User canceled experiment loading")
             # Use safe cancellation instead of terminate()

@@ -320,7 +320,11 @@ class ApplicationState:
             experiment_id = self._pending_experiment_id
             dataset_id = self._pending_dataset_id
             session_id = self._pending_session_id
-
+            # Check if restoration was canceled (pending IDs would be None)
+            if experiment_id is None:
+                logging.debug("Session restoration was canceled - skipping completion")
+                self._is_restoring_session = False
+                return
             # Verify experiment loaded correctly
             if not gui.current_experiment or gui.current_experiment.id != experiment_id:
                 logging.warning(
