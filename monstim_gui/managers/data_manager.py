@@ -1014,6 +1014,7 @@ class DataManager:
 
         # If we're in the middle of session restoration, cancel it completely
         from monstim_gui.core.application_state import ApplicationState
+
         app_state = ApplicationState()
         if app_state._is_restoring_session:
             logging.info("Session restoration canceled by user - clearing restoration state")
