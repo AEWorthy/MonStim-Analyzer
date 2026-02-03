@@ -220,6 +220,10 @@ def is_index_stale(index: ExperimentIndex) -> bool:
     except Exception:
         return True  # Can't list directory, assume stale
 
+    # Define helper function once outside the loop for better performance
+    def is_recording_item(p: Path) -> bool:
+        return (p.is_file() and p.suffix.lower() in {".h5", ".hdf5", ".npy", ".npz", ".csv"}) or p.is_dir()
+
     for ds in index.datasets:
         ds_meta = Path(ds.meta_path) if ds.meta_path else None
         if ds_meta and ds.size is not None and ds.mtime is not None:
@@ -229,10 +233,6 @@ def is_index_stale(index: ExperimentIndex) -> bool:
         ds_path = Path(ds.path)
         if not ds_path.exists():
             return True
-
-        # Define helper function once outside the loop for better performance
-        def is_recording_item(p: Path) -> bool:
-            return (p.is_file() and p.suffix.lower() in {".h5", ".hdf5", ".npy", ".npz", ".csv"}) or p.is_dir()
 
         for s in ds.sessions:
             s_meta = Path(s.meta_path) if s.meta_path else None

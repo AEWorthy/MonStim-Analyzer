@@ -363,6 +363,19 @@ class ApplicationState:
             # After loading, ensure visual combo selections are synced with actual state
             gui.data_selection_widget.update()
 
+            # Save the final restored state after successful restoration
+            profile_name = self._pending_profile_name
+            experiment_id = self._pending_experiment_id
+            dataset_id = self._pending_dataset_id
+            session_id = self._pending_session_id
+
+            self.save_current_session_state(
+                experiment_id=experiment_id,
+                dataset_id=dataset_id,
+                session_id=session_id,
+                profile_name=profile_name,
+            )
+
         except Exception as e:
             logging.error(f"Error completing session restoration: {e}")
             import traceback
@@ -373,22 +386,8 @@ class ApplicationState:
             if gui.current_experiment and not gui.current_experiment.datasets:
                 gui.data_selection_widget.update(levels=("dataset", "session"))
 
-            # Save the final restored state before clearing
-            profile_name = self._pending_profile_name
-            experiment_id = self._pending_experiment_id
-            dataset_id = self._pending_dataset_id
-            session_id = self._pending_session_id
-
             # Always clear the restoration flag and pending state when done
             self._clear_restoration_state()
-
-            # Save final state
-            self.save_current_session_state(
-                experiment_id=experiment_id,
-                dataset_id=dataset_id,
-                session_id=session_id,
-                profile_name=profile_name,
-            )
 
     # === PROGRAM PREFERENCES ===
     def get_preference(self, key: str, default_value=True) -> bool:

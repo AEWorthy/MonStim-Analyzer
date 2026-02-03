@@ -55,6 +55,7 @@ class Session:
             # Minimal initialization for deferred loading - set placeholder values
             self._deferred_loading = True
             self._set_placeholder_parameters()
+            # Skip _initialize_annotations() during deferred loading since it depends on num_channels
 
         self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()

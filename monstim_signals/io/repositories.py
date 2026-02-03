@@ -106,7 +106,6 @@ class RecordingRepository:
                         logging.debug(
                             f"Recording annotation migrated {report.original_version}->{report.final_version} for {self.annot_js.name}"
                         )
-                        # Persist migrated version immediately
                         self.annot_js.write_text(json.dumps(annot_dict, indent=2))
                 except FutureVersionError as e:
                     logging.error(str(e))
@@ -341,7 +340,6 @@ class SessionRepository:
                         logging.debug(
                             f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}"
                         )
-                        # Persist migrations regardless of allow_write; schema updates must be saved
                         self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
                 except FutureVersionError as e:
                     logging.error(str(e))
@@ -592,7 +590,6 @@ class DatasetRepository:
                         logging.debug(
                             f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}"
                         )
-                        # Persist migrations regardless of allow_write; schema updates must be saved
                         self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
                 except FutureVersionError as e:
                     logging.error(str(e))
