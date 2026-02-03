@@ -345,7 +345,10 @@ class SessionRepository:
                             f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}"
                         )
                         # Persist migrations regardless of allow_write; schema updates must be saved
-                        self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                        try:
+                            self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                        except OSError as e:
+                            logging.error(f"Failed to persist migration for {self.session_js.name}: {e}")
                 except FutureVersionError as e:
                     logging.error(str(e))
                     raise
@@ -592,7 +595,10 @@ class DatasetRepository:
                             f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}"
                         )
                         # Persist migrations regardless of allow_write; schema updates must be saved
-                        self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                        try:
+                            self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                        except OSError as e:
+                            logging.error(f"Failed to persist migration for {self.dataset_js.name}: {e}")
                 except FutureVersionError as e:
                     logging.error(str(e))
                     raise
@@ -1009,7 +1015,10 @@ class ExperimentRepository:
                             f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}"
                         )
                         # Persist migrations regardless of allow_write; schema updates must be saved
-                        self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                        try:
+                            self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                        except OSError as e:
+                            logging.error(f"Failed to persist migration for {self.expt_js.name}: {e}")
                 except FutureVersionError as e:
                     logging.error(str(e))
                     raise
