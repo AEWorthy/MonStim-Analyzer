@@ -340,7 +340,7 @@ class SessionRepository:
 
                 try:
                     report = migrate_annotation_dict(session_annot_dict, strict_version=strict_version)
-                    if report.changed and allow_write:
+                    if report.changed:
                         logging.debug(
                             f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}"
                         )
@@ -587,7 +587,7 @@ class DatasetRepository:
 
                 try:
                     report = migrate_annotation_dict(dataset_annot_dict, strict_version=strict_version)
-                    if report.changed and allow_write:
+                    if report.changed:
                         logging.debug(
                             f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}"
                         )
@@ -1004,7 +1004,7 @@ class ExperimentRepository:
 
                 try:
                     report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
-                    if report.changed and allow_write:
+                    if report.changed:
                         logging.debug(
                             f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}"
                         )
