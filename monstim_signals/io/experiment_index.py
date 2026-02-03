@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+logger = logging.getLogger(__name__)
+
 try:
     import orjson as json_mod  # type: ignore
+    logger.debug("Using orjson for faster JSON parsing in experiment index")
 except Exception:  # pragma: no cover
     import json as json_mod  # fallback
+    logger.debug("orjson not available, falling back to standard json module for experiment index")
 
 INDEX_FILENAME = ".index.json"
 INDEX_VERSION = 1
