@@ -1,14 +1,10 @@
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
-
-try:
-    import orjson as json_mod  # type: ignore
-except Exception:  # pragma: no cover
-    import json as json_mod  # fallback
 
 INDEX_FILENAME = ".index.json"
 INDEX_VERSION = 1
@@ -67,17 +63,11 @@ def _stat_safe(p: Path) -> Tuple[Optional[int], Optional[float]]:
 
 
 def _dump_json(data: dict, file_path: Path) -> None:
-    if json_mod.__name__ == "orjson":
-        file_path.write_bytes(json_mod.dumps(data))
-    else:
-        file_path.write_text(json_mod.dumps(data), encoding="utf-8")
+    file_path.write_text(json.dumps(data), encoding="utf-8")
 
 
 def _load_json(file_path: Path) -> dict:
-    if json_mod.__name__ == "orjson":
-        return json_mod.loads(file_path.read_bytes())
-    else:
-        return json_mod.loads(file_path.read_text(encoding="utf-8"))
+    return json.loads(file_path.read_text(encoding="utf-8"))
 
 
 def index_path(exp_path: Path) -> Path:
