@@ -330,6 +330,12 @@ class ApplicationState:
                 logging.warning(
                     f"Session restoration: Experiment mismatch (expected '{experiment_id}', got '{gui.current_experiment.id if gui.current_experiment else 'None'}')"
                 )
+                # Clear restoration flags and pending state before returning
+                self._is_restoring_session = False
+                self._pending_dataset_id = None
+                self._pending_session_id = None
+                self._pending_profile_name = None
+                self._pending_experiment_id = None
                 return
 
             # Restore dataset
