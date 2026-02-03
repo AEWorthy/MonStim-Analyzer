@@ -386,7 +386,6 @@ class PlotController:
                     self._is_in_graphics_critical_section = False
                 except Exception:
                     logging.error("Failed to re-enable plot controls in heartbeat error handling", exc_info=True)
-                    pass
 
         try:
             # Re-enable input after ~50ms (after layout update and GC are complete)
