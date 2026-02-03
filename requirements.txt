@@ -1,4 +1,4 @@
-numpy==2.4.1
+numpy==2.4.2
 pandas==3.0.0
 matplotlib==3.10.8
 scipy==1.17.0
@@ -10,10 +10,10 @@ pillow==12.1.0
 pyqtgraph==0.14.0
 
 # Pip-only packages (from environment.yml pip subsection)
-Markdown==3.10
+Markdown==3.10.1
 python_markdown_math==0.9
 pytest==9.0.2
-setuptools==80.9.0
+setuptools==80.10.2
 
  # NOTE: This `requirements.txt` is generated from `environment.yml`.
  # Keep PyQt packages managed by conda (do NOT list PySide6 here).
