@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.5.1] - 2026-02-03
+
+### Added
+- **Experiment Index System**: New background indexing and caching system for faster experiment loading and improved metadata access.
+- **Date Tracking for Annotations**: Added `date_added` and `date_modified` fields to all annotation models with migration to `DATA_VERSION = "2.1.0"`.
+- **DataFrame Export Improvements**: Added descriptive filenames for CSV exports with experiment/dataset/session context.
+- **Latency Window Clipboard Features**: New single-window clipboard and append/replace functionality for latency window management across experiments.
+- **User Preference for Index Building**: Added preference to control automatic experiment index building behavior.
+
+### Changed
+- **Session Restoration**: Refactored session restoration to complete after experiment load, improving startup reliability and state management.
+- **Progress Dialog**: Improved resizing behavior for large experiments with many datasets.
+- **Channel Selection Persistence**: Enhanced channel selection memory and status messages across plotting operations.
+- **Y-axis Scaling**: Improved linked plot Y-axis scaling for better data visualization.
+- **OpenGL Acceleration**: Changed default OpenGL acceleration preference to disabled for better compatibility.
+- **Error Handling**: Improved experiment rename validation, error logging, and user feedback throughout the application.
+- **Thread Management**: Enhanced thread cancellation and cleanup logic in GUI operations for better resource management.
+- **Plot Memory Management**: Improved memory handling and diagnostics for plotting operations.
+- **Context Menu Positioning**: Enhanced fallback logic for context menu positioning on edge cases.
+- **Export Timestamps**: Removed timestamps from export filenames for cleaner file naming.
+
+### Fixed
+- **Experiment Load Cancellation**: Fixed cleanup and state handling when users cancel experiment loading operations.
+- **Session Restoration Cancellation**: Properly handle cancellation during session restoration to avoid inconsistent states.
+- **Dataset Persistence**: Fixed issue where excluded datasets were not properly persisted in repositories.
+- **Index Staleness Detection**: Improved detection logic for when experiment indices need rebuilding.
+- **Dataset Count Checking**: Added proper validation in index staleness function to prevent errors.
+- **Skipped Dataset Handling**: Now warns and reports datasets that are skipped during experiment load due to errors.
+- **Raw Data Logging**: Fixed length logging in plot_data function for accurate diagnostics.
+- **Context Menu Positioning**: Fixed edge cases where context menus could appear offscreen.
+
+### Testing
+- Added comprehensive tests for GUI state management and session restoration.
+- Added tests for experiment indexing and staleness detection.
+- Updated OpenGL acceleration preference tests to match new defaults.
+- Improved test coverage for plotting and memory management.
+- Fixed file handle cleanup issues in dark mode rendering tests.
+- Added integration tests for math rendering in GUI dialogs.
+
+### Dependencies
+- Updated pytest to v9.0.2.
+- Updated pip dependencies across multiple packages.
+- CI: Bumped `actions/upload-artifact` from v5 to v6.
+- CI: Bumped `actions/cache` from v4 to v5.
+- Updated `environment.yml` with latest dependency versions.
+
+### Configuration
+- Added new latency window presets to `config.yml` for vibration experiments.
+- Added data version 2.1.0 migration for date field additions.
+- Updated YAML formatting for vibration_H_7 presets.
+- Migrated Renovate config to `.github/` directory for better organization.
+
+### Notes
+- This is a maintenance release with significant improvements to experiment loading performance, state management, and stability.
+- The new experiment indexing system provides faster loading times for large experiments with many datasets.
+- Users can control index building behavior through Program Preferences.
+- Date tracking in annotations enables better data provenance and audit trails.
 
 
 ## [0.5.0] - 2025-12-03
