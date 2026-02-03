@@ -168,7 +168,7 @@ class TestDomainModelWithRealData:
         if not imported_dataset_path.exists():
             pytest.fail(f"Imported dataset not found at {imported_dataset_path}")
 
-        dataset = DatasetRepository(imported_dataset_path).load()
+        dataset = DatasetRepository(imported_dataset_path).load(load_recordings=True)
         # Ensure sessions are not excluded from previous test runs
         if dataset.annot.excluded_sessions:
             dataset.annot.excluded_sessions = []
