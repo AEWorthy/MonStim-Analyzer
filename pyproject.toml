@@ -19,11 +19,3 @@ extend-exclude = '''
   | dist
 )/
 '''
-
-[project.optional-dependencies]
-dev = [
-    "black==25.9.0",
-    "flake8>=7.0.0",
-    "flake8-pyproject>=1.2.0",
-    "isort>=5.13.0",
-]
