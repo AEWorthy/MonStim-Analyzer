@@ -188,18 +188,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -e . --no-deps
-        pip install flake8 flake8-pyproject black isort
+        pip install -r dev-requirements.txt
 
     - name: Check code formatting with black
       run: |
-        black --check --diff --line-length=127 .
+        black --version
+        black --check --diff .
 
     - name: Check import sorting with isort
       run: |
+        isort --version
         isort --check-only --diff .
 
     - name: Advanced linting with flake8
       run: |
+        flake8 --version
         flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
 
   security:

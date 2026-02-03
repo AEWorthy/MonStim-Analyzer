@@ -1,14 +1,35 @@
 """Asynchronous experiment loading functionality."""
 
 import logging
+import re
 import traceback
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
 from monstim_gui.core.application_state import app_state
-from monstim_signals.io.data_migrations import scan_annotation_versions
+
+# Note: skip preflight migration scans during load for performance.
+# Post-load migrations can be initiated separately in a background task.
 from monstim_signals.io.repositories import ExperimentRepository
+
+
+class DatasetSkipLogHandler(logging.Handler):
+    """Logging handler to capture dataset skip warnings during load."""
+
+    def __init__(self):
+        super().__init__()
+        self.skipped_datasets = []
+
+    def emit(self, record):
+        if record.levelno == logging.WARNING and "skipped due to validation error" in record.getMessage():
+            # Parse dataset name and error from log message
+            msg = record.getMessage()
+            match = re.search(r"Dataset '([^']+)' skipped due to validation error: (.+)", msg)
+            if match:
+                dataset_name = match.group(1)
+                error_detail = match.group(2).split("\n")[0]  # Get first line only
+                self.skipped_datasets.append((dataset_name, error_detail))
 
 
 class ExperimentLoadingThread(QThread):
@@ -19,6 +40,7 @@ class ExperimentLoadingThread(QThread):
     error = Signal(str)  # Emits error message
     progress = Signal(int)  # Emits progress percentage
     status_update = Signal(str)  # Emits status message
+    datasets_skipped = Signal(list)  # Emits list of (dataset_name, error_msg) tuples for skipped datasets
 
     def __init__(self, experiment_path: str, config: dict):
         super().__init__()
@@ -26,7 +48,14 @@ class ExperimentLoadingThread(QThread):
         self.config = config
         self.experiment_name = Path(experiment_path).name
         self._is_first_load = None  # Will be determined during analysis
+        self._skipped_datasets = []  # Track skipped datasets
         self._estimated_time = None
+        self._cancel_requested = False  # Flag for safe cancellation
+
+    def request_cancel(self):
+        """Request graceful cancellation of the loading operation."""
+        logging.info("Cancellation requested for experiment loading thread")
+        self._cancel_requested = True
 
     def _analyze_load_requirements(self, exp_path: Path) -> tuple[bool, int, int]:
         """
@@ -94,6 +123,12 @@ class ExperimentLoadingThread(QThread):
 
     def run(self):
         """Load the experiment in a separate thread."""
+        # Set up logging handler to capture dataset skip warnings
+        skip_handler = DatasetSkipLogHandler()
+        skip_handler.setLevel(logging.WARNING)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(skip_handler)
+
         try:
             logging.debug(f"Starting async load of experiment: '{self.experiment_name}'")
             self.status_update.emit(f"Loading experiment: '{self.experiment_name}'")
@@ -104,6 +139,11 @@ class ExperimentLoadingThread(QThread):
                 self.error.emit(f"Experiment folder '{self.experiment_path}' not found.")
                 # Wait so user can read the message
                 QThread.sleep(3)
+                return
+
+            # Check for cancellation early
+            if self._cancel_requested:
+                logging.info("Loading canceled before analysis")
                 return
 
             self.progress.emit(10)
@@ -123,11 +163,16 @@ class ExperimentLoadingThread(QThread):
             if is_first_load:
                 estimated_time = int(missing_annotations / 100 * 60)  # Rough estimate: 100 files per minute
                 self._estimated_time = estimated_time
-                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created.\nEstimated time: {estimated_time} seconds for {annotations_required} annotations."
+                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created. Estimated time: {estimated_time} seconds for {annotations_required} annotations."
                 logging.info(time_msg)
             elif files_to_load > 5000:
                 time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
                 logging.info(time_msg)
+
+            # Check for cancellation before repository creation
+            if self._cancel_requested:
+                logging.info("Loading canceled before repository creation")
+                return
 
             # Create repository
             repo = ExperimentRepository(exp_path)
@@ -136,43 +181,49 @@ class ExperimentLoadingThread(QThread):
             # This is the slow part - the actual repo.load() call
             if is_first_load:
                 self.status_update.emit(
-                    f"First-time loading '{self.experiment_name}'...\n\nCreating {missing_annotations} annotation files.\nEstimated time: {estimated_time} seconds."
+                    f"First-time load detected for '{self.experiment_name}'.\n\nCreating {missing_annotations} annotation files and building indexes.\nEstimated time: {estimated_time} seconds."
                 )
             elif files_to_load > 5000:
                 self.status_update.emit(
-                    f"Loading '{self.experiment_name}'...\n\nLarge experiment with {files_to_load} recordings.\nThis may take several seconds."
+                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found."
                 )
             else:
-                self.status_update.emit("Reading experiment metadata...")
+                self.status_update.emit(f"Loading '{self.experiment_name}'...")
             self.progress.emit(20)
 
-            # Preflight migration scan (before heavy load) so we can communicate wait time.
-            self.status_update.emit("Scanning annotations for required migrations...")
+            # Show a distinct "Indexing..." step only when needed
             try:
-                scan_results = scan_annotation_versions(exp_path)
-                outdated = [r for r in scan_results if r.get("needs_migration")]
-                if outdated:
-                    # Rough heuristic: each migration step per file is tiny, but IO dominates. Estimate ~2ms per file.
-                    est_ms = max(50, int(len(outdated) * 2))
-                    msg = (
-                        f"{len(outdated)} annotation files require migration (e.g. {outdated[0]['path']}).\n"
-                        f"Planned steps example: {', '.join(outdated[0]['planned_steps'])}.\n"
-                        f"This may add ~{est_ms/1000:.2f}s to load time."
-                    )
-                    logging.info("Experiment preflight: %s", msg.replace("\n", " "))
-                    self.status_update.emit("Annotation migrations pending...\n" + msg)
-                else:
-                    logging.debug("Experiment preflight: all annotation files current.")
-            except Exception as e:  # pragma: no cover
-                logging.debug(f"Annotation preflight scan failed (non-fatal): {e}")
+                from monstim_signals.io.experiment_index import is_index_stale, load_experiment_index
 
-            self.progress.emit(30)
-            self.status_update.emit("Loading experiment repository...")
+                idx = load_experiment_index(exp_path)
+                needs_index = idx is None or is_index_stale(idx)
+            except Exception:
+                needs_index = False
+
+            from monstim_gui.core.application_state import app_state as _app
+
+            if needs_index and _app.should_build_index_on_load():
+                self.status_update.emit("Indexing experiment folders...")
+                self.progress.emit(25)
 
             # Load experiment - this can take a long time for large experiments
             # Map dataset iteration progress (callback driven) into progress range 30-85.
+            # Rate-limit progress updates to ~10/sec to reduce GUI churn.
+            _last_emit_ts = 0.0
+
             def _progress_cb(level: str, index: int, total: int, name: str):
+                nonlocal _last_emit_ts
+                import time as _t
+
+                # Check cancellation in callback - do this FIRST before any processing
+                if self._cancel_requested:
+                    logging.info("Progress callback detected cancellation flag")
+                    raise InterruptedError("Loading canceled by user")
+
                 if level == "dataset" and total > 0:
+                    now = _t.monotonic()
+                    if now - _last_emit_ts < 0.1:
+                        return
                     # Reserve 55% of the bar (30 -> 85) for dataset loading.
                     base = 30
                     span = 55
@@ -184,7 +235,17 @@ class ExperimentLoadingThread(QThread):
                     else:
                         name_display = name
                     self.progress.emit(pct)
-                    self.status_update.emit(f"Loading dataset {index}/{total}: '{name_display}' ...")
+                    self.status_update.emit(f"Loading dataset {index}/{total}:\n'{name_display}'")
+                    _last_emit_ts = now
+                elif level == "index" and total > 0:
+                    # Map index progress into 20-30% range before dataset load
+                    try:
+                        pct = 20 + int(10 * (index / total))
+                        self.progress.emit(pct)
+                        self.status_update.emit(f"Building index {index}/{total}:\n'{name}'")
+                    except Exception as exc:
+                        # Progress UI failures must not abort experiment loading; log for diagnostics.
+                        logging.debug("Non-fatal error while updating index progress: %s", exc)
 
             # Overlay application preferences (QSettings) for loading:
             cfg = dict(self.config or {})
@@ -199,10 +260,54 @@ class ExperimentLoadingThread(QThread):
                 else:
                     cfg["load_workers"] = 1
 
-            experiment = repo.load(config=cfg, progress_callback=_progress_cb)
+            # For first-time loads (missing annotations), we must allow writing
+            # to persist newly created annotation files. For subsequent loads,
+            # we can use read-only mode to avoid accidental modifications during load.
+            # Ensure sessions materialize recordings during load to avoid
+            # "no recordings" errors from strict domain checks. Lazy
+            # access can still be applied at the HDF5 level via
+            # `lazy_open_h5` in config.
+
+            # Check for cancellation before starting the actual load
+            if self._cancel_requested:
+                logging.info("Loading canceled before repo.load()")
+                return
+
+            try:
+                experiment = repo.load(
+                    config=cfg,
+                    progress_callback=_progress_cb,
+                    allow_write=is_first_load,
+                    load_recordings=False,
+                )
+            except InterruptedError as e:
+                # Graceful cancellation from progress callback
+                logging.info(f"Loading interrupted: {e}")
+                self.status_update.emit("Loading canceled by user...")
+                return
+
+            # Check for cancellation after load completes
+            if self._cancel_requested:
+                logging.info("Loading canceled after repo.load()")
+                return
 
             self.progress.emit(90)
             self.status_update.emit("Finalizing experiment structure...")
+
+            # Check if any datasets were skipped and inform user
+            expected_datasets = len([p for p in exp_path.iterdir() if p.is_dir()])
+            loaded_datasets = len(experiment.datasets)
+
+            if loaded_datasets < expected_datasets:
+                skipped = expected_datasets - loaded_datasets
+                logging.warning(
+                    f"{skipped} dataset(s) could not be loaded from '{self.experiment_name}'. "
+                    f"Check the log for details about validation errors or data inconsistencies."
+                )
+                # Emit the skipped datasets information for GUI warning
+                if skip_handler.skipped_datasets:
+                    self._skipped_datasets = skip_handler.skipped_datasets
+                    self.datasets_skipped.emit(self._skipped_datasets)
 
             self.progress.emit(100)
             logging.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
@@ -224,3 +329,18 @@ class ExperimentLoadingThread(QThread):
             logging.error(error_msg)
             logging.error(traceback.format_exc())
             self.error.emit(error_msg)
+        finally:
+            # Clean up logging handler
+            root_logger.removeHandler(skip_handler)
+
+            # If cancellation was requested, ensure cleanup
+            if self._cancel_requested:
+                logging.debug("Performing cleanup after canceled load")
+                try:
+                    # Force garbage collection to clean up any partially loaded objects
+                    import gc
+
+                    collected = gc.collect()
+                    logging.debug(f"Post-cancellation cleanup: collected {collected} objects")
+                except Exception as cleanup_error:
+                    logging.warning(f"Error during post-cancellation cleanup: {cleanup_error}")

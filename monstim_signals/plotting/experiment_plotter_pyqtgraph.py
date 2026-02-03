@@ -489,7 +489,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Iterate through datasets to get M-max data
             mmax_amplitudes = []
             animal_ids = []
-            for dataset in self.emg_object.emg_datasets:
+            for dataset in self.emg_object.datasets:
                 m_max_amplitude = dataset.get_avg_m_max(method, channel_idx)
                 mmax_amplitudes.append(m_max_amplitude)
                 animal_ids.append(dataset.id)

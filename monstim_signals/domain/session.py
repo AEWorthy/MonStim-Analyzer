@@ -37,6 +37,7 @@ class Session:
         annot: "SessionAnnot",
         repo: Any = None,
         config: dict = None,
+        allow_deferred_loading: bool = False,
     ):
         self.id: str = session_id
         self._all_recordings: List["Recording"] = recordings
@@ -45,8 +46,17 @@ class Session:
         self.parent_dataset: "Dataset | None" = None
         self._config = config
         self._load_config_settings()
-        self._load_session_parameters()
-        self._initialize_annotations()
+
+        # Allow sessions with deferred recording loading (for lightweight discovery)
+        if recordings or not allow_deferred_loading:
+            self._load_session_parameters()
+            self._initialize_annotations()
+        else:
+            # Minimal initialization for deferred loading - set placeholder values
+            self._deferred_loading = True
+            self._set_placeholder_parameters()
+            # Skip _initialize_annotations() during deferred loading since it depends on num_channels
+
         self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
         self.__check_recording_consistency()
@@ -76,7 +86,7 @@ class Session:
         self.m_max_args = _config["m_max_args"]
         self.butter_filter_args = _config["butter_filter_args"]
         self.default_method: str = _config["default_method"]
-        self.default_channel_names: List[str] = _config["default_channel_names"]
+        self.default_channel_names: List[str] = _config.get("default_channel_names", [])
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
@@ -113,28 +123,27 @@ class Session:
             )  # in seconds, time between recordings (if applicable)
             self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
         else:
-            # No recordings available. Use annotation/defaults where possible and avoid raising.
-            logging.warning(f"Session {self.id} contains no recordings. Using annotation/defaults for session parameters.")
-            self.formatted_name = self.id
-            self.scan_rate = None
-            self.num_samples = 0
-            # Prefer channel count from annotation, otherwise fall back to configured defaults
-            try:
-                self.num_channels = (
-                    len(self.annot.channels) if getattr(self.annot, "channels", None) else len(self.default_channel_names)
-                )
-            except Exception:
-                self.num_channels = len(self.default_channel_names)
-            self._channel_types = []
-            self.stim_clusters = []
-            self.primary_stim = None
-            self.pre_stim_acquired = 0
-            self.post_stim_acquired = 0
-            self.stim_delay = 0.0
-            self.stim_duration = 0.0
-            self.stim_start = 0.0
-            self.recording_interval = None
-            self.emg_amp_gains = None
+            raise ValueError(f"Session {self.id} has no recordings associated with it.")
+
+    def _set_placeholder_parameters(self):
+        """Set placeholder parameters for sessions with deferred recording loading."""
+        self.formatted_name = self.id
+        self.scan_rate = None
+        self.num_samples = 0
+        self.num_channels = 0
+        self._channel_types = []
+        self.stim_clusters = []
+        self.primary_stim = None
+        self.pre_stim_acquired = 0
+        self.post_stim_acquired = 0
+        self.stim_delay = 0
+        self.stim_duration = 0
+        self.stim_start = 0
+        self.recording_interval = None
+        self.emg_amp_gains = None
+        self.channel_names = []
+        self.channel_units = []
+        self.channel_types = []
 
     def _initialize_annotations(self):
         # Check in case of empty list annot
@@ -175,6 +184,9 @@ class Session:
         """
         Apply the loaded configuration settings to the session.
         This is called after loading the session or when preferences are changed.
+
+        Note: This method does NOT automatically persist changes to disk.
+        Callers must explicitly call save() if persistence is required.
         """
         self._load_config_settings()  # Reload config settings to ensure they are up-to-date
 
@@ -186,8 +198,6 @@ class Session:
 
         if reset_caches:
             self.reset_all_caches()
-        if self.repo is not None:
-            self.repo.save(self)
 
     @property
     def num_recordings(self) -> int:
@@ -1064,9 +1074,24 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     # 4) Clean‐up
     # ──────────────────────────────────────────────────────────────────
-    def close(self):
-        for rec in self.recordings:
-            rec.close()
+    def close(self, force_gc: bool = True):
+        """Close all recording HDF5 file handles.
+
+        Args:
+            force_gc: If True, force garbage collection after closing.
+                     Set to False when closing as part of dataset/experiment.
+        """
+        for rec in self.get_all_recordings(include_excluded=True):
+            try:
+                rec.close()
+            except Exception as e:
+                logging.warning(f"Error closing recording {rec.id}: {e}")
+
+        # Force GC when closing session individually (not as part of dataset)
+        if force_gc:
+            import gc
+
+            gc.collect()
 
     # ──────────────────────────────────────────────────────────────────
     # 5) Object representation and reports

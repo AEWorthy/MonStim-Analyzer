@@ -48,6 +48,8 @@ Developer Checklist for Each Migration:
 * Tested
 """
 
+# TODO: Implement migrations for meta JSONs as well. Add a schema validation step.
+
 from __future__ import annotations
 
 import logging
@@ -177,10 +179,34 @@ def migrate_1_0_0_to_2_0_0(data: dict) -> dict:
             "data_version": "2.0.0",
         }
     elif level == "session":
+        # Preserve existing channels if present and valid; otherwise leave empty for reconstruction.
+        preserved_channels = []
+        raw_channels = data.get("channels")
+        if isinstance(raw_channels, list):
+            # Expect list[dict]; filter to known keys and keep as-is
+            for ch in raw_channels:
+                if isinstance(ch, dict):
+                    name = ch.get("name")
+                    unit = ch.get("unit")
+                    type_override = ch.get("type_override")
+                    invert = ch.get("invert")
+                    preserved_channels.append(
+                        {
+                            k: v
+                            for k, v in {"name": name, "unit": unit, "type_override": type_override, "invert": invert}.items()
+                            if v is not None
+                        }
+                    )
+        elif isinstance(raw_channels, str):
+            # Legacy comma-separated or whitespace string; split into names
+            parts = [p.strip() for p in raw_channels.replace(";", ",").split(",") if p.strip()]
+            for nm in parts:
+                preserved_channels.append({"name": nm, "unit": "V"})
+
         rebuilt = {
             "excluded_recordings": data.get("excluded_recordings", []),
             "latency_windows": [],  # Legacy windows discarded; user can recreate
-            "channels": [],  # Channel metadata reconstructed later from meta if needed
+            "channels": preserved_channels,  # Preserve if any; else empty for later reconstruction
             "m_max_values": [],
             "is_completed": bool(data.get("is_completed", False)),
             "data_version": "2.0.0",

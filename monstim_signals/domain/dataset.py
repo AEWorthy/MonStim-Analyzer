@@ -427,8 +427,6 @@ class Dataset:
 
         if reset_caches:
             self.reset_all_caches()
-        if self.repo is not None:
-            self.repo.save(self)
 
     def set_config(self, config: dict) -> None:
         """
@@ -722,7 +720,23 @@ class Dataset:
         Returns:
             tuple: A tuple containing a boolean value indicating whether all sessions have consistent parameters and a message indicating the result.
         """
-        reference_session = self.sessions[0]
+        # In lazy-load mode, sessions may not have recordings/materialized metadata yet.
+        # Defer strict consistency checks until sessions are fully loaded.
+        if not self.sessions:
+            return
+        # Find a session with complete metadata to use as reference
+        reference_session = None
+        for s in self.sessions:
+            if (
+                getattr(s, "scan_rate", None) is not None
+                and getattr(s, "num_channels", None) is not None
+                and getattr(s, "primary_stim", None) is not None
+            ):
+                reference_session = s
+                break
+        if reference_session is None:
+            # No session has complete metadata yet; skip consistency check
+            return
         reference_scan_rate = reference_session.scan_rate
         reference_num_channels = reference_session.num_channels
         reference_stim_type = reference_session.primary_stim.stim_type
@@ -736,6 +750,9 @@ class Dataset:
                 raise ValueError(
                     f"Inconsistent number of channels for {session.id} in {self.formatted_name}: {session.num_channels} != {reference_num_channels}."
                 )
+            if getattr(session, "primary_stim", None) is None:
+                # Session not fully materialized yet; skip stimulus consistency for now
+                continue
             if session.primary_stim.stim_type != reference_stim_type:
                 raise ValueError(
                     f"Inconsistent primary stimulus for {session.id} in {self.formatted_name}: {session.primary_stim.stim_type} != {reference_stim_type}."
@@ -744,16 +761,25 @@ class Dataset:
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────
-    def close(self) -> None:
-        """
-        Close all sessions in the dataset.
-        This is a placeholder for any cleanup logic needed.
+    def close(self, force_gc: bool = True) -> None:
+        """Close all sessions in the dataset.
+
+        Args:
+            force_gc: If True, force garbage collection after closing.
+                     Set to False when closing as part of full experiment.
         """
         for sess in self.sessions:
             if hasattr(sess, "close"):
-                sess.close()
+                # Don't GC at session level when closing dataset/experiment
+                sess.close(force_gc=False)
             else:
                 raise NotImplementedError(f"Session {sess.id} does not have a close method.")
+
+        # Force GC when closing dataset individually (not as part of experiment)
+        if force_gc:
+            import gc
+
+            gc.collect()
 
     # ──────────────────────────────────────────────────────────────────
     # 3) Object representation and reports

@@ -128,7 +128,7 @@ class TestGoldenCSVImport:
         import_experiment(golden_root, out_expt, overwrite=True, max_workers=1)
 
         # Load domain objects and verify structure
-        expt = ExperimentRepository(out_expt).load()
+        expt = ExperimentRepository(out_expt).load(load_recordings=True)
         assert len(expt.datasets) == len(
             expected_layout
         ), f"Dataset count mismatch: expected {len(expected_layout)}, got {len(expt.datasets)}"

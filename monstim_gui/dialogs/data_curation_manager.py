@@ -777,16 +777,25 @@ class DataCurationManager(QDialog):
             self.original_experiments = dict(self.gui.expts_dict)
 
             # Populate experiment tree
-            self.update_dataset_tree()
+            try:
+                self.update_dataset_tree()
+            except Exception as tree_error:
+                logging.error(f"Failed to update dataset tree: {tree_error}", exc_info=True)
+                raise
 
             # Initialize button states
-            self._update_button_states()
+            try:
+                self._update_button_states()
+            except Exception as button_error:
+                logging.error(f"Failed to update button states: {button_error}", exc_info=True)
+                # Non-critical, continue
 
             logging.debug("Data Curation Manager: Data loaded successfully")
 
         except Exception as e:
-            logging.error(f"Failed to load data in Data Curation Manager: {e}")
+            logging.error(f"Failed to load data in Data Curation Manager: {e}", exc_info=True)
             QMessageBox.critical(self, "Data Loading Error", f"Failed to load experiment data:\n{str(e)}")
+            raise  # Re-raise to propagate the error
 
     def _save_tree_expansion_state(self):
         """Save the current expansion state of tree items."""
@@ -847,10 +856,16 @@ class DataCurationManager(QDialog):
             tree_items = 0
             for exp_id in self.gui.expts_dict_keys:
                 try:
+                    logging.debug(f"Processing experiment: {exp_id}")
                     exp_path = Path(self.gui.expts_dict[exp_id])
 
                     # Get experiment metadata using repository method
-                    exp_metadata = self._get_experiment_metadata(exp_path)
+                    try:
+                        exp_metadata = self._get_experiment_metadata(exp_path)
+                        logging.debug(f"Retrieved metadata for {exp_id}: {exp_metadata.get('dataset_count', 0)} datasets")
+                    except Exception as metadata_error:
+                        logging.error(f"Failed to get metadata for '{exp_id}': {metadata_error}", exc_info=True)
+                        raise
 
                     # Create experiment node with status and dates
                     dataset_count = exp_metadata.get("dataset_count", 0)
@@ -938,12 +953,17 @@ class DataCurationManager(QDialog):
                     logging.debug(f"Added experiment to tree: {exp_id} with {len(exp_metadata.get('datasets', []))} datasets")
 
                 except Exception as e:
-                    logging.error(f"Failed to scan experiment '{exp_id}' metadata: {e}")
+                    logging.error(f"Failed to scan experiment '{exp_id}' metadata: {e}", exc_info=True)
                     # Add a placeholder item for the failed experiment
-                    exp_item = QTreeWidgetItem([exp_id, "Error loading", "Failed"])
-                    exp_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "experiment", "id": exp_id})
-                    self.dataset_tree.addTopLevelItem(exp_item)
-                    tree_items += 1
+                    try:
+                        exp_item = QTreeWidgetItem([exp_id, "Error loading", "Failed"])
+                        exp_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "experiment", "id": exp_id})
+                        self.dataset_tree.addTopLevelItem(exp_item)
+                        tree_items += 1
+                    except Exception as placeholder_error:
+                        logging.error(
+                            f"Failed to add placeholder for failed experiment '{exp_id}': {placeholder_error}", exc_info=True
+                        )
 
             # Restore expansion state and selections after all items are added
             self._restore_tree_expansion_state(expansion_state, selected_datasets)
@@ -1094,11 +1114,15 @@ class DataCurationManager(QDialog):
         try:
             from monstim_signals.io.repositories import ExperimentRepository
 
+            logging.debug(f"Creating ExperimentRepository for {exp_path}")
             exp_repo = ExperimentRepository(exp_path)
-            return exp_repo.get_metadata()
+            logging.debug(f"Getting metadata for {exp_path.name}")
+            metadata = exp_repo.get_metadata()
+            logging.debug(f"Successfully retrieved metadata for {exp_path.name}")
+            return metadata
 
         except Exception as e:
-            logging.error(f"Failed to get experiment metadata for {exp_path.name}: {e}")
+            logging.error(f"Failed to get experiment metadata for {exp_path.name}: {e}", exc_info=True)
             return {
                 "id": exp_path.name,
                 "path": str(exp_path),
@@ -2304,6 +2328,20 @@ class DataCurationManager(QDialog):
 
         if ok and new_name.strip() and new_name.strip() != exp_name:
             new_name = new_name.strip()
+
+            # Validate name for invalid directory characters
+            invalid_chars = r'<>:"/\\|?*'
+            found_invalid = [c for c in new_name if c in invalid_chars]
+            if found_invalid:
+                invalid_str = ", ".join(f"'{c}' ({ord(c)})" if c != "\\" else "'\\\\' (backslash)" for c in set(found_invalid))
+                QMessageBox.warning(
+                    self,
+                    "Invalid Characters",
+                    f"The experiment name contains invalid characters for a directory name:\n\n"
+                    f"Invalid characters found: {invalid_str}\n\n"
+                    f'The following characters are not allowed: < > : " / \\ | ? *',
+                )
+                return
 
             # Check for naming conflicts
             if new_name in self.gui.expts_dict_keys:

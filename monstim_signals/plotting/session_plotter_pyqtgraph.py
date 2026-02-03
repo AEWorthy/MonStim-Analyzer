@@ -324,6 +324,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         layout: pg.GraphicsLayout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
 
+        # Track Y-axis bounds across all channels as we plot
+        overall_y_min = float("inf")
+        overall_y_max = float("-inf")
+
         # Add synchronized crosshairs to all plots (if enabled)
         if interactive_cursor:
             self.add_synchronized_crosshairs(plot_items)
@@ -380,7 +384,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 raw_data_dict["channel_index"].extend([channel_index] * num_points)
                 raw_data_dict["stimulus_V"].extend([stimulus_v] * num_points)
                 raw_data_dict["time_point"].extend(time_axis)
-                raw_data_dict["amplitude_mV"].extend(channel_data[window_start_sample:window_end_sample])
+                data_segment = channel_data[window_start_sample:window_end_sample]
+                raw_data_dict["amplitude_mV"].extend(data_segment)
+
+                # Track min/max for Y-axis scaling across ALL channels
+                valid_data = data_segment[~(np.isnan(data_segment) | np.isinf(data_segment))]
+                if len(valid_data) > 0:
+                    overall_y_min = min(overall_y_min, np.min(valid_data))
+                    overall_y_max = max(overall_y_max, np.max(valid_data))
 
         # Set labels for each plot
         for plot_idx, channel_index in enumerate(channel_indices):
@@ -399,8 +410,19 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             )
             self.add_colormap_scalebar(layout, plot_items, value_range)
 
-        # Auto-range Y-axis for all linked plots
-        self.auto_range_y_axis_linked_plots(plot_items)
+        # Set Y-axis range for all linked plots based on tracked bounds
+        if overall_y_min != float("inf") and overall_y_max != float("-inf"):
+            y_range = overall_y_max - overall_y_min
+            if y_range == 0:
+                y_range = max(abs(overall_y_max), 1.0) * 0.1
+            padding = 0.05  # 5% padding
+            padded_y_min = overall_y_min - (y_range * padding)
+            padded_y_max = overall_y_max + (y_range * padding)
+            # Set range on first plot (propagates to all Y-linked plots)
+            plot_items[0].setYRange(padded_y_min, padded_y_max, padding=0)
+        else:
+            # Fallback to auto-range if no valid data found
+            plot_items[0].enableAutoRange(axis="y", enable=True)
 
         # Create DataFrame with multi-level index (matching matplotlib version exactly)
         raw_data_df = pd.DataFrame(raw_data_dict)
@@ -901,9 +923,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             if not np.isnan(y_max) and plot_items:
                 # Set range on first plot only since they're Y-linked
                 plot_items[0].setYRange(0, 1.1 * y_max)
-
-        # Display the plot
-        self.display_plot(canvas)
 
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)

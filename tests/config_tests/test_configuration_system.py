@@ -632,7 +632,7 @@ class TestApplicationState:
         assert app_state.should_track_import_export_paths() is True
         assert app_state.should_track_recent_files() is True
         assert app_state.should_track_analysis_profiles() is True
-        assert app_state.should_use_opengl_acceleration() is True
+        assert app_state.should_use_opengl_acceleration() is False
 
         # Disable a feature
         app_state.set_setting("track_recent_files", False)

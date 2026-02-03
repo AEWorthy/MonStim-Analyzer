@@ -164,6 +164,22 @@ class MonstimGUI(QMainWindow):
 
         self.status_bar.showMessage(f"Welcome to MonStim Analyzer, {SPLASH_INFO['version']}", 10000)
 
+        # Migration banner (hidden by default)
+        try:
+            from monstim_gui.widgets.migration_banner import MigrationBanner
+
+            self.migration_banner = MigrationBanner(self)
+            # Place the banner just above the status bar in main layout if available
+            main = self.centralWidget()
+            if main and hasattr(main, "layout") and callable(getattr(main, "layout")):
+                lay = main.layout()
+                if hasattr(lay, "addWidget"):
+                    lay.addWidget(self.migration_banner)
+            # Wire button to trigger background migrations
+            self.migration_banner.run_clicked.connect(self._run_background_migrations)
+        except Exception:
+            logging.debug("Failed to create migration banner (non-fatal).", exc_info=True)
+
     @staticmethod
     def handle_qt_error_logs():
         # Install Qt message handler to suppress QPainter warnings during resize operations
@@ -390,6 +406,59 @@ class MonstimGUI(QMainWindow):
             # Clear problematic state
             app_state.clear_session_state()
 
+    def _run_background_migrations(self):
+        try:
+            if self.current_experiment and self.current_experiment.repo:
+                from monstim_gui.io.migration_runner import MigrationRunner
+
+                runner = MigrationRunner(str(self.current_experiment.repo.folder))
+                from PySide6.QtWidgets import QProgressDialog
+
+                dlg = QProgressDialog("Migrating annotations...", "Cancel", 0, 100, self)
+                dlg.setWindowTitle("Background Migration")
+                dlg.setWindowModality(Qt.WindowModality.WindowModal)
+                dlg.setAutoClose(True)
+                dlg.setAutoReset(True)
+                runner.progress.connect(dlg.setValue)
+                runner.status_update.connect(dlg.setLabelText)
+                runner.finished.connect(dlg.close)
+                runner.finished.connect(lambda n: self.status_bar.showMessage(f"Migrations complete: {n} files.", 5000))
+                runner.error.connect(lambda e: QMessageBox.critical(self, "Migration Error", e))
+                runner.error.connect(dlg.close)
+
+                # Hide banner on completion and re-scan to decide future visibility
+                def _on_migrations_complete(_n: int):
+                    try:
+                        if hasattr(self, "migration_banner"):
+                            self.migration_banner.hide()
+                        # Trigger a quick background re-scan; banner will only reappear if new work exists
+                        from monstim_gui.io.migration_runner import MigrationScanThread
+
+                        scan = MigrationScanThread(str(self.current_experiment.repo.folder))
+
+                        def _on_scan(has_work: bool, count: int):
+                            if has_work and hasattr(self, "migration_banner"):
+                                msg = f"Annotation migrations detected ({count}). Run now to update files."
+                                self.migration_banner.show_message(msg)
+                            else:
+                                if hasattr(self, "migration_banner"):
+                                    self.migration_banner.hide()
+
+                        scan.has_work.connect(_on_scan)
+                        scan.error.connect(lambda e: logging.debug(f"Migration re-scan error: {e}"))
+                        # Keep a reference to avoid GC during run
+                        self._migration_rescan = scan
+                        scan.start()
+                    except Exception:
+                        logging.debug("Failed to hide banner / rescan after migrations.", exc_info=True)
+
+                runner.finished.connect(_on_migrations_complete)
+                self._migration_runner = runner
+                dlg.show()
+                runner.start()
+        except Exception:
+            logging.debug("Failed to start background migrations.", exc_info=True)
+
     # Command functions
     def undo(self):
         try:
@@ -522,6 +591,34 @@ class MonstimGUI(QMainWindow):
         self._latency_dialog.show()  # Use show() instead of exec() to allow interaction with main window
         self._latency_dialog.raise_()  # Bring to front
         self._latency_dialog.activateWindow()  # Give focus
+
+    def append_replace_latency_windows(self, level: str):
+        """Open specialized dialog for appending/replacing a single latency window."""
+        logging.debug(f"Opening append/replace latency window dialog for {level}.")
+        match level:
+            case "experiment":
+                if not self.current_experiment:
+                    QMessageBox.warning(self, "Warning", "Please select an experiment first.")
+                    return
+                emg_data = self.current_experiment
+            case "dataset":
+                if not self.current_dataset:
+                    QMessageBox.warning(self, "Warning", "Please load a dataset first.")
+                    return
+                emg_data = self.current_dataset
+            case "session":
+                if not self.current_session:
+                    QMessageBox.warning(self, "Warning", "Please select a session first.")
+                    return
+                emg_data = self.current_session
+            case _:
+                QMessageBox.warning(self, "Warning", "Invalid level for append/replace operation.")
+                return
+
+        from monstim_gui.dialogs.latency import AppendReplaceLatencyWindowDialog
+
+        dialog = AppendReplaceLatencyWindowDialog(emg_data, self)
+        dialog.exec()
 
     def invert_channel_polarity(self, level: str):
         logging.debug("Inverting channel polarity.")
@@ -681,6 +778,54 @@ class MonstimGUI(QMainWindow):
         """
         from monstim_gui.core.ui_config import ui_config
         from monstim_gui.dialogs import clear_math_cache
+
+        # Stop any running background threads gracefully
+        logging.debug("Stopping background threads...")
+
+        # Stop loading thread if running
+        if hasattr(self.data_manager, "loading_thread") and self.data_manager.loading_thread.isRunning():
+            logging.info("Stopping experiment loading thread...")
+            self.data_manager.loading_thread.request_cancel()
+            if not self.data_manager.loading_thread.wait(3000):
+                logging.warning("Loading thread did not stop in time, forcing termination")
+                self.data_manager.loading_thread.terminate()
+                self.data_manager.loading_thread.wait()
+
+        # Stop import threads if running
+        if (
+            hasattr(self.data_manager, "thread")
+            and hasattr(self.data_manager.thread, "isRunning")
+            and self.data_manager.thread.isRunning()
+        ):
+            logging.info("Stopping import thread...")
+            self.data_manager.thread.cancel()
+            if not self.data_manager.thread.wait(3000):
+                logging.warning("Import thread did not stop in time")
+
+        if (
+            hasattr(self.data_manager, "multi_thread")
+            and hasattr(self.data_manager.multi_thread, "isRunning")
+            and self.data_manager.multi_thread.isRunning()
+        ):
+            logging.info("Stopping multi-import thread...")
+            self.data_manager.multi_thread.cancel()
+            if not self.data_manager.multi_thread.wait(3000):
+                logging.warning("Multi-import thread did not stop in time")
+
+        # Stop migration threads if running
+        if hasattr(self, "_migration_runner") and self._migration_runner.isRunning():
+            logging.info("Stopping migration runner...")
+            self._migration_runner.request_cancel()
+            if not self._migration_runner.wait(2000):
+                logging.warning("Migration runner did not stop in time")
+
+        if hasattr(self, "_migration_rescan") and self._migration_rescan.isRunning():
+            logging.debug("Stopping migration rescan...")
+            self._migration_rescan.request_cancel()
+            if not self._migration_rescan.wait(2000):
+                logging.warning("Migration rescan did not stop in time")
+
+        logging.debug("All background threads stopped.")
 
         ui_config.save_window_state(self)
         try:

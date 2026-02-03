@@ -354,9 +354,16 @@ class PlotWidget(QGroupBox):
                         if hasattr(self, "persistent_channel_selection") and hasattr(
                             self.current_option_widget, "channel_selector"
                         ):
-                            self.current_option_widget.channel_selector.set_selected_channels(
-                                self.persistent_channel_selection
-                            )
+                            # If persistent selection is empty (first load), populate with all available channels
+                            if not self.persistent_channel_selection:
+                                all_channels = self.current_option_widget.channel_selector.get_selected_channels()
+                                if all_channels:  # Only update if there are channels available
+                                    self.persistent_channel_selection = all_channels
+                                    logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                            else:
+                                self.current_option_widget.channel_selector.set_selected_channels(
+                                    self.persistent_channel_selection
+                                )
 
                     # Connect channel selection updates for real-time persistence
                     self.connect_channel_selection_updates()
@@ -421,7 +428,14 @@ class PlotWidget(QGroupBox):
             else:
                 # Apply persistent channel selection even if no other saved options exist
                 if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
-                    self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
+                    # If persistent selection is empty (first load), populate with all available channels
+                    if not self.persistent_channel_selection:
+                        all_channels = self.current_option_widget.channel_selector.get_selected_channels()
+                        if all_channels:  # Only update if there are channels available
+                            self.persistent_channel_selection = all_channels
+                            logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                    else:
+                        self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
             # Connect channel selection updates for real-time persistence
             self.connect_channel_selection_updates()

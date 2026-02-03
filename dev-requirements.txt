@@ -1,0 +1,6 @@
+# Development tools and linters
+# Pin versions to ensure consistent formatting between local and CI
+black==25.9.0
+flake8>=7.0.0
+flake8-pyproject>=1.2.0
+isort>=5.13.0
