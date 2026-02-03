@@ -287,20 +287,17 @@ class SessionRepository:
             # 2) Sort by the primary StimCluster’s stim_v
             recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
         else:
-            # Lightweight discovery: build minimal Recording objects without opening HDF5,
-            # so sessions are considered valid and pass strict domain checks.
-            # Heavy raw data access remains deferred.
+            # Deferred loading: store recording stems for later materialization
+            # without actually loading Recording objects. This enables fast session
+            # discovery and validation without the overhead of loading HDF5 files.
             try:
                 self._pending_recording_stems = [r.stem for r in recording_repos]
+                logging.debug(
+                    f"Deferred loading: stored {len(self._pending_recording_stems)} recording stems for later materialization."
+                )
             except Exception:
                 logging.debug("Failed to record pending recording stems (non-fatal).", exc_info=True)
-
-            try:
-                # Force lazy_open_h5 to True for lightweight construction
-                recordings = [repo.load(config=config, lazy_open_h5=True, allow_write=allow_write) for repo in recording_repos]
-                recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
-            except Exception:
-                logging.debug("Lightweight recording construction failed; leaving session empty.", exc_info=True)
+            # Leave recordings as empty list; they'll be loaded on-demand via materialize_recordings()
 
         # 3) Load or create session annotation JSON
         if self.session_js.exists():
@@ -374,6 +371,7 @@ class SessionRepository:
             annot=session_annot,
             repo=self,
             config=config,
+            allow_deferred_loading=not load_recordings,
         )
         return session
 
@@ -407,6 +405,9 @@ class SessionRepository:
 
             # Session.recordings is a derived, filtered view (no setter). Update internal storage.
             session._all_recordings = recs
+            # Clear deferred loading flag if it was set
+            if hasattr(session, "_deferred_loading"):
+                session._deferred_loading = False
             # Refresh session parameters and caches to reflect newly available recordings
             try:
                 session._load_session_parameters()

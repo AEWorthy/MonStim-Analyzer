@@ -31,13 +31,10 @@ class PlotController:
 
         # Diagnostic tracking for extended sessions
         self._plot_count = 0
-        self._total_memory_freed = 0.0
 
         # Safety flag: disable automatic GC if it causes crashes
         # Can be set to False if deferred GC still causes issues on certain systems
         self._enable_auto_gc = True
-        self._gc_failure_count = 0  # Track GC-related issues
-        self._max_gc_failures = 3  # Disable GC after this many issues
 
         # Input blocking during critical graphics operations
         # Prevents user interactions from interfering with screen refresh/layout updates
@@ -126,13 +123,6 @@ class PlotController:
         # Increment plot counter for extended session diagnostics
         self._plot_count += 1
         logging.debug(f"=== Starting plot operation #{self._plot_count} ===")
-
-        # Check if GC should be temporarily disabled due to previous issues
-        if self._plot_count > 100 and self._total_memory_freed < 1.0 and self._enable_auto_gc:
-            logging.warning(
-                f"Auto-GC not freeing memory after {self._plot_count} plots "
-                f"({self._total_memory_freed:.2f} MB freed total). Consider disabling if stability issues occur."
-            )
 
         try:
             self._validate_gui_components()
@@ -321,37 +311,9 @@ class PlotController:
                 """Safely perform garbage collection after Qt events are fully processed."""
                 try:
                     logging.debug("Starting deferred garbage collection...")
-
-                    # Get memory usage before collection (if psutil available)
-                    mem_before = None
-                    try:
-                        import psutil
-
-                        process = psutil.Process()
-                        mem_before = process.memory_info().rss / 1024 / 1024  # MB
-                        logging.debug(f"Memory usage before GC: {mem_before:.2f} MB")
-                    except ImportError:
-                        pass  # psutil not available, skip memory monitoring
-                    except Exception as e:
-                        logging.debug(f"Could not get memory info: {e}")
-
-                    logging.debug("Calling gc.collect()...")
                     collected = gc.collect()
                     logging.debug(f"Garbage collection completed. Collected {collected} objects.")
-
-                    # Get memory usage after collection
-                    if mem_before is not None:
-                        try:
-                            mem_after = process.memory_info().rss / 1024 / 1024  # MB
-                            mem_freed = mem_before - mem_after
-                            self._total_memory_freed += max(0, mem_freed)  # Track cumulative freed memory
-                            logging.debug(f"Memory usage after GC: {mem_after:.2f} MB (freed: {mem_freed:.2f} MB)")
-                            logging.debug(
-                                f"Session totals: {self._plot_count} plots, {self._total_memory_freed:.2f} MB freed cumulatively"
-                            )
-                        except Exception as e:
-                            logging.debug(f"Could not calculate memory freed: {e}")
-
+                    logging.debug(f"Session totals: {self._plot_count} plots created so far")
                 except Exception as gc_error:
                     logging.error(f"CRITICAL: Deferred garbage collection failed: {gc_error}", exc_info=True)
 
@@ -537,10 +499,7 @@ class PlotController:
                 logging.debug(f"GC generation {generation}: collected {collected} objects")
 
             # Log session statistics
-            logging.info(
-                f"Session statistics: {self._plot_count} plots created, "
-                f"{self._total_memory_freed:.2f} MB freed cumulatively"
-            )
+            logging.info(f"Session statistics: {self._plot_count} plots created")
 
         except Exception as e:
             logging.error(f"Error during forced memory cleanup: {e}", exc_info=True)

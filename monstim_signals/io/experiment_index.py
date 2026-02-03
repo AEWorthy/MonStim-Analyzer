@@ -229,6 +229,11 @@ def is_index_stale(index: ExperimentIndex) -> bool:
         ds_path = Path(ds.path)
         if not ds_path.exists():
             return True
+
+        # Define helper function once outside the loop for better performance
+        def is_recording_item(p: Path) -> bool:
+            return (p.is_file() and p.suffix.lower() in {".h5", ".hdf5", ".npy", ".npz", ".csv"}) or p.is_dir()
+
         for s in ds.sessions:
             s_meta = Path(s.meta_path) if s.meta_path else None
             if s_meta and s.size is not None and s.mtime is not None:
@@ -241,10 +246,6 @@ def is_index_stale(index: ExperimentIndex) -> bool:
             # Directory-level change detection: new or removed recordings
             try:
                 current_items = sorted(s_path.iterdir())
-
-                def is_recording_item(p: Path) -> bool:
-                    return (p.is_file() and p.suffix.lower() in {".h5", ".hdf5", ".npy", ".npz", ".csv"}) or p.is_dir()
-
                 current_recordings = [p for p in current_items if is_recording_item(p)]
                 if len(current_recordings) != len(s.recordings):
                     return True
