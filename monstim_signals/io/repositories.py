@@ -348,7 +348,10 @@ class SessionRepository:
                         try:
                             self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
                         except OSError as e:
-                            logging.error(f"Failed to persist migration for {self.session_js.name}: {e}")
+                            logging.error(
+                                f"Failed to persist migration for {self.session_js.name} - migration applied in memory only. "
+                                f"The file will need to be migrated again on next load. Error: {e}"
+                            )
                 except FutureVersionError as e:
                     logging.error(str(e))
                     raise
@@ -598,7 +601,10 @@ class DatasetRepository:
                         try:
                             self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
                         except OSError as e:
-                            logging.error(f"Failed to persist migration for {self.dataset_js.name}: {e}")
+                            logging.error(
+                                f"Failed to persist migration for {self.dataset_js.name} - migration applied in memory only. "
+                                f"The file will need to be migrated again on next load. Error: {e}"
+                            )
                 except FutureVersionError as e:
                     logging.error(str(e))
                     raise
@@ -1018,7 +1024,10 @@ class ExperimentRepository:
                         try:
                             self.expt_js.write_text(json.dumps(annot_dict, indent=2))
                         except OSError as e:
-                            logging.error(f"Failed to persist migration for {self.expt_js.name}: {e}")
+                            logging.error(
+                                f"Failed to persist migration for {self.expt_js.name} - migration applied in memory only. "
+                                f"The file will need to be migrated again on next load. Error: {e}"
+                            )
                 except FutureVersionError as e:
                     logging.error(str(e))
                     raise
