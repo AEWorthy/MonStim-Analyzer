@@ -37,6 +37,7 @@ class MigrationBanner(QWidget):
                 y = parent_rect.bottom() - self.height() - 56
                 self.move(x, y)
         except Exception:
+            # Best-effort positioning only; on any error fall back to default widget placement.
             pass
         self.show()
 

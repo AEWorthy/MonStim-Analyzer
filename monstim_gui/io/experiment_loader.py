@@ -243,8 +243,9 @@ class ExperimentLoadingThread(QThread):
                         pct = 20 + int(10 * (index / total))
                         self.progress.emit(pct)
                         self.status_update.emit(f"Building index {index}/{total}:\n'{name}'")
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        # Progress UI failures must not abort experiment loading; log for diagnostics.
+                        logging.debug("Non-fatal error while updating index progress: %s", exc)
 
             # Overlay application preferences (QSettings) for loading:
             cfg = dict(self.config or {})

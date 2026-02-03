@@ -40,6 +40,14 @@ class ApplicationState:
         """Reinitialize QSettings (call after QApplication org/app name is set)."""
         self._settings = None  # Force recreation on next access
 
+    def _clear_restoration_state(self):
+        """Clear restoration flags and pending state."""
+        self._is_restoring_session = False
+        self._pending_dataset_id = None
+        self._pending_session_id = None
+        self._pending_profile_name = None
+        self._pending_experiment_id = None
+
     # === IMPORT/EXPORT PATH MEMORY ===
     def save_last_import_path(self, path: str):
         """Save the last directory used for importing experiments."""
@@ -301,11 +309,7 @@ class ApplicationState:
             logging.error(f"Error during session restoration: {e}")
             self.clear_session_state()
             # Make sure to clear the flag on error
-            self._is_restoring_session = False
-            self._pending_dataset_id = None
-            self._pending_session_id = None
-            self._pending_profile_name = None
-            self._pending_experiment_id = None
+            self._clear_restoration_state()
             return False
 
     def complete_session_restoration(self, gui: "MonstimGUI"):
@@ -323,13 +327,15 @@ class ApplicationState:
             # Check if restoration was canceled (pending IDs would be None)
             if experiment_id is None:
                 logging.debug("Session restoration was canceled - skipping completion")
-                self._is_restoring_session = False
+                self._clear_restoration_state()
                 return
             # Verify experiment loaded correctly
             if not gui.current_experiment or gui.current_experiment.id != experiment_id:
                 logging.warning(
                     f"Session restoration: Experiment mismatch (expected '{experiment_id}', got '{gui.current_experiment.id if gui.current_experiment else 'None'}')"
                 )
+                # Clear restoration flags and pending state before returning
+                self._clear_restoration_state()
                 return
 
             # Restore dataset
@@ -363,23 +369,18 @@ class ApplicationState:
 
             logging.error(traceback.format_exc())
         finally:
-            # Always clear the restoration flag and pending state when done
-            self._is_restoring_session = False
             # For empty experiments, ensure combos show correct state after restoration
             if gui.current_experiment and not gui.current_experiment.datasets:
                 gui.data_selection_widget.update(levels=("dataset", "session"))
 
-            # Save the final restored state
+            # Save the final restored state before clearing
             profile_name = self._pending_profile_name
             experiment_id = self._pending_experiment_id
             dataset_id = self._pending_dataset_id
             session_id = self._pending_session_id
 
-            # Clear pending state
-            self._pending_dataset_id = None
-            self._pending_session_id = None
-            self._pending_profile_name = None
-            self._pending_experiment_id = None
+            # Always clear the restoration flag and pending state when done
+            self._clear_restoration_state()
 
             # Save final state
             self.save_current_session_state(
