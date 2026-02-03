@@ -52,11 +52,8 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
     # Remove date_added / date_modified if present
     for k in ("date_added", "date_modified"):
         if k in data:
-            try:
-                del data[k]
-                changed = True
-            except Exception:
-                pass
+            del data[k]
+            changed = True
 
     if changed and not dry_run:
         try:
