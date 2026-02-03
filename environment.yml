@@ -12,7 +12,7 @@ channels:
   - defaults
 dependencies:
   - python=3.14.*
-  - numpy=2.4.1
+  - numpy=2.4.2
   - pandas=3.0.0
   - matplotlib=3.10.8
   - scipy=1.17.0
@@ -25,7 +25,7 @@ dependencies:
   - pyqtgraph=0.14.0
   - pip
   - pip:
-      - Markdown==3.10
+      - Markdown==3.10.1
       - python_markdown_math==0.9
       - pytest==9.0.1
       - setuptools==80.9.0
