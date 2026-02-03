@@ -1008,7 +1008,6 @@ class ExperimentRepository:
                         logging.debug(
                             f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}"
                         )
-                        # Persist migrations regardless of allow_write; schema updates must be saved
                         self.expt_js.write_text(json.dumps(annot_dict, indent=2))
                 except FutureVersionError as e:
                     logging.error(str(e))

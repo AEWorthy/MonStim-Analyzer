@@ -594,8 +594,6 @@ class InsertSingleLatencyWindowCommand(Command):
 
     def _merge_window(self, existing_windows, new_window):
         """Merge a single window into existing windows, replacing by name if it exists."""
-        import copy
-
         result = []
         replaced = False
 

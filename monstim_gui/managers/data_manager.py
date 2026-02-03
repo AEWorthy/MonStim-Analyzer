@@ -848,7 +848,7 @@ class DataManager:
                             3000,
                         )
                     except Exception:
-                        pass
+                        logging.debug("Failed to update status bar during experiment close.", exc_info=True)
                     try:
                         self.gui.current_experiment.close()
                         logging.debug("Previous experiment closed successfully.")
@@ -1178,7 +1178,7 @@ class DataManager:
             try:
                 self.gui.data_selection_widget.experiment_combo.setEnabled(True)
             except Exception:
-                pass
+                logging.debug("Failed to re-enable experiment combo after cancel.", exc_info=True)
 
     def load_dataset(self, index, auto_load_first_session=True):
         # Set busy cursor if QApplication is available

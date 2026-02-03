@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -147,7 +148,7 @@ def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[ca
             except Exception:
                 # Silently ignore callback errors to ensure index building continues
                 # even if the progress callback fails (e.g., disconnected, GUI closed)
-                pass
+                logging.debug("Progress callback failed during index build.", exc_info=True)
 
     idx = ExperimentIndex(id=exp_id, path=str(exp_path), datasets=datasets, generated_at=time.time())
     return idx

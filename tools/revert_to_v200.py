@@ -56,7 +56,7 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
                 del data[k]
                 changed = True
             except Exception:
-                pass
+                logging.debug(f"Failed to remove {k} from annotation: {path}", exc_info=True)
 
     if changed and not dry_run:
         try:
@@ -75,7 +75,7 @@ def remove_index_file(path: Path, dry_run: bool) -> bool:
     if dry_run:
         return True
     try:
-        path.unlink(missing_ok=True)  # type: ignore[arg-type]
+        path.unlink(missing_ok=True)
         return True
     except Exception as e:
         log.error(f"Failed to delete index file: {path} ({e})")
@@ -97,7 +97,7 @@ def process_root(root: Path, dry_run: bool) -> Tuple[int, int, int, int]:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Revert annotations to data_version 1.0.0 and remove index files")
+    parser = argparse.ArgumentParser(description="Revert annotations to data_version 2.0.0 and remove index files")
     parser.add_argument(
         "--root",
         type=Path,
