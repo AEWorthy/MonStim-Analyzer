@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DataFrame Export Improvements**: Added descriptive filenames for CSV exports with experiment/dataset/session context.
 - **Latency Window Clipboard Features**: New single-window clipboard and append/replace functionality for latency window management across experiments.
 - **User Preference for Index Building**: Added preference to control automatic experiment index building behavior.
+- **AUC Amplitude Calculation Method**: New "Area Under Curve" (AUC) method for calculating EMG amplitude, providing cumulative muscle activation measurement across analysis windows.
 
 ### Changed
 - **Session Restoration**: Refactored session restoration to complete after experiment load, improving startup reliability and state management.

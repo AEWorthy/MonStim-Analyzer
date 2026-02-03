@@ -64,6 +64,11 @@ Various methods are employed to calculate EMG amplitude, depending on the specif
 4. **Average Unrectified Amplitude:**
    $$A_{unrect} = \frac{1}{T_2 - T_1} \int_{T_1}^{T_2} EMG(t) dt$$
 
+5. **Area Under Curve (AUC) of Rectified Signal:**
+   $$A_{AUC} = \int_{T_1}^{T_2} |EMG(t)| dt$$
+   
+   This method calculates the total area under the rectified EMG curve, providing a measure of the cumulative muscle activation over the analysis window.
+
 Where $T_1$ and $T_2$ represent the start and end times of the analysis window, respectively. The default method is RMS amplitude.
 
 ### M-max Determination

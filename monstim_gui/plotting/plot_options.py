@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from .plotting_widget import PlotWidget
 
-CALCULATION_METHODS = ["peak_to_trough", "rms", "average_rectified", "average_unrectified"]
+CALCULATION_METHODS = ["peak_to_trough", "rms", "average_rectified", "average_unrectified", "auc"]
 DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
 
 
