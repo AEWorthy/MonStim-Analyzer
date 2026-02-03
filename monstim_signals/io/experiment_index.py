@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 try:
     import orjson as json_mod  # type: ignore
     logger.debug("Using orjson for faster JSON parsing in experiment index")
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     import json as json_mod  # fallback
     logger.debug("orjson not available, falling back to standard json module for experiment index")
 
