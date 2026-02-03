@@ -1041,9 +1041,24 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     # 4) Clean‐up
     # ──────────────────────────────────────────────────────────────────
-    def close(self):
-        for rec in self.recordings:
-            rec.close()
+    def close(self, force_gc: bool = True):
+        """Close all recording HDF5 file handles.
+
+        Args:
+            force_gc: If True, force garbage collection after closing.
+                     Set to False when closing as part of dataset/experiment.
+        """
+        for rec in self.get_all_recordings(include_excluded=True):
+            try:
+                rec.close()
+            except Exception as e:
+                logging.warning(f"Error closing recording {rec.id}: {e}")
+
+        # Force GC when closing session individually (not as part of dataset)
+        if force_gc:
+            import gc
+
+            gc.collect()
 
     # ──────────────────────────────────────────────────────────────────
     # 5) Object representation and reports

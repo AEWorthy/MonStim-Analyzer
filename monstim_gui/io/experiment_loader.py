@@ -215,8 +215,9 @@ class ExperimentLoadingThread(QThread):
                 nonlocal _last_emit_ts
                 import time as _t
 
-                # Check cancellation in callback
+                # Check cancellation in callback - do this FIRST before any processing
                 if self._cancel_requested:
+                    logging.info("Progress callback detected cancellation flag")
                     raise InterruptedError("Loading canceled by user")
 
                 if level == "dataset" and total > 0:

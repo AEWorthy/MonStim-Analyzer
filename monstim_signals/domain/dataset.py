@@ -761,16 +761,25 @@ class Dataset:
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────
-    def close(self) -> None:
-        """
-        Close all sessions in the dataset.
-        This is a placeholder for any cleanup logic needed.
+    def close(self, force_gc: bool = True) -> None:
+        """Close all sessions in the dataset.
+
+        Args:
+            force_gc: If True, force garbage collection after closing.
+                     Set to False when closing as part of full experiment.
         """
         for sess in self.sessions:
             if hasattr(sess, "close"):
-                sess.close()
+                # Don't GC at session level when closing dataset/experiment
+                sess.close(force_gc=False)
             else:
                 raise NotImplementedError(f"Session {sess.id} does not have a close method.")
+
+        # Force GC when closing dataset individually (not as part of experiment)
+        if force_gc:
+            import gc
+
+            gc.collect()
 
     # ──────────────────────────────────────────────────────────────────
     # 3) Object representation and reports

@@ -505,13 +505,26 @@ class Experiment:
         else:
             raise NotImplementedError("No repository defined for saving the experiment.")
 
-    def close(self) -> None:
-        """
-        Close all datasets in the experiment.
-        This is a placeholder for any cleanup logic needed.
+    def close(self, force_gc: bool = True) -> None:
+        """Close all datasets in the experiment.
+
+        Args:
+            force_gc: If True, force garbage collection after closing.
+                     Set to False when closing nested objects to avoid redundant GC.
         """
         for ds in self.datasets:
-            ds.close()
+            try:
+                # Don't GC at dataset level when closing full experiment
+                ds.close(force_gc=False)
+            except Exception as e:
+                logging.warning(f"Error closing dataset {ds.id}: {e}")
+
+        # Force garbage collection only if requested (e.g., at top level)
+        if force_gc:
+            import gc
+
+            collected = gc.collect()
+            logging.debug(f"Experiment close: GC collected {collected} objects")
 
     # ──────────────────────────────────────────────────────────────────
     # 3) Object representation and reports

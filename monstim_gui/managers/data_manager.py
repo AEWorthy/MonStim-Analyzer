@@ -773,17 +773,48 @@ class DataManager:
         # Cancel any existing loading operation
         if hasattr(self, "loading_thread") and self.loading_thread.isRunning():
             logging.info("Cancelling previous experiment loading operation")
-            # Use safe cancellation instead of terminate()
-            self.loading_thread.request_cancel()
-            # Wait with timeout (max 5 seconds for graceful shutdown)
-            if not self.loading_thread.wait(5000):
-                logging.warning("Loading thread did not stop gracefully, forcing termination")
-                self.loading_thread.terminate()
-                self.loading_thread.wait()
-            self.loading_thread.deleteLater()
-            if hasattr(self, "current_progress_dialog"):
-                self.current_progress_dialog.close()
-                del self.current_progress_dialog
+            # Disable experiment combo to prevent user interaction
+            self.gui.data_selection_widget.experiment_combo.setEnabled(False)
+            # Set wait cursor during cancellation
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                # Use safe cancellation instead of terminate()
+                self.loading_thread.request_cancel()
+                # Wait with timeout (max 5 seconds for graceful shutdown)
+                if not self.loading_thread.wait(5000):
+                    logging.warning("Loading thread did not stop gracefully, forcing termination")
+                    self.loading_thread.terminate()
+                    self.loading_thread.wait()
+                    # After forced termination, need more aggressive cleanup
+                    logging.info("Performing aggressive cleanup after forced thread termination")
+                    import gc
+                    import time
+
+                    # Multiple GC passes to ensure cleanup
+                    for i in range(3):
+                        collected = gc.collect()
+                        logging.debug(f"GC pass {i+1} after termination: collected {collected} objects")
+                    # Give OS time to release resources
+                    time.sleep(0.5)
+                    QApplication.processEvents()
+                try:
+                    self.loading_thread.deleteLater()
+                except Exception:
+                    logging.warning("Failed to delete loading thread", exc_info=True)
+                if hasattr(self, "current_progress_dialog"):
+                    try:
+                        self.current_progress_dialog.close()
+                    except Exception:
+                        logging.warning("Failed to close progress dialog", exc_info=True)
+                    del self.current_progress_dialog
+                # Force garbage collection after canceling previous load
+                import gc
+
+                gc.collect()
+            finally:
+                # Always restore cursor and re-enable combo
+                QApplication.restoreOverrideCursor()
+                self.gui.data_selection_widget.experiment_combo.setEnabled(True)
 
         # Reset loading completion flag
         self.loading_completed_successfully = False
@@ -807,19 +838,30 @@ class DataManager:
                 logging.debug(
                     f"Closing currently loaded experiment '{self.gui.current_experiment.id}' before switching to '{experiment_name}'."
                 )
-                # Notify user via status bar
+                # Set wait cursor during close operation
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
                 try:
-                    self.gui.status_bar.showMessage(
-                        f"Closing current experiment '{self.gui.current_experiment.id}'...",
-                        3000,
-                    )
-                except Exception:
-                    pass
-                try:
-                    self.gui.current_experiment.close()
-                    logging.debug("Previous experiment closed successfully.")
-                except Exception as e:
-                    logging.exception(f"Error closing previous experiment: {e}")
+                    # Notify user via status bar
+                    try:
+                        self.gui.status_bar.showMessage(
+                            f"Closing current experiment '{self.gui.current_experiment.id}'...",
+                            3000,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        self.gui.current_experiment.close()
+                        logging.debug("Previous experiment closed successfully.")
+                    except Exception as e:
+                        logging.exception(f"Error closing previous experiment: {e}")
+                    finally:
+                        # Force garbage collection to release HDF5 file handles
+                        import gc
+
+                        collected = gc.collect()
+                        logging.debug(f"Garbage collection after experiment close: collected {collected} objects")
+                finally:
+                    QApplication.restoreOverrideCursor()
         except Exception:
             # Never block switching due to cleanup errors
             pass
@@ -829,6 +871,13 @@ class DataManager:
         self.gui.set_current_dataset(None)
         self.gui.set_current_session(None)
         self.gui.set_current_experiment(None)
+
+        # Additional defensive cleanup: Force garbage collection to release any
+        # lingering references from previously loaded data
+        import gc
+
+        gc.collect()
+        QApplication.processEvents()  # Process any pending GUI cleanup
 
         # Create and show progress dialog
         progress_dialog = QProgressDialog("Loading experiment...", "Cancel", 0, 100, self.gui)
@@ -955,24 +1004,62 @@ class DataManager:
             logging.error(f"Error setting loaded experiment: {e}")
             QMessageBox.critical(self.gui, "Error", f"Error setting loaded experiment: {e}")
         finally:
-            # Cleanup
+            # Cleanup with forced garbage collection
             if hasattr(self, "loading_thread"):
-                self.loading_thread.deleteLater()
-                del self.loading_thread
+                try:
+                    self.loading_thread.deleteLater()
+                except Exception:
+                    logging.warning("Failed to delete loading thread", exc_info=True)
+                try:
+                    del self.loading_thread
+                except AttributeError:
+                    logging.debug("Loading thread deletion failed: already deleted.")
             if hasattr(self, "current_progress_dialog"):
-                del self.current_progress_dialog
+                try:
+                    if not self.current_progress_dialog.isHidden():
+                        self.current_progress_dialog.close()
+                except Exception:
+                    logging.warning("Failed to close progress dialog", exc_info=True)
+                try:
+                    del self.current_progress_dialog
+                except AttributeError:
+                    logging.debug("Progress dialog deletion failed: already deleted.")
+            # Force garbage collection to release any resources
+            import gc
+
+            gc.collect()
 
     def _on_experiment_load_error(self, error_message):
         """Handle experiment loading error."""
         QMessageBox.critical(self.gui, "Error", error_message)
         logging.error(f"Experiment loading error: {error_message}")
 
-        # Cleanup
+        # Cleanup with forced garbage collection
         if hasattr(self, "loading_thread"):
-            self.loading_thread.deleteLater()
-            del self.loading_thread
+            try:
+                self.loading_thread.deleteLater()
+            except Exception:
+                logging.warning("Failed to delete loading thread", exc_info=True)
+            try:
+                del self.loading_thread
+            except AttributeError:
+                logging.debug("Loading thread deletion failed: already deleted.")
         if hasattr(self, "current_progress_dialog"):
-            del self.current_progress_dialog
+            try:
+                if not self.current_progress_dialog.isHidden():
+                    self.current_progress_dialog.close()
+            except Exception:
+                logging.warning("Failed to close progress dialog", exc_info=True)
+            try:
+                del self.current_progress_dialog
+            except AttributeError:
+                logging.debug("Progress dialog deletion failed: already deleted.")
+
+        # Force garbage collection to clean up failed load artifacts
+        import gc
+
+        collected = gc.collect()
+        logging.debug(f"Garbage collection after load error: collected {collected} objects")
 
     def _on_datasets_skipped(self, skipped_list):
         """Handle warning about skipped datasets during load."""
@@ -1009,43 +1096,89 @@ class DataManager:
         if hasattr(self, "loading_completed_successfully") and self.loading_completed_successfully:
             logging.debug("Ignoring cancel signal - experiment loading completed successfully")
             if hasattr(self, "current_progress_dialog"):
-                del self.current_progress_dialog
+                try:
+                    del self.current_progress_dialog
+                except AttributeError:
+                    logging.debug("Progress dialog deletion failed: already deleted.")
             return
 
-        # If we're in the middle of session restoration, cancel it completely
-        from monstim_gui.core.application_state import ApplicationState
+        # Set wait cursor to indicate cleanup is in progress
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            # If we're in the middle of session restoration, cancel it completely
+            from monstim_gui.core.application_state import ApplicationState
 
-        app_state = ApplicationState()
-        if app_state._is_restoring_session:
-            logging.info("Session restoration canceled by user - clearing restoration state")
-            app_state._is_restoring_session = False
-            app_state._pending_experiment_id = None
-            app_state._pending_dataset_id = None
-            app_state._pending_session_id = None
-            app_state._pending_profile_name = None
+            app_state = ApplicationState()
+            if app_state._is_restoring_session:
+                logging.info("Session restoration canceled by user - clearing restoration state")
+                app_state._is_restoring_session = False
+                app_state._pending_experiment_id = None
+                app_state._pending_dataset_id = None
+                app_state._pending_session_id = None
+                app_state._pending_profile_name = None
 
-        if hasattr(self, "loading_thread") and self.loading_thread.isRunning():
-            logging.info("User canceled experiment loading")
-            # Use safe cancellation instead of terminate()
-            self.loading_thread.request_cancel()
-            # Wait with timeout (max 5 seconds for graceful shutdown)
-            if not self.loading_thread.wait(5000):
-                logging.warning("Loading thread did not stop gracefully after cancel, forcing termination")
-                self.loading_thread.terminate()
-                self.loading_thread.wait()
-            self.loading_thread.deleteLater()
-            del self.loading_thread
+            if hasattr(self, "loading_thread") and self.loading_thread.isRunning():
+                logging.info("User canceled experiment loading - stopping thread...")
+                # Use safe cancellation instead of terminate()
+                self.loading_thread.request_cancel()
+                # Wait with timeout (max 5 seconds for graceful shutdown)
+                if not self.loading_thread.wait(5000):
+                    logging.warning("Loading thread did not stop gracefully after cancel, forcing termination")
+                    self.loading_thread.terminate()
+                    self.loading_thread.wait()
+                    # After forced termination, need aggressive cleanup
+                    logging.info("Performing aggressive cleanup after forced thread termination")
+                    import gc
+                    import time
 
-        self.gui.status_bar.showMessage("Experiment loading canceled.", 3000)
-        logging.info("Experiment loading canceled by user.")
+                    # Multiple GC passes
+                    for i in range(3):
+                        collected = gc.collect()
+                        logging.debug(f"GC pass {i+1} after termination: collected {collected} objects")
+                    # Give OS time to release resources
+                    time.sleep(0.5)
+                    QApplication.processEvents()
+                try:
+                    self.loading_thread.deleteLater()
+                except Exception as e:
+                    logging.warning(f"Error deleting loading thread: {e}")
+                del self.loading_thread
 
-        # Reset experiment combo to no selection
-        self.gui.data_selection_widget.experiment_combo.blockSignals(True)
-        self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)  # Select placeholder
-        self.gui.data_selection_widget.experiment_combo.blockSignals(False)
+            # Force garbage collection after canceling to clean up partially loaded data
+            import gc
 
-        if hasattr(self, "current_progress_dialog"):
-            del self.current_progress_dialog
+            collected = gc.collect()
+            logging.debug(f"Garbage collection after cancel: collected {collected} objects")
+
+            self.gui.status_bar.showMessage("Experiment loading canceled.", 3000)
+            logging.info("Experiment loading canceled by user.")
+
+            # Reset experiment combo to no selection
+            try:
+                self.gui.data_selection_widget.experiment_combo.blockSignals(True)
+                self.gui.data_selection_widget.experiment_combo.setCurrentIndex(0)  # Select placeholder
+                self.gui.data_selection_widget.experiment_combo.blockSignals(False)
+            except Exception as e:
+                logging.warning(f"Error resetting experiment combo after cancel: {e}")
+
+            if hasattr(self, "current_progress_dialog"):
+                try:
+                    # Safely close and delete the dialog
+                    if not self.current_progress_dialog.isHidden():
+                        self.current_progress_dialog.close()
+                except Exception:
+                    logging.warning("Failed to close progress dialog", exc_info=True)
+                try:
+                    del self.current_progress_dialog
+                except AttributeError:
+                    logging.debug("Progress dialog deletion failed: already deleted.")
+        finally:
+            # Always restore cursor and re-enable experiment combo
+            QApplication.restoreOverrideCursor()
+            try:
+                self.gui.data_selection_widget.experiment_combo.setEnabled(True)
+            except Exception:
+                pass
 
     def load_dataset(self, index, auto_load_first_session=True):
         # Set busy cursor if QApplication is available

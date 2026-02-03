@@ -877,6 +877,14 @@ class ExperimentRepository:
                     if progress_callback is not None:
                         try:
                             progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
+                        except InterruptedError:
+                            # User canceled - propagate immediately
+                            logging.info(f"Dataset loading interrupted at {idx}/{total_datasets} (parallel mode)")
+                            # Cancel remaining futures
+                            for fut in future_map.keys():
+                                fut.cancel()
+                            ex.shutdown(wait=False)
+                            raise
                         except Exception:  # pragma: no cover - defensive
                             logging.debug("Progress callback errored (ignored)", exc_info=True)
                     future = ex.submit(
@@ -916,8 +924,12 @@ class ExperimentRepository:
         else:
             for idx, ds_folder in enumerate(dataset_folders, start=1):
                 if progress_callback is not None:
-                    try:  # Never let a UI callback break loading
+                    try:  # Never let a UI callback break loading UNLESS it's a cancellation
                         progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
+                    except InterruptedError:
+                        # User canceled - propagate immediately
+                        logging.info(f"Dataset loading interrupted at {idx}/{total_datasets}")
+                        raise
                     except Exception:  # pragma: no cover - defensive
                         logging.debug("Progress callback errored (ignored)", exc_info=True)
                 try:
