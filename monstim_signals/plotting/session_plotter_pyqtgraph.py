@@ -414,6 +414,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             )
             self.add_colormap_scalebar(layout, plot_items, value_range)
 
+        # Set X-axis range explicitly to prevent flickering from auto-calculation
+        # The time_axis is already computed and represents the actual data range
+        if len(time_axis) > 0:
+            x_min = time_axis[0]
+            x_max = time_axis[-1]
+            # Set X range on first plot (propagates to all X-linked plots)
+            plot_items[0].setXRange(x_min, x_max, padding=0)
+
         # Set Y-axis range for all linked plots based on tracked bounds
         if overall_y_min != float("inf") and overall_y_max != float("-inf"):
             y_range = overall_y_max - overall_y_min
