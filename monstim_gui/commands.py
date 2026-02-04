@@ -1195,3 +1195,67 @@ class ToggleDatasetInclusionCommand(Command):
     def get_description(self) -> str:
         action = "Excluded" if self.exclude else "Included"
         return f"{action} dataset '{self.dataset_id}' in '{self.exp_id}'"
+
+
+class ToggleCompletionStatusCommand(Command):
+    """Toggle completion status for experiments, datasets, or sessions.
+
+    Completion status is a user-facing organizational flag that allows
+    marking data as complete for analysis. This command makes the toggle
+    undoable and ensures proper save/UI refresh.
+    """
+
+    def __init__(self, gui, level: str, target_object):
+        """
+        Args:
+            gui: The main GUI instance
+            level: \"experiment\", \"dataset\", or \"session\"
+            target_object: The domain object to toggle (Experiment, Dataset, or Session)
+        """
+        self.gui = gui
+        self.level = level
+        self.target_id = target_object.id
+        self.old_status = getattr(target_object, "is_completed", False)
+        self.new_status = not self.old_status
+
+        obj_name = getattr(target_object, "id", "Unknown")
+        action = "Complete" if self.new_status else "Incomplete"
+        self.command_name = f"Mark {level.title()} '{obj_name}' as {action}"
+
+    def _get_target_object(self):
+        """Retrieve the target object based on level and ID."""
+        match self.level:
+            case "experiment":
+                if self.gui.current_experiment and self.gui.current_experiment.id == self.target_id:
+                    return self.gui.current_experiment
+            case "dataset":
+                if self.gui.current_dataset and self.gui.current_dataset.id == self.target_id:
+                    return self.gui.current_dataset
+            case "session":
+                if self.gui.current_session and self.gui.current_session.id == self.target_id:
+                    return self.gui.current_session
+        return None
+
+    def execute(self):
+        """Toggle completion status to new value."""
+        target = self._get_target_object()
+        if target:
+            target.is_completed = self.new_status
+            # Trigger UI refresh to update completion status indicators
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update_completion_status(self.level)
+                self.gui.data_selection_widget.update_all_completion_statuses()
+
+    def undo(self):
+        """Restore previous completion status."""
+        target = self._get_target_object()
+        if target:
+            target.is_completed = self.old_status
+            # Trigger UI refresh to update completion status indicators
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update_completion_status(self.level)
+                self.gui.data_selection_widget.update_all_completion_statuses()
+
+    def get_description(self) -> str:
+        action = "completed" if self.new_status else "marked incomplete"
+        return f"Marked {self.level} '{self.target_id}' as {action}"

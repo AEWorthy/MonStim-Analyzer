@@ -496,10 +496,10 @@ class DataSelectionWidget(QGroupBox):
             return
 
         if selected == toggle_action and current_obj:
-            current_obj.is_completed = not getattr(current_obj, "is_completed", False)
-            # Update only the toggled item, then refresh all statuses for safety
-            self.update_completion_status(level)
-            self.update_all_completion_statuses()
+            from monstim_gui.commands import ToggleCompletionStatusCommand
+
+            command = ToggleCompletionStatusCommand(self.parent, level, current_obj)
+            self.parent.command_invoker.execute(command)
         elif exclude_action is not None and selected == exclude_action and current_obj:
             if level == "dataset":
                 self.parent.exclude_dataset()

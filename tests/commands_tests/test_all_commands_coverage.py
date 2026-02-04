@@ -39,6 +39,7 @@ EXPECTED_COMMANDS = {
     "RenameExperimentCommand",
     "DeleteDatasetCommand",
     "ToggleDatasetInclusionCommand",
+    "ToggleCompletionStatusCommand",
 }
 
 
@@ -247,6 +248,40 @@ class TestToggleDatasetInclusionCommand:
         """Test ToggleDatasetInclusionCommand has proper structure."""
         assert hasattr(commands.ToggleDatasetInclusionCommand, "execute")
         assert hasattr(commands.ToggleDatasetInclusionCommand, "undo")
+
+
+class TestToggleCompletionStatusCommand:
+    """Test ToggleCompletionStatusCommand."""
+
+    def test_command_structure(self):
+        """Test ToggleCompletionStatusCommand has proper structure."""
+        assert hasattr(commands.ToggleCompletionStatusCommand, "execute")
+        assert hasattr(commands.ToggleCompletionStatusCommand, "undo")
+
+    def test_execute_and_undo(self):
+        """Test execute toggles completion status and undo restores it."""
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        mock_target = Mock()
+        mock_target.id = "TEST_OBJ"
+        mock_target.is_completed = False
+
+        # Set up GUI to return the mock target
+        mock_gui.current_experiment = mock_target
+
+        cmd = commands.ToggleCompletionStatusCommand(mock_gui, "experiment", mock_target)
+
+        # Verify initial state captured
+        assert not cmd.old_status
+        assert cmd.new_status
+
+        # Execute
+        cmd.execute()
+        assert mock_target.is_completed
+
+        # Undo
+        cmd.undo()
+        assert not mock_target.is_completed
 
 
 # Mark untestable commands
