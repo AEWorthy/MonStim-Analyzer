@@ -1797,8 +1797,8 @@ class DataCurationManager(QDialog):
     def import_experiment(self):
         """Import experiment using existing functionality (minimal wrapper).
 
-        This uses the application's DataManager.import_expt_data() method and
-        preserves the existing confirmation for unsaved changes.
+        This uses the application's DataManager.import_expt_data() method.
+        All data changes auto-save via the command pattern.
         """
 
         # Helper to disable/enable dataset UI during long operations
@@ -1836,30 +1836,7 @@ class DataCurationManager(QDialog):
         # Suppress auto-refresh until import completes (may run in background thread)
         self._suppress_autorefresh = True
 
-        # Check for unsaved changes
-        if getattr(self.gui, "has_unsaved_changes", False):
-            reply = QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                "You have unsaved changes to data. Save them before importing?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
-            )
-
-            if reply == QMessageBox.StandardButton.Yes:
-                # Use DataManager save if available
-                try:
-                    self.gui.data_manager.save_experiment()
-                except Exception as e:
-                    logging.error(f"Failed to save before import: {e}")
-            elif reply == QMessageBox.StandardButton.Cancel:
-                # Restore UI and cursor
-                try:
-                    QApplication.restoreOverrideCursor()
-                except Exception as e:
-                    logging.warning(f"Failed to restore cursor: {e}")
-                _set_dataset_ui_enabled(True)
-                self._suppress_autorefresh = False
-                return
+        # Data changes auto-save via command pattern, proceed with import
 
         # Use existing import functionality
         try:

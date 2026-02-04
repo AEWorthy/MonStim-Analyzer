@@ -47,7 +47,6 @@ class CommandInvoker:
             logging.warning("Non-fatal: Command history trimming failed.", exc_info=True)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
-        # --> Set self.parent._has_unsaved_changes to True if needed <--
         # Always refresh notice icons after a command executes so diagnostics stay in sync with domain state.
         try:
             self.parent.data_selection_widget.refresh_notice_icons()
@@ -60,7 +59,6 @@ class CommandInvoker:
             command.undo()
             self.redo_stack.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # --> Set self.parent._has_unsaved_changes to True if needed <--
             try:
                 self.parent.data_selection_widget.refresh_notice_icons()
             except Exception as e:
@@ -72,7 +70,6 @@ class CommandInvoker:
             command.execute()
             self.history.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # --> Set self.parent._has_unsaved_changes to True if needed <--
             try:
                 self.parent.data_selection_widget.refresh_notice_icons()
             except Exception as e:

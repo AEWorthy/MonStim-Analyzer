@@ -761,7 +761,6 @@ class DataManager:
             self.gui.current_experiment.save()
             self.gui.status_bar.showMessage("Experiment saved successfully.", 5000)
             logging.debug("Experiment saved successfully.")
-            self.gui.has_unsaved_changes = False
             return True
         return False
 
