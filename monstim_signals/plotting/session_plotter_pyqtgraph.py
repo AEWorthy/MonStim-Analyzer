@@ -79,29 +79,33 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         return time_axis, window_start_sample, window_end_sample
 
-    def get_emg_recordings(self, data_type, original=False) -> List[np.ndarray]:
+    def get_emg_recordings(self, data_type, use_all=False) -> List[np.ndarray]:
         """
         Get the EMG recordings based on the specified data type.
 
+        Parameters
+        ----------
+        data_type : str
+            Type of data to retrieve ('filtered', 'raw', 'rectified_raw', 'rectified_filtered')
+        use_all : bool
+            Whether to use all recordings including excluded ones
+
         This method matches the original matplotlib plotter interface exactly.
         """
-        if original:
-            raise NotImplementedError(
-                "Original recordings are not supported in EMGSessionPlotter. Please use the 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered' data types."
-            )
-        else:
-            if data_type in ["raw", "filtered", "rectified_raw", "rectified_filtered"]:
-                attribute_name = f"recordings_{data_type}"
-                data = getattr(self.emg_object, attribute_name)
-                if data is None:
-                    raise AttributeError(
-                        f"Data type '{attribute_name}' is not available in the Session object. Please ensure that the data has been processed and stored correctly."
-                    )
-                return data
-            else:
-                raise ValueError(
-                    f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'."
+
+        if data_type in ["raw", "filtered", "rectified_raw", "rectified_filtered"]:
+            prefix = "all_" if use_all else ""
+            attribute_name = f"{prefix}recordings_{data_type}"
+            data = getattr(self.emg_object, attribute_name)
+            if data is None:
+                raise AttributeError(
+                    f"Data type '{attribute_name}' is not available in the Session object. Please ensure that the data has been processed and stored correctly."
                 )
+            return data
+        else:
+            raise ValueError(
+                f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'."
+            )
 
     def plot_channel_data(
         self,
@@ -495,7 +499,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             self.plot_latency_windows(current_plot, all_flags, channel_index)
 
         # Get EMG recordings
-        emg_recordings = self.get_emg_recordings(data_type)
+        # We access ALL recordings here (including excluded) to ensure that the recording_index
+        # from the GUI matches the list index. The GUI cycler iterates over all recordings.
+        emg_recordings = self.get_emg_recordings(data_type, use_all=True)
 
         # Strict recording index validation: never auto-wrap or coerce silently.
         # Rationale: Silent wrapping can mask upstream logic errors (e.g., stale cached
@@ -507,29 +513,43 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise UnableToPlotError(f"Recording index {recording_index} out of range (0-{len(emg_recordings)-1})")
 
         # Calculate fixed y-axis limits if needed
+        # Note: We likely want to scale the y-axis based on valid (non-excluded) recordings only,
+        # so that artifacts in excluded recordings don't squash the view of good data.
         y_min, y_max = None, None
         if fixed_y_axis:
-            max_y = []
-            min_y = []
-            for rec in emg_recordings:
-                for channel_index, channel_data in enumerate(rec.T):
-                    if channel_index in channel_indices:
-                        segment = channel_data[window_start_sample:window_end_sample]
-                        if segment.size > 0:
-                            max_y.append(np.max(segment))
-                            min_y.append(np.min(segment))
-            if max_y and min_y:
-                y_max = max(max_y)
-                y_min = min(min_y)
-                y_range = y_max - y_min
-                y_max += 0.01 * y_range
-                y_min -= 0.01 * y_range
-            else:
+            try:
+                # Use active recordings for auto-scaling
+                active_recordings = self.get_emg_recordings(data_type, use_all=False)
+                max_y = []
+                min_y = []
+                for rec in active_recordings:
+                    for channel_index, channel_data in enumerate(rec.T):
+                        if channel_index in channel_indices:
+                            segment = channel_data[window_start_sample:window_end_sample]
+                            if segment.size > 0:
+                                max_y.append(np.max(segment))
+                                min_y.append(np.min(segment))
+                if max_y and min_y:
+                    y_max = max(max_y)
+                    y_min = min(min_y)
+                    y_range = y_max - y_min
+                    y_max += 0.01 * y_range
+                    y_min -= 0.01 * y_range
+                else:
+                    y_max, y_min = 1, -1
+            except Exception as e:
+                logging.warning(f"Error calculating fixed y-axis limits: {e}")
                 y_max, y_min = 1, -1
 
         # call this after calculating y_min and y_max
         recording = emg_recordings[recording_index]
-        stimulus_v = self.emg_object.stimulus_voltages[recording_index]
+        # Retrieve stimulus voltage from the correct recording object (using all_recordings)
+        stimulus_v = 0.0
+        # Use simple attribute access now that the domain object supports it
+        if recording_index < len(self.emg_object.all_stimulus_voltages):
+            stimulus_v = self.emg_object.all_stimulus_voltages[recording_index]
+        else:
+            logging.warning(f"Recording index {recording_index} out of range for stimulus voltages.")
 
         # Prepare colormap normalization if needed
         norm = None
