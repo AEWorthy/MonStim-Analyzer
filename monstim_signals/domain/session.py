@@ -92,7 +92,7 @@ class Session:
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
         if self.recordings:
             first_meta = self.recordings[0].meta
-            self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
+            self.formatted_name = self.id
             self.scan_rate = first_meta.scan_rate  # Hz
             self.num_samples = first_meta.num_samples  # samples/channel
             self.num_channels = first_meta.num_channels  # number of channels
