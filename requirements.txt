@@ -10,7 +10,7 @@ pillow==12.1.0
 pyqtgraph==0.14.0
 
 # Pip-only packages (from environment.yml pip subsection)
-Markdown==3.10.1
+Markdown==3.10.2
 python_markdown_math==0.9
 pytest==9.0.2
 setuptools==80.10.2
