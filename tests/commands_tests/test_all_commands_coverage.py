@@ -258,30 +258,69 @@ class TestToggleCompletionStatusCommand:
         assert hasattr(commands.ToggleCompletionStatusCommand, "execute")
         assert hasattr(commands.ToggleCompletionStatusCommand, "undo")
 
-    def test_execute_and_undo(self):
-        """Test execute toggles completion status and undo restores it."""
+    @pytest.mark.parametrize(
+        "level,repo_class,target_id",
+        [
+            ("experiment", "ExperimentRepository", "TEST_EXP"),
+            ("dataset", "DatasetRepository", "TEST_DATASET"),
+            ("session", "SessionRepository", "TEST_SESSION"),
+        ],
+    )
+    def test_execute_and_undo(self, tmp_path, level, repo_class, target_id):
+        """Test execute toggles completion status and undo restores it at all hierarchy levels."""
+        from unittest.mock import MagicMock, patch
+
+        # Create necessary directory structure
+        exp_path = tmp_path / "test_exp"
+        exp_path.mkdir()
+        if level in ["dataset", "session"]:
+            dataset_path = exp_path / "TEST_DATASET"
+            dataset_path.mkdir()
+        if level == "session":
+            session_path = dataset_path / "TEST_SESSION"
+            session_path.mkdir()
+
+        # Create mock GUI with expts_dict
         mock_gui = Mock()
         mock_gui.data_selection_widget = Mock()
+        mock_gui.expts_dict = {"TEST_EXP": str(exp_path)}
+        mock_gui.current_experiment = Mock(id="TEST_EXP")
+        mock_gui.current_dataset = Mock(id="TEST_DATASET") if level in ["dataset", "session"] else None
+
+        # Create mock target object
         mock_target = Mock()
-        mock_target.id = "TEST_OBJ"
+        mock_target.id = target_id
         mock_target.is_completed = False
 
-        # Set up GUI to return the mock target
-        mock_gui.current_experiment = mock_target
+        # Mock the repository to return our mock target
+        mock_repo = MagicMock()
+        mock_repo.load.return_value = mock_target
 
-        cmd = commands.ToggleCompletionStatusCommand(mock_gui, "experiment", mock_target)
+        cmd = commands.ToggleCompletionStatusCommand(mock_gui, level, mock_target)
 
         # Verify initial state captured
         assert not cmd.old_status
         assert cmd.new_status
 
-        # Execute
-        cmd.execute()
-        assert mock_target.is_completed
+        # Execute with mocked repository (patch where it's imported)
+        with patch(f"monstim_signals.io.repositories.{repo_class}", return_value=mock_repo):
+            cmd.execute()
+            mock_repo.load.assert_called_once()
+            mock_repo.save.assert_called_once()
+            # Verify the target's is_completed was set to True
+            assert mock_target.is_completed
 
-        # Undo
-        cmd.undo()
-        assert not mock_target.is_completed
+        # Reset mock to test undo
+        mock_repo.reset_mock()
+        mock_target.is_completed = True  # State after execute
+
+        # Undo with mocked repository
+        with patch(f"monstim_signals.io.repositories.{repo_class}", return_value=mock_repo):
+            cmd.undo()
+            mock_repo.load.assert_called_once()
+            mock_repo.save.assert_called_once()
+            # Verify the target's is_completed was restored to False
+            assert not mock_target.is_completed
 
 
 # Mark untestable commands

@@ -88,7 +88,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         data_type : str
             Type of data to retrieve ('filtered', 'raw', 'rectified_raw', 'rectified_filtered')
         use_all : bool
-            Whether to use all recordings including excluded ones
+            If False (default), returns only active/non-excluded recordings.
+            If True, returns all recordings including excluded ones ('all_recordings_<data_type>').
 
         This method matches the original matplotlib plotter interface exactly.
         """
@@ -344,6 +345,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Get EMG recordings
         emg_recordings = self.get_emg_recordings(data_type)
 
+        # Check for empty recordings
+        if not emg_recordings:
+            raise UnableToPlotError(
+                "No active recordings available to plot in this session. " "All recordings may have been excluded."
+            )
+
         # Create normalization for stimulus voltages (matching matplotlib version)
         norm = self.get_brightness_adjusted_norm()
 
@@ -523,7 +530,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Calculate fixed y-axis limits if needed
         # Note: We likely want to scale the y-axis based on valid (non-excluded) recordings only,
         # so that artifacts in excluded recordings don't squash the view of good data.
-        y_min, y_max = None, None
         if fixed_y_axis:
             try:
                 # Use active recordings for auto-scaling
@@ -544,10 +550,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     y_max += 0.01 * y_range
                     y_min -= 0.01 * y_range
                 else:
-                    y_max, y_min = 1, -1
+                    y_min, y_max = None, None  # No valid data found; will fallback to auto-scaling
             except Exception as e:
                 logging.warning(f"Error calculating fixed y-axis limits: {e}")
-                y_max, y_min = 1, -1
+                y_max, y_min = None, None  # Fallback to auto-scaling if error occurs
 
         # call this after calculating y_min and y_max
         recording = emg_recordings[recording_index]
@@ -631,7 +637,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Add an info bubble showing the primary stimulus amplitude (formatted like dataset/experiment inlays)
         # This inlay mirrors the pg.TextItem usage in dataset/experiment plotters
-        # TODO: Make bubble move with zoom/pan
+        # TODO: Make bubble move/scale with zoom/pan
         try:
             info_text = f"Stimulus: {stimulus_v:.2f} V"
             # Use same styling as other plotters' inlay TextItem
@@ -711,6 +717,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         if len(self.emg_object.latency_windows) == 0:
             raise ValueError("No latency windows found. Add some to plot reflex curves.")
+
+        # Check for empty recordings - reflex curves require active recordings
+        if not self.emg_object.recordings_filtered:
+            raise UnableToPlotError(
+                "No active recordings available to plot reflex curves. " "All recordings may have been excluded."
+            )
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -828,6 +840,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         if len(self.emg_object.latency_windows) == 0:
             raise ValueError("No latency windows found. Add an 'M-max' window to calculate M-max.")
+
+        # Check for empty recordings - M-max requires active recordings
+        if not self.emg_object.recordings_filtered:
+            raise UnableToPlotError("No active recordings available to plot M-max. " "All recordings may have been excluded.")
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -1040,6 +1056,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         if len(self.emg_object.latency_windows) == 0:
             raise ValueError("No latency windows found. Add some to plot reflex averages.")
+
+        # Check for empty recordings - reflex averages require active recordings
+        if not self.emg_object.recordings_filtered:
+            raise UnableToPlotError(
+                "No active recordings available to plot reflex averages. " "All recordings may have been excluded."
+            )
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -1275,6 +1297,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         if len(self.emg_object.latency_windows) == 0:
             raise ValueError("No latency windows found. Add some to plot latency window trends.")
+
+        # Check for empty recordings - average reflex curves require active recordings
+        if not self.emg_object.recordings_filtered:
+            raise UnableToPlotError(
+                "No active recordings available to plot average reflex curves. " "All recordings may have been excluded."
+            )
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)

@@ -1266,11 +1266,19 @@ class DataManager:
         session = self.gui.current_dataset.sessions[index]
         # Ensure recordings are present. All recordings should be fully loaded
         # at dataset load time; warn if a session is unexpectedly empty.
-        if not session.recordings:
+        if not session.all_recordings:
             logging.warning(
                 f"Session {session.id} has no recordings after load; recordings should be fully materialized by load()."
             )
+        if not session.recordings:
+            logging.warning(
+                f"Session {session.id} has no active recordings after load; check if all recordings are marked as excluded."
+            )
         self.gui.set_current_session(session)
+
+        # Refresh notice icons to display any session-level warnings (e.g., no active recordings)
+        if hasattr(self.gui, "data_selection_widget"):
+            self.gui.data_selection_widget.refresh_notice_icons()
 
         # Save complete session state for restoration
         profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, "profile_selector_combo") else None

@@ -1226,8 +1226,8 @@ class ToggleCompletionStatusCommand(Command):
     """Toggle completion status for experiments, datasets, or sessions.
 
     Completion status is a user-facing organizational flag that allows
-    marking data as complete for analysis. This command makes the toggle
-    undoable and ensures proper save/UI refresh.
+    marking data as complete for analysis. This command uses repository-based
+    persistence to ensure undo/redo works reliably across selection changes.
     """
 
     def __init__(self, gui, level: str, target_object):
@@ -1243,43 +1243,88 @@ class ToggleCompletionStatusCommand(Command):
         self.old_status = getattr(target_object, "is_completed", False)
         self.new_status = not self.old_status
 
+        # Store hierarchy IDs for reliable lookup from disk
+        if level == "experiment":
+            self.experiment_id = target_object.id
+            self.dataset_id = None
+        elif level == "dataset":
+            # Get parent experiment ID from current context
+            self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+            self.dataset_id = target_object.id
+        elif level == "session":
+            # Get parent experiment and dataset IDs from current context
+            self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+            self.dataset_id = self.gui.current_dataset.id if self.gui.current_dataset else None
+
         obj_name = getattr(target_object, "id", "Unknown")
         action = "Complete" if self.new_status else "Incomplete"
         self.command_name = f"Mark {level.title()} '{obj_name}' as {action}"
 
-    def _get_target_object(self):
-        """Retrieve the target object based on level and ID."""
-        match self.level:
-            case "experiment":
-                if self.gui.current_experiment and self.gui.current_experiment.id == self.target_id:
-                    return self.gui.current_experiment
-            case "dataset":
-                if self.gui.current_dataset and self.gui.current_dataset.id == self.target_id:
-                    return self.gui.current_dataset
-            case "session":
-                if self.gui.current_session and self.gui.current_session.id == self.target_id:
-                    return self.gui.current_session
-        return None
+    def _apply_status(self, status: bool):
+        """Apply completion status by loading from disk, modifying, and saving back."""
+        from pathlib import Path
+
+        from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository, SessionRepository
+
+        try:
+            match self.level:
+                case "experiment":
+                    if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
+                        logging.error(f"Experiment '{self.experiment_id}' not found in expts_dict")
+                        return
+                    exp_path = Path(self.gui.expts_dict[self.experiment_id])
+                    repo = ExperimentRepository(exp_path)
+                    exp = repo.load()
+                    exp.is_completed = status
+                    repo.save(exp)
+
+                case "dataset":
+                    if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
+                        logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        return
+                    exp_path = Path(self.gui.expts_dict[self.experiment_id])
+                    dataset_path = exp_path / self.dataset_id
+                    if not dataset_path.exists():
+                        logging.error(f"Dataset path '{dataset_path}' not found")
+                        return
+                    repo = DatasetRepository(dataset_path)
+                    dataset = repo.load()
+                    dataset.is_completed = status
+                    repo.save(dataset)
+
+                case "session":
+                    if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
+                        logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        return
+                    exp_path = Path(self.gui.expts_dict[self.experiment_id])
+                    dataset_path = exp_path / self.dataset_id
+                    if not dataset_path.exists():
+                        logging.error(f"Parent dataset path '{dataset_path}' not found")
+                        return
+                    session_path = dataset_path / self.target_id
+                    if not session_path.exists():
+                        logging.error(f"Session path '{session_path}' not found")
+                        return
+                    repo = SessionRepository(session_path)
+                    session = repo.load()
+                    session.is_completed = status
+                    repo.save(session)
+
+            # Refresh UI if the affected object is currently visible
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update_completion_status(self.level)
+                self.gui.data_selection_widget.update_all_completion_statuses()
+
+        except Exception as e:
+            logging.error(f"Failed to apply completion status: {e}", exc_info=True)
 
     def execute(self):
         """Toggle completion status to new value."""
-        target = self._get_target_object()
-        if target:
-            target.is_completed = self.new_status
-            # Trigger UI refresh to update completion status indicators
-            if hasattr(self.gui, "data_selection_widget"):
-                self.gui.data_selection_widget.update_completion_status(self.level)
-                self.gui.data_selection_widget.update_all_completion_statuses()
+        self._apply_status(self.new_status)
 
     def undo(self):
         """Restore previous completion status."""
-        target = self._get_target_object()
-        if target:
-            target.is_completed = self.old_status
-            # Trigger UI refresh to update completion status indicators
-            if hasattr(self.gui, "data_selection_widget"):
-                self.gui.data_selection_widget.update_completion_status(self.level)
-                self.gui.data_selection_widget.update_all_completion_statuses()
+        self._apply_status(self.old_status)
 
     def get_description(self) -> str:
         action = "completed" if self.new_status else "marked incomplete"
