@@ -683,11 +683,10 @@ class Dataset:
         else:
             logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
 
+        # Note: We log when all sessions are excluded but don't auto-exclude the dataset.
+        # This prevents silent cascading exclusions that can cause GUI sync issues.
         if self.sessions == []:
-            logging.info(f"All sessions in dataset {self.id} have been excluded.")
-            # If no sessions remain, optionally notify parent experiment
-            if self.parent_experiment is not None:
-                self.parent_experiment.exclude_dataset(self.id)
+            logging.info(f"All sessions in dataset {self.id} have been excluded. Dataset remains active.")
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""

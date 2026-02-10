@@ -155,10 +155,26 @@ class ExcludeSessionCommand(Command):
         self.previous_dataset = None
 
     def execute(self):
+        # Verify we have valid session and dataset
+        if not self.gui.current_session or not self.gui.current_dataset:
+            logging.warning("Cannot exclude session: No session or dataset is currently selected.")
+            return  # Exit gracefully
+
         self.removed_session = self.gui.current_session
         self.session_id = self.gui.current_session.id
-        self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
         self.previous_dataset = self.gui.current_dataset  # Preserve dataset selection
+
+        # Verify the session is in the dataset's sessions list before excluding
+        try:
+            self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
+        except ValueError:
+            # Session is not in the list - it may have already been excluded
+            # (e.g., when all its recordings were excluded)
+            logging.warning(
+                f"Cannot exclude session '{self.session_id}': Session is not in the dataset's sessions list. "
+                f"It may have already been excluded (e.g., by excluding all its recordings)."
+            )
+            return  # Exit gracefully without making changes
 
         self.gui.current_dataset.exclude_session(self.session_id)
         # Determine new selection: try next session at same index, else previous.
@@ -236,19 +252,28 @@ class ExcludeDatasetCommand(Command):
         self.previous_experiment = None
 
     def execute(self):
+        # Verify we have valid dataset and experiment
+        if not self.gui.current_dataset or not self.gui.current_experiment:
+            logging.warning("Cannot exclude dataset: No dataset or experiment is currently selected.")
+            return  # Exit gracefully
+
         # Capture state prior to exclusion
         self.removed_dataset = self.gui.current_dataset
-        self.dataset_id = self.gui.current_dataset.id if self.gui.current_dataset else None
-        self.idx = (
-            self.gui.current_experiment.datasets.index(self.gui.current_dataset)
-            if self.gui.current_dataset in self.gui.current_experiment.datasets
-            else None
-        )
+        self.dataset_id = self.gui.current_dataset.id
+
+        # Verify the dataset is in the experiment's datasets list before excluding
+        if self.gui.current_dataset not in self.gui.current_experiment.datasets:
+            logging.warning(
+                f"Cannot exclude dataset '{self.dataset_id}': Dataset is not in the experiment's datasets list. "
+                f"It may have already been excluded."
+            )
+            return  # Exit gracefully without making changes
+
+        self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
         self.previous_experiment = self.gui.current_experiment  # Preserve experiment selection
 
         # Perform exclusion in domain
-        if self.dataset_id is not None:
-            self.gui.current_experiment.exclude_dataset(self.dataset_id)
+        self.gui.current_experiment.exclude_dataset(self.dataset_id)
 
         # Determine next dataset selection (next at same index if available, else previous, else none)
         remaining = self.gui.current_experiment.datasets

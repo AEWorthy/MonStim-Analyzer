@@ -83,8 +83,9 @@ class Session:
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
-        if self.recordings:
-            first_meta = self.recordings[0].meta
+        # Use all_recordings (including excluded) so session can load even with all recordings excluded
+        if self.all_recordings:
+            first_meta = self.all_recordings[0].meta
             self.formatted_name = self.id
             self.scan_rate = first_meta.scan_rate  # Hz
             self.num_samples = first_meta.num_samples  # samples/channel
@@ -943,11 +944,10 @@ class Session:
         else:
             logging.warning(f"Recording {recording_id} is already excluded in session {self.id}.")
 
-        if not self.recordings:
-            # If no recordings remain, mark the session and inform parent dataset
-            self.exclude_session()
-            if self.parent_dataset is not None:
-                self.parent_dataset.exclude_session(self.id)
+        # Note: We no longer auto-exclude sessions when all recordings are excluded.
+        # This prevents silent state changes that can cause GUI synchronization issues.
+        # Sessions with no active recordings will remain visible but show appropriate
+        # warnings when attempting to plot. Users can manually exclude the session if desired.
 
     def restore_session(self):
         """
@@ -963,11 +963,12 @@ class Session:
         """
         Exclude the entire session by marking all recordings as excluded.
         This is a user action that modifies the session's exclude flags.
+
+        Note: This method is typically called BY the dataset's exclude_session() method,
+        which handles adding the session to the dataset's excluded list. We don't call
+        parent_dataset.exclude_session() here to avoid circular logic.
         """
         self.annot.excluded_recordings = [rec.id for rec in self.get_all_recordings(include_excluded=True)]
-        if self.recordings == []:
-            # If no recordings remain, mark the session as excluded
-            self.parent_dataset.exclude_session(self.id)
         self.reset_all_caches()
         if self.repo is not None:
             self.repo.save(self)
