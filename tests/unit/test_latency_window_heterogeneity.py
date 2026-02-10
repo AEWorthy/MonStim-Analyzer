@@ -61,7 +61,12 @@ def _make_session(session_id: str, scan_rate=1000, stim_start=0.0, windows=None,
     # Provide fake filtered recordings for amplitude calculations
     rng = np.random.default_rng(0)
     filtered = [rng.normal(0, 0.1, size=(1000, n_channels)) for _ in range(n_recordings)]
-    session.recordings_filtered = filtered  # monkey-patch attribute used by synthetic get_lw_reflex_amplitudes
+    # We monkey-patch the internal cached storage or property logic
+    # Since recordings_filtered is now a dynamic property filtering all_recordings_filtered
+    # we patch all_recordings_filtered instead.
+    session.all_recordings_filtered = filtered
+    # Ensure excluded_recordings is empty so all are returned
+    session.annot.excluded_recordings = []
 
     # Methods required by dataset aggregation
     def reset_all_caches():

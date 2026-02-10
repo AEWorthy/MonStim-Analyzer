@@ -445,6 +445,38 @@ class TestSessionCommands:
         cmd.undo()
         mock_dataset.restore_session.assert_called_once_with("SES001")
 
+    def test_exclude_session_command_already_excluded(self):
+        """Test ExcludeSessionCommand gracefully handles already-excluded session."""
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        mock_session = Mock()
+        mock_session.id = "SES001"
+        mock_dataset = Mock()
+        # Session is NOT in the sessions list (already excluded)
+        mock_dataset.sessions = []
+        mock_gui.current_dataset = mock_dataset
+        mock_gui.current_session = mock_session
+
+        cmd = ExcludeSessionCommand(mock_gui)
+
+        # Test execute - should NOT crash and should NOT call exclude_session
+        cmd.execute()
+        # exclude_session should not be called since session is not in list
+        mock_dataset.exclude_session.assert_not_called()
+
+    def test_exclude_session_command_no_selection(self):
+        """Test ExcludeSessionCommand gracefully handles no current session/dataset."""
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        mock_gui.current_dataset = None
+        mock_gui.current_session = None
+
+        cmd = ExcludeSessionCommand(mock_gui)
+
+        # Test execute - should NOT crash
+        cmd.execute()
+        # No methods should be called since there's no valid selection
+
     def test_restore_session_command(self):
         """Test RestoreSessionCommand execution and undo."""
         mock_gui = Mock()
@@ -495,6 +527,38 @@ class TestDatasetCommands:
         # Test undo
         cmd.undo()
         mock_experiment.restore_dataset.assert_called_once_with("DS001")
+
+    def test_exclude_dataset_command_already_excluded(self):
+        """Test ExcludeDatasetCommand gracefully handles already-excluded dataset."""
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        mock_dataset = Mock()
+        mock_dataset.id = "DS001"
+        mock_experiment = Mock()
+        # Dataset is NOT in the datasets list (already excluded)
+        mock_experiment.datasets = []
+        mock_gui.current_experiment = mock_experiment
+        mock_gui.current_dataset = mock_dataset
+
+        cmd = ExcludeDatasetCommand(mock_gui)
+
+        # Test execute - should NOT crash and should NOT call exclude_dataset
+        cmd.execute()
+        # exclude_dataset should not be called since dataset is not in list
+        mock_experiment.exclude_dataset.assert_not_called()
+
+    def test_exclude_dataset_command_no_selection(self):
+        """Test ExcludeDatasetCommand gracefully handles no current dataset/experiment."""
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        mock_gui.current_experiment = None
+        mock_gui.current_dataset = None
+
+        cmd = ExcludeDatasetCommand(mock_gui)
+
+        # Test execute - should NOT crash
+        cmd.execute()
+        # No methods should be called since there's no valid selection
 
 
 class TestChannelCommands:

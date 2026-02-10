@@ -100,3 +100,48 @@ class TestSessionAnnotationOverlay:
         # Removing should update overlays & cache
         session.remove_latency_window("TestWindow")
         assert session.get_latency_window("TestWindow") is None
+
+    def test_excluding_all_recordings_does_not_auto_exclude_session(self, temp_copied_session: Path):
+        """Test that excluding all recordings in a session does NOT auto-exclude the session itself.
+
+        This is a regression test for the auto-exclusion cascade bug where sessions were
+        silently excluded from their parent dataset without GUI notification, causing
+        indexing errors when the GUI tried to access the session later.
+        """
+        from monstim_signals.io.repositories import DatasetRepository
+
+        # Load the session and its parent dataset
+        session = SessionRepository(temp_copied_session).load()
+        dataset_path = temp_copied_session.parent
+        dataset = DatasetRepository(dataset_path).load()
+
+        session_id = session.id
+
+        # Verify session starts in the dataset's active sessions list (by ID, not object identity)
+        session_ids_in_dataset = [s.id for s in dataset.sessions]
+        assert session_id in session_ids_in_dataset, "Session should be in dataset's active sessions initially"
+        assert session_id not in dataset.annot.excluded_sessions, "Session should not be excluded initially"
+
+        # Get all recording IDs
+        all_recordings = session.get_all_recordings(include_excluded=True)
+        recording_ids = [rec.id for rec in all_recordings]
+
+        # Exclude all recordings one by one
+        for rec_id in recording_ids:
+            session.exclude_recording(rec_id)
+
+        # Verify all recordings are excluded
+        assert len(session.recordings) == 0, "All recordings should be excluded"
+        assert len(session.excluded_recordings) == len(recording_ids), "All recordings should be in excluded list"
+
+        # CRITICAL: Session should still be in dataset's active sessions
+        # (This would fail before the fix, when auto-exclusion was happening)
+        dataset = DatasetRepository(dataset_path).load()  # Reload to get fresh state
+        assert (
+            session_id not in dataset.annot.excluded_sessions
+        ), "Session should NOT be auto-excluded when all recordings are excluded"
+
+        # The session object itself remains valid even with no active recordings
+        session = SessionRepository(temp_copied_session).load()
+        assert len(session.all_recordings) == len(recording_ids), "Session should still have all recordings (just excluded)"
+        assert len(session.recordings) == 0, "But no active recordings should remain"

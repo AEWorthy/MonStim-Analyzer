@@ -95,12 +95,19 @@ class TestDomainModelWithRealData:
         filtered1 = session.recordings_filtered
         filtered2 = session.recordings_filtered
 
-        # Should return same objects (cached)
-        assert raw1 is raw2
-        assert filtered1 is filtered2
+        # Should return new lists but same underlying arrays (since all_* is cached)
+        assert raw1 is not raw2
+        assert raw1[0] is raw2[0]
+        assert filtered1 is not filtered2
+        assert filtered1[0] is filtered2[0]
+
+        # all_recordings_* properties SHOULD be cached (same list object)
+        all_raw1 = session.all_recordings_raw
+        all_raw2 = session.all_recordings_raw
+        assert all_raw1 is all_raw2
 
         # Different property types should be different objects
-        assert raw1 is not filtered1
+        assert raw1[0] is not filtered1[0]
 
     def test_session_exclusion_filtering(self, session_with_mwave):
         """Test that recording exclusions work properly."""
@@ -168,7 +175,7 @@ class TestDomainModelWithRealData:
         if not imported_dataset_path.exists():
             pytest.fail(f"Imported dataset not found at {imported_dataset_path}")
 
-        dataset = DatasetRepository(imported_dataset_path).load(load_recordings=True)
+        dataset = DatasetRepository(imported_dataset_path).load()
         # Ensure sessions are not excluded from previous test runs
         if dataset.annot.excluded_sessions:
             dataset.annot.excluded_sessions = []

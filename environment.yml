@@ -25,9 +25,9 @@ dependencies:
   - pyqtgraph=0.14.0
   - pip
   - pip:
-      - Markdown==3.10.1
+      - Markdown==3.10.2
       - python_markdown_math==0.9
       - pytest==9.0.1
-      - setuptools==80.9.0
+      - setuptools==82.0.0
 
 

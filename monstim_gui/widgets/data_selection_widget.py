@@ -496,11 +496,10 @@ class DataSelectionWidget(QGroupBox):
             return
 
         if selected == toggle_action and current_obj:
-            current_obj.is_completed = not getattr(current_obj, "is_completed", False)
-            self.parent.has_unsaved_changes = True
-            # Update only the toggled item, then refresh all statuses for safety
-            self.update_completion_status(level)
-            self.update_all_completion_statuses()
+            from monstim_gui.commands import ToggleCompletionStatusCommand
+
+            command = ToggleCompletionStatusCommand(self.parent, level, current_obj)
+            self.parent.command_invoker.execute(command)
         elif exclude_action is not None and selected == exclude_action and current_obj:
             if level == "dataset":
                 self.parent.exclude_dataset()
@@ -644,9 +643,6 @@ class DataSelectionWidget(QGroupBox):
         if not self.parent.expts_dict_keys or index > len(self.parent.expts_dict_keys):
             logging.warning(f"Invalid experiment index: {index}")
             return
-
-        if self.parent.has_unsaved_changes:
-            self.parent.data_manager.save_experiment()
 
         # Adjust index to account for placeholder item
         self.parent.data_manager.load_experiment(index - 1)

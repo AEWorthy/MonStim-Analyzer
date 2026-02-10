@@ -39,6 +39,7 @@ EXPECTED_COMMANDS = {
     "RenameExperimentCommand",
     "DeleteDatasetCommand",
     "ToggleDatasetInclusionCommand",
+    "ToggleCompletionStatusCommand",
 }
 
 
@@ -247,6 +248,91 @@ class TestToggleDatasetInclusionCommand:
         """Test ToggleDatasetInclusionCommand has proper structure."""
         assert hasattr(commands.ToggleDatasetInclusionCommand, "execute")
         assert hasattr(commands.ToggleDatasetInclusionCommand, "undo")
+
+
+class TestToggleCompletionStatusCommand:
+    """Test ToggleCompletionStatusCommand."""
+
+    def test_command_structure(self):
+        """Test ToggleCompletionStatusCommand has proper structure."""
+        assert hasattr(commands.ToggleCompletionStatusCommand, "execute")
+        assert hasattr(commands.ToggleCompletionStatusCommand, "undo")
+
+    @pytest.mark.parametrize(
+        "level,annot_filename,target_id",
+        [
+            ("experiment", "experiment.annot.json", "TEST_EXP"),
+            ("dataset", "dataset.annot.json", "TEST_DATASET"),
+            ("session", "session.annot.json", "TEST_SESSION"),
+        ],
+    )
+    def test_execute_and_undo(self, tmp_path, level, annot_filename, target_id):
+        """Test execute toggles completion status and undo restores it at all hierarchy levels."""
+        import json
+
+        from monstim_signals.core import DatasetAnnot, ExperimentAnnot, SessionAnnot
+
+        # Create necessary directory structure
+        exp_path = tmp_path / "test_exp"
+        exp_path.mkdir()
+        dataset_path = None
+        session_path = None
+
+        if level in ["dataset", "session"]:
+            dataset_path = exp_path / "TEST_DATASET"
+            dataset_path.mkdir()
+        if level == "session":
+            session_path = dataset_path / "TEST_SESSION"
+            session_path.mkdir()
+
+        # Create initial annotation file with is_completed = False
+        annot_path = None
+        if level == "experiment":
+            annot_path = exp_path / annot_filename
+            annot = ExperimentAnnot.create_empty()
+        elif level == "dataset":
+            annot_path = dataset_path / annot_filename
+            annot = DatasetAnnot.create_empty()
+        elif level == "session":
+            annot_path = session_path / annot_filename
+            annot = SessionAnnot.create_empty()
+
+        annot.is_completed = False
+        from dataclasses import asdict
+
+        annot_path.write_text(json.dumps(asdict(annot), indent=2))
+
+        # Create mock GUI with expts_dict
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        mock_gui.expts_dict = {"TEST_EXP": str(exp_path)}
+        mock_gui.current_experiment = Mock(id="TEST_EXP")
+        mock_gui.current_dataset = Mock(id="TEST_DATASET") if level in ["dataset", "session"] else None
+
+        # Create mock target object
+        mock_target = Mock()
+        mock_target.id = target_id
+        mock_target.is_completed = False
+
+        cmd = commands.ToggleCompletionStatusCommand(mock_gui, level, mock_target)
+
+        # Verify initial state captured
+        assert not cmd.old_status
+        assert cmd.new_status
+
+        # Execute
+        cmd.execute()
+
+        # Verify annotation file was updated
+        annot_data = json.loads(annot_path.read_text())
+        assert annot_data["is_completed"] is True
+
+        # Undo
+        cmd.undo()
+
+        # Verify annotation file was restored
+        annot_data = json.loads(annot_path.read_text())
+        assert annot_data["is_completed"] is False
 
 
 # Mark untestable commands

@@ -1,5 +1,6 @@
 import abc
 import copy
+import json
 import logging
 from collections import deque
 from pathlib import Path
@@ -47,7 +48,6 @@ class CommandInvoker:
             logging.warning("Non-fatal: Command history trimming failed.", exc_info=True)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
-        # --> Set self.parent._has_unsaved_changes to True if needed <--
         # Always refresh notice icons after a command executes so diagnostics stay in sync with domain state.
         try:
             self.parent.data_selection_widget.refresh_notice_icons()
@@ -60,7 +60,6 @@ class CommandInvoker:
             command.undo()
             self.redo_stack.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # --> Set self.parent._has_unsaved_changes to True if needed <--
             try:
                 self.parent.data_selection_widget.refresh_notice_icons()
             except Exception as e:
@@ -72,7 +71,6 @@ class CommandInvoker:
             command.execute()
             self.history.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
-            # --> Set self.parent._has_unsaved_changes to True if needed <--
             try:
                 self.parent.data_selection_widget.refresh_notice_icons()
             except Exception as e:
@@ -158,10 +156,26 @@ class ExcludeSessionCommand(Command):
         self.previous_dataset = None
 
     def execute(self):
+        # Verify we have valid session and dataset
+        if not self.gui.current_session or not self.gui.current_dataset:
+            logging.warning("Cannot exclude session: No session or dataset is currently selected.")
+            return  # Exit gracefully
+
         self.removed_session = self.gui.current_session
         self.session_id = self.gui.current_session.id
-        self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
         self.previous_dataset = self.gui.current_dataset  # Preserve dataset selection
+
+        # Verify the session is in the dataset's sessions list before excluding
+        try:
+            self.idx = self.gui.current_dataset.sessions.index(self.gui.current_session)
+        except ValueError:
+            # Session is not in the list - it may have already been excluded
+            # (e.g., when all its recordings were excluded)
+            logging.warning(
+                f"Cannot exclude session '{self.session_id}': Session is not in the dataset's sessions list. "
+                f"It may have already been excluded (e.g., by excluding all its recordings)."
+            )
+            return  # Exit gracefully without making changes
 
         self.gui.current_dataset.exclude_session(self.session_id)
         # Determine new selection: try next session at same index, else previous.
@@ -239,19 +253,28 @@ class ExcludeDatasetCommand(Command):
         self.previous_experiment = None
 
     def execute(self):
+        # Verify we have valid dataset and experiment
+        if not self.gui.current_dataset or not self.gui.current_experiment:
+            logging.warning("Cannot exclude dataset: No dataset or experiment is currently selected.")
+            return  # Exit gracefully
+
         # Capture state prior to exclusion
         self.removed_dataset = self.gui.current_dataset
-        self.dataset_id = self.gui.current_dataset.id if self.gui.current_dataset else None
-        self.idx = (
-            self.gui.current_experiment.datasets.index(self.gui.current_dataset)
-            if self.gui.current_dataset in self.gui.current_experiment.datasets
-            else None
-        )
+        self.dataset_id = self.gui.current_dataset.id
+
+        # Verify the dataset is in the experiment's datasets list before excluding
+        if self.gui.current_dataset not in self.gui.current_experiment.datasets:
+            logging.warning(
+                f"Cannot exclude dataset '{self.dataset_id}': Dataset is not in the experiment's datasets list. "
+                f"It may have already been excluded."
+            )
+            return  # Exit gracefully without making changes
+
+        self.idx = self.gui.current_experiment.datasets.index(self.gui.current_dataset)
         self.previous_experiment = self.gui.current_experiment  # Preserve experiment selection
 
         # Perform exclusion in domain
-        if self.dataset_id is not None:
-            self.gui.current_experiment.exclude_dataset(self.dataset_id)
+        self.gui.current_experiment.exclude_dataset(self.dataset_id)
 
         # Determine next dataset selection (next at same index if available, else previous, else none)
         remaining = self.gui.current_experiment.datasets
@@ -1198,3 +1221,149 @@ class ToggleDatasetInclusionCommand(Command):
     def get_description(self) -> str:
         action = "Excluded" if self.exclude else "Included"
         return f"{action} dataset '{self.dataset_id}' in '{self.exp_id}'"
+
+
+class ToggleCompletionStatusCommand(Command):
+    """Toggle completion status for experiments, datasets, or sessions.
+
+    Completion status is a user-facing organizational flag that allows
+    marking data as complete for analysis. This command uses repository-based
+    persistence to ensure undo/redo works reliably across selection changes.
+    """
+
+    def __init__(self, gui, level: str, target_object):
+        """
+        Args:
+            gui: The main GUI instance
+            level: \"experiment\", \"dataset\", or \"session\"
+            target_object: The domain object to toggle (Experiment, Dataset, or Session)
+        """
+        self.gui = gui
+        self.level = level
+        self.target_id = target_object.id
+        self.old_status = getattr(target_object, "is_completed", False)
+        self.new_status = not self.old_status
+
+        # Store hierarchy IDs for reliable lookup from disk
+        if level == "experiment":
+            self.experiment_id = target_object.id
+            self.dataset_id = None
+        elif level == "dataset":
+            # Get parent experiment ID from current context
+            self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+            self.dataset_id = target_object.id
+            if not self.experiment_id:
+                raise ValueError("Cannot toggle dataset completion status: no parent experiment in context")
+        elif level == "session":
+            # Get parent experiment and dataset IDs from current context
+            self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+            self.dataset_id = self.gui.current_dataset.id if self.gui.current_dataset else None
+            if not self.experiment_id:
+                raise ValueError("Cannot toggle session completion status: no parent experiment in context")
+            if not self.dataset_id:
+                raise ValueError("Cannot toggle session completion status: no parent dataset in context")
+        else:
+            raise ValueError(f"Invalid level for completion status toggle: {level}")
+
+        obj_name = getattr(target_object, "id", "Unknown")
+        action = "Complete" if self.new_status else "Incomplete"
+        self.command_name = f"Mark {level.title()} '{obj_name}' as {action}"
+
+    def _apply_status(self, status: bool):
+        """Apply completion status by directly modifying annotation JSON files."""
+        from dataclasses import asdict
+        from pathlib import Path
+
+        from monstim_signals.core import DatasetAnnot, ExperimentAnnot, SessionAnnot
+
+        try:
+            match self.level:
+                case "experiment":
+                    if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
+                        logging.error(f"Experiment '{self.experiment_id}' not found in expts_dict")
+                        return
+                    exp_path = Path(self.gui.expts_dict[self.experiment_id])
+                    annot_file = exp_path / "experiment.annot.json"
+
+                    if annot_file.exists():
+                        annot_dict = json.loads(annot_file.read_text())
+                        annot = ExperimentAnnot.from_dict(annot_dict)
+                    else:
+                        annot = ExperimentAnnot.create_empty()
+
+                    annot.is_completed = status
+                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                case "dataset":
+                    if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
+                        logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        return
+                    if not self.dataset_id:
+                        logging.error("Dataset ID is missing")
+                        return
+                    exp_path = Path(self.gui.expts_dict[self.experiment_id])
+                    dataset_path = exp_path / self.dataset_id
+                    if not dataset_path.exists():
+                        logging.error(f"Dataset path '{dataset_path}' not found")
+                        return
+                    annot_file = dataset_path / "dataset.annot.json"
+
+                    if annot_file.exists():
+                        annot_dict = json.loads(annot_file.read_text())
+                        annot = DatasetAnnot.from_dict(annot_dict)
+                    else:
+                        annot = DatasetAnnot.create_empty()
+
+                    annot.is_completed = status
+                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                case "session":
+                    if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
+                        logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        return
+                    if not self.dataset_id:
+                        logging.error("Parent dataset ID is missing")
+                        return
+                    exp_path = Path(self.gui.expts_dict[self.experiment_id])
+                    dataset_path = exp_path / self.dataset_id
+                    if not dataset_path.exists():
+                        logging.error(f"Parent dataset path '{dataset_path}' not found")
+                        return
+                    session_path = dataset_path / self.target_id
+                    if not session_path.exists():
+                        logging.error(f"Session path '{session_path}' not found")
+                        return
+                    annot_file = session_path / "session.annot.json"
+
+                    if annot_file.exists():
+                        annot_dict = json.loads(annot_file.read_text())
+                        annot = SessionAnnot.from_dict(annot_dict)
+                    else:
+                        annot = SessionAnnot.create_empty()
+
+                    annot.is_completed = status
+                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                case _:
+                    logging.error(f"Unknown level '{self.level}' for completion status toggle")
+                    return
+
+            # Refresh UI if the affected object is currently visible
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update_completion_status(self.level)
+                self.gui.data_selection_widget.update_all_completion_statuses()
+
+        except Exception as e:
+            logging.error(f"Failed to apply completion status: {e}", exc_info=True)
+
+    def execute(self):
+        """Toggle completion status to new value."""
+        self._apply_status(self.new_status)
+
+    def undo(self):
+        """Restore previous completion status."""
+        self._apply_status(self.old_status)
+
+    def get_description(self) -> str:
+        action = "completed" if self.new_status else "marked incomplete"
+        return f"Marked {self.level} '{self.target_id}' as {action}"

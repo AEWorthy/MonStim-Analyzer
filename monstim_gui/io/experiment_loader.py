@@ -263,10 +263,9 @@ class ExperimentLoadingThread(QThread):
             # For first-time loads (missing annotations), we must allow writing
             # to persist newly created annotation files. For subsequent loads,
             # we can use read-only mode to avoid accidental modifications during load.
-            # Ensure sessions materialize recordings during load to avoid
-            # "no recordings" errors from strict domain checks. Lazy
-            # access can still be applied at the HDF5 level via
-            # `lazy_open_h5` in config.
+            # Ensure sessions have recordings during load to avoid
+            # "no recordings" errors from strict domain checks. Lazy HDF5
+            # handle behavior is controlled via `lazy_open_h5` in config.
 
             # Check for cancellation before starting the actual load
             if self._cancel_requested:
@@ -278,7 +277,6 @@ class ExperimentLoadingThread(QThread):
                     config=cfg,
                     progress_callback=_progress_cb,
                     allow_write=is_first_load,
-                    load_recordings=False,
                 )
             except InterruptedError as e:
                 # Graceful cancellation from progress callback

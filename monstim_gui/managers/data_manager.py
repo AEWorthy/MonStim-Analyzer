@@ -761,7 +761,6 @@ class DataManager:
             self.gui.current_experiment.save()
             self.gui.status_bar.showMessage("Experiment saved successfully.", 5000)
             logging.debug("Experiment saved successfully.")
-            self.gui.has_unsaved_changes = False
             return True
         return False
 
@@ -1265,15 +1264,21 @@ class DataManager:
 
         logging.debug(f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'.")
         session = self.gui.current_dataset.sessions[index]
-        # On-demand materialization of recordings for lazy-loaded sessions
-        try:
-            if session and session.repo and not session.recordings:
-                session = session.repo.materialize_recordings(
-                    session, config=self.gui.config_repo.read_config(), allow_write=False
-                )
-        except Exception:
-            logging.debug("Non-fatal: error materializing recordings on session selection.", exc_info=True)
+        # Ensure recordings are present. All recordings should be fully loaded
+        # at dataset load time; warn if a session is unexpectedly empty.
+        if not session.all_recordings:
+            logging.warning(
+                f"Session {session.id} has no recordings after load; recordings should be fully materialized by load()."
+            )
+        if not session.recordings:
+            logging.warning(
+                f"Session {session.id} has no active recordings after load; check if all recordings are marked as excluded."
+            )
         self.gui.set_current_session(session)
+
+        # Refresh notice icons to display any session-level warnings (e.g., no active recordings)
+        if hasattr(self.gui, "data_selection_widget"):
+            self.gui.data_selection_widget.refresh_notice_icons()
 
         # Save complete session state for restoration
         profile_name = self.gui.profile_selector_combo.currentText() if hasattr(self.gui, "profile_selector_combo") else None

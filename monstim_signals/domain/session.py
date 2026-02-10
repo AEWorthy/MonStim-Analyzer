@@ -37,7 +37,6 @@ class Session:
         annot: "SessionAnnot",
         repo: Any = None,
         config: dict = None,
-        allow_deferred_loading: bool = False,
     ):
         self.id: str = session_id
         self._all_recordings: List["Recording"] = recordings
@@ -47,15 +46,9 @@ class Session:
         self._config = config
         self._load_config_settings()
 
-        # Allow sessions with deferred recording loading (for lightweight discovery)
-        if recordings or not allow_deferred_loading:
-            self._load_session_parameters()
-            self._initialize_annotations()
-        else:
-            # Minimal initialization for deferred loading - set placeholder values
-            self._deferred_loading = True
-            self._set_placeholder_parameters()
-            # Skip _initialize_annotations() during deferred loading since it depends on num_channels
+        # Load session parameters from recordings
+        self._load_session_parameters()
+        self._initialize_annotations()
 
         self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
@@ -90,9 +83,10 @@ class Session:
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
-        if self.recordings:
-            first_meta = self.recordings[0].meta
-            self.formatted_name = self.id + "_" + first_meta.recording_id  # e.g., "AA00_0000"
+        # Use all_recordings (including excluded) so session can load even with all recordings excluded
+        if self.all_recordings:
+            first_meta = self.all_recordings[0].meta
+            self.formatted_name = self.id
             self.scan_rate = first_meta.scan_rate  # Hz
             self.num_samples = first_meta.num_samples  # samples/channel
             self.num_channels = first_meta.num_channels  # number of channels
@@ -124,26 +118,6 @@ class Session:
             self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
         else:
             raise ValueError(f"Session {self.id} has no recordings associated with it.")
-
-    def _set_placeholder_parameters(self):
-        """Set placeholder parameters for sessions with deferred recording loading."""
-        self.formatted_name = self.id
-        self.scan_rate = None
-        self.num_samples = 0
-        self.num_channels = 0
-        self._channel_types = []
-        self.stim_clusters = []
-        self.primary_stim = None
-        self.pre_stim_acquired = 0
-        self.post_stim_acquired = 0
-        self.stim_delay = 0
-        self.stim_duration = 0
-        self.stim_start = 0
-        self.recording_interval = None
-        self.emg_amp_gains = None
-        self.channel_names = []
-        self.channel_units = []
-        self.channel_types = []
 
     def _initialize_annotations(self):
         # Check in case of empty list annot
@@ -332,10 +306,18 @@ class Session:
     @property
     def stimulus_voltages(self) -> np.ndarray:
         """
-        Return a list of stimulus voltages for each recording in the session.
+        Return a list of stimulus voltages for each active recording in the session.
         This assumes that each recording's primary cluster stim_v is the amplitude for that recording.
         """
         return np.array([rec.meta.primary_stim.stim_v for rec in self.recordings])
+
+    @property
+    def all_stimulus_voltages(self) -> np.ndarray:
+        """
+        Return a list of stimulus voltages for all recordings in the session (including excluded).
+        This assumes that each recording's primary cluster stim_v is the amplitude for that recording.
+        """
+        return np.array([rec.meta.primary_stim.stim_v for rec in self.all_recordings])
 
     @property
     def recordings(self) -> List[Recording]:
@@ -477,17 +459,25 @@ class Session:
             logging.debug(f"Notice collection error (session {self.id}): {e}")
         return notices
 
+    def _filter_active(self, source_list: List[Any]) -> List[Any]:
+        """
+        Helper to filter a list of data corresponding to all_recordings,
+        returning only items corresponding to active (non-excluded) recordings.
+        """
+        excluded = self.excluded_recordings
+        return [item for i, item in enumerate(source_list) if self.all_recordings[i].id not in excluded]
+
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
     @cached_property
-    def recordings_raw(self) -> List[np.ndarray]:
+    def all_recordings_raw(self) -> List[np.ndarray]:
         """
-        Return a list of raw data arrays for each recording.
+        Return a list of raw data arrays for all recordings (including excluded).
         Each array is of shape (num_samples, num_channels).
         """
         recordings = []
-        for rec in self.recordings:
+        for rec in self.all_recordings:
             raw_data = rec.raw_view()
             for ch in range(rec.meta.num_channels):
                 if self.annot.channels[ch].invert:
@@ -495,10 +485,15 @@ class Session:
             recordings.append(raw_data)
         return recordings
 
+    @property
+    def recordings_raw(self) -> List[np.ndarray]:
+        """Return a list of raw data arrays for active recordings only."""
+        return self._filter_active(self.all_recordings_raw)
+
     @cached_property
-    def recordings_filtered(self) -> List[np.ndarray]:
+    def all_recordings_filtered(self) -> List[np.ndarray]:
         """
-        Return a list of processed data arrays for each recording.
+        Return a list of processed data arrays for all recordings (including excluded).
         Each array is of shape (num_samples, num_channels).
         This applies a butter bandpass filter to the raw data and inverts if
         indicated in the channel annotations in the session annot.json file.
@@ -551,12 +546,14 @@ class Session:
 
             return np.column_stack(filtered_channels)
 
-        max_workers = (os.cpu_count() - 1) or 1  # Use all available CPU cores
+        cpu_count = os.cpu_count()
+        max_workers = (cpu_count - 1) if cpu_count and cpu_count > 1 else 1
+
         filtered_recordings: List[np.ndarray] = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit futures and maintain order by storing them in a list
             ordered_futures = []
-            for rec in self.recordings:
+            for rec in self.all_recordings:
                 future = executor.submit(_process_single_recording, rec)
                 ordered_futures.append(future)
 
@@ -567,32 +564,43 @@ class Session:
 
         return filtered_recordings
 
+    @property
+    def recordings_filtered(self) -> List[np.ndarray]:
+        """Return a list of processed data arrays for active recordings only."""
+        return self._filter_active(self.all_recordings_filtered)
+
     @cached_property
-    def recordings_rectified_raw(self) -> List[np.ndarray]:
+    def all_recordings_rectified_raw(self) -> List[np.ndarray]:
         """
-        Return a list of rectified raw data arrays for each recording.
-        Each array is of shape (num_samples, num_channels).
-        This applies a rectification to the raw data and inverts if indicated in the channel annotations.
+        Return a list of rectified raw data arrays for all recordings.
         """
         recordings = []
-        for rec in self.recordings:
+        for rec in self.all_recordings:
             raw_data = rec.raw_view()
             rectified = np.abs(raw_data)
             recordings.append(rectified)
         return recordings
 
+    @property
+    def recordings_rectified_raw(self) -> List[np.ndarray]:
+        """Return a list of rectified raw data arrays for active recordings only."""
+        return self._filter_active(self.all_recordings_rectified_raw)
+
     @cached_property
-    def recordings_rectified_filtered(self) -> List[np.ndarray]:
+    def all_recordings_rectified_filtered(self) -> List[np.ndarray]:
         """
-        Return a list of rectified filtered data arrays for each recording.
-        Each array is of shape (num_samples, num_channels).
-        This applies a rectification to the filtered data and inverts if indicated in the channel annotations.
+        Return a list of rectified filtered data arrays for all recordings.
         """
         recordings = []
-        for rec in self.recordings_filtered:
+        for rec in self.all_recordings_filtered:
             rectified = np.abs(rec)
             recordings.append(rectified)
         return recordings
+
+    @property
+    def recordings_rectified_filtered(self) -> List[np.ndarray]:
+        """Return a list of rectified filtered data arrays for active recordings only."""
+        return self._filter_active(self.all_recordings_rectified_filtered)
 
     @cached_property
     def m_max(self) -> List[float]:
@@ -680,18 +688,17 @@ class Session:
         Reset the cached processed recordings.
         This is used after changing the filter parameters or excluding/including recordings from the session set.
         """
-        if "recordings" in self.__dict__:
-            del self.__dict__["recordings"]
-        if "recordings_raw" in self.__dict__:
-            del self.__dict__["recordings_raw"]
+        # Clear all_recordings_* caches (primary data)
+        for key in [
+            "all_recordings_raw",
+            "all_recordings_filtered",
+            "all_recordings_rectified_raw",
+            "all_recordings_rectified_filtered",
+        ]:
+            if key in self.__dict__:
+                del self.__dict__[key]
 
-        if "recordings_filtered" in self.__dict__:
-            del self.__dict__["recordings_filtered"]
-        if "recordings_rectified_raw" in self.__dict__:
-            del self.__dict__["recordings_rectified_raw"]
-        # TODO: include recordings_rectified_filtered and the cached m_max if present
-        if "recordings_rectified_filtered" in self.__dict__:
-            del self.__dict__["recordings_rectified_filtered"]
+        # Clear m_max which is still cached and depends on active recordings
         if "m_max" in self.__dict__:
             del self.__dict__["m_max"]
 
@@ -937,11 +944,10 @@ class Session:
         else:
             logging.warning(f"Recording {recording_id} is already excluded in session {self.id}.")
 
-        if not self.recordings:
-            # If no recordings remain, mark the session and inform parent dataset
-            self.exclude_session()
-            if self.parent_dataset is not None:
-                self.parent_dataset.exclude_session(self.id)
+        # Note: We no longer auto-exclude sessions when all recordings are excluded.
+        # This prevents silent state changes that can cause GUI synchronization issues.
+        # Sessions with no active recordings will remain visible but show appropriate
+        # warnings when attempting to plot. Users can manually exclude the session if desired.
 
     def restore_session(self):
         """
@@ -957,11 +963,12 @@ class Session:
         """
         Exclude the entire session by marking all recordings as excluded.
         This is a user action that modifies the session's exclude flags.
+
+        Note: This method is typically called BY the dataset's exclude_session() method,
+        which handles adding the session to the dataset's excluded list. We don't call
+        parent_dataset.exclude_session() here to avoid circular logic.
         """
         self.annot.excluded_recordings = [rec.id for rec in self.get_all_recordings(include_excluded=True)]
-        if self.recordings == []:
-            # If no recordings remain, mark the session as excluded
-            self.parent_dataset.exclude_session(self.id)
         self.reset_all_caches()
         if self.repo is not None:
             self.repo.save(self)
@@ -971,105 +978,15 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     def update_window_settings(self):
         """
-        ***ONLY FOR USE IN JUPYTER NOTEBOOKS OR INTERACTIVE PYTHON ENVIRONMENTS***
+        Deprecated: This method has been deprecated to maintain separation of concerns.
+        The `monstim_signals` package must remain GUI-agnostic.
 
-        Opens a GUI to manually update the M-wave and H-reflex window settings for each channel using PyQt.
-
-        This function should only be used if you are working in a Jupyter notebook or an interactive Python environment. Do not call this function in any other GUI environment.
+        To update window settings, please use the main GUI application or modify
+        the `session.annot` object directly in your script.
         """
-        import sys
-
-        from PySide6.QtWidgets import (
-            QApplication,
-            QHBoxLayout,
-            QLabel,
-            QLineEdit,
-            QPushButton,
-            QVBoxLayout,
-            QWidget,
+        logging.warning(
+            "Session.update_window_settings() is deprecated and has been removed to avoid PySide6 dependencies in domain logic."
         )
-
-        class ReflexSettingsDialog(QWidget):
-            def __init__(self, parent: Session):
-                super().__init__()
-                self.parent: Session = parent
-                self.initUI()
-
-            def initUI(self):
-                self.setWindowTitle(f"Update Reflex Window Settings: Session {self.parent.session_id}")
-                layout = QVBoxLayout()
-
-                duration_layout = QHBoxLayout()
-                duration_layout.addWidget(QLabel("m_duration:"))
-                self.m_duration_entry = QLineEdit(str(self.parent.m_duration[0]))
-                duration_layout.addWidget(self.m_duration_entry)
-
-                duration_layout.addWidget(QLabel("h_duration:"))
-                self.h_duration_entry = QLineEdit(str(self.parent.h_duration[0]))
-                duration_layout.addWidget(self.h_duration_entry)
-
-                layout.addLayout(duration_layout)
-
-                self.entries = []
-                for i in range(self.parent.num_channels):
-                    channel_layout = QHBoxLayout()
-                    channel_layout.addWidget(QLabel(f"Channel {i}:"))
-
-                    channel_layout.addWidget(QLabel("m_start:"))
-                    m_start_entry = QLineEdit(str(self.parent.m_start[i]))
-                    channel_layout.addWidget(m_start_entry)
-
-                    channel_layout.addWidget(QLabel("h_start:"))
-                    h_start_entry = QLineEdit(str(self.parent.h_start[i]))
-                    channel_layout.addWidget(h_start_entry)
-
-                    layout.addLayout(channel_layout)
-                    self.entries.append((m_start_entry, h_start_entry))
-
-                save_button = QPushButton("Confirm")
-                save_button.clicked.connect(self.save_settings)
-                layout.addWidget(save_button)
-
-                self.setLayout(layout)
-
-            def save_settings(self):
-                try:
-                    m_duration = float(self.m_duration_entry.text())
-                    h_duration = float(self.h_duration_entry.text())
-                except ValueError:
-                    logging.error("Invalid input for durations. Please enter valid numbers.")
-                    return
-                m_start = []
-                h_start = []
-                for i, (m_start_entry, h_start_entry) in enumerate(self.entries):
-                    try:
-                        m_start.append(float(m_start_entry.text()))
-                        h_start.append(float(h_start_entry.text()))
-                    except ValueError:
-                        logging.error(f"Invalid input for channel {i}. Skipping.")
-
-                # Update the reflex windows in the parent object based on the new windows.
-                try:
-                    self.parent.change_reflex_latency_windows(m_start, m_duration, h_start, h_duration)
-                    self.parent.reset_all_caches()
-                except Exception as e:
-                    logging.error(
-                        f"Error occurred when trying to save the following reflex settings: m_start: {m_start}\n\tm_duration: {m_duration}\n\th_start: {h_start}\n\th_duration: {h_duration}"
-                    )
-                    logging.error(f"Error: {str(e)}")
-                    return
-
-                self.close()
-
-        app = QApplication.instance()  # Check if there's an existing QApplication instance
-        if not app:
-            app = QApplication(sys.argv)
-            window = ReflexSettingsDialog(self)
-            window.show()
-            app.exec()
-        else:
-            window = ReflexSettingsDialog(self)
-            window.show()
 
     # ──────────────────────────────────────────────────────────────────
     # 4) Clean‐up

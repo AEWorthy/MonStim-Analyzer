@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.5.2] - 2026-02-10
+
+### Added
+- **Toggle Completion Status Command**: New `ToggleCompletionStatusCommand` for undoable completion status changes across experiments, datasets, and sessions.
+
+### Changed
+- **Recording Data Access Pattern**: Introduced `all_*` cached properties (`all_recordings_raw`, `all_recordings_filtered`, `all_recordings_rectified_*`) that represent data for all recordings including excluded ones, and `recordings_*` dynamic properties that filter to active recordings only. This provides better separation between raw data and active data views.
+- **Session Exclusion Behavior**: Sessions are no longer auto-excluded when all their recordings become excluded. The condition is logged but the session remains active to prevent silent state changes.
+- **Dataset Exclusion Behavior**: Datasets are no longer auto-excluded when all their sessions become excluded, preventing cascading exclusions.
+- **Simplified Data Loading**: Removed deferred recording loading support. Sessions now always load parameters and initialize annotations immediately, simplifying the discovery/loading flow and fixing a critical bug where unmaterialized sessions were not properly initialized post-load.
+- **Auto-save Integration**: Removed manual unsaved-changes tracking in favor of command-pattern auto-save. Eliminated redundant save confirmation prompts before import/close operations.
+- **Plot Stability**: Set explicit X-axis range on initial plot to prevent flickering caused by auto-calculation. The stable range propagates to X-linked plots.
+- **Reduced Log Verbosity**: Removed noisy debug logging from IO modules to reduce log clutter while preserving error and exception logging.
+- **GUI-Agnostic Domain Logic**: Removed PySide6 GUI code from `Session.update_window_settings` and replaced with deprecation warning to maintain separation of concerns.
+- **Completion Toggle Persistence**: `ToggleCompletionStatusCommand` now properly persists changes via repository pattern. Command stores hierarchy IDs, loads objects from disk, updates completion status, saves back, and refreshes UI with comprehensive error logging.
+- **Data Manager Recording Handling**: `DataManager` now distinguishes between all recordings and active recordings. Emits warnings when active recordings are missing and refreshes notice icons after session load.
+- **Session Plotter Defensive Checks**: `SessionPlotterPyQtGraph` adds defensive checks that raise `UnableToPlotError` when no active recordings are available for various plot types. Improved Y-axis fallback behavior and clarified `use_all` parameter documentation.
+
+### Fixed
+- **Exclusion Command Guards**: `ExcludeSessionCommand` and `ExcludeDatasetCommand` now verify current selection and membership in parent lists before performing exclusions. Commands log and return gracefully if nothing is selected or item is already excluded, preventing crashes and index errors when GUI state is out of sync.
+- **Session Naming**: Fixed bug where session display names sometimes incorrectly appended first recording ID (e.g., '_0000').
+- **Plot Y-Axis Scaling**: Y-axis scaling now computed based on active recordings only rather than all recordings, providing accurate visualization of non-excluded data.
+- **Session Parameter Loading**: Sessions can now initialize parameters even if all recordings are excluded by using `all_recordings` instead of filtered recordings during load.
+
+### Testing
+- Added unit tests for exclude commands covering already-excluded and no-selection edge cases.
+- Added regression test ensuring excluding all recordings does not auto-exclude the parent session.
+- Updated tests to reflect new caching semantics with `all_*` vs `recordings_*` property names.
+- Enhanced command pattern test coverage.
+- Enhanced completion toggle command tests with parametrization for experiment/dataset/session levels. Tests now create temporary directory structures and mock repository classes to verify proper load/save behavior.
+- Improved test formatting and consistency in integration tests.
+
+### Dependencies
+- Updated `black` to 26.1.0 for development tooling.
+- Updated `Markdown` to 3.10.2.
+- Updated `setuptools` to 82.0.0.
+
+
 ## [0.5.1] - 2026-02-03
 
 ### Added

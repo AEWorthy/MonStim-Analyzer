@@ -1,7 +1,7 @@
 
 # MonStim Analyzer - EMG Analysis and Visualization Tool
 
-**Version:** 0.5.1 (Full Release)
+**Version:** 0.5.2 (Full Release)
 
 This repository contains the source code for the MonStim EMG Analyzer GUI
 application and the supporting signal processing library. The tool provides
