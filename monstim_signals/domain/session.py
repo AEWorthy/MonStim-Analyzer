@@ -37,7 +37,6 @@ class Session:
         annot: "SessionAnnot",
         repo: Any = None,
         config: dict = None,
-        allow_deferred_loading: bool = False,
     ):
         self.id: str = session_id
         self._all_recordings: List["Recording"] = recordings
@@ -47,15 +46,9 @@ class Session:
         self._config = config
         self._load_config_settings()
 
-        # Allow sessions with deferred recording loading (for lightweight discovery)
-        if recordings or not allow_deferred_loading:
-            self._load_session_parameters()
-            self._initialize_annotations()
-        else:
-            # Minimal initialization for deferred loading - set placeholder values
-            self._deferred_loading = True
-            self._set_placeholder_parameters()
-            # Skip _initialize_annotations() during deferred loading since it depends on num_channels
+        # Load session parameters from recordings
+        self._load_session_parameters()
+        self._initialize_annotations()
 
         self.plotter = SessionPlotterPyQtGraph(self)
         self.update_latency_window_parameters()
@@ -124,26 +117,6 @@ class Session:
             self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
         else:
             raise ValueError(f"Session {self.id} has no recordings associated with it.")
-
-    def _set_placeholder_parameters(self):
-        """Set placeholder parameters for sessions with deferred recording loading."""
-        self.formatted_name = self.id
-        self.scan_rate = None
-        self.num_samples = 0
-        self.num_channels = 0
-        self._channel_types = []
-        self.stim_clusters = []
-        self.primary_stim = None
-        self.pre_stim_acquired = 0
-        self.post_stim_acquired = 0
-        self.stim_delay = 0
-        self.stim_duration = 0
-        self.stim_start = 0
-        self.recording_interval = None
-        self.emg_amp_gains = None
-        self.channel_names = []
-        self.channel_units = []
-        self.channel_types = []
 
     def _initialize_annotations(self):
         # Check in case of empty list annot

@@ -720,8 +720,8 @@ class Dataset:
         Returns:
             tuple: A tuple containing a boolean value indicating whether all sessions have consistent parameters and a message indicating the result.
         """
-        # In lazy-load mode, sessions may not have recordings/materialized metadata yet.
-        # Defer strict consistency checks until sessions are fully loaded.
+        # Ensure there are sessions to check and that they contain metadata.
+        # Perform strict consistency checks only when session metadata is available.
         if not self.sessions:
             return
         # Find a session with complete metadata to use as reference
@@ -751,7 +751,7 @@ class Dataset:
                     f"Inconsistent number of channels for {session.id} in {self.formatted_name}: {session.num_channels} != {reference_num_channels}."
                 )
             if getattr(session, "primary_stim", None) is None:
-                # Session not fully materialized yet; skip stimulus consistency for now
+                # Session missing primary_stim; skip stimulus consistency for now
                 continue
             if session.primary_stim.stim_type != reference_stim_type:
                 raise ValueError(
