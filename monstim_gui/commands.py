@@ -1,5 +1,6 @@
 import abc
 import copy
+import json
 import logging
 from collections import deque
 from pathlib import Path
@@ -1251,20 +1252,29 @@ class ToggleCompletionStatusCommand(Command):
             # Get parent experiment ID from current context
             self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
             self.dataset_id = target_object.id
+            if not self.experiment_id:
+                raise ValueError("Cannot toggle dataset completion status: no parent experiment in context")
         elif level == "session":
             # Get parent experiment and dataset IDs from current context
             self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
             self.dataset_id = self.gui.current_dataset.id if self.gui.current_dataset else None
+            if not self.experiment_id:
+                raise ValueError("Cannot toggle session completion status: no parent experiment in context")
+            if not self.dataset_id:
+                raise ValueError("Cannot toggle session completion status: no parent dataset in context")
+        else:
+            raise ValueError(f"Invalid level for completion status toggle: {level}")
 
         obj_name = getattr(target_object, "id", "Unknown")
         action = "Complete" if self.new_status else "Incomplete"
         self.command_name = f"Mark {level.title()} '{obj_name}' as {action}"
 
     def _apply_status(self, status: bool):
-        """Apply completion status by loading from disk, modifying, and saving back."""
+        """Apply completion status by directly modifying annotation JSON files."""
+        from dataclasses import asdict
         from pathlib import Path
 
-        from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository, SessionRepository
+        from monstim_signals.core import DatasetAnnot, ExperimentAnnot, SessionAnnot
 
         try:
             match self.level:
@@ -1273,28 +1283,46 @@ class ToggleCompletionStatusCommand(Command):
                         logging.error(f"Experiment '{self.experiment_id}' not found in expts_dict")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
-                    repo = ExperimentRepository(exp_path)
-                    exp = repo.load()
-                    exp.is_completed = status
-                    repo.save(exp)
+                    annot_file = exp_path / "experiment.annot.json"
+
+                    if annot_file.exists():
+                        annot_dict = json.loads(annot_file.read_text())
+                        annot = ExperimentAnnot.from_dict(annot_dict)
+                    else:
+                        annot = ExperimentAnnot.create_empty()
+
+                    annot.is_completed = status
+                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
                 case "dataset":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
                         logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        return
+                    if not self.dataset_id:
+                        logging.error("Dataset ID is missing")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
                     dataset_path = exp_path / self.dataset_id
                     if not dataset_path.exists():
                         logging.error(f"Dataset path '{dataset_path}' not found")
                         return
-                    repo = DatasetRepository(dataset_path)
-                    dataset = repo.load()
-                    dataset.is_completed = status
-                    repo.save(dataset)
+                    annot_file = dataset_path / "dataset.annot.json"
+
+                    if annot_file.exists():
+                        annot_dict = json.loads(annot_file.read_text())
+                        annot = DatasetAnnot.from_dict(annot_dict)
+                    else:
+                        annot = DatasetAnnot.create_empty()
+
+                    annot.is_completed = status
+                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
                 case "session":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
                         logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        return
+                    if not self.dataset_id:
+                        logging.error("Parent dataset ID is missing")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
                     dataset_path = exp_path / self.dataset_id
@@ -1305,10 +1333,20 @@ class ToggleCompletionStatusCommand(Command):
                     if not session_path.exists():
                         logging.error(f"Session path '{session_path}' not found")
                         return
-                    repo = SessionRepository(session_path)
-                    session = repo.load()
-                    session.is_completed = status
-                    repo.save(session)
+                    annot_file = session_path / "session.annot.json"
+
+                    if annot_file.exists():
+                        annot_dict = json.loads(annot_file.read_text())
+                        annot = SessionAnnot.from_dict(annot_dict)
+                    else:
+                        annot = SessionAnnot.create_empty()
+
+                    annot.is_completed = status
+                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                case _:
+                    logging.error(f"Unknown level '{self.level}' for completion status toggle")
+                    return
 
             # Refresh UI if the affected object is currently visible
             if hasattr(self.gui, "data_selection_widget"):

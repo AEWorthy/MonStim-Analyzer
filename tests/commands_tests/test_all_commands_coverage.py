@@ -259,26 +259,48 @@ class TestToggleCompletionStatusCommand:
         assert hasattr(commands.ToggleCompletionStatusCommand, "undo")
 
     @pytest.mark.parametrize(
-        "level,repo_class,target_id",
+        "level,annot_filename,target_id",
         [
-            ("experiment", "ExperimentRepository", "TEST_EXP"),
-            ("dataset", "DatasetRepository", "TEST_DATASET"),
-            ("session", "SessionRepository", "TEST_SESSION"),
+            ("experiment", "experiment.annot.json", "TEST_EXP"),
+            ("dataset", "dataset.annot.json", "TEST_DATASET"),
+            ("session", "session.annot.json", "TEST_SESSION"),
         ],
     )
-    def test_execute_and_undo(self, tmp_path, level, repo_class, target_id):
+    def test_execute_and_undo(self, tmp_path, level, annot_filename, target_id):
         """Test execute toggles completion status and undo restores it at all hierarchy levels."""
-        from unittest.mock import MagicMock, patch
+        import json
+
+        from monstim_signals.core import DatasetAnnot, ExperimentAnnot, SessionAnnot
 
         # Create necessary directory structure
         exp_path = tmp_path / "test_exp"
         exp_path.mkdir()
+        dataset_path = None
+        session_path = None
+
         if level in ["dataset", "session"]:
             dataset_path = exp_path / "TEST_DATASET"
             dataset_path.mkdir()
         if level == "session":
             session_path = dataset_path / "TEST_SESSION"
             session_path.mkdir()
+
+        # Create initial annotation file with is_completed = False
+        annot_path = None
+        if level == "experiment":
+            annot_path = exp_path / annot_filename
+            annot = ExperimentAnnot.create_empty()
+        elif level == "dataset":
+            annot_path = dataset_path / annot_filename
+            annot = DatasetAnnot.create_empty()
+        elif level == "session":
+            annot_path = session_path / annot_filename
+            annot = SessionAnnot.create_empty()
+
+        annot.is_completed = False
+        from dataclasses import asdict
+
+        annot_path.write_text(json.dumps(asdict(annot), indent=2))
 
         # Create mock GUI with expts_dict
         mock_gui = Mock()
@@ -292,35 +314,25 @@ class TestToggleCompletionStatusCommand:
         mock_target.id = target_id
         mock_target.is_completed = False
 
-        # Mock the repository to return our mock target
-        mock_repo = MagicMock()
-        mock_repo.load.return_value = mock_target
-
         cmd = commands.ToggleCompletionStatusCommand(mock_gui, level, mock_target)
 
         # Verify initial state captured
         assert not cmd.old_status
         assert cmd.new_status
 
-        # Execute with mocked repository (patch where it's imported)
-        with patch(f"monstim_signals.io.repositories.{repo_class}", return_value=mock_repo):
-            cmd.execute()
-            mock_repo.load.assert_called_once()
-            mock_repo.save.assert_called_once()
-            # Verify the target's is_completed was set to True
-            assert mock_target.is_completed
+        # Execute
+        cmd.execute()
 
-        # Reset mock to test undo
-        mock_repo.reset_mock()
-        mock_target.is_completed = True  # State after execute
+        # Verify annotation file was updated
+        annot_data = json.loads(annot_path.read_text())
+        assert annot_data["is_completed"] is True
 
-        # Undo with mocked repository
-        with patch(f"monstim_signals.io.repositories.{repo_class}", return_value=mock_repo):
-            cmd.undo()
-            mock_repo.load.assert_called_once()
-            mock_repo.save.assert_called_once()
-            # Verify the target's is_completed was restored to False
-            assert not mock_target.is_completed
+        # Undo
+        cmd.undo()
+
+        # Verify annotation file was restored
+        annot_data = json.loads(annot_path.read_text())
+        assert annot_data["is_completed"] is False
 
 
 # Mark untestable commands

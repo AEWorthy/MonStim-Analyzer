@@ -91,7 +91,11 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             If False (default), returns only active/non-excluded recordings.
             If True, returns all recordings including excluded ones ('all_recordings_<data_type>').
 
-        This method matches the original matplotlib plotter interface exactly.
+        Returns
+        -------
+        List[np.ndarray]
+            List of EMG recordings corresponding to the specified data type and exclusion criteria.
+
         """
 
         if data_type in ["raw", "filtered", "rectified_raw", "rectified_filtered"]:

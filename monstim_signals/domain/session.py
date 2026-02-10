@@ -978,7 +978,7 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     def update_window_settings(self):
         """
-        Deprecated: This method has been removed to maintain separation of concerns.
+        Deprecated: This method has been deprecated to maintain separation of concerns.
         The `monstim_signals` package must remain GUI-agnostic.
 
         To update window settings, please use the main GUI application or modify
