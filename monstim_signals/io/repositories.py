@@ -247,14 +247,11 @@ class SessionRepository:
         # Ensure the session_id reflects the new folder name
         self.session_id = new_folder.name
 
-    def load(
-        self, config=None, *, strict_version: bool = False, allow_write: bool = True, load_recordings: bool = True
-    ) -> "Session":
+    def load(self, config=None, *, strict_version: bool = False, allow_write: bool = True) -> "Session":
         # Guard: folder must exist
         if not self.folder.exists():
             raise FileNotFoundError(f"Session folder not found: {self.folder}")
 
-        recordings = []
         # 1) Discover all recordings in this folder
         # Prefer index-based discovery to avoid heavy directory scans
         recording_repos: list[RecordingRepository] = []
@@ -271,32 +268,21 @@ class SessionRepository:
         except Exception:
             logging.debug("Index-based discovery failed; falling back to folder scan.", exc_info=True)
             recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-        if load_recordings:
-            # Pass through lazy_open_h5 from config if present; prefer explicit key in config
-            lazy_from_cfg = None
-            try:
-                if config is not None and "lazy_open_h5" in config:
-                    lazy_from_cfg = bool(config.get("lazy_open_h5"))
-            except Exception:
-                lazy_from_cfg = None
 
-            recordings = [
-                repo.load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write) for repo in recording_repos
-            ]
-            # 2) Sort by the primary StimCluster’s stim_v
-            recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
-        else:
-            # Deferred loading: store recording stems for later materialization
-            # without actually loading Recording objects. This enables fast session
-            # discovery and validation without the overhead of loading HDF5 files.
-            try:
-                self._pending_recording_stems = [r.stem for r in recording_repos]
-                logging.debug(
-                    f"Deferred loading: stored {len(self._pending_recording_stems)} recording stems for later materialization."
-                )
-            except Exception:
-                logging.debug("Failed to record pending recording stems (non-fatal).", exc_info=True)
-            # Leave recordings as empty list; they'll be loaded on-demand via materialize_recordings()
+        # 2) Load all recordings
+        # Pass through lazy_open_h5 from config if present; prefer explicit key in config
+        lazy_from_cfg = None
+        try:
+            if config is not None and "lazy_open_h5" in config:
+                lazy_from_cfg = bool(config.get("lazy_open_h5"))
+        except Exception:
+            lazy_from_cfg = None
+
+        recordings = [
+            repo.load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write) for repo in recording_repos
+        ]
+        # Sort by the primary StimCluster's stim_v
+        recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
 
         # 3) Load or create session annotation JSON
         if self.session_js.exists():
@@ -369,53 +355,7 @@ class SessionRepository:
             annot=session_annot,
             repo=self,
             config=config,
-            allow_deferred_loading=not load_recordings,
         )
-        return session
-
-    def materialize_recordings(self, session: "Session", config=None, *, allow_write: bool = False) -> "Session":
-        """Load recordings into an existing session on-demand.
-
-        Uses any cached pending stems discovered during load; falls back to folder scan.
-        """
-        try:
-            stems = getattr(self, "_pending_recording_stems", None)
-            if stems is None:
-                stems = [r.stem for r in RecordingRepository.discover_in_folder(self.folder)]
-
-            # Honor lazy_open_h5 from config to avoid opening data at selection time if desired
-            lazy_from_cfg = None
-            try:
-                if config is not None and "lazy_open_h5" in config:
-                    lazy_from_cfg = bool(config.get("lazy_open_h5"))
-            except Exception:
-                lazy_from_cfg = None
-
-            recs = [
-                RecordingRepository(stem).load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write)
-                for stem in stems
-            ]
-            try:
-                recs.sort(key=lambda r: r.meta.primary_stim.stim_v)
-            except Exception:
-                # If any recording is missing primary_stim, keep original order
-                logging.debug("Could not sort recordings by stim_v; leaving original order.", exc_info=True)
-
-            # Session.recordings is a derived, filtered view (no setter). Update internal storage.
-            session._all_recordings = recs
-            # Clear deferred loading flag if it was set
-            if hasattr(session, "_deferred_loading"):
-                session._deferred_loading = False
-            # Refresh session parameters and caches to reflect newly available recordings
-            try:
-                session._load_session_parameters()
-                session._initialize_annotations()
-                session.update_latency_window_parameters()
-                session.reset_recordings_cache()
-            except Exception:
-                logging.debug("Post-materialization session refresh encountered an issue.", exc_info=True)
-        except Exception:
-            logging.exception("Failed to materialize recordings for session %s", self.session_id)
         return session
 
     def save(self, session: Session) -> None:
@@ -476,13 +416,11 @@ class SessionRepository:
 
             # Session folder with explicit session annotation
             if (entry / "session.annot.json").exists():
-                logging.debug(f"Discovered session: {entry.name}")
                 yield SessionRepository(entry)
                 continue
 
             # Session folder inferred by presence of raw recordings
             if any(entry.glob("*.raw.h5")):
-                logging.debug(f"Discovered session without annot: {entry.name}")
                 yield SessionRepository(entry)  # still yield, but no session.annot.json
                 continue
 
@@ -519,7 +457,6 @@ class DatasetRepository:
         strict_version: bool = False,
         lazy_open_h5: Optional[bool] = None,
         allow_write: bool = True,
-        load_recordings: bool = False,
     ) -> "Dataset":
         # 1) Discover valid session folders (those with annot or any *.raw.h5)
         session_repos = list(SessionRepository.discover_in_folder(self.folder))
@@ -532,7 +469,6 @@ class DatasetRepository:
                     config=config,
                     strict_version=strict_version,
                     allow_write=allow_write,
-                    load_recordings=load_recordings,
                 )
                 sessions.append(sess)
             except ValueError as e:
@@ -809,7 +745,6 @@ class ExperimentRepository:
         lazy_open_h5: Optional[bool] = None,
         load_workers: Optional[int] = None,
         allow_write: bool = True,
-        load_recordings: bool = False,
     ) -> "Experiment":
         """Load the full experiment.
 
@@ -890,7 +825,6 @@ class ExperimentRepository:
                         config=config,
                         strict_version=strict_version,
                         allow_write=allow_write,
-                        load_recordings=load_recordings,
                     )
                     future_map[future] = ds_folder
 
@@ -935,7 +869,6 @@ class ExperimentRepository:
                         config=config,
                         strict_version=strict_version,
                         allow_write=allow_write,
-                        load_recordings=load_recordings,
                     )
                     datasets.append(ds_obj)
                 except ValueError as e:

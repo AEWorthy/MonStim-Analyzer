@@ -65,19 +65,28 @@ class TestHierarchyAndCaches:
         assert sess.num_recordings == 3
         assert sess.num_channels == 2
 
-        # Cached properties should memoize
+        # Cached properties (all_*) should memoize
+        all_raw1 = sess.all_recordings_raw
+        all_raw2 = sess.all_recordings_raw
+        assert all_raw1 is all_raw2
+
+        # dynamic properties (recordings_*) should return new lists but same elements (since all_* is cached)
         raw1 = sess.recordings_raw
         raw2 = sess.recordings_raw
-        assert raw1 is raw2
+        assert raw1 is not raw2  # List object is new
+        assert raw1[0] is raw2[0]  # Element is cached
 
         filt1 = sess.recordings_filtered
         filt2 = sess.recordings_filtered
-        assert filt1 is filt2
+        assert filt1 is not filt2
+        assert filt1[0] is filt2[0]
 
         # Reset caches should invalidate
         sess.reset_all_caches()
-        assert sess.recordings_raw is not raw1
-        assert sess.recordings_filtered is not filt1
+        # After reset, all_recordings_raw should be new
+        assert sess.all_recordings_raw is not all_raw1
+        # And elements of new recordings_raw should be different from old ones (recomputed)
+        assert sess.recordings_raw[0] is not raw1[0]
 
     def test_excluding_recording_affects_filtered_only(self):
         sess = make_dummy_session()

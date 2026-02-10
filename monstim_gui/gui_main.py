@@ -62,7 +62,6 @@ from monstim_signals.domain.session import Session
 class MonstimGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.has_unsaved_changes = False
         self.setWindowTitle(f"MonStim Analyzer {SPLASH_INFO['version']}")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), "icon.png")))
         self.handle_qt_error_logs()
@@ -851,29 +850,9 @@ class MonstimGUI(QMainWindow):
                 )
                 logging.info("Session state saved on application close")
 
-            # Check for unsaved changes
-            if self.has_unsaved_changes:
-                reply = QMessageBox.question(
-                    self,
-                    "Unsaved Changes",
-                    "You have unsaved changes. Do you want to save before closing?",
-                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
-                )
-
-                if reply == QMessageBox.StandardButton.Save:
-                    if self.data_manager.save_experiment():
-                        self._cleanup_on_close()
-                        event.accept()
-                    else:
-                        event.ignore()
-                elif reply == QMessageBox.StandardButton.Discard:
-                    self._cleanup_on_close()
-                    event.accept()
-                else:  # Cancel
-                    event.ignore()
-            else:
-                self._cleanup_on_close()
-                event.accept()
+            # All data changes auto-save via command pattern, so just cleanup and close
+            self._cleanup_on_close()
+            event.accept()
 
         except Exception as e:
             logging.error(f"Error during application close: {e}")

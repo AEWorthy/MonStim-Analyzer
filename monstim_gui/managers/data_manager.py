@@ -761,7 +761,6 @@ class DataManager:
             self.gui.current_experiment.save()
             self.gui.status_bar.showMessage("Experiment saved successfully.", 5000)
             logging.debug("Experiment saved successfully.")
-            self.gui.has_unsaved_changes = False
             return True
         return False
 
@@ -1265,14 +1264,12 @@ class DataManager:
 
         logging.debug(f"Loading session [{index}] from dataset '{self.gui.current_dataset.id}'.")
         session = self.gui.current_dataset.sessions[index]
-        # On-demand materialization of recordings for lazy-loaded sessions
-        try:
-            if session and session.repo and not session.recordings:
-                session = session.repo.materialize_recordings(
-                    session, config=self.gui.config_repo.read_config(), allow_write=False
-                )
-        except Exception:
-            logging.debug("Non-fatal: error materializing recordings on session selection.", exc_info=True)
+        # Ensure recordings are present. All recordings should be fully loaded
+        # at dataset load time; warn if a session is unexpectedly empty.
+        if not session.recordings:
+            logging.warning(
+                f"Session {session.id} has no recordings after load; recordings should be fully materialized by load()."
+            )
         self.gui.set_current_session(session)
 
         # Save complete session state for restoration

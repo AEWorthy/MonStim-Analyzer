@@ -141,7 +141,7 @@ class RecordingCyclerWidget(QGroupBox):
         if not self.gui.current_session:
             self.max_recording_idxs = 0
         else:
-            self.max_recording_idxs = max(0, self.gui.current_session.num_recordings - 1)
+            self.max_recording_idxs = max(0, self.gui.current_session.num_all_recordings - 1)
         # Block signals so we don't trigger plot updates with transient invalid values
         self.recording_spinbox.blockSignals(True)
         old_val = self.recording_spinbox.value()
