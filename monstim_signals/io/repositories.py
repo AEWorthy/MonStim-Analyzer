@@ -291,9 +291,6 @@ class SessionRepository:
             # discovery and validation without the overhead of loading HDF5 files.
             try:
                 self._pending_recording_stems = [r.stem for r in recording_repos]
-                logging.debug(
-                    f"Deferred loading: stored {len(self._pending_recording_stems)} recording stems for later materialization."
-                )
             except Exception:
                 logging.debug("Failed to record pending recording stems (non-fatal).", exc_info=True)
             # Leave recordings as empty list; they'll be loaded on-demand via materialize_recordings()
@@ -476,13 +473,11 @@ class SessionRepository:
 
             # Session folder with explicit session annotation
             if (entry / "session.annot.json").exists():
-                logging.debug(f"Discovered session: {entry.name}")
                 yield SessionRepository(entry)
                 continue
 
             # Session folder inferred by presence of raw recordings
             if any(entry.glob("*.raw.h5")):
-                logging.debug(f"Discovered session without annot: {entry.name}")
                 yield SessionRepository(entry)  # still yield, but no session.annot.json
                 continue
 
