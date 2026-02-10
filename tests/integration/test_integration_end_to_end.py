@@ -592,14 +592,12 @@ class TestConfigurationIntegration:
 
         # Create default config
         default_config = config_dir / "config.yml"
-        default_config.write_text(
-            """
+        default_config.write_text("""
 default_setting: "default_value"
 analysis:
   method: "default_method"
   threshold: 1.0
-"""
-        )
+""")
 
         # Create profile directory
         profile_dir = temp_output_dir / "profiles"

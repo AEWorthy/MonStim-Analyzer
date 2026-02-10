@@ -7,6 +7,7 @@ Strategy:
 
 This script is intended to be run in CI and committed back to the repo when changes occur.
 """
+
 import re
 from pathlib import Path
 

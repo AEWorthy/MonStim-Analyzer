@@ -4,6 +4,7 @@
 This script tolerates common pip<->conda name differences via a small mapping.
 Exit code 0 if consistent, non-zero otherwise.
 """
+
 import re
 import sys
 from pathlib import Path
