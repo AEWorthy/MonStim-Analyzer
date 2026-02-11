@@ -75,7 +75,7 @@ As of version 0.5.3, MonStim Analyzer tracks settings version using the `Setting
 
 When you need to make breaking changes to settings structure:
 
-1. Increment `SETTINGS_VERSION` in [monstim_gui/core/application_state.py](monstim_gui/core/application_state.py)
+1. Increment `SETTINGS_VERSION` in [monstim_gui/core/application_state.py](monstim_gui/core/application_state.py) **and** increment `CURRENT_SETTINGS_VERSION` in [`tools/settings_manager.py`](../tools/settings_manager.py). These two constants must always match so that both the GUI and the CLI agree on the current settings schema version.
 2. Add migration logic in `_migrate_settings()`:
 
 ```python
