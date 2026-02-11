@@ -12,6 +12,10 @@ from PySide6.QtCore import QSettings
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
 
+# Settings version for migration tracking
+# Increment this when making breaking changes to settings structure
+SETTINGS_VERSION = 1
+
 
 class ApplicationState:
     """Manage application state using QSettings (separate from analysis config)."""
@@ -39,6 +43,42 @@ class ApplicationState:
     def reinitialize_settings(self):
         """Reinitialize QSettings (call after QApplication org/app name is set)."""
         self._settings = None  # Force recreation on next access
+        self._check_and_migrate_settings()  # Check and migrate settings if needed
+
+    def _check_and_migrate_settings(self):
+        """Check settings version and migrate if needed."""
+        stored_version = self.settings.value("SettingsVersion", None, type=int)
+
+        if stored_version is None:
+            # First run with versioning or legacy settings - just set version
+            logging.info(f"Initializing settings version tracking (v{SETTINGS_VERSION})")
+            self.settings.setValue("SettingsVersion", SETTINGS_VERSION)
+            self.settings.sync()
+        elif stored_version < SETTINGS_VERSION:
+            # Migration needed
+            logging.info(f"Migrating settings from v{stored_version} to v{SETTINGS_VERSION}")
+            self._migrate_settings(from_version=stored_version, to_version=SETTINGS_VERSION)
+            self.settings.setValue("SettingsVersion", SETTINGS_VERSION)
+            self.settings.sync()
+        elif stored_version > SETTINGS_VERSION:
+            # Newer settings than current app version (downgrade scenario)
+            logging.warning(
+                f"Settings version ({stored_version}) is newer than app version ({SETTINGS_VERSION}). "
+                f"Some settings may not be compatible."
+            )
+
+    def _migrate_settings(self, from_version: int, to_version: int):
+        """Perform migration of settings between versions."""
+        # Add migration logic here when settings structure changes
+        # Example migrations:
+        # if from_version < 2:
+        #     # Rename a key
+        #     old_val = self.settings.value("OldKey")
+        #     if old_val:
+        #         self.settings.setValue("NewKey", old_val)
+        #         self.settings.remove("OldKey")
+
+        logging.info(f"Settings migration from v{from_version} to v{to_version} complete")
 
     def _clear_restoration_state(self):
         """Clear restoration flags and pending state."""
@@ -482,7 +522,7 @@ class ApplicationState:
         self.set_setting("build_index_on_load", bool(enabled))
 
     def clear_all_tracked_data(self):
-        """Clear all tracked user data."""
+        """Clear all tracked user data (preserves preferences)."""
         # Clear session restoration data
         self.clear_session_state()
         self.settings.remove("LastSelection")
@@ -497,7 +537,49 @@ class ApplicationState:
         self.settings.remove("RecentProfiles")
 
         self.settings.sync()
-        logging.info("All tracked user data cleared")
+        logging.info("All tracked user data cleared (preferences preserved)")
+
+    def clear_all_settings(self):
+        """Clear ALL settings including preferences and version (nuclear option).
+
+        This is more aggressive than clear_all_tracked_data as it also clears
+        program preferences. After calling this, all settings will be reset to
+        their default values.
+        """
+        self.settings.clear()
+        self.settings.sync()
+        logging.warning("All settings cleared (including preferences and version)")
+
+    def get_settings_diagnostics(self) -> dict:
+        """Get detailed diagnostics about current settings state.
+
+        Returns:
+            dict with keys: version, session_restore, preferences, recent_files, etc.
+        """
+        all_keys = self.settings.allKeys()
+
+        # Categorize keys
+        session_restore = {k: self.settings.value(k) for k in all_keys if k.startswith("SessionRestore/")}
+        last_selection = {k: self.settings.value(k) for k in all_keys if k.startswith("LastSelection/")}
+        last_paths = {k: self.settings.value(k) for k in all_keys if k.startswith("LastPaths/")}
+        preferences = {k: self.settings.value(k) for k in all_keys if k.startswith("ProgramPreferences/")}
+        recent_files = {k: self.settings.value(k) for k in all_keys if k.startswith("RecentFiles/")}
+        recent_profiles = {k: self.settings.value(k) for k in all_keys if k.startswith("RecentProfiles/")}
+
+        return {
+            "version": self.settings.value("SettingsVersion", None, type=int),
+            "organization": self.settings.organizationName(),
+            "application": self.settings.applicationName(),
+            "storage_location": self.settings.fileName(),
+            "total_keys": len(all_keys),
+            "session_restore": session_restore,
+            "last_selection": last_selection,
+            "last_paths": last_paths,
+            "preferences": preferences,
+            "recent_files": recent_files,
+            "recent_profiles": recent_profiles,
+            "session_restore_enabled": self.should_track_session_restoration(),
+        }
 
 
 # Global application state instance
