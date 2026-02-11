@@ -12,7 +12,7 @@ MonStim Analyzer uses Qt's `QSettings` to persist user preferences and applicati
 - Organization: `WorthyLab`
 - Application: `MonStim Analyzer`
 
-The storage location is determined by the organization name and application name set in [main.py](main.py#L132-L133).
+The storage location is determined by the organization name and application name set in [main.py](../main.py#L132-L133).
 
 ## Settings Structure
 
@@ -75,7 +75,7 @@ As of version 0.5.3, MonStim Analyzer tracks settings version using the `Setting
 
 When you need to make breaking changes to settings structure:
 
-1. Increment `SETTINGS_VERSION` in [monstim_gui/core/application_state.py](monstim_gui/core/application_state.py)
+1. Increment `SETTINGS_VERSION` in [monstim_gui/core/application_state.py](../monstim_gui/core/application_state.py)
 2. Add migration logic in `_migrate_settings()`:
 
 ```python
@@ -199,7 +199,7 @@ python tools/settings_manager.py restore --file settings_export.json
 
 ## Best Practices for Developers
 
-1. **Never change org/app names** in [main.py](main.py) without a migration plan - this changes storage location.
+1. **Never change org/app names** in [main.py](../main.py) without a migration plan - this changes storage location.
 
 2. **Increment SETTINGS_VERSION** when making breaking changes to settings structure
 
@@ -221,6 +221,6 @@ python tools/settings_manager.py restore --file settings_export.json
 ## References
 
 - Qt Documentation: [QSettings Class](https://doc.qt.io/qt-6/qsettings.html)
-- Implementation: [monstim_gui/core/application_state.py](monstim_gui/core/application_state.py)
-- Initialization: [main.py](main.py#L132-L147)
-- Management Utility: [tools/settings_manager.py](tools/settings_manager.py)
+- Implementation: [monstim_gui/core/application_state.py](../monstim_gui/core/application_state.py)
+- Initialization: [main.py](../main.py#L132-L147)
+- Management Utility: [tools/settings_manager.py](../tools/settings_manager.py)
