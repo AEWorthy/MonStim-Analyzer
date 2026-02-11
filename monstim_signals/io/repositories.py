@@ -612,6 +612,15 @@ class DatasetRepository:
                         # If in-memory updates fail, log but do not prevent the rename (filesystem succeeded)
                         logging.exception("Failed to update in-memory child repo objects after dataset rename.")
 
+                # Refresh experiment index after dataset rename
+                try:
+                    exp_root = new_folder.parent
+                    from .experiment_index import ensure_fresh_index
+
+                    ensure_fresh_index(exp_root.name, exp_root)
+                except Exception:
+                    logging.debug("Index refresh after dataset rename failed (non-fatal).", exc_info=True)
+
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
@@ -620,14 +629,6 @@ class DatasetRepository:
                     gc.collect()
                     continue
                 raise
-        # Refresh experiment index after dataset rename
-        try:
-            exp_root = new_folder.parent
-            from .experiment_index import ensure_fresh_index
-
-            ensure_fresh_index(exp_root.name, exp_root)
-        except Exception:
-            logging.debug("Index refresh after dataset rename failed (non-fatal).", exc_info=True)
 
     def get_metadata(self) -> dict:
         """

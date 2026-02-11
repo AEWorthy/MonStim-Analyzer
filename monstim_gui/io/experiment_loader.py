@@ -191,27 +191,12 @@ class ExperimentLoadingThread(QThread):
                 self.status_update.emit(f"Loading '{self.experiment_name}'...")
             self.progress.emit(20)
 
-            # Show a distinct "Indexing..." step only when needed
-            try:
-                from monstim_signals.io.experiment_index import is_index_stale, load_experiment_index
-
-                idx = load_experiment_index(exp_path)
-                needs_index = idx is None or is_index_stale(idx)
-            except Exception:
-                needs_index = False
-
-            from monstim_gui.core.application_state import app_state as _app
-
-            if needs_index and _app.should_build_index_on_load():
-                self.status_update.emit("Indexing experiment folders...")
-                self.progress.emit(25)
-
             # Load experiment - this can take a long time for large experiments
             # Map dataset iteration progress (callback driven) into progress range 30-85.
             # Rate-limit progress updates to ~10/sec to reduce GUI churn.
             _last_emit_ts = 0.0
 
-            def _progress_cb(level: str, index: int, total: int, name: str):
+            def _progress_cb(level: str, index: int, total: int, name: str, *extra):
                 nonlocal _last_emit_ts
                 import time as _t
 
@@ -246,6 +231,28 @@ class ExperimentLoadingThread(QThread):
                     except Exception as exc:
                         # Progress UI failures must not abort experiment loading; log for diagnostics.
                         logging.debug("Non-fatal error while updating index progress: %s", exc)
+
+            # Show a distinct "Indexing..." step only when needed and requested
+            needs_index = False
+            try:
+                from monstim_signals.io.experiment_index import ensure_fresh_index, is_index_stale, load_experiment_index
+
+                idx = load_experiment_index(exp_path)
+                needs_index = idx is None or is_index_stale(idx)
+            except Exception:
+                needs_index = False
+
+            from monstim_gui.core.application_state import app_state as _app
+
+            build_index_pref = _app.should_build_index_on_load()
+
+            if needs_index and build_index_pref:
+                self.status_update.emit("Indexing experiment folders...")
+                self.progress.emit(25)
+                try:
+                    ensure_fresh_index(self.experiment_name, exp_path, progress_cb=_progress_cb)
+                except Exception as exc:
+                    logging.warning("Index build failed before load; continuing without index: %s", exc)
 
             # Overlay application preferences (QSettings) for loading:
             cfg = dict(self.config or {})

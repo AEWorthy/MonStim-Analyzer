@@ -8,6 +8,7 @@ from monstim_signals.io.experiment_index import (
     load_experiment_index,
     save_experiment_index,
 )
+from monstim_signals.io.repositories import DatasetRepository
 
 
 def test_build_and_save_index(tmp_path: Path):
@@ -145,6 +146,30 @@ def test_ensure_fresh_index_updates_on_dataset_rename(tmp_path: Path):
     ids = [d.id for d in loaded2.datasets]
     assert "DatasetRenamed" in ids
     assert "DatasetA" not in ids
+
+
+def test_dataset_repository_rename_refreshes_index(tmp_path: Path):
+    exp = tmp_path / "ExpRepo"
+    ds = exp / "DatasetA"
+    sess = ds / "S1"
+    exp.mkdir()
+    ds.mkdir()
+    sess.mkdir()
+    (exp / "experiment.annot.json").write_text("{}")
+    (ds / "dataset.annot.json").write_text("{}")
+    (sess / "session.annot.json").write_text("{}")
+    (sess / "RX00_0000.raw.h5").write_bytes(b"h5mock")
+
+    ensure_fresh_index("ExpRepo", exp)
+    repo = DatasetRepository(ds)
+
+    new_ds = exp / "DatasetB"
+    repo.rename(new_ds)
+
+    loaded = load_experiment_index(exp)
+    assert loaded is not None
+    ids = [d.id for d in loaded.datasets]
+    assert ids == ["DatasetB"]
 
 
 def test_stale_detection_after_new_recording_addition(tmp_path: Path):

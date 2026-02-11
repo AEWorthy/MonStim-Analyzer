@@ -728,7 +728,7 @@ class DataManager:
         try:
             if hasattr(self.gui, "current_experiment") and self.gui.current_experiment is not None:
                 exp_path = self.gui.current_experiment.repo.folder if self.gui.current_experiment.repo else None
-                if exp_path:
+                if exp_path and app_state.should_build_index_on_load():
                     from monstim_signals.io.experiment_index import ensure_fresh_index
 
                     ensure_fresh_index(self.gui.current_experiment.id, exp_path)
@@ -993,7 +993,7 @@ class DataManager:
             try:
                 if hasattr(self.gui, "current_experiment") and self.gui.current_experiment is not None:
                     exp_path = self.gui.current_experiment.repo.folder if self.gui.current_experiment.repo else None
-                    if exp_path:
+                    if exp_path and app_state.should_build_index_on_load():
                         from monstim_signals.io.experiment_index import ensure_fresh_index
 
                         ensure_fresh_index(self.gui.current_experiment.id, exp_path)
