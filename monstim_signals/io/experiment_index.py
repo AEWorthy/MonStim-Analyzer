@@ -24,6 +24,14 @@ class RecordingIndex:
     meta_path: Optional[str] = None
     size: Optional[int] = None
     mtime: Optional[float] = None
+    # Metadata extracted from meta.json for fast loading
+    meta_size: Optional[int] = None  # size of meta.json file
+    meta_mtime: Optional[float] = None  # mtime of meta.json file
+    recording_id: Optional[str] = None
+    num_channels: Optional[int] = None
+    num_samples: Optional[int] = None
+    scan_rate: Optional[int] = None
+    primary_stim_v: Optional[float] = None  # For sorting recordings
 
 
 @dataclass
@@ -98,12 +106,48 @@ def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[ca
                     # HDF5/NPY/CSV payloads potentially
                     if item.suffix.lower() in {".h5", ".hdf5", ".npy", ".npz", ".csv"}:
                         r_size, r_mtime = _stat_safe(item)
+                        # Extract metadata for fast loading
+                        stem = item.with_suffix("")
+                        meta_file = stem.with_suffix(".meta.json")
+                        meta_size, meta_mtime = _stat_safe(meta_file)
+                        # Read minimal metadata from meta.json if it exists
+                        recording_id = None
+                        num_channels = None
+                        num_samples = None
+                        scan_rate = None
+                        primary_stim_v = None
+                        if meta_file.exists():
+                            try:
+                                meta_dict = _load_json(meta_file)
+                                recording_id = meta_dict.get("recording_id")
+                                num_channels = meta_dict.get("num_channels")
+                                num_samples = meta_dict.get("num_samples")
+                                scan_rate = meta_dict.get("scan_rate")
+                                # Extract primary_stim.stim_v for sorting
+                                primary_stim = meta_dict.get("primary_stim")
+                                if isinstance(primary_stim, dict):
+                                    primary_stim_v = primary_stim.get("stim_v")
+                                elif isinstance(primary_stim, int) and primary_stim > 0:
+                                    # primary_stim is 1-based index into stim_clusters
+                                    stim_clusters = meta_dict.get("stim_clusters", [])
+                                    if 0 <= primary_stim - 1 < len(stim_clusters):
+                                        primary_stim_v = stim_clusters[primary_stim - 1].get("stim_v")
+                            except Exception:
+                                # If metadata extraction fails, continue without it
+                                logging.debug(f"Failed to extract metadata from {meta_file}", exc_info=True)
                         recordings.append(
                             RecordingIndex(
                                 path=str(item),
-                                meta_path=None,
+                                meta_path=str(meta_file) if meta_file.exists() else None,
                                 size=r_size,
                                 mtime=r_mtime,
+                                meta_size=meta_size,
+                                meta_mtime=meta_mtime,
+                                recording_id=recording_id,
+                                num_channels=num_channels,
+                                num_samples=num_samples,
+                                scan_rate=scan_rate,
+                                primary_stim_v=primary_stim_v,
                             )
                         )
                 elif item.is_dir():
@@ -186,6 +230,13 @@ def load_experiment_index(exp_path: Path) -> Optional[ExperimentIndex]:
                                     meta_path=r.get("meta_path"),
                                     size=r.get("size"),
                                     mtime=r.get("mtime"),
+                                    meta_size=r.get("meta_size"),
+                                    meta_mtime=r.get("meta_mtime"),
+                                    recording_id=r.get("recording_id"),
+                                    num_channels=r.get("num_channels"),
+                                    num_samples=r.get("num_samples"),
+                                    scan_rate=r.get("scan_rate"),
+                                    primary_stim_v=r.get("primary_stim_v"),
                                 )
                                 for r in s["recordings"]
                             ],
@@ -257,9 +308,20 @@ def is_index_stale(index: ExperimentIndex) -> bool:
                 r_path = Path(r.path)
                 if not r_path.exists():
                     return True
+                # Check raw data file if tracked
                 if r.size is not None or r.mtime is not None:
                     size, mtime = _stat_safe(r_path if r_path.is_file() else Path(r.meta_path) if r.meta_path else r_path)
                     if size != r.size or mtime != r.mtime:
+                        return True
+                # CRITICAL: Check meta.json file for changes to ensure GUI data is never stale
+                if r.meta_path and (r.meta_size is not None or r.meta_mtime is not None):
+                    meta_file = Path(r.meta_path)
+                    if meta_file.exists():
+                        meta_size, meta_mtime = _stat_safe(meta_file)
+                        if meta_size != r.meta_size or meta_mtime != r.meta_mtime:
+                            return True
+                    else:
+                        # meta.json was deleted - rebuild index
                         return True
     return False
 

@@ -197,9 +197,7 @@ class ExcludeSessionCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError:
-                # Session not found in the list (may have been removed); safe to ignore.
-                # Session not found in the list (may have been removed); safe to ignore.
-                pass
+                pass  # Session not found in the list (may have been removed); safe to ignore.
         else:
             # No sessions left; clear plots
             if hasattr(self.gui, "plot_widget"):
@@ -1294,6 +1292,20 @@ class ToggleCompletionStatusCommand(Command):
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
+                    # Also update the in-memory object if it's currently loaded so UI updates immediately
+                    try:
+                        if (
+                            hasattr(self.gui, "current_experiment")
+                            and self.gui.current_experiment
+                            and self.gui.current_experiment.id == self.experiment_id
+                        ):
+                            self.gui.current_experiment.is_completed = status
+                    except Exception:
+                        logging.error(
+                            f"Failed to update in-memory experiment object for experiment '{self.experiment_id}'",
+                            exc_info=True,
+                        )
+
                 case "dataset":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
                         logging.error(f"Parent experiment '{self.experiment_id}' not found")
@@ -1316,6 +1328,22 @@ class ToggleCompletionStatusCommand(Command):
 
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                    # Update in-memory dataset object if present
+                    try:
+                        if (
+                            hasattr(self.gui, "current_experiment")
+                            and self.gui.current_experiment
+                            and getattr(self.gui.current_experiment, "datasets", None)
+                        ):
+                            for ds in self.gui.current_experiment.datasets:
+                                if getattr(ds, "id", None) == self.dataset_id:
+                                    ds.is_completed = status
+                                    break
+                    except Exception:
+                        logging.error(
+                            f"Failed to update in-memory dataset object for dataset '{self.dataset_id}'", exc_info=True
+                        )
 
                 case "session":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
@@ -1343,6 +1371,22 @@ class ToggleCompletionStatusCommand(Command):
 
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                    # Update in-memory session object if present
+                    try:
+                        if (
+                            hasattr(self.gui, "current_dataset")
+                            and self.gui.current_dataset
+                            and getattr(self.gui.current_dataset, "sessions", None)
+                        ):
+                            for s in self.gui.current_dataset.sessions:
+                                if getattr(s, "id", None) == self.target_id:
+                                    s.is_completed = status
+                                    break
+                    except Exception:
+                        logging.error(
+                            f"Failed to update in-memory session object for session '{self.target_id}'", exc_info=True
+                        )
 
                 case _:
                     logging.error(f"Unknown level '{self.level}' for completion status toggle")

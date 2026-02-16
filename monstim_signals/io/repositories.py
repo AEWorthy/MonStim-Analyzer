@@ -255,6 +255,7 @@ class SessionRepository:
         # 1) Discover all recordings in this folder
         # Prefer index-based discovery to avoid heavy directory scans
         recording_repos: list[RecordingRepository] = []
+        recording_sort_keys = {}  # Map repo stem to primary_stim_v for pre-sorting
         try:
             exp_root = self.folder.parent.parent  # Experiment/dataset/session
             sess_idx = find_session_index(exp_root, self.folder)
@@ -262,12 +263,21 @@ class SessionRepository:
                 for r in sess_idx.recordings:
                     p = Path(r.path)
                     stem = p.with_suffix("") if p.is_file() else p  # tolerate file or folder style
-                    recording_repos.append(RecordingRepository(stem=stem))
+                    repo = RecordingRepository(stem=stem)
+                    recording_repos.append(repo)
+                    # Store primary_stim_v from index for efficient pre-sorting
+                    if r.primary_stim_v is not None:
+                        recording_sort_keys[str(stem)] = r.primary_stim_v
             else:
                 recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
         except Exception:
             logging.debug("Index-based discovery failed; falling back to folder scan.", exc_info=True)
             recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
+
+        # Pre-sort recording repos using index metadata if available for all recordings
+        # This ordering optimization reduces post-load sorting overhead
+        if recording_repos and len(recording_sort_keys) == len(recording_repos):
+            recording_repos.sort(key=lambda repo: recording_sort_keys.get(str(repo.stem), float("inf")))
 
         # 2) Load all recordings
         # Pass through lazy_open_h5 from config if present; prefer explicit key in config
@@ -281,8 +291,9 @@ class SessionRepository:
         recordings = [
             repo.load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write) for repo in recording_repos
         ]
-        # Sort by the primary StimCluster's stim_v
-        recordings.sort(key=lambda r: r.meta.primary_stim.stim_v)
+        # Sort by primary StimCluster's stim_v for correctness
+        # (Index-based pre-sorting is an optimization but we verify correct ordering)
+        recordings.sort(key=lambda r: r.meta.primary_stim.stim_v if r.meta.primary_stim else float("inf"))
 
         # 3) Load or create session annotation JSON
         if self.session_js.exists():
@@ -612,6 +623,15 @@ class DatasetRepository:
                         # If in-memory updates fail, log but do not prevent the rename (filesystem succeeded)
                         logging.exception("Failed to update in-memory child repo objects after dataset rename.")
 
+                # Refresh experiment index after dataset rename
+                try:
+                    exp_root = new_folder.parent
+                    from .experiment_index import ensure_fresh_index
+
+                    ensure_fresh_index(exp_root.name, exp_root)
+                except Exception:
+                    logging.debug("Index refresh after dataset rename failed (non-fatal).", exc_info=True)
+
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
@@ -620,14 +640,6 @@ class DatasetRepository:
                     gc.collect()
                     continue
                 raise
-        # Refresh experiment index after dataset rename
-        try:
-            exp_root = new_folder.parent
-            from .experiment_index import ensure_fresh_index
-
-            ensure_fresh_index(exp_root.name, exp_root)
-        except Exception:
-            logging.debug("Index refresh after dataset rename failed (non-fatal).", exc_info=True)
 
     def get_metadata(self) -> dict:
         """

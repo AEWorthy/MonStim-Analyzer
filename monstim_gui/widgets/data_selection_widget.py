@@ -473,21 +473,19 @@ class DataSelectionWidget(QGroupBox):
                     "session": self.session_combo,
                 }.get(level)
                 if source_widget is not None:
+                    # If sender is None (e.g., triggered from keyboard), map from the combo box itself
                     global_pos = source_widget.mapToGlobal(pos)
-                    logging.debug(
-                        "Failed to map context menu position from Sender. Mapped context menu position from combo box for level '%s' instead.",
-                        level,
-                    )
+
             except Exception:
                 global_pos = None
 
         # Final fallback: use current cursor position
         if global_pos is None:
-            logging.debug(
-                "Failed to map context menu position from Sender or combo box. Using cursor position for level '%s' instead.",
-                level,
-            )
+            # If we can't map the position from the sender or combo, fall back to the current cursor position
             global_pos = QCursor.pos()
+            logging.warning(
+                "Could not determine context menu position from sender nor combo box; falling back to cursor position"
+            )
 
         selected = menu.exec(global_pos)
 
