@@ -1599,22 +1599,43 @@ class DataManager:
             return
 
         try:
+            from monstim_gui.commands import EditDatasetMetadataCommand
             from monstim_gui.dialogs.dataset_metadata_editor import DatasetMetadataEditor
 
             # Show editor dialog with the current dataset
             dialog = DatasetMetadataEditor(self.gui.current_dataset, parent=self.gui)
 
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                # Refresh the dataset and session combos to show updated display names
-                # Will automatically restore selection based on current_dataset reference
-                self.gui.data_selection_widget.update(levels=("dataset", "session"))
+                # Create and execute the command with the collected metadata
+                command = EditDatasetMetadataCommand(
+                    gui=self.gui,
+                    dataset=self.gui.current_dataset,
+                    old_date=dialog.old_date,
+                    new_date=dialog.new_date,
+                    old_animal_id=dialog.old_animal_id,
+                    new_animal_id=dialog.new_animal_id,
+                    old_condition=dialog.old_condition,
+                    new_condition=dialog.new_condition,
+                    old_folder_name=dialog.old_folder_name,
+                    new_folder_name=dialog.new_folder_name,
+                )
+
+                # Execute via command invoker for undo/redo support
+                self.gui.command_invoker.execute(command)
+
+                # Show success message
+                success_msg = "Dataset metadata updated successfully!"
+                if dialog.new_folder_name:
+                    success_msg += f"\n\nFolder renamed to: {dialog.new_folder_name}"
+                success_msg += f"\n\nNew display name: {self.gui.current_dataset.formatted_name}"
+                QMessageBox.information(self.gui, "Success", success_msg)
 
                 self.gui.status_bar.showMessage("Dataset metadata updated successfully.", 5000)
                 logging.info(f"Dataset metadata updated for '{self.gui.current_dataset.id}'")
 
         except Exception as e:
-            logging.error(f"Error opening dataset metadata editor: {e}")
-            QMessageBox.critical(self.gui, "Error", f"Failed to open dataset metadata editor:\n{e}")
+            logging.error(f"Error editing dataset metadata: {e}", exc_info=True)
+            QMessageBox.critical(self.gui, "Error", f"Failed to edit dataset metadata:\n{e}")
 
     # ------------------------------------------------------------------
     def close_all_data(self):

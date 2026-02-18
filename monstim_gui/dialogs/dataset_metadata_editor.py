@@ -3,9 +3,6 @@ Dataset metadata editor dialog for MonStim Analyzer.
 Allows users to edit dataset date, animal ID, and experimental condition.
 """
 
-import errno
-import logging
-import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,6 +32,18 @@ class DatasetMetadataEditor(QDialog):
         self.setWindowTitle("Edit Dataset Metadata")
         self.setModal(True)
         self.resize(500, 300)
+
+        # Store metadata for command creation
+        self.old_date = self.dataset.annot.date
+        self.old_animal_id = self.dataset.annot.animal_id
+        self.old_condition = self.dataset.annot.condition
+        self.old_folder_name = self.dataset.id if self.dataset.repo else None
+
+        # These will be set when user clicks Save
+        self.new_date = None
+        self.new_animal_id = None
+        self.new_condition = None
+        self.new_folder_name = None
 
         # Initialize UI
         self._setup_ui()
@@ -248,7 +257,7 @@ class DatasetMetadataEditor(QDialog):
         return errors
 
     def _save_changes(self):
-        """Save the metadata changes to the dataset."""
+        """Validate inputs and prepare metadata for command execution."""
         # Validate inputs
         errors = self._validate_inputs()
         if errors:
@@ -265,143 +274,38 @@ class DatasetMetadataEditor(QDialog):
         condition_input = self.condition_edit.text().strip()
 
         # Parse and store the values
-        parsed_date = self._parse_date_input(date_input) if date_input else None
-        parsed_animal_id = animal_id_input if animal_id_input else None
-        parsed_condition = condition_input if condition_input else None
+        self.new_date = self._parse_date_input(date_input) if date_input else None
+        self.new_animal_id = animal_id_input if animal_id_input else None
+        self.new_condition = condition_input if condition_input else None
 
-        try:
-            # Check if we need to rename the folder
-            should_rename_folder = parsed_date and parsed_animal_id and parsed_condition and self.dataset.repo is not None
+        # Check if we need to rename the folder
+        should_rename_folder = self.new_date and self.new_animal_id and self.new_condition and self.dataset.repo is not None
 
-            old_folder_path = None
-            new_folder_path = None
+        if should_rename_folder:
+            # Calculate new folder name
+            new_folder_name = self._format_folder_name(self.new_date, self.new_animal_id, self.new_condition)
+            old_folder_path = Path(self.dataset.repo.folder)
 
-            if should_rename_folder:
-                # Calculate new folder name
-                new_folder_name = self._format_folder_name(parsed_date, parsed_animal_id, parsed_condition)
-                old_folder_path = Path(self.dataset.repo.folder)
+            # Check if rename is needed (folder name changed)
+            if old_folder_path.name != new_folder_name:
                 new_folder_path = old_folder_path.parent / new_folder_name
 
-                # Check if rename is needed (folder name changed)
-                if old_folder_path.name != new_folder_name:
-                    # Check if target folder already exists
-                    if new_folder_path.exists():
-                        QMessageBox.warning(
-                            self,
-                            "Folder Exists",
-                            f"A folder with the name '{new_folder_name}' already exists.\n"
-                            f"Please choose different metadata values or rename the existing folder first.",
-                        )
-                        return
+                # Check if target folder already exists
+                if new_folder_path.exists():
+                    QMessageBox.warning(
+                        self,
+                        "Folder Exists",
+                        f"A folder with the name '{new_folder_name}' already exists.\n"
+                        f"Please choose different metadata values or rename the existing folder first.",
+                    )
+                    return
 
-                    # Close all open HDF5 files before renaming
-                    logging.info("Closing all open files before folder rename...")
-                    try:
-                        self.dataset.close()
-                    except Exception as e_close:
-                        logging.warning(f"Error while closing dataset files: {e_close}")
+                self.new_folder_name = new_folder_name
+            else:
+                # Folder name won't change
+                self.new_folder_name = None
+        else:
+            self.new_folder_name = None
 
-                    # Force garbage collection to help release OS file handles held by h5py
-                    import gc
-
-                    gc.collect()
-
-                    # Use repository-level rename (handles retries and path updates)
-                    renamed = False
-                    try:
-                        if hasattr(self.dataset, "repo") and self.dataset.repo is not None:
-                            # DatasetRepository.rename will perform the filesystem move and update the repo internals
-                            # Provide the Dataset domain object so child repos are updated in-memory
-                            self.dataset.repo.rename(new_folder_path, dataset=self.dataset)
-                            logging.info(
-                                f"Renamed dataset folder from '{old_folder_path.name}' to '{new_folder_name}' via repository.rename()"
-                            )
-                            renamed = True
-                        else:
-                            # Fallback to os.rename if no repo is available (should be rare)
-                            os.rename(str(old_folder_path), str(new_folder_path))
-                            logging.info(
-                                f"Renamed dataset folder from '{old_folder_path.name}' to '{new_folder_name}' using os.rename()"
-                            )
-                            renamed = True
-                    except OSError as rename_error:
-                        # If access denied, present helpful message
-                        if getattr(rename_error, "errno", None) == errno.EACCES:
-                            QMessageBox.critical(
-                                self,
-                                "Access Denied",
-                                f"Cannot rename folder because it is in use.\n\n"
-                                f"Please make sure no other programs are accessing files in:\n{old_folder_path}\n\n"
-                                f"Try closing any data analysis tools, file explorers, or other applications "
-                                f"that might have these files open, then try again.",
-                            )
-                            return
-                        else:
-                            raise
-
-                    if not renamed:
-                        # If rename did not occur for some reason, abort
-                        logging.error("Failed to rename folder after repository call.")
-                        return
-
-                    # Update the repository and dataset paths (DatasetRepository.rename already updated repo internals)
-                    # Ensure dataset domain object matches
-                    self.dataset.id = new_folder_name
-
-                    # Update all session repository paths
-                    for session in self.dataset.get_all_sessions(include_excluded=True):
-                        if session.repo:
-                            new_session_path = new_folder_path / session.repo.folder.name
-                            session.repo.update_path(new_session_path)
-
-                            # Update all recording repository paths within this session
-                            for recording in session.recordings:
-                                if recording.repo:
-                                    old_stem = recording.repo.stem
-                                    new_stem = new_session_path / old_stem.name
-                                    recording.repo.update_path(new_stem)
-                else:
-                    # No folder rename needed
-                    should_rename_folder = False
-
-            # Update the dataset annotation
-            self.dataset.annot.date = parsed_date
-            self.dataset.annot.animal_id = parsed_animal_id
-            self.dataset.annot.condition = parsed_condition
-
-            # Save the dataset (this will persist the changes)
-            if self.dataset.repo is not None:
-                self.dataset.repo.save(self.dataset)
-                logging.info(
-                    f"Updated metadata for dataset '{self.dataset.id}': date={parsed_date}, animal_id={parsed_animal_id}, condition={parsed_condition}"
-                )
-
-            # Show success message
-            success_msg = "Dataset metadata updated successfully!"
-            if should_rename_folder and new_folder_path:
-                success_msg += f"\n\nFolder renamed to: {new_folder_path.name}"
-            success_msg += f"\n\nNew display name: {self.dataset.formatted_name}"
-
-            QMessageBox.information(self, "Success", success_msg)
-
-            self.accept()
-
-        except Exception as e:
-            # If folder rename failed, try to rename it back using repository API if available
-            if should_rename_folder and old_folder_path and new_folder_path and new_folder_path.exists():
-                try:
-                    if hasattr(self.dataset, "repo") and self.dataset.repo is not None:
-                        # Attempt to move it back using the repo API (handles retries)
-                        self.dataset.repo.rename(old_folder_path)
-                        logging.info("Reverted folder rename via repository.rename() due to error")
-                        # Also revert the dataset repo path
-                        self.dataset.repo.update_path(old_folder_path)
-                        self.dataset.id = old_folder_path.name
-                    else:
-                        os.rename(str(new_folder_path), str(old_folder_path))
-                        logging.info("Reverted folder rename using os.rename() due to error")
-                except Exception as revert_error:
-                    logging.error(f"Failed to revert folder rename: {revert_error}")
-
-            logging.error(f"Error saving dataset metadata: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to save metadata changes:\n{e}")
+        # Accept the dialog - the command will execute the changes
+        self.accept()

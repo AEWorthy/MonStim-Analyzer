@@ -40,6 +40,7 @@ EXPECTED_COMMANDS = {
     "DeleteDatasetCommand",
     "ToggleDatasetInclusionCommand",
     "ToggleCompletionStatusCommand",
+    "EditDatasetMetadataCommand",
 }
 
 
