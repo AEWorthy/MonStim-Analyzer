@@ -1490,6 +1490,18 @@ class EditDatasetMetadataCommand(Command):
                 if new_folder_path.exists():
                     raise FileExistsError(f"Target folder already exists: {new_folder_path}")
 
+                # Explicitly close any open resources (e.g. HDF5 files) before renaming
+                if hasattr(self.dataset, "close"):
+                    try:
+                        self.dataset.close()
+                        logging.debug("Closed dataset before folder rename to release file handles.")
+                    except Exception as close_err:
+                        # Proceed with rename even if close fails; behavior is no worse than before
+                        logging.warning(
+                            "Failed to close dataset cleanly before rename: %s",
+                            close_err,
+                            exc_info=True,
+                        )
                 try:
                     # Use repository rename with retry logic
                     self.dataset.repo.rename(new_folder_path, dataset=self.dataset)
