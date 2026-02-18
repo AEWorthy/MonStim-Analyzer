@@ -1479,12 +1479,8 @@ class EditDatasetMetadataCommand(Command):
         """
         import errno
 
-        # Update annotation
-        self.dataset.annot.date = date
-        self.dataset.annot.animal_id = animal_id
-        self.dataset.annot.condition = condition
-
-        # Rename folder if needed
+        # Rename folder if needed (before mutating metadata)
+        # This ensures atomicity - if rename fails, metadata hasn't changed yet
         if folder_name and self.dataset.repo:
             current_folder = self.dataset.repo.folder  # Already a Path object
             if current_folder.name != folder_name:
@@ -1504,6 +1500,11 @@ class EditDatasetMetadataCommand(Command):
                             f"Cannot rename folder - it is in use. " f"Please close any programs accessing: {current_folder}"
                         ) from e
                     raise
+
+        # Update annotation after successful rename (or if no rename needed)
+        self.dataset.annot.date = date
+        self.dataset.annot.animal_id = animal_id
+        self.dataset.annot.condition = condition
 
         # Save annotation changes
         if self.dataset.repo:
@@ -1537,7 +1538,7 @@ class EditDatasetMetadataCommand(Command):
 
         except Exception as e:
             logging.error(f"Failed to undo dataset metadata changes: {e}", exc_info=True)
-            raise Exception(f"Failed to undo dataset metadata changes: {str(e)}")
+            raise
 
     def get_description(self) -> str:
         """Return a human-readable description of this command."""

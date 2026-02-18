@@ -10,7 +10,7 @@ These tests verify that:
 """
 
 from pathlib import Path
-from unittest.mock import Mock, PropertyMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -97,21 +97,21 @@ class TestEditDatasetMetadataCommand:
         mock_dataset.repo = Mock()
 
         # Mock the folder path - need to properly mock Path behavior
-        old_folder = Mock(spec=Path)
+        old_folder = MagicMock(spec=Path)
         old_folder.name = "240115 C123 control"
-        parent_folder = Mock(spec=Path)
+        parent_folder = MagicMock(spec=Path)
 
-        # Mock the / operator for parent / folder_name
-        def parent_div(self_arg, folder_name):
-            new_path = Mock(spec=Path)
+        # Mock the / operator for parent / folder_name using side_effect
+        def parent_div(folder_name):
+            new_path = MagicMock(spec=Path)
             new_path.name = folder_name
             new_path.exists.return_value = False
             return new_path
 
-        parent_folder.__truediv__ = parent_div
+        parent_folder.__truediv__.side_effect = parent_div
         old_folder.parent = parent_folder
 
-        type(mock_dataset.repo).folder = PropertyMock(return_value=old_folder)
+        mock_dataset.repo.folder = old_folder
 
         # Create command with folder rename
         cmd = EditDatasetMetadataCommand(
@@ -163,21 +163,21 @@ class TestEditDatasetMetadataCommand:
         mock_dataset.repo = Mock()
 
         # Mock the folder path
-        old_folder = Mock(spec=Path)
+        old_folder = MagicMock(spec=Path)
         old_folder.name = "240115 C123 control"
-        parent_folder = Mock(spec=Path)
+        parent_folder = MagicMock(spec=Path)
 
-        # Mock the / operator to return a path that exists
-        def parent_div(self_arg, folder_name):
-            new_path = Mock(spec=Path)
+        # Mock the / operator to return a path that exists using side_effect
+        def parent_div(folder_name):
+            new_path = MagicMock(spec=Path)
             new_path.name = folder_name
             new_path.exists.return_value = True  # Target already exists
             return new_path
 
-        parent_folder.__truediv__ = parent_div
+        parent_folder.__truediv__.side_effect = parent_div
         old_folder.parent = parent_folder
 
-        type(mock_dataset.repo).folder = PropertyMock(return_value=old_folder)
+        mock_dataset.repo.folder = old_folder
 
         # Create command with folder rename
         cmd = EditDatasetMetadataCommand(
@@ -209,21 +209,21 @@ class TestEditDatasetMetadataCommand:
         mock_dataset.repo = Mock()
 
         # After execute, folder has been renamed to new name
-        new_folder = Mock(spec=Path)
+        new_folder = MagicMock(spec=Path)
         new_folder.name = "240116 C456 test"
-        parent_folder = Mock(spec=Path)
+        parent_folder = MagicMock(spec=Path)
 
-        # Mock the / operator for parent / folder_name
-        def parent_div(self_arg, folder_name):
-            path = Mock(spec=Path)
+        # Mock the / operator for parent / folder_name using side_effect
+        def parent_div(folder_name):
+            path = MagicMock(spec=Path)
             path.name = folder_name
             path.exists.return_value = False
             return path
 
-        parent_folder.__truediv__ = parent_div
+        parent_folder.__truediv__.side_effect = parent_div
         new_folder.parent = parent_folder
 
-        type(mock_dataset.repo).folder = PropertyMock(return_value=new_folder)
+        mock_dataset.repo.folder = new_folder
 
         # Create command
         cmd = EditDatasetMetadataCommand(
@@ -372,21 +372,21 @@ class TestEditDatasetMetadataCommand:
         mock_dataset.repo = Mock()
 
         # Mock the folder path
-        old_folder = Mock(spec=Path)
+        old_folder = MagicMock(spec=Path)
         old_folder.name = "240115 C123 control"
-        parent_folder = Mock(spec=Path)
+        parent_folder = MagicMock(spec=Path)
 
-        # Mock the / operator
-        def parent_div(self_arg, folder_name):
-            new_path = Mock(spec=Path)
+        # Mock the / operator using side_effect
+        def parent_div(folder_name):
+            new_path = MagicMock(spec=Path)
             new_path.name = folder_name
             new_path.exists.return_value = False
             return new_path
 
-        parent_folder.__truediv__ = parent_div
+        parent_folder.__truediv__.side_effect = parent_div
         old_folder.parent = parent_folder
 
-        type(mock_dataset.repo).folder = PropertyMock(return_value=old_folder)
+        mock_dataset.repo.folder = old_folder
 
         # Make repo.rename raise access denied error
         access_error = OSError("Access denied")

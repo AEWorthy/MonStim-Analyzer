@@ -323,15 +323,15 @@ class PlotWidget(QGroupBox):
             # Get the current plot type
             plot_type = self.plot_type_combo.currentText()
 
-            # Skip if no plot type selected
-            if not plot_type:
-                return
-
             # Remove the current widget if it exists
             if self.current_option_widget:
                 self.options_layout.removeWidget(self.current_option_widget)
                 self.current_option_widget.deleteLater()
                 self.current_option_widget = None
+
+            # Skip if no plot type selected
+            if not plot_type:
+                return
 
             # Create a new widget with the same plot type
             if plot_type in self.plot_options[self.view]:
