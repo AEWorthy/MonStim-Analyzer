@@ -74,7 +74,7 @@ class RecordingCyclerWidget(QGroupBox):
         super().__init__("Recording Cycler", parent)
 
         self.gui: "MonstimGUI" = get_main_window()
-        if not self.gui.current_session:
+        if not self.gui or not self.gui.current_session:
             self.max_recording_idxs = 0
         else:
             self.max_recording_idxs = self.gui.current_session.num_all_recordings - 1
@@ -138,7 +138,7 @@ class RecordingCyclerWidget(QGroupBox):
         self.recording_spinbox.valueChanged.connect(self.on_recording_changed)
 
     def reset_max_recordings(self):
-        if not self.gui.current_session:
+        if not self.gui or not self.gui.current_session:
             self.max_recording_idxs = 0
         else:
             self.max_recording_idxs = max(0, self.gui.current_session.num_all_recordings - 1)
@@ -168,6 +168,8 @@ class RecordingCyclerWidget(QGroupBox):
             self.recording_spinbox.setValue(self.recording_spinbox.value() + self.step_size.value())
 
     def on_exclude(self):
+        if not self.gui or not self.gui.current_session:
+            return
         selected_recording_id = self.gui.current_session.all_recordings[self.recording_spinbox.value()].id
         logging.info(f"Excluding/including recording ID {selected_recording_id}")
         logging.info(f"Current excluded recordings: {self.gui.current_session.excluded_recordings}")
@@ -189,10 +191,11 @@ class RecordingCyclerWidget(QGroupBox):
             value = max_val
         self._refresh_exclude_button(value)
 
-        self.gui.plot_controller.plot_data()
+        if self.gui and self.gui.plot_controller:
+            self.gui.plot_controller.plot_data()
 
     def _refresh_exclude_button(self, recording_index):
-        if self.gui.current_session and self.gui.current_session.all_recordings:
+        if self.gui and self.gui.current_session and self.gui.current_session.all_recordings:
             # Translate index -> recording id before checking exclusion list
             if 0 <= recording_index < len(self.gui.current_session.all_recordings):
                 rec_id = self.gui.current_session.all_recordings[recording_index].id

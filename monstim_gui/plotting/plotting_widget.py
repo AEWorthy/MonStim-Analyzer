@@ -320,68 +320,70 @@ class PlotWidget(QGroupBox):
         This should refresh the current plot options widget without changing saved options.
         """
         try:
-            # Just refresh the current widget without changing saved options
+            # Get the current plot type
             plot_type = self.plot_type_combo.currentText()
-            if plot_type and self.current_option_widget:
-                # Remove the current widget
+
+            # Remove the current widget if it exists
+            if self.current_option_widget:
                 self.options_layout.removeWidget(self.current_option_widget)
                 self.current_option_widget.deleteLater()
                 self.current_option_widget = None
 
-                # Create a new widget with the same plot type
-                if plot_type in self.plot_options[self.view]:
-                    self.current_option_widget = self.plot_options[self.view][plot_type](self)
-                    self.options_layout.addWidget(self.current_option_widget)
+            # Skip if no plot type selected
+            if not plot_type:
+                return
 
-                    # Restore the saved options for this view and plot type
-                    if plot_type in self.last_options[self.view] and self.last_options[self.view][plot_type]:
-                        try:
-                            saved_options = self.last_options[self.view][plot_type]
+            # Create a new widget with the same plot type
+            if plot_type in self.plot_options[self.view]:
+                self.current_option_widget = self.plot_options[self.view][plot_type](self)
+                self.options_layout.addWidget(self.current_option_widget)
 
-                            # Filter options to only include those that are valid for this plot type
-                            default_options = self.current_option_widget.get_options()
-                            filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
+                # Restore the saved options for this view and plot type
+                if plot_type in self.last_options[self.view] and self.last_options[self.view][plot_type]:
+                    try:
+                        saved_options = self.last_options[self.view][plot_type]
 
-                            # Use persistent channel selection instead of view-specific selection
-                            if "channel_indices" in filtered_options and hasattr(self, "persistent_channel_selection"):
-                                filtered_options["channel_indices"] = self.persistent_channel_selection
+                        # Filter options to only include those that are valid for this plot type
+                        default_options = self.current_option_widget.get_options()
+                        filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
 
-                            self.current_option_widget.set_options(filtered_options)
-                        except Exception as e:
-                            logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
-                    else:
-                        # Apply persistent channel selection even if no other saved options exist
-                        if hasattr(self, "persistent_channel_selection") and hasattr(
-                            self.current_option_widget, "channel_selector"
-                        ):
-                            # If persistent selection is empty (first load), populate with all available channels
-                            if not self.persistent_channel_selection:
-                                all_channels = self.current_option_widget.channel_selector.get_selected_channels()
-                                if all_channels:  # Only update if there are channels available
-                                    self.persistent_channel_selection = all_channels
-                                    logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
-                            else:
-                                self.current_option_widget.channel_selector.set_selected_channels(
-                                    self.persistent_channel_selection
-                                )
+                        # Use persistent channel selection instead of view-specific selection
+                        if "channel_indices" in filtered_options and hasattr(self, "persistent_channel_selection"):
+                            filtered_options["channel_indices"] = self.persistent_channel_selection
 
-                    # Connect channel selection updates for real-time persistence
-                    self.connect_channel_selection_updates()
+                        self.current_option_widget.set_options(filtered_options)
+                    except Exception as e:
+                        logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                else:
+                    # Apply persistent channel selection even if no other saved options exist
+                    if hasattr(self, "persistent_channel_selection") and hasattr(
+                        self.current_option_widget, "channel_selector"
+                    ):
+                        # If persistent selection is empty (first load), populate with all available channels
+                        if not self.persistent_channel_selection:
+                            all_channels = self.current_option_widget.channel_selector.get_selected_channels()
+                            if all_channels:  # Only update if there are channels available
+                                self.persistent_channel_selection = all_channels
+                                logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                        else:
+                            self.current_option_widget.channel_selector.set_selected_channels(
+                                self.persistent_channel_selection
+                            )
 
-                    # Connect option change signals so modifications are saved immediately
-                    self.connect_option_change_signals()
+                # Connect channel selection updates for real-time persistence
+                self.connect_channel_selection_updates()
 
-                    # Connect option change signals so modifications are saved immediately
-                    self.connect_option_change_signals()
+                # Connect option change signals so modifications are saved immediately
+                self.connect_option_change_signals()
 
-                    self.options_layout.update()
+                self.options_layout.update()
 
-                    # Handle special case for Single EMG Recordings
-                    if plot_type == "Single EMG Recordings":
-                        self.current_option_widget.recording_cycler.reset_max_recordings()
+                # Handle special case for Single EMG Recordings
+                if plot_type == "Single EMG Recordings":
+                    self.current_option_widget.recording_cycler.reset_max_recordings()
 
-        except AttributeError:
-            pass
+        except AttributeError as e:
+            logging.warning(f"Error refreshing plot options widget: {e}", exc_info=True)
 
     def update_plot_types(self):
         self.plot_type_combo.blockSignals(True)

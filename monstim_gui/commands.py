@@ -1411,3 +1411,157 @@ class ToggleCompletionStatusCommand(Command):
     def get_description(self) -> str:
         action = "completed" if self.new_status else "marked incomplete"
         return f"Marked {self.level} '{self.target_id}' as {action}"
+
+
+class EditDatasetMetadataCommand(Command):
+    """Command to edit dataset metadata (date, animal ID, condition) with optional folder rename."""
+
+    def __init__(
+        self,
+        gui,
+        dataset,
+        old_date: str | None,
+        new_date: str | None,
+        old_animal_id: str | None,
+        new_animal_id: str | None,
+        old_condition: str | None,
+        new_condition: str | None,
+        old_folder_name: str | None = None,
+        new_folder_name: str | None = None,
+    ):
+        """Initialize the edit metadata command.
+
+        Args:
+            gui: The main GUI instance
+            dataset: The Dataset object to modify
+            old_date: Previous date string (YYYY-MM-DD format)
+            new_date: New date string (YYYY-MM-DD format)
+            old_animal_id: Previous animal ID
+            new_animal_id: New animal ID
+            old_condition: Previous condition
+            new_condition: New condition
+            old_folder_name: Original folder name (if renaming)
+            new_folder_name: New folder name (if renaming)
+        """
+        self.gui = gui
+        self.dataset = dataset
+        self.old_date = old_date
+        self.new_date = new_date
+        self.old_animal_id = old_animal_id
+        self.new_animal_id = new_animal_id
+        self.old_condition = old_condition
+        self.new_condition = new_condition
+        self.old_folder_name = old_folder_name
+        self.new_folder_name = new_folder_name
+
+        # Build command name
+        parts = []
+        if old_date != new_date:
+            parts.append(f"date: {old_date} → {new_date}")
+        if old_animal_id != new_animal_id:
+            parts.append(f"ID: {old_animal_id} → {new_animal_id}")
+        if old_condition != new_condition:
+            parts.append(f"condition: {old_condition} → {new_condition}")
+
+        if parts:
+            self.command_name = f"Edit Dataset Metadata ({', '.join(parts)})"
+        else:
+            self.command_name = "Edit Dataset Metadata"
+
+    def _apply_metadata(self, date: str | None, animal_id: str | None, condition: str | None, folder_name: str | None):
+        """Apply metadata changes and optionally rename folder.
+
+        Args:
+            date: Date to set
+            animal_id: Animal ID to set
+            condition: Condition to set
+            folder_name: Target folder name (None if no rename needed)
+        """
+        import errno
+
+        # Rename folder if needed (before mutating metadata)
+        # This ensures atomicity - if rename fails, metadata hasn't changed yet
+        if folder_name and self.dataset.repo:
+            current_folder = self.dataset.repo.folder  # Already a Path object
+            if current_folder.name != folder_name:
+                new_folder_path = current_folder.parent / folder_name
+
+                # Check if target exists
+                if new_folder_path.exists():
+                    raise FileExistsError(f"Target folder already exists: {new_folder_path}")
+
+                # Explicitly close any open resources (e.g. HDF5 files) before renaming
+                if hasattr(self.dataset, "close"):
+                    try:
+                        self.dataset.close()
+                        logging.debug("Closed dataset before folder rename to release file handles.")
+                    except Exception as close_err:
+                        # Proceed with rename even if close fails; behavior is no worse than before
+                        logging.warning(
+                            "Failed to close dataset cleanly before rename: %s",
+                            close_err,
+                            exc_info=True,
+                        )
+                try:
+                    # Use repository rename with retry logic
+                    self.dataset.repo.rename(new_folder_path, dataset=self.dataset)
+                    logging.info(f"Renamed dataset folder: {current_folder.name} → {folder_name}")
+                except OSError as e:
+                    if getattr(e, "errno", None) == errno.EACCES:
+                        raise OSError(
+                            f"Cannot rename folder - it is in use. " f"Please close any programs accessing: {current_folder}"
+                        ) from e
+                    raise
+
+        # Update annotation after successful rename (or if no rename needed)
+        self.dataset.annot.date = date
+        self.dataset.annot.animal_id = animal_id
+        self.dataset.annot.condition = condition
+
+        # Save annotation changes
+        if self.dataset.repo:
+            self.dataset.repo.save(self.dataset)
+            logging.info(
+                f"Updated metadata for dataset '{self.dataset.id}': "
+                f"date={date}, animal_id={animal_id}, condition={condition}"
+            )
+
+    def execute(self):
+        """Apply the new metadata and folder name."""
+        try:
+            self._apply_metadata(self.new_date, self.new_animal_id, self.new_condition, self.new_folder_name)
+
+            # Refresh UI to show updated display name
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update(levels=("dataset", "session"))
+
+        except Exception as e:
+            logging.error(f"Failed to apply dataset metadata changes: {e}", exc_info=True)
+            raise
+
+    def undo(self):
+        """Revert to the old metadata and folder name."""
+        try:
+            self._apply_metadata(self.old_date, self.old_animal_id, self.old_condition, self.old_folder_name)
+
+            # Refresh UI to show reverted display name
+            if hasattr(self.gui, "data_selection_widget"):
+                self.gui.data_selection_widget.update(levels=("dataset", "session"))
+
+        except Exception as e:
+            logging.error(f"Failed to undo dataset metadata changes: {e}", exc_info=True)
+            raise
+
+    def get_description(self) -> str:
+        """Return a human-readable description of this command."""
+        parts = []
+        if self.old_date != self.new_date:
+            parts.append(f"date to {self.new_date}")
+        if self.old_animal_id != self.new_animal_id:
+            parts.append(f"ID to {self.new_animal_id}")
+        if self.old_condition != self.new_condition:
+            parts.append(f"condition to {self.new_condition}")
+
+        if parts:
+            return f"Changed dataset {', '.join(parts)}"
+        return "Modified dataset metadata"
