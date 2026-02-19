@@ -10,49 +10,15 @@ from pathlib import Path
 
 import numpy as np
 from scipy import signal
+from monstim_signals.domain.processing import (
+    butter_bandpass_filter,
+    calculate_rms_amplitude,
+    calculate_peak_to_trough_amplitude,
+)
 
 # ============================================================================
 # Signal Processing Functions (from monstim_signals)
 # ============================================================================
-
-
-def butter_bandpass(lowcut: float, highcut: float, fs: float, order: int):
-    """Design a Butterworth bandpass filter."""
-    nyquist = 0.5 * fs
-    low = lowcut / nyquist
-    high = highcut / nyquist
-    b, a = signal.butter(order, [low, high], btype="band")
-    return b, a
-
-
-def butter_bandpass_filter(data, fs, lowcut=100, highcut=3500, order=4):
-    """Apply a Butterworth bandpass filter to data."""
-    b, a = butter_bandpass(lowcut, highcut, fs, order)
-    return signal.filtfilt(b, a, data)
-
-
-def calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
-    """Calculate root mean square (RMS) amplitude of EMG signal."""
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
-    if emg_window.size == 0:
-        return np.nan
-    squared_emg_window = np.square(emg_window)
-    mean_squared_value = np.mean(squared_emg_window)
-    return np.sqrt(mean_squared_value)
-
-
-def calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
-    """Calculate peak-to-trough amplitude of EMG signal."""
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
-    if emg_window.size == 0:
-        return np.nan
-    return np.max(emg_window) - np.min(emg_window)
-
-
 # ============================================================================
 # Physiological Parameters
 # ============================================================================
