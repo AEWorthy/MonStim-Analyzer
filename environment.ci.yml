@@ -1,4 +1,4 @@
-name: alv_lab
+name: monstim
 channels:
   - conda-forge
   - defaults

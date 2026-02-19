@@ -1,19 +1,19 @@
 # Copilot Instructions for MonStim Analyzer
 
-## 🚨 ABSOLUTELY REQUIRED: Activate the `alv_lab` Conda Environment First
-You MUST activate the `alv_lab` environment **before running ANY code, tests, imports, migrations, or package installs**. Failing to do this causes missing dependency errors (e.g. `pytest` not found, GUI backend issues, version mismatches).
+## 🚨 ABSOLUTELY REQUIRED: Activate the `monstim` Conda Environment First
+You MUST activate the `monstim` environment **before running ANY code, tests, imports, migrations, or package installs**. Failing to do this causes missing dependency errors (e.g. `pytest` not found, GUI backend issues, version mismatches).
 
 Always do this first in every fresh terminal session:
 
 ```powershell
-conda activate alv_lab
+conda activate monstim
 ```
 
 If the environment is missing:
 1. Create it from `docs/environment.yml` (preferred) or install from `requirements.txt`.
 2. Re-open VS Code or reload the window so the interpreter is detected.
 
-Never run `python`, `pytest`, or `pyinstaller` until `conda info --envs` shows `alv_lab` with an asterisk.
+Never run `python`, `pytest`, or `pyinstaller` until `conda info --envs` shows `monstim` with an asterisk.
 
 If automation (like Copilot) attempts to run tests without activation, STOP and activate first. Treat unactivated runs as invalid.
 
@@ -54,20 +54,20 @@ If automation (like Copilot) attempts to run tests without activation, STOP and 
 ## Development Workflows
 
 ### Running the Application
-ALWAYS activate `alv_lab` first. Do not skip this step.
+ALWAYS activate `monstim` first. Do not skip this step.
 
 ```powershell
-conda activate alv_lab  # REQUIRED
+conda activate monstim  # REQUIRED
 python main.py --debug  # Development run with console logging
 ```
 
-If `alv_lab` environment is not available, ensure all dependencies from `requirements.txt` are installed in your active environment.
+If `monstim` environment is not available, ensure all dependencies from `requirements.txt` are installed in your active environment.
 
 ### Testing Components
 ALWAYS ensure the environment is active:
 
 ```powershell
-conda activate alv_lab  # REQUIRED before any test
+conda activate monstim  # REQUIRED before any test
 pytest -q               # Run full test suite
 ```
 

@@ -12,8 +12,8 @@ Revert annotations under a folder to data_version '2.0.0' and remove index files
 - Sets/overwrites 'data_version' to '2.0.0' in any '*.annot.json' (experiment/dataset/session/recording)
 
 Usage (PowerShell):
-  conda activate alv_lab
-  python tools/revert_to_v200.py --root PATH-TO\\TEST_MIGR [--dry-run]
+    conda activate monstim
+    python tools/revert_to_v200.py --root PATH-TO/TEST_MIGR [--dry-run]
 """
 
 log = logging.getLogger("revert_v200")

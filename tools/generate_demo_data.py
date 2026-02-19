@@ -5,16 +5,17 @@ it as JSON for use in a Plotly.js interactive demo.
 """
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from scipy import signal
-from monstim_signals.domain.processing import (
-    butter_bandpass_filter,
-    calculate_rms_amplitude,
-    calculate_peak_to_trough_amplitude,
-)
+
+# Add parent directory to path so we can import from monstim_gui
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from monstim_signals.transform import butter_bandpass_filter  # noqa: E402
+from monstim_signals.transform.amplitude import _calculate_peak_to_trough_amplitude, _calculate_rms_amplitude  # noqa: E402
 
 # ============================================================================
 # Signal Processing Functions (from monstim_signals)
@@ -236,14 +237,14 @@ def generate_demo_data():
         # Calculate M-wave amplitudes
         m_window_start_abs_ms = STIM_ONSET_MS + M_WINDOW_START_MS
         m_window_end_abs_ms = STIM_ONSET_MS + M_WINDOW_END_MS
-        m_rms = calculate_rms_amplitude(emg_mv, m_window_start_abs_ms, m_window_end_abs_ms, SCAN_RATE)
-        m_p2t = calculate_peak_to_trough_amplitude(emg_mv, m_window_start_abs_ms, m_window_end_abs_ms, SCAN_RATE)
+        m_rms = _calculate_rms_amplitude(emg_mv, m_window_start_abs_ms, m_window_end_abs_ms, SCAN_RATE)
+        m_p2t = _calculate_peak_to_trough_amplitude(emg_mv, m_window_start_abs_ms, m_window_end_abs_ms, SCAN_RATE)
 
         # Calculate H-wave amplitudes
         h_window_start_abs_ms = STIM_ONSET_MS + H_WINDOW_START_MS
         h_window_end_abs_ms = STIM_ONSET_MS + H_WINDOW_END_MS
-        h_rms = calculate_rms_amplitude(emg_mv, h_window_start_abs_ms, h_window_end_abs_ms, SCAN_RATE)
-        h_p2t = calculate_peak_to_trough_amplitude(emg_mv, h_window_start_abs_ms, h_window_end_abs_ms, SCAN_RATE)
+        h_rms = _calculate_rms_amplitude(emg_mv, h_window_start_abs_ms, h_window_end_abs_ms, SCAN_RATE)
+        h_p2t = _calculate_peak_to_trough_amplitude(emg_mv, h_window_start_abs_ms, h_window_end_abs_ms, SCAN_RATE)
 
         # Determine if waves are present
         m_present = m_rms > H_MIN_AMPLITUDE_MV

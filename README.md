@@ -26,10 +26,10 @@ See the **[Quickstart Guide](/QUICKSTART.md)** for express installation instruct
 
 ## Developer Quick Note
 
-- When running locally for development or to execute tests, activate the `alv_lab` conda environment first:
+- When running locally for development or to execute tests, activate the `monstim` conda environment first:
 
 ```pwsh
-conda activate alv_lab
+conda activate monstim
 ```
 
 See `QUICKSTART.md` and `docs/readme.md` for full developer instructions.
@@ -38,7 +38,7 @@ See `QUICKSTART.md` and `docs/readme.md` for full developer instructions.
 
 - **PyQt (GUI) should be installed via Conda.** GUI packages are binary and platform-sensitive; Conda provides compatible builds for many platforms. Do not list `PySide6` in `requirements.txt` when you provide `pyqt` in `environment.yml`.
 - To pin the exact PyQt version used by developers and CI, we pin the conda package in `environment.yml` (example: `pyqt=6.10.0`). This ensures consistent GUI binaries across machines.
-- If you need a pip-only workflow, provide separate instructions and a `requirements-pip.txt` that pins `PySide6` explicitly (e.g. `PySide6==6.10.0`) and document that pip installs are not covered by the `alv_lab` conda environment.
+- If you need a pip-only workflow, provide separate instructions and a `requirements-pip.txt` that pins `PySide6` explicitly (e.g. `PySide6==6.10.0`) and document that pip installs are not covered by the `monstim` conda environment.
 
 CI and tooling notes:
 - The repository's dependency consistency check understands the `pyqt` ↔ `PySide6` name mapping and will not fail when `pyqt` is provided by `environment.yml` and omitted from `requirements.txt`.

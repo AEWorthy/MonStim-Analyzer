@@ -7,5 +7,8 @@
     "python.testing.cwd": "${workspaceFolder}",
     "python-envs.defaultEnvManager": "ms-python.python:conda",
     "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "yaml.schemas": {
+        "file:///c%3A/Users/aewor/.vscode/extensions/ms-python.python-2026.2.0-win32-x64/schemas/conda-environment.json": "file:///c%3A/Users/aewor/Documents/GitHub/MonStim-Analyzer/environment.yml"
+    }
 }

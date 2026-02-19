@@ -105,10 +105,10 @@ Click any report button:
 
 ## 🛠 Developer / Running from Source
 
-- **Activate the development Conda environment first:** this repository expects the `alv_lab` environment for running tests and development tools.
+- **Activate the development Conda environment first:** this repository expects the `monstim` environment for running tests and development tools.
 
 ```pwsh
-conda activate alv_lab
+conda activate monstim
 ```
 
 - **Run the application from source (development):**
@@ -117,7 +117,7 @@ conda activate alv_lab
 python main.py --debug
 ```
 
-- **Run tests:** make sure `alv_lab` is active, then run:
+- **Run tests:** make sure `monstim` is active, then run:
 
 ```pwsh
 pytest -q

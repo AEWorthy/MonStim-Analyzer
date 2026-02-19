@@ -173,7 +173,7 @@ class TestMyNewCommand:
 ### 4. Run Tests
 
 ```bash
-conda activate alv_lab
+conda activate monstim
 pytest tests/commands_tests/test_all_commands_coverage.py -v
 ```
 

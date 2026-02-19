@@ -2,7 +2,7 @@
 # Usage: Run from an Anaconda Prompt or a PowerShell session where conda is available
 
 param(
-    [string]$envName = "alv_lab" # Update this to your environment name
+    [string]$envName = "monstim" # Update this to your environment name
 )
 
 Write-Host "Backing up current environment..."

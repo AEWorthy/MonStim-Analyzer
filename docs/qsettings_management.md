@@ -50,7 +50,7 @@ RecentProfiles/
 Use the settings management utility:
 
 ```powershell
-conda activate alv_lab
+conda activate monstim
 python tools/settings_manager.py inspect
 ```
 

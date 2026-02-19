@@ -9,7 +9,7 @@ Walks the directory recursively and for each *.annot.json file:
  - Sets date_added and date_modified to current datetime in ISO format.
  - Updates data_version to TARGET_VERSION if is_older.
 
-Respects the repository guidance: run within the activated `alv_lab` env.
+Respects the repository guidance: run within the activated `monstim` env.
 """
 
 from __future__ import annotations

@@ -4,13 +4,13 @@ This project uses pytest with a curated set of golden fixtures to provide fast, 
 
 ## Environment
 
-- Recommended: the `alv_lab` conda environment
+- Recommended: the `monstim` conda environment
 
 ```powershell
-conda activate alv_lab
+conda activate monstim
 ```
 
-- If `alv_lab` isn’t available, install directly:
+- If `monstim` isn’t available, install directly:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -78,6 +78,6 @@ Golden datasets are expected to contain at least 2 channels per session/recordin
 
 ## Troubleshooting
 
-- Ensure you’re in the right environment (conda `alv_lab`) so scientific and PyQt dependencies resolve.
+-- Ensure you’re in the right environment (conda `monstim`) so scientific and PyQt dependencies resolve.
 - If a test appears to use data from `data/`, refactor it to import from golden fixtures into a temp dir.
 - For plotting-related failures, follow the error-handling policy: `UnableToPlotError` should be handled explicitly in plotting paths.
