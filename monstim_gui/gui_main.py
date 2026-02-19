@@ -46,7 +46,7 @@ from monstim_gui.dialogs import (
 )
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
-from monstim_gui.managers import DataManager, PlotController, ReportManager
+from monstim_gui.managers import BulkExportManager, DataManager, PlotController, ReportManager
 from monstim_gui.widgets.gui_layout import setup_main_layout
 from monstim_signals.core import (
     get_config_path,
@@ -98,6 +98,7 @@ class MonstimGUI(QMainWindow):
         self.data_manager = DataManager(self)
         self.report_manager = ReportManager(self)
         self.plot_controller = PlotController(self)
+        self.bulk_export_manager = BulkExportManager(self)
 
         self.config_repo = ConfigRepository(get_config_path())
         self.help_repo = HelpFileRepository(get_docs_path())

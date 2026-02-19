@@ -25,6 +25,7 @@ dependencies:
   - pyqtgraph=0.14.0
   - pip
   - pip:
+      - openpyxl>=3.1
       - Markdown==3.10.2
       - python_markdown_math==0.9
       - pytest==9.0.1

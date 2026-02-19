@@ -379,7 +379,13 @@ class PlotController:
             config = self.get_plot_configuration()
             level, _ = self.get_plot_level_and_object()
 
-            dialog = DataFrameDialog(raw_data, self.gui, plot_type=config["plot_type_raw"], data_level=level)
+            dialog = DataFrameDialog(
+                raw_data,
+                self.gui,
+                plot_type=config["plot_type_raw"],
+                data_level=level,
+                plot_options=config.get("plot_options") if isinstance(config, dict) else None,
+            )
             dialog.exec()
         else:
             QMessageBox.warning(self.gui, "Warning", "No data to display.")

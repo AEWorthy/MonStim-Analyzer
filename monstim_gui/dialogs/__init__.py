@@ -1,3 +1,4 @@
+from .bulk_export_dialog import BulkExportDialog
 from .channel import ChangeChannelNamesDialog, InvertChannelPolarityDialog
 from .dataset_metadata_editor import DatasetMetadataEditor
 from .help_about import AboutDialog, HelpWindow, clear_math_cache
@@ -7,6 +8,7 @@ from .program_settings import ProgramSettingsDialog
 from .reporting import CopyableReportDialog
 
 __all__ = [
+    "BulkExportDialog",
     "ChangeChannelNamesDialog",
     "DatasetMetadataEditor",
     "InvertChannelPolarityDialog",

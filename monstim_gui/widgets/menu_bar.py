@@ -40,6 +40,13 @@ class MenuBar(QMenuBar):
 
         file_menu.addSeparator()
 
+        # Bulk Export Data
+        bulk_export_action = file_menu.addAction("Bulk Export Data…")
+        bulk_export_action.triggered.connect(self.parent.bulk_export_manager.show_bulk_export_dialog)
+        bulk_export_action.setToolTip("Export aggregated data for multiple experiments/datasets to Excel")
+
+        file_menu.addSeparator()
+
         # Preferences button
         preferences_action = file_menu.addAction("Analysis Preferences")
         preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
