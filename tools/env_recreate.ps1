@@ -1,5 +1,5 @@
 param(
-    [string]$envName = "alv_lab" # Environment name to recreate
+    [string]$envName = "monstim" # Environment name to recreate
 )
 
 Write-Host "Checking for existing conda environments..."

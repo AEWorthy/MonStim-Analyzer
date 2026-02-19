@@ -41,10 +41,10 @@ MonStim EMG Analyzer is a graphical user interface (GUI) application designed to
 
 ## Developer Notes
 
-- **Conda environment (required for development & testing):** Activate the `alv_lab` environment before running any code, tests, imports, or packaging steps.
+-- **Conda environment (required for development & testing):** Activate the `monstim` environment before running any code, tests, imports, or packaging steps.
 
 ```pwsh
-conda activate alv_lab
+conda activate monstim
 ```
 
 - **Run from source (development):**
@@ -55,7 +55,7 @@ python main.py --debug
 
 - **Packaging:** Releases are built with PyInstaller using the `win-main.spec` file. The spec pulls the project version from `monstim_gui/version.py` and includes docs into the distributable.
 
-- **Testing:** With `alv_lab` active run `pytest -q` to execute the test suite and golden-fixture checks.
+- **Testing:** With `monstim` active run `pytest -q` to execute the test suite and golden-fixture checks.
 
 - **Plotting backend:** The GUI uses `PyQtGraph` for interactive plotting (matplotlib-based GUI plotters were removed in prior releases).
 

@@ -7,7 +7,7 @@ Runs (in order):
 Streams raw tool output directly. No summaries, no diff analysis.
 
 Usage:
-  conda activate alv_lab
+    conda activate monstim
   ./precommit_cleanup.ps1            # format (in-place) + lint
   ./precommit_cleanup.ps1 -Check     # check only (no file modifications)
 
@@ -26,8 +26,8 @@ function C($text, $color) {
     if ($map.ContainsKey($color)) { return "`e[$($map[$color])m$text`e[0m" } else { return $text }
 }
 
-if ($env:CONDA_DEFAULT_ENV -ne 'alv_lab') {
-    Write-Host (C "[warn] Active env: $($env:CONDA_DEFAULT_ENV) (expected alv_lab)" 'yellow')
+if ($env:CONDA_DEFAULT_ENV -ne 'monstim') {
+    Write-Host (C "[warn] Active env: $($env:CONDA_DEFAULT_ENV) (expected monstim)" 'yellow')
 }
 
 function Invoke-Cmd {

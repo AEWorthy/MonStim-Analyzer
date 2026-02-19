@@ -17,6 +17,15 @@ from PySide6.QtWidgets import (
 from monstim_gui.core.application_state import app_state
 from monstim_signals.core import get_base_path
 
+# Normalize a few known method names to short suffixes
+METHOD_SUFFIX_MAP = {
+    "peak_to_trough": "ptt",
+    "rms": "rms",
+    "average_rectified": "avgrect",
+    "average_unrectified": "avgunrect",
+    "auc": "auc",
+}
+
 
 def _sanitize_filename(name: str) -> str:
     # Remove characters invalid on Windows and collapse whitespace
@@ -123,6 +132,22 @@ def make_export_filename(df: pd.DataFrame) -> str:
 
     if plot_key:
         parts.append(str(plot_key))
+
+    # If this is an average-reflex style export, append the amplitude
+    # calculation method (when available) so files indicate the metric used.
+    try:
+        method = None
+        if hasattr(df, "attrs"):
+            # common keys used across the codebase: 'method' from plot options
+            method = df.attrs.get("method") or df.attrs.get("amplitude_method") or df.attrs.get("calc_method")
+    except Exception:
+        method = None
+
+    if method:
+        mkey = str(method).lower()
+        suf = METHOD_SUFFIX_MAP.get(mkey, re.sub(r"[^a-z0-9]+", "", mkey)[:10])
+        # Append as its own part so the filename becomes e.g. '...__avg_reflex__rms'
+        parts.append(str(suf))
     elif dfname:
         parts.append(str(dfname))
 
@@ -167,11 +192,14 @@ class PandasModel(QAbstractTableModel):
 
 
 class DataFrameDialog(QDialog):
-    def __init__(self, df: pd.DataFrame, parent=None, plot_type: str = None, data_level: str = None):
+    def __init__(
+        self, df: pd.DataFrame, parent=None, plot_type: str = None, data_level: str = None, plot_options: dict | None = None
+    ):
         super().__init__(parent)
         self.df = df
         self.plot_type = plot_type
         self.data_level = data_level
+        self.plot_options = plot_options or {}
         self.setWindowTitle("Data Preview")
         self.resize(800, 400)
 
@@ -211,6 +239,14 @@ class DataFrameDialog(QDialog):
             self.df.attrs["plot_type"] = self.plot_type
         if self.data_level:
             self.df.attrs["data_level"] = self.data_level
+        # If plot options include a calculation method, store that too so filenames
+        # can indicate which amplitude method was used (e.g., rms, ptt, auc).
+        try:
+            method = self.plot_options.get("method") if isinstance(self.plot_options, dict) else None
+            if method:
+                self.df.attrs["method"] = method
+        except Exception:
+            pass
 
         # Build a descriptive default filename based on context
         suggested = make_export_filename(self.df)

@@ -177,7 +177,7 @@ tests/fixtures/golden/
 ### Prerequisites:
 ```bash
 # Activate the conda environment
-conda activate alv_lab
+conda activate monstim
 ```
 
 ### Individual Test Files:

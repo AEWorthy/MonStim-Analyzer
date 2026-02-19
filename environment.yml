@@ -2,11 +2,11 @@
 #   conda env create -f environment.yml
 
 # To fully re-build the environment from scratch, run:
-#   conda env remove -n alv_lab
+#   conda env remove -n monstim
 #   conda clean --all
 #   conda env create -f environment.yml
 
-name: alv_lab
+name: monstim
 channels:
   - conda-forge
   - defaults
@@ -25,6 +25,7 @@ dependencies:
   - pyqtgraph=0.14.0
   - pip
   - pip:
+      - openpyxl>=3.1
       - Markdown==3.10.2
       - python_markdown_math==0.9
       - pytest==9.0.1
