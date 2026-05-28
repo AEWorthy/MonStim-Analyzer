@@ -86,6 +86,7 @@ python main.py --debug
     - Click the "Plot & Extract Data" button to simultaneously plot data and extract the plotted values.
     - In the pop-up window, press "Export Dataframe..." to easily export this data to a CSV file.
     - Note: The extracted data are an exact copy of the data plotted in the plotting frame.
+    - Use "File" > "Bulk Export Data..." for workbook exports across many datasets or experiments. Select "Longform Reflex Amplitudes" when downstream mixed-effects models need one row per active recording/channel/latency-window/method instead of averaged reflex curves.
 
 6. **Preferences and Settings**
     - Use "File" > "Preferences" to configure analysis parameters and create custom analysis profiles.

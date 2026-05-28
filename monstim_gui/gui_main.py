@@ -52,6 +52,7 @@ from monstim_signals.core import (
     get_config_path,
     get_docs_path,
     get_output_path,
+    get_export_path,
     get_source_path,
 )
 from monstim_signals.domain.dataset import Dataset
@@ -85,6 +86,7 @@ class MonstimGUI(QMainWindow):
 
         # Set default paths
         self.output_path = get_output_path()
+        self.export_path = get_export_path()
         self.config_file = get_config_path()
 
         # Profile manager for analysis profiles

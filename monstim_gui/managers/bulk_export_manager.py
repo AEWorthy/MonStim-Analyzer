@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 #: Human-readable data-type keys → Excel sheet names
 DATA_TYPE_LABELS: dict[str, str] = {
     "avg_reflex_curves": "Avg Reflex Curves",
+    "longform_reflex_amplitudes": "Longform Reflex Amplitudes",
     "mmax": "M-max Summary",
     "max_h": "Max H-Reflex",
 }
@@ -127,6 +128,128 @@ def _get_mmax_cache(obj, config: BulkExportConfig) -> dict[tuple[int, str], Opti
                 logging.debug("M-max unavailable for ch=%d method=%s: %s", ch_idx, method, exc)
                 cache[(ch_idx, method)] = None
     return cache
+
+
+def _iter_object_datasets(obj):
+    """Yield dataset-like objects from either a Dataset or Experiment."""
+    datasets = getattr(obj, "datasets", None)
+    if datasets is not None:
+        for dataset in datasets:
+            yield dataset
+    else:
+        yield obj
+
+
+def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.DataFrame:
+    """Build one row per active recording/channel/window/method amplitude.
+
+    This export preserves recording-level values for downstream mixed-effects
+    models. It intentionally does not bin or average amplitudes; the binned
+    stimulus column is included only as an optional modeling/grouping helper.
+    """
+    mmax_cache = _get_mmax_cache(obj, config) if config.normalize_to_mmax else {}
+    rows: list[dict] = []
+
+    for dataset in _iter_object_datasets(obj):
+        dataset_id = getattr(dataset, "id", "")
+        dataset_date = getattr(dataset, "date", "")
+        animal_id = getattr(dataset, "animal_id", "")
+        condition = getattr(dataset, "condition", "")
+        bin_size = getattr(dataset, "bin_size", getattr(obj, "bin_size", np.nan))
+        try:
+            window_names = dataset.unique_latency_window_names()
+        except Exception:
+            window_names = [getattr(window, "name", "") for window in getattr(dataset, "latency_windows", [])]
+
+        for session in getattr(dataset, "sessions", []):
+            session_id = getattr(session, "id", "")
+            active_recordings = list(getattr(session, "recordings", []))
+            stimulus_values = np.asarray(getattr(session, "stimulus_voltages", []), dtype=float)
+            if bin_size and not pd.isna(bin_size):
+                binned_values = np.round(stimulus_values / bin_size) * bin_size
+            else:
+                binned_values = np.full(len(stimulus_values), np.nan)
+
+            for ch_idx in config.channel_indices:
+                if ch_idx >= getattr(session, "num_channels", 0):
+                    logging.debug(
+                        "_compute_longform_reflex_amplitudes: channel index %d out of range for session %s - skipped.",
+                        ch_idx,
+                        session_id,
+                    )
+                    continue
+                ch_name = _safe_channel_name(session, ch_idx)
+
+                for window_name in window_names:
+                    try:
+                        latency_window = dataset.get_session_latency_window(session, window_name)
+                    except Exception:
+                        try:
+                            latency_window = session.get_latency_window(window_name)
+                        except Exception:
+                            latency_window = None
+                    if latency_window is None:
+                        continue
+
+                    try:
+                        window_start_ms = latency_window.start_times[ch_idx]
+                        window_end_ms = latency_window.end_times[ch_idx]
+                        window_duration_ms = latency_window.durations[ch_idx]
+                    except Exception:
+                        window_start_ms = np.nan
+                        window_end_ms = np.nan
+                        window_duration_ms = np.nan
+
+                    for method in config.methods:
+                        try:
+                            amplitudes = np.asarray(
+                                session.get_lw_reflex_amplitudes(method, ch_idx, window_name),
+                                dtype=float,
+                            )
+                        except Exception as exc:
+                            logging.warning(
+                                "longform_reflex_amplitudes error dataset=%s session=%s ch=%s window=%s method=%s: %s",
+                                dataset_id,
+                                session_id,
+                                ch_name,
+                                window_name,
+                                method,
+                                exc,
+                            )
+                            continue
+
+                        mmax = mmax_cache.get((ch_idx, method)) if config.normalize_to_mmax else None
+                        for rec_idx, amplitude in enumerate(amplitudes):
+                            recording = active_recordings[rec_idx] if rec_idx < len(active_recordings) else None
+                            stimulus_value = stimulus_values[rec_idx] if rec_idx < len(stimulus_values) else np.nan
+                            binned_value = binned_values[rec_idx] if rec_idx < len(binned_values) else np.nan
+                            row = {
+                                "dataset_id": dataset_id,
+                                "dataset_date": dataset_date,
+                                "animal_id": animal_id,
+                                "condition": condition,
+                                "session_id": session_id,
+                                "recording_id": getattr(recording, "id", "") if recording is not None else "",
+                                "recording_index": rec_idx,
+                                "stimulus_value": stimulus_value,
+                                "stimulus_binned": binned_value,
+                                "channel_index": ch_idx,
+                                "channel": ch_name,
+                                "window": window_name,
+                                "window_start_ms": window_start_ms,
+                                "window_end_ms": window_end_ms,
+                                "window_duration_ms": window_duration_ms,
+                                "method": method,
+                                "amplitude": amplitude,
+                            }
+                            if config.normalize_to_mmax:
+                                row["mmax_for_normalization"] = mmax
+                                row["amplitude_norm_mmax"] = (
+                                    amplitude / mmax if mmax is not None and mmax != 0.0 else np.nan
+                                )
+                            rows.append(row)
+
+    return pd.DataFrame(rows)
 
 
 def _compute_avg_reflex_curves(obj, config: BulkExportConfig) -> pd.DataFrame:
@@ -296,6 +419,7 @@ def _compute_max_h(obj, config: BulkExportConfig) -> pd.DataFrame:
 
 _DATA_TYPE_HANDLERS: dict[str, Callable] = {
     "avg_reflex_curves": _compute_avg_reflex_curves,
+    "longform_reflex_amplitudes": _compute_longform_reflex_amplitudes,
     "mmax": _compute_mmax,
     "max_h": _compute_max_h,
 }

@@ -1,6 +1,7 @@
 /output
 /files_to_process
 /data
+/export
 /.EXAMPLE_DATA
 /.OLD_DATA
 /.pytest-tmp-golden-check

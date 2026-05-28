@@ -15,6 +15,7 @@ import numpy as np
 
 DIST_PATH = "dist"
 OUTPUT_PATH = "data"
+EXPORT_PATH = "export"
 
 
 def to_camel_case(text: str) -> str:
@@ -65,6 +66,14 @@ def get_output_path() -> str:
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     return output_path
+
+
+def get_export_path() -> str:
+    """Return the directory used for program exports."""
+    export_path = os.path.join(get_base_path(), EXPORT_PATH)
+    if not os.path.exists(export_path):
+        os.makedirs(export_path)
+    return export_path
 
 
 def get_source_path() -> str:
