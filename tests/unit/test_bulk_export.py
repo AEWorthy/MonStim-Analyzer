@@ -10,6 +10,8 @@ Covers:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -90,10 +92,11 @@ class _MockRecording:
 
 
 class _MockSession:
-    def __init__(self, session_id="S1", n_channels=2):
+    def __init__(self, session_id="S1", n_channels=2, emg_amp_gains=None):
         self.id = session_id
         self.num_channels = n_channels
         self.channel_names = [f"Ch{i}" for i in range(n_channels)]
+        self.emg_amp_gains = emg_amp_gains or [1000] * n_channels
         self.recordings = [_MockRecording("R0"), _MockRecording("R1"), _MockRecording("R2")]
         self.stimulus_voltages = np.array([0.1, 0.2, 0.2])
         self._window = _MockWindow()
@@ -113,7 +116,10 @@ class _MockDataset:
         self.animal_id = "C309.6"
         self.condition = "post-dec mcurve_long-"
         self.bin_size = 0.1
-        self.sessions = [_MockSession("S1"), _MockSession("S2")]
+        self.sessions = [
+            _MockSession("S1", emg_amp_gains=[500, 1000]),
+            _MockSession("S2", emg_amp_gains=[2000, 4000]),
+        ]
         self.channel_names = ["Ch0", "Ch1"]
 
     def unique_latency_window_names(self):
@@ -191,6 +197,82 @@ class TestBulkExportConfig:
             output_path="",
         )
         assert cfg.experiment_paths == {}
+
+
+class TestAutoMaxWorkers:
+    def test_leaves_one_cpu_for_gui(self, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        monkeypatch.setattr(bulk_export_manager.os, "cpu_count", lambda: 8)
+
+        assert bulk_export_manager._auto_max_workers(10) == 7
+
+    def test_never_exceeds_dataset_task_count(self, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        monkeypatch.setattr(bulk_export_manager.os, "cpu_count", lambda: 16)
+
+        assert bulk_export_manager._auto_max_workers(3) == 3
+
+    def test_single_cpu_and_single_task_are_serial(self, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        monkeypatch.setattr(bulk_export_manager.os, "cpu_count", lambda: 1)
+
+        assert bulk_export_manager._auto_max_workers(0) == 1
+        assert bulk_export_manager._auto_max_workers(1) == 1
+        assert bulk_export_manager._auto_max_workers(5) == 1
+
+    def test_large_datasets_do_not_force_serial_when_raw_handles_close(self, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        monkeypatch.setattr(bulk_export_manager.os, "cpu_count", lambda: 16)
+
+        assert bulk_export_manager._auto_max_workers(98, max_dataset_recordings=981) == 12
+
+    def test_small_datasets_can_use_multiple_workers(self, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        monkeypatch.setattr(bulk_export_manager.os, "cpu_count", lambda: 16)
+
+        assert bulk_export_manager._auto_max_workers(30, max_dataset_recordings=3) == 12
+
+
+class TestBulkExportSessionProcessing:
+    def test_filtered_recordings_close_raw_handles_when_configured(self):
+        from monstim_signals.domain.session import Session
+
+        class DummyRecording:
+            id = "R0"
+            meta = SimpleNamespace(num_channels=1)
+
+            def __init__(self):
+                self.closed = False
+
+            def raw_view(self):
+                return np.ones((4, 1), dtype=float)
+
+            def close(self):
+                self.closed = True
+
+        recording = DummyRecording()
+        session = Session.__new__(Session)
+        session._all_recordings = [recording]
+        session.annot = SimpleNamespace(
+            excluded_recordings=[],
+            channels=[SimpleNamespace(invert=False)],
+        )
+        session.channel_types = ["unknown"]
+        session._config = {
+            "close_raw_after_filter": True,
+            "signal_processing_workers": 1,
+        }
+
+        filtered = session.all_recordings_filtered
+
+        assert recording.closed is True
+        assert len(filtered) == 1
+        np.testing.assert_allclose(filtered[0], np.ones((4, 1)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -330,6 +412,7 @@ class TestComputeLongformReflexAmplitudes:
             "stimulus_binned",
             "channel_index",
             "channel",
+            "emg_amp_gain",
             "window",
             "window_start_ms",
             "window_end_ms",
@@ -353,6 +436,38 @@ class TestComputeLongformReflexAmplitudes:
         assert set(df["method"]) == {"rms", "auc"}
         assert "amplitude_rms" not in df.columns
         assert "amplitude_auc" not in df.columns
+
+    def test_uses_session_channel_gain_per_longform_row(self):
+        from monstim_gui.managers.bulk_export_manager import _compute_longform_reflex_amplitudes
+
+        obj = _MockDataset()
+        config = _make_config(
+            data_types=["longform_reflex_amplitudes"],
+            methods=["rms"],
+            channel_indices=[0],
+        )
+        df = _compute_longform_reflex_amplitudes(obj, config)
+
+        gains_by_session = {
+            session_id: set(group["emg_amp_gain"].dropna())
+            for session_id, group in df.groupby("session_id")
+        }
+        assert gains_by_session == {"S1": {500.0}, "S2": {2000.0}}
+
+    def test_missing_emg_channel_gain_stays_missing(self):
+        from monstim_gui.managers.bulk_export_manager import _compute_longform_reflex_amplitudes
+
+        obj = _MockDataset()
+        for session in obj.sessions:
+            session.emg_amp_gains = None
+        config = _make_config(
+            data_types=["longform_reflex_amplitudes"],
+            methods=["rms"],
+            channel_indices=[0],
+        )
+        df = _compute_longform_reflex_amplitudes(obj, config)
+
+        assert df["emg_amp_gain"].isna().all()
 
     def test_experiment_level_includes_all_datasets(self):
         from monstim_gui.managers.bulk_export_manager import _compute_longform_reflex_amplitudes
@@ -589,12 +704,14 @@ class TestRunBulkExport:
 
         ds1 = _MockObj(n_channels=2, n_voltages=4)
         ds1.id = "DS1"
+        load_kwargs = []
 
         class FakeDatasetRepo:
             def __init__(self, folder):
                 pass
 
             def load(self, **kwargs):
+                load_kwargs.append(kwargs)
                 return ds1
 
         # Dataset-level now loads DatasetRepository directly (not ExperimentRepository)
@@ -618,6 +735,12 @@ class TestRunBulkExport:
         written = bulk_export_manager.run_bulk_export(config)
         assert len(written) == 1
         assert "DS1_bulk_export.xlsx" in written[0]
+        assert load_kwargs
+        assert load_kwargs[0]["lazy_open_h5"] is True
+        assert load_kwargs[0]["config"]["lazy_open_h5"] is True
+        assert load_kwargs[0]["config"]["signal_processing_workers"] == 1
+        assert load_kwargs[0]["config"]["close_raw_after_filter"] is True
+        assert "time_window" in load_kwargs[0]["config"]
 
     def test_experiment_level_writes_files(self, tmp_path, monkeypatch):
         import monstim_signals.io.repositories as repos_mod

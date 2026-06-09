@@ -13,6 +13,7 @@ Responsibilities
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,6 +45,10 @@ METHOD_LABELS: dict[str, str] = {
     "average_unrectified": "Avg Unrectified",
     "auc": "AUC",
 }
+
+BULK_EXPORT_OPEN_FILE_BUDGET = 128
+BULK_EXPORT_OPEN_FILE_RESERVE = 32
+BULK_EXPORT_MIN_DATASET_FILE_COST = 8
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -79,9 +84,6 @@ class BulkExportConfig:
     #: {expt_name: str(folder_path)} – sourced from gui.expts_dict
     experiment_paths: dict[str, str] = field(default_factory=dict)
 
-    #: Number of parallel worker threads for dataset-level exports (1 = serial).
-    max_workers: int = 1
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pure-function export engine (no Qt – safe to run in a worker thread)
@@ -105,6 +107,58 @@ def _safe_channel_name(obj, channel_idx: int) -> str:
     except Exception:
         pass
     return f"Ch{channel_idx}"
+
+
+def _safe_channel_gain(session, recording, channel_idx: int) -> float:
+    """Return the EMG amplifier gain for a channel from row-level metadata."""
+    gain_sources = []
+    if recording is not None:
+        meta = getattr(recording, "meta", None)
+        gain_sources.append(getattr(meta, "emg_amp_gains", None))
+    gain_sources.append(getattr(session, "emg_amp_gains", None))
+
+    for gains in gain_sources:
+        if gains is None:
+            continue
+        try:
+            if channel_idx < len(gains):
+                gain = gains[channel_idx]
+                return float(gain) if gain is not None else np.nan
+        except Exception:
+            continue
+    return np.nan
+
+
+def _auto_max_workers(task_count: int, max_dataset_recordings: int = 0) -> int:
+    """Return a worker count that leaves GUI and file-handle headroom."""
+    if task_count <= 1:
+        return 1
+    available_cpus = os.cpu_count() or 2
+    cpu_workers = max(1, min(task_count, available_cpus - 1))
+
+    file_budget = max(1, BULK_EXPORT_OPEN_FILE_BUDGET - BULK_EXPORT_OPEN_FILE_RESERVE)
+    file_workers = max(1, file_budget // BULK_EXPORT_MIN_DATASET_FILE_COST)
+    return max(1, min(cpu_workers, file_workers))
+
+
+def _count_dataset_recording_files(ds_folder: Path) -> int:
+    """Estimate dataset size without opening recording files."""
+    try:
+        return sum(1 for _ in ds_folder.rglob("*.meta.json"))
+    except OSError as exc:
+        logging.warning("Could not estimate recording count for '%s': %s", ds_folder, exc)
+        return 0
+
+
+def _bulk_export_load_config() -> dict:
+    """Repository load options used only by bulk export."""
+    from monstim_signals.core import load_config
+
+    config = dict(load_config())
+    config["lazy_open_h5"] = True
+    config["signal_processing_workers"] = 1
+    config["close_raw_after_filter"] = True
+    return config
 
 
 def _n_col_label(config: BulkExportConfig) -> str:
@@ -223,6 +277,7 @@ def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.Dat
                             recording = active_recordings[rec_idx] if rec_idx < len(active_recordings) else None
                             stimulus_value = stimulus_values[rec_idx] if rec_idx < len(stimulus_values) else np.nan
                             binned_value = binned_values[rec_idx] if rec_idx < len(binned_values) else np.nan
+                            emg_amp_gain = _safe_channel_gain(session, recording, ch_idx)
                             row = {
                                 "dataset_id": dataset_id,
                                 "dataset_date": dataset_date,
@@ -235,6 +290,7 @@ def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.Dat
                                 "stimulus_binned": binned_value,
                                 "channel_index": ch_idx,
                                 "channel": ch_name,
+                                "emg_amp_gain": emg_amp_gain,
                                 "window": window_name,
                                 "window_start_ms": window_start_ms,
                                 "window_end_ms": window_end_ms,
@@ -501,7 +557,11 @@ def _load_and_export_dataset_task(
 
     try:
         logging.info("Bulk export: loading dataset '%s/%s'", expt_name, ds_id)
-        dataset = DatasetRepository(ds_folder).load(allow_write=False)
+        dataset = DatasetRepository(ds_folder).load(
+            config=_bulk_export_load_config(),
+            lazy_open_h5=True,
+            allow_write=False,
+        )
     except Exception as exc:
         logging.error("Failed to load dataset '%s/%s': %s", expt_name, ds_id, exc)
         return None, f"Error loading: {ds_id}"
@@ -509,6 +569,12 @@ def _load_and_export_dataset_task(
     # Check again after loading (load may have taken seconds/minutes)
     if is_canceled and is_canceled():
         logging.info("Bulk export: skipping write for '%s/%s' – canceled after load.", expt_name, ds_id)
+        try:
+            close = getattr(dataset, "close", None)
+            if callable(close):
+                close()
+        except Exception as exc:
+            logging.debug("Bulk export: failed to close canceled dataset '%s/%s': %s", expt_name, ds_id, exc)
         del dataset
         gc.collect()
         return None, f"Canceled: {ds_id}"
@@ -521,6 +587,12 @@ def _load_and_export_dataset_task(
     except Exception as exc:
         logging.error("Export error for dataset '%s/%s': %s", expt_name, ds_id, exc)
     finally:
+        try:
+            close = getattr(dataset, "close", None)
+            if callable(close):
+                close()
+        except Exception as exc:
+            logging.debug("Bulk export: failed to close dataset '%s/%s': %s", expt_name, ds_id, exc)
         del dataset
         gc.collect()
 
@@ -535,13 +607,14 @@ def run_bulk_export(
     """Load each selected object and write export xlsx files.
 
     For **dataset-level** exports each dataset is loaded individually via
-    :func:`_load_and_export_dataset_task` so only one dataset's file handles
-    are open at a time (preventing *Too many open files* errors).
+    :func:`_load_and_export_dataset_task` and worker count is capped by an
+    estimated open-file budget.
 
-    When ``config.max_workers > 1``, dataset-level exports are processed in
-    parallel using a :class:`~concurrent.futures.ThreadPoolExecutor`.  Each
-    worker thread loads and writes one dataset independently, which can
-    dramatically reduce total wall-clock time for large experiments.
+    Dataset-level exports are processed in parallel using a
+    :class:`~concurrent.futures.ThreadPoolExecutor` sized from the available CPU
+    count while leaving one CPU for the GUI. Each worker thread loads and writes
+    one dataset independently, which can dramatically reduce total wall-clock
+    time for large experiments.
 
     For **experiment-level** exports the full experiment is loaded, written,
     then freed before processing the next one (always serial).
@@ -569,13 +642,13 @@ def run_bulk_export(
 
     written_files: list[str] = []
     total_objects = sum(max(len(ds_ids), 1) for ds_ids in config.selected_objects.values())
-    max_workers = max(1, getattr(config, "max_workers", 1))
 
     # ── Dataset level ─────────────────────────────────────────────────────────
     if config.data_level == "dataset":
         # Flatten to a list of (expt_name, ds_id, expt_folder) tasks,
         # skipping experiments that have no resolved path.
         tasks: list[tuple[str, str, Path]] = []
+        max_dataset_recordings = 0
         for expt_name, ds_ids in config.selected_objects.items():
             expt_path_str = config.experiment_paths.get(expt_name)
             if not expt_path_str:
@@ -585,7 +658,17 @@ def run_bulk_export(
                 continue
             expt_folder = Path(expt_path_str)
             for ds_id in ds_ids:
+                ds_folder = expt_folder / ds_id
+                max_dataset_recordings = max(max_dataset_recordings, _count_dataset_recording_files(ds_folder))
                 tasks.append((expt_name, ds_id, expt_folder))
+
+        max_workers = _auto_max_workers(len(tasks), max_dataset_recordings=max_dataset_recordings)
+        logging.info(
+            "Bulk export: using %d dataset worker(s) for %d task(s); largest selected dataset has %d recording(s).",
+            max_workers,
+            len(tasks),
+            max_dataset_recordings,
+        )
 
         if max_workers > 1:
             # ── Parallel ──────────────────────────────────────────────────
@@ -674,7 +757,11 @@ def run_bulk_export(
                 progress_callback(current, total_objects, f"Loading: {expt_name}…")
             try:
                 logging.info("Bulk export: loading experiment '%s' from '%s'", expt_name, expt_folder)
-                experiment = ExperimentRepository(expt_folder).load(allow_write=False)
+                experiment = ExperimentRepository(expt_folder).load(
+                    config=_bulk_export_load_config(),
+                    lazy_open_h5=True,
+                    allow_write=False,
+                )
             except Exception as exc:
                 logging.error("Failed to load experiment '%s': %s", expt_name, exc)
                 current += 1
@@ -688,6 +775,12 @@ def run_bulk_export(
             except Exception as exc:
                 logging.error("Export error for experiment '%s': %s", expt_name, exc)
             finally:
+                try:
+                    close = getattr(experiment, "close", None)
+                    if callable(close):
+                        close()
+                except Exception as exc:
+                    logging.debug("Bulk export: failed to close experiment '%s': %s", expt_name, exc)
                 del experiment
                 gc.collect()
             current += 1

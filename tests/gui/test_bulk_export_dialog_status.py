@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QGroupBox, QSpinBox, QWidget
 
 pytestmark = pytest.mark.unit
 
@@ -95,3 +95,23 @@ def test_discover_experiment_status_reads_completion_metadata(monkeypatch, tmp_p
     assert [ds.dataset_id for ds in status.datasets] == ["DS1", "DS2"]
     assert [ds.is_completed for ds in status.datasets] == [True, False]
     assert status.datasets[1].is_excluded is True
+
+
+def test_bulk_export_dialog_does_not_expose_worker_count(qt_app):
+    from monstim_gui.dialogs.bulk_export_dialog import BulkExportDialog
+
+    gui = QWidget()
+    gui.expts_dict = {}
+    gui.export_path = ""
+    gui.channel_names = ["Ch0"]
+    gui.current_session = None
+    gui.current_dataset = None
+    gui.current_experiment = None
+
+    dialog = BulkExportDialog(gui)
+
+    group_titles = {group.title() for group in dialog.findChildren(QGroupBox)}
+    assert "Export Options" in group_titles
+    assert "Plot Options" not in group_titles
+    assert not hasattr(dialog, "_sb_workers")
+    assert dialog.findChildren(QSpinBox) == []

@@ -7,7 +7,7 @@ The dialog collects:
   - Objects       : hierarchical collapsible experiment / dataset checkboxes
   - Data types    : Average Reflex Curves, Longform Reflex Amplitudes, M-max, Max H-reflex
   - Methods       : rms, auc, peak_to_trough, average_rectified, average_unrectified
-  - Plot options  : Normalize to M-max
+  - Export options: Normalize to M-max
   - Channels      : per-channel checkboxes
   - Output path   : directory chooser
 
@@ -41,7 +41,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
-    QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -544,8 +543,8 @@ class BulkExportDialog(QDialog):
         method_layout.addStretch()
         root.addWidget(method_box)
 
-        # ── 5. Plot Options ───────────────────────────────────────────────
-        opts_box = QGroupBox("Plot Options")
+        # ── 5. Export Options ────────────────────────────────────────────
+        opts_box = QGroupBox("Export Options")
         opts_layout = QVBoxLayout(opts_box)
         self._cb_normalize_mmax = QCheckBox("Normalize amplitudes to M-max")
         self._cb_normalize_mmax.setChecked(False)
@@ -555,23 +554,6 @@ class BulkExportDialog(QDialog):
             "⚠ Requires M-max latency windows to be defined for all selected objects."
         )
         opts_layout.addWidget(self._cb_normalize_mmax)
-        workers_row = QWidget()
-        workers_layout = QHBoxLayout(workers_row)
-        workers_layout.setContentsMargins(0, 2, 0, 0)
-        workers_layout.setSpacing(6)
-        workers_layout.addWidget(QLabel("Parallel workers:"))
-        self._sb_workers = QSpinBox()
-        self._sb_workers.setRange(1, 16)
-        self._sb_workers.setValue(1)
-        self._sb_workers.setFixedWidth(60)
-        self._sb_workers.setToolTip(
-            "Number of datasets to load and process simultaneously.\n"
-            "Values > 1 can significantly speed up large exports but use more RAM.\n"
-            "Applies to dataset-level exports only."
-        )
-        workers_layout.addWidget(self._sb_workers)
-        workers_layout.addStretch()
-        opts_layout.addWidget(workers_row)
         root.addWidget(opts_box)
 
         # ── 6. Channels ───────────────────────────────────────────────────
@@ -878,7 +860,6 @@ class BulkExportDialog(QDialog):
 
         expts_dict: dict[str, str] = getattr(self.gui, "expts_dict", {})
         normalize_to_mmax = self._cb_normalize_mmax.isChecked()
-        max_workers = self._sb_workers.value()
 
         return BulkExportConfig(
             data_level=data_level,
@@ -888,6 +869,5 @@ class BulkExportDialog(QDialog):
             channel_indices=channel_indices,
             output_path=output_path,
             normalize_to_mmax=normalize_to_mmax,
-            max_workers=max_workers,
             experiment_paths={name: str(expts_dict.get(name, "")) for name in selected_objects},
         )

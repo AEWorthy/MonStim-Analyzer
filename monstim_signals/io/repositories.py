@@ -247,7 +247,14 @@ class SessionRepository:
         # Ensure the session_id reflects the new folder name
         self.session_id = new_folder.name
 
-    def load(self, config=None, *, strict_version: bool = False, allow_write: bool = True) -> "Session":
+    def load(
+        self,
+        config=None,
+        *,
+        strict_version: bool = False,
+        lazy_open_h5: Optional[bool] = None,
+        allow_write: bool = True,
+    ) -> "Session":
         # Guard: folder must exist
         if not self.folder.exists():
             raise FileNotFoundError(f"Session folder not found: {self.folder}")
@@ -281,12 +288,12 @@ class SessionRepository:
 
         # 2) Load all recordings
         # Pass through lazy_open_h5 from config if present; prefer explicit key in config
-        lazy_from_cfg = None
+        lazy_from_cfg = lazy_open_h5
         try:
-            if config is not None and "lazy_open_h5" in config:
+            if lazy_from_cfg is None and config is not None and "lazy_open_h5" in config:
                 lazy_from_cfg = bool(config.get("lazy_open_h5"))
         except Exception:
-            lazy_from_cfg = None
+            lazy_from_cfg = lazy_open_h5
 
         recordings = [
             repo.load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write) for repo in recording_repos
@@ -479,6 +486,7 @@ class DatasetRepository:
                 sess = repo.load(
                     config=config,
                     strict_version=strict_version,
+                    lazy_open_h5=lazy_open_h5,
                     allow_write=allow_write,
                 )
                 sessions.append(sess)
@@ -836,6 +844,7 @@ class ExperimentRepository:
                         DatasetRepository(ds_folder).load,
                         config=config,
                         strict_version=strict_version,
+                        lazy_open_h5=lazy_open_h5,
                         allow_write=allow_write,
                     )
                     future_map[future] = ds_folder
@@ -880,6 +889,7 @@ class ExperimentRepository:
                     ds_obj = DatasetRepository(ds_folder).load(
                         config=config,
                         strict_version=strict_version,
+                        lazy_open_h5=lazy_open_h5,
                         allow_write=allow_write,
                     )
                     datasets.append(ds_obj)
