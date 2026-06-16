@@ -58,6 +58,7 @@ Click any report button:
 | | Reflex Curves | M-response & H-reflex vs stimulus |
 | | Single EMG Recordings | Individual stimulus responses |
 | **Dataset** | Average Reflex Curves | Averaged across sessions |
+| | Longform Reflex Amplitudes | One row per active recording for mixed-effects exports |
 | | Max H-Reflex | Peak H-reflex response |
 | **Experiment** | Average Reflex Curves | Biological replicates averaged |
 

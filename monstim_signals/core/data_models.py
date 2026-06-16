@@ -112,7 +112,7 @@ class RecordingMeta:
     post_stim_acquired: int  # number of ms acquired after the last stimulus
     recording_interval: float  # in seconds, time between consecutive recordings/stimuli
     channel_types: List[str]  # e.g. ["EMG", "Force", "Accelerometer"]
-    emg_amp_gains: List[int]  # e.g. [1000, 1000, 1000] (gain for each EMG channel)
+    emg_amp_gains: List[int] | None  # e.g. [1000, 1000, 1000] (gain for each EMG channel)
     stim_clusters: List[StimCluster]  # list of StimCluster objects, one per stimulus cluster
     primary_stim: StimCluster | int | None = None  # (1-based index) primary stimulus cluster
     num_samples: int | None = None  # filled lazily

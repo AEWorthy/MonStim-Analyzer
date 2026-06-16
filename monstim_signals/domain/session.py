@@ -499,55 +499,69 @@ class Session:
         indicated in the channel annotations in the session annot.json file.
         """
 
+        close_raw_after_filter = bool(self._config.get("close_raw_after_filter", False))
+
         def _process_single_recording(rec: Recording) -> np.ndarray:
             """
             Process a single recording's raw data with the butter bandpass filter.
             """
-            raw_data = rec.raw_view()
-            bf_args = getattr(
-                self,
-                "butter_filter_args",
-                {"lowcut": None, "highcut": None, "order": None},
-            )
+            try:
+                raw_data = rec.raw_view()
+                bf_args = getattr(
+                    self,
+                    "butter_filter_args",
+                    {"lowcut": None, "highcut": None, "order": None},
+                )
 
-            filtered_channels = []
-            for ch in range(rec.meta.num_channels):
-                channel_data = raw_data[:, ch]
-                channel_type = self.channel_types[ch].lower()
+                filtered_channels = []
+                for ch in range(rec.meta.num_channels):
+                    channel_data = raw_data[:, ch]
+                    channel_type = self.channel_types[ch].lower()
 
-                if channel_type in ("force", "length"):
-                    # Apply specific processing for force and length channels
-                    # TODO: Implement specific filtering for force and length channels if needed
-                    # Notes/TODOs:
-                    # - Force/length channels may need low-pass smoothing or detrending
-                    #   rather than the EMG bandpass. Add configuration options and a
-                    #   clear API entry point for channel-specific processing.
-                    # - Consider adding unit tests that validate the processing for
-                    #   force/length channels and ensure these channels are not
-                    #   inadvertently rectified/treated as EMG.
-                    filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
-                elif channel_type in ("emg",):
-                    # Apply specific processing for EMG channels
-                    filtered = butter_bandpass_filter(
-                        channel_data,
-                        fs=self.scan_rate,
-                        lowcut=bf_args["lowcut"],
-                        highcut=bf_args["highcut"],
-                        order=bf_args["order"],
-                    )
-                else:
-                    logging.warning(f"No specific processing for channel type: {channel_type}")
-                    filtered = channel_data
+                    if channel_type in ("force", "length"):
+                        # Apply specific processing for force and length channels
+                        # TODO: Implement specific filtering for force and length channels if needed
+                        # Notes/TODOs:
+                        # - Force/length channels may need low-pass smoothing or detrending
+                        #   rather than the EMG bandpass. Add configuration options and a
+                        #   clear API entry point for channel-specific processing.
+                        # - Consider adding unit tests that validate the processing for
+                        #   force/length channels and ensure these channels are not
+                        #   inadvertently rectified/treated as EMG.
+                        filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
+                    elif channel_type in ("emg",):
+                        # Apply specific processing for EMG channels
+                        filtered = butter_bandpass_filter(
+                            channel_data,
+                            fs=self.scan_rate,
+                            lowcut=bf_args["lowcut"],
+                            highcut=bf_args["highcut"],
+                            order=bf_args["order"],
+                        )
+                    else:
+                        logging.warning(f"No specific processing for channel type: {channel_type}")
+                        filtered = channel_data
 
-                if self.annot.channels[ch].invert:
-                    filtered = -filtered
+                    if self.annot.channels[ch].invert:
+                        filtered = -filtered
 
-                filtered_channels.append(filtered)
+                    filtered_channels.append(filtered)
 
-            return np.column_stack(filtered_channels)
+                return np.column_stack(filtered_channels)
+            finally:
+                if close_raw_after_filter:
+                    rec.close()
 
-        cpu_count = os.cpu_count()
-        max_workers = (cpu_count - 1) if cpu_count and cpu_count > 1 else 1
+        configured_workers = None
+        try:
+            configured_workers = self._config.get("signal_processing_workers")
+        except Exception:
+            configured_workers = None
+        if configured_workers is not None:
+            max_workers = max(1, int(configured_workers))
+        else:
+            cpu_count = os.cpu_count()
+            max_workers = (cpu_count - 1) if cpu_count and cpu_count > 1 else 1
 
         filtered_recordings: List[np.ndarray] = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -5,9 +5,9 @@ BulkExportDialog – wizard-style dialog for the Bulk Data Export feature.
 The dialog collects:
   - Data level    : Dataset or Experiment
   - Objects       : hierarchical collapsible experiment / dataset checkboxes
-  - Data types    : Average Reflex Curves, M-max, Max H-reflex
+  - Data types    : Average Reflex Curves, Longform Reflex Amplitudes, M-max, Max H-reflex
   - Methods       : rms, auc, peak_to_trough, average_rectified, average_unrectified
-  - Plot options  : Normalize to M-max
+  - Export options: Normalize to M-max
   - Channels      : per-channel checkboxes
   - Output path   : directory chooser
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -40,7 +41,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
-    QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -196,13 +196,85 @@ class BulkExportProgressWindow(QDialog):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class _DatasetStatus:
+    """Lightweight dataset metadata needed by the export selector."""
+
+    dataset_id: str
+    display_name: str
+    is_completed: bool | None
+    is_excluded: bool = False
+
+
+@dataclass(frozen=True)
+class _ExperimentStatus:
+    """Lightweight experiment metadata needed by the export selector."""
+
+    is_completed: bool | None
+    datasets: list[_DatasetStatus]
+
+
+def _completion_label_text(is_completed: bool | None) -> str:
+    if is_completed is True:
+        return "Complete"
+    if is_completed is False:
+        return "Incomplete"
+    return "Unknown"
+
+
+def _completion_label_stylesheet(is_completed: bool | None) -> str:
+    base = (
+        "QLabel {"
+        " border: 1px solid %s;"
+        " border-radius: 7px;"
+        " padding: 1px 7px;"
+        " font-weight: 600;"
+        " color: %s;"
+        " background: %s;"
+        "}"
+    )
+    if is_completed is True:
+        return base % ("#8fd19e", "#176b2c", "#e7f6ea")
+    if is_completed is False:
+        return base % ("#f1a8a8", "#b42318", "#fdeaea")
+    return base % ("#c7c7c7", "#555555", "#f1f1f1")
+
+
+def _make_completion_badge(is_completed: bool | None, tooltip_prefix: str, parent: QWidget | None = None) -> QLabel:
+    label = QLabel(_completion_label_text(is_completed), parent)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    label.setMinimumWidth(88)
+    label.setStyleSheet(_completion_label_stylesheet(is_completed))
+    label.setToolTip(f"{tooltip_prefix}: {_completion_label_text(is_completed)}")
+    return label
+
+
+def _dataset_completion_summary(datasets: list[_DatasetStatus]) -> str:
+    if not datasets:
+        return "No datasets"
+    known = [ds for ds in datasets if ds.is_completed is not None]
+    complete = sum(1 for ds in known if ds.is_completed)
+    incomplete = sum(1 for ds in known if ds.is_completed is False)
+    unknown = len(datasets) - len(known)
+    parts = [f"{complete} complete", f"{incomplete} incomplete"]
+    if unknown:
+        parts.append(f"{unknown} unknown")
+    return ", ".join(parts)
+
+
 class _ExperimentGroup(QWidget):
     """A collapsible card showing one experiment with its dataset checkboxes."""
 
-    def __init__(self, expt_name: str, dataset_ids: list[str], parent: QWidget | None = None):
+    def __init__(
+        self,
+        expt_name: str,
+        experiment_completed: bool | None,
+        datasets: list[_DatasetStatus],
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self.expt_name = expt_name
-        self.dataset_ids = dataset_ids
+        self.dataset_statuses = datasets
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 2, 0, 2)
@@ -228,6 +300,15 @@ class _ExperimentGroup(QWidget):
         self._expt_cb.stateChanged.connect(self._on_expt_checked)
         header_layout.addWidget(self._expt_cb, 1)
 
+        self._dataset_summary_lbl = QLabel(_dataset_completion_summary(datasets))
+        self._dataset_summary_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._dataset_summary_lbl.setStyleSheet("QLabel { color: #555555; }")
+        self._dataset_summary_lbl.setToolTip("Dataset completion summary for this experiment")
+        header_layout.addWidget(self._dataset_summary_lbl)
+
+        self._expt_status_lbl = _make_completion_badge(experiment_completed, "Experiment status", self)
+        header_layout.addWidget(self._expt_status_lbl)
+
         outer.addWidget(header_row)
 
         # ── children container (datasets) ─────────────────────────────────
@@ -237,18 +318,44 @@ class _ExperimentGroup(QWidget):
         children_layout.setSpacing(2)
 
         self._dataset_cbs: list[QCheckBox] = []
-        for ds_id in dataset_ids:
-            cb = QCheckBox(ds_id)
+        self._dataset_ids_by_cb: dict[QCheckBox, str] = {}
+        self._dataset_status_by_cb: dict[QCheckBox, _DatasetStatus] = {}
+        self._dataset_row_by_cb: dict[QCheckBox, QWidget] = {}
+        for ds_status in datasets:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
+
+            cb = QCheckBox(ds_status.display_name)
+            cb.setToolTip(ds_status.dataset_id)
             cb.setChecked(False)
             cb.stateChanged.connect(self._on_child_changed)
-            children_layout.addWidget(cb)
+            row_layout.addWidget(cb, 1)
+            row_layout.addWidget(_make_completion_badge(ds_status.is_completed, "Dataset status", row))
+
+            if ds_status.is_excluded:
+                excluded_lbl = QLabel("Excluded")
+                excluded_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                excluded_lbl.setMinimumWidth(70)
+                excluded_lbl.setStyleSheet(
+                    "QLabel { border: 1px solid #c7c7c7; border-radius: 7px; padding: 1px 7px; color: #555555; }"
+                )
+                excluded_lbl.setToolTip("This dataset is marked as excluded in the experiment metadata")
+                row_layout.addWidget(excluded_lbl)
+
+            children_layout.addWidget(row)
             self._dataset_cbs.append(cb)
+            self._dataset_ids_by_cb[cb] = ds_status.dataset_id
+            self._dataset_status_by_cb[cb] = ds_status
+            self._dataset_row_by_cb[cb] = row
 
         self._children_widget.setVisible(False)
         outer.addWidget(self._children_widget)
 
         # In dataset mode the children are meaningful; in experiment mode hide them
         self._dataset_mode = True
+        self._completed_only = False
 
     # ── internal slots ────────────────────────────────────────────────────
 
@@ -260,16 +367,17 @@ class _ExperimentGroup(QWidget):
     def _on_expt_checked(self, state: int) -> None:
         checked = state == Qt.CheckState.Checked.value
         if self._dataset_mode:
-            for cb in self._dataset_cbs:
+            for cb in self._visible_dataset_cbs():
                 cb.blockSignals(True)
                 cb.setChecked(checked)
                 cb.blockSignals(False)
 
     def _on_child_changed(self) -> None:
         """Update experiment-level checkbox based on children."""
-        states = [cb.isChecked() for cb in self._dataset_cbs]
+        visible_cbs = self._visible_dataset_cbs()
+        states = [cb.isChecked() for cb in visible_cbs]
         self._expt_cb.blockSignals(True)
-        if all(states):
+        if states and all(states):
             self._expt_cb.setCheckState(Qt.CheckState.Checked)
         elif any(states):
             self._expt_cb.setCheckState(Qt.CheckState.PartiallyChecked)
@@ -298,12 +406,31 @@ class _ExperimentGroup(QWidget):
     def is_expt_checked(self) -> bool:
         return self._expt_cb.checkState() != Qt.CheckState.Unchecked
 
+    def set_completed_only(self, enabled: bool) -> None:
+        """Hide incomplete or unknown datasets and clear hidden selections."""
+        self._completed_only = enabled
+        for cb in self._dataset_cbs:
+            status = self._dataset_status_by_cb[cb]
+            is_visible = not enabled or status.is_completed is True
+            row = self._dataset_row_by_cb[cb]
+            row.setVisible(is_visible)
+            if not is_visible and cb.isChecked():
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
+        self._on_child_changed()
+
+    def _visible_dataset_cbs(self) -> list[QCheckBox]:
+        if not self._completed_only:
+            return list(self._dataset_cbs)
+        return [cb for cb in self._dataset_cbs if self._dataset_status_by_cb[cb].is_completed is True]
+
     @property
     def selected_dataset_ids(self) -> list[str]:
         """Return selected dataset IDs (only meaningful in dataset mode)."""
         if not self._dataset_mode:
             return []
-        return [cb.text() for cb in self._dataset_cbs if cb.isChecked()]
+        return [self._dataset_ids_by_cb[cb] for cb in self._visible_dataset_cbs() if cb.isChecked()]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -318,7 +445,7 @@ class BulkExportDialog(QDialog):
         super().__init__(parent or gui)
         self.gui = gui
         self.setWindowTitle("Bulk Data Export")
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(720)
         self.setMinimumHeight(640)
 
         self._expt_groups: list[_ExperimentGroup] = []
@@ -369,6 +496,13 @@ class BulkExportDialog(QDialog):
         sel_btn_none.clicked.connect(lambda: self._set_all_objects(False))
         sel_layout.addWidget(sel_btn_all)
         sel_layout.addWidget(sel_btn_none)
+        self._cb_completed_only = QCheckBox("Completed datasets only")
+        self._cb_completed_only.setToolTip(
+            "Hide incomplete or unknown datasets in the dataset-level selector. "
+            "Experiment-level exports still export the whole selected experiment."
+        )
+        self._cb_completed_only.toggled.connect(self._on_completed_only_changed)
+        sel_layout.addWidget(self._cb_completed_only)
         sel_layout.addStretch()
         obj_box_layout.addWidget(sel_row)
 
@@ -409,34 +543,17 @@ class BulkExportDialog(QDialog):
         method_layout.addStretch()
         root.addWidget(method_box)
 
-        # ── 5. Plot Options ───────────────────────────────────────────────
-        opts_box = QGroupBox("Plot Options")
+        # ── 5. Export Options ────────────────────────────────────────────
+        opts_box = QGroupBox("Export Options")
         opts_layout = QVBoxLayout(opts_box)
         self._cb_normalize_mmax = QCheckBox("Normalize amplitudes to M-max")
         self._cb_normalize_mmax.setChecked(False)
         self._cb_normalize_mmax.setToolTip(
             "Adds *_norm_mmax_* columns alongside raw amplitude columns in the "
-            "Avg Reflex Curves and Max H-Reflex sheets.\n"
+            "Avg Reflex Curves, Max H-Reflex, and Longform Reflex Amplitudes sheets.\n"
             "⚠ Requires M-max latency windows to be defined for all selected objects."
         )
         opts_layout.addWidget(self._cb_normalize_mmax)
-        workers_row = QWidget()
-        workers_layout = QHBoxLayout(workers_row)
-        workers_layout.setContentsMargins(0, 2, 0, 0)
-        workers_layout.setSpacing(6)
-        workers_layout.addWidget(QLabel("Parallel workers:"))
-        self._sb_workers = QSpinBox()
-        self._sb_workers.setRange(1, 16)
-        self._sb_workers.setValue(1)
-        self._sb_workers.setFixedWidth(60)
-        self._sb_workers.setToolTip(
-            "Number of datasets to load and process simultaneously.\n"
-            "Values > 1 can significantly speed up large exports but use more RAM.\n"
-            "Applies to dataset-level exports only."
-        )
-        workers_layout.addWidget(self._sb_workers)
-        workers_layout.addStretch()
-        opts_layout.addWidget(workers_row)
         root.addWidget(opts_box)
 
         # ── 6. Channels ───────────────────────────────────────────────────
@@ -450,7 +567,7 @@ class BulkExportDialog(QDialog):
         path_layout = QHBoxLayout(path_box)
         self._path_edit = QLineEdit()
         self._path_edit.setPlaceholderText("Select an output folder…")
-        default_out = str(getattr(self.gui, "output_path", "") or "")
+        default_out = str(getattr(self.gui, "export_path", "") or "")
         if default_out:
             self._path_edit.setText(default_out)
         browse_btn = QPushButton("Browse…")
@@ -484,8 +601,8 @@ class BulkExportDialog(QDialog):
         self._expt_groups.clear()
 
         for expt_name, expt_path_str in sorted(expts_dict.items()):
-            dataset_ids = self._discover_dataset_ids(expt_path_str)
-            group = _ExperimentGroup(expt_name, dataset_ids)
+            status = self._discover_experiment_status(expt_path_str)
+            group = _ExperimentGroup(expt_name, status.is_completed, status.datasets)
             self._tree_layout.insertWidget(self._tree_layout.count() - 1, group)
             self._expt_groups.append(group)
 
@@ -495,13 +612,51 @@ class BulkExportDialog(QDialog):
             self._tree_layout.insertWidget(0, empty_lbl)
 
     @staticmethod
-    def _discover_dataset_ids(expt_path_str: str) -> list[str]:
-        """Return sorted dataset folder names inside an experiment directory."""
+    def _discover_experiment_status(expt_path_str: str) -> _ExperimentStatus:
+        """Return lightweight experiment/dataset completion status for the chooser."""
         try:
             folder = Path(expt_path_str)
-            return sorted(p.name for p in folder.iterdir() if p.is_dir())
-        except Exception:
-            return []
+            from monstim_signals.io.repositories import ExperimentRepository
+
+            metadata = ExperimentRepository(folder).get_metadata()
+            excluded_ids = set(metadata.get("excluded_datasets") or [])
+            dataset_statuses = []
+            for ds_meta in metadata.get("datasets") or []:
+                ds_id = str(ds_meta.get("id") or "")
+                if not ds_id:
+                    continue
+                dataset_statuses.append(
+                    _DatasetStatus(
+                        dataset_id=ds_id,
+                        display_name=str(ds_meta.get("formatted_name") or ds_id),
+                        is_completed=bool(ds_meta.get("is_completed", False)),
+                        is_excluded=ds_id in excluded_ids,
+                    )
+                )
+
+            if not dataset_statuses:
+                dataset_statuses = [
+                    _DatasetStatus(dataset_id=p.name, display_name=p.name, is_completed=None)
+                    for p in sorted(folder.iterdir())
+                    if p.is_dir()
+                ]
+
+            return _ExperimentStatus(
+                is_completed=bool(metadata.get("is_completed", False)),
+                datasets=sorted(dataset_statuses, key=lambda ds: ds.display_name.casefold()),
+            )
+        except Exception as exc:
+            logging.warning("Could not read completion status for experiment path %s: %s", expt_path_str, exc)
+            try:
+                folder = Path(expt_path_str)
+                datasets = [
+                    _DatasetStatus(dataset_id=p.name, display_name=p.name, is_completed=None)
+                    for p in sorted(folder.iterdir())
+                    if p.is_dir()
+                ]
+            except Exception:
+                datasets = []
+            return _ExperimentStatus(is_completed=None, datasets=datasets)
 
     def _populate_channels(self) -> None:
         """Add per-channel checkboxes from the currently loaded experiment."""
@@ -562,13 +717,19 @@ class BulkExportDialog(QDialog):
     def _on_level_changed(self, dataset_mode_active: bool) -> None:
         for group in self._expt_groups:
             group.set_dataset_mode(dataset_mode_active)
+            group.set_completed_only(dataset_mode_active and self._cb_completed_only.isChecked())
 
     def _set_all_objects(self, checked: bool) -> None:
         for group in self._expt_groups:
             group._expt_cb.setChecked(checked)
 
+    def _on_completed_only_changed(self, checked: bool) -> None:
+        dataset_mode_active = self._rb_dataset.isChecked()
+        for group in self._expt_groups:
+            group.set_completed_only(dataset_mode_active and checked)
+
     def _browse_output(self) -> None:
-        current = self._path_edit.text().strip() or str(getattr(self.gui, "output_path", ""))
+        current = self._path_edit.text().strip() or str(getattr(self.gui, "export_path", ""))
         chosen = QFileDialog.getExistingDirectory(self, "Select Output Directory", current)
         if chosen:
             self._path_edit.setText(chosen)
@@ -699,7 +860,6 @@ class BulkExportDialog(QDialog):
 
         expts_dict: dict[str, str] = getattr(self.gui, "expts_dict", {})
         normalize_to_mmax = self._cb_normalize_mmax.isChecked()
-        max_workers = self._sb_workers.value()
 
         return BulkExportConfig(
             data_level=data_level,
@@ -709,6 +869,5 @@ class BulkExportDialog(QDialog):
             channel_indices=channel_indices,
             output_path=output_path,
             normalize_to_mmax=normalize_to_mmax,
-            max_workers=max_workers,
             experiment_paths={name: str(expts_dict.get(name, "")) for name in selected_objects},
         )
