@@ -51,8 +51,8 @@ from monstim_gui.widgets.gui_layout import setup_main_layout
 from monstim_signals.core import (
     get_config_path,
     get_docs_path,
-    get_output_path,
     get_export_path,
+    get_output_path,
     get_source_path,
 )
 from monstim_signals.domain.dataset import Dataset
