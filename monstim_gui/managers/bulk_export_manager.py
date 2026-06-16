@@ -300,9 +300,7 @@ def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.Dat
                             }
                             if config.normalize_to_mmax:
                                 row["mmax_for_normalization"] = mmax
-                                row["amplitude_norm_mmax"] = (
-                                    amplitude / mmax if mmax is not None and mmax != 0.0 else np.nan
-                                )
+                                row["amplitude_norm_mmax"] = amplitude / mmax if mmax is not None and mmax != 0.0 else np.nan
                             rows.append(row)
 
     return pd.DataFrame(rows)

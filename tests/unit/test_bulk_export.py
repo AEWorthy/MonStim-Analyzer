@@ -448,10 +448,7 @@ class TestComputeLongformReflexAmplitudes:
         )
         df = _compute_longform_reflex_amplitudes(obj, config)
 
-        gains_by_session = {
-            session_id: set(group["emg_amp_gain"].dropna())
-            for session_id, group in df.groupby("session_id")
-        }
+        gains_by_session = {session_id: set(group["emg_amp_gain"].dropna()) for session_id, group in df.groupby("session_id")}
         assert gains_by_session == {"S1": {500.0}, "S2": {2000.0}}
 
     def test_missing_emg_channel_gain_stays_missing(self):
