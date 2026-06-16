@@ -21,6 +21,7 @@ if ($envList -match $envName) {
 
     Write-Host "Cleaning conda caches..."
     conda clean --all --yes
+    conda clean --force-pkgs-dirs -y
 } else {
     Write-Host "Environment '$envName' not found. Creating a fresh environment from 'environment.yml'."
 }
