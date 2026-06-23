@@ -66,6 +66,7 @@ class Session:
 
     def _load_config_settings(self):
         _config = self._config if self._config is not None else load_config()
+        self._config = _config
         self.time_window_ms: float = _config["time_window"]
         self.pre_stim_time_ms: float = _config["pre_stim_time"]
         self.bin_size: float = _config["bin_size"]

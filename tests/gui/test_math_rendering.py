@@ -1,7 +1,5 @@
 import os
 
-import pytest
-
 from monstim_gui.dialogs import help_about as ha
 
 
@@ -72,8 +70,8 @@ def test_cache_key_generation_and_fontsize_variation():
     assert a[0] != b[0]
 
 
-def test_render_failure_propagates(monkeypatch):
-    # Simulate a failure inside matplotlib figure/text path
+def test_render_failure_uses_fallback(monkeypatch):
+    # Simulate a failure inside the matplotlib figure/text path.
 
     def bad_figure(*args, **kwargs):
         class BadFig:
@@ -97,9 +95,16 @@ def test_render_failure_propagates(monkeypatch):
             def savefig(self, *a, **kw):
                 raise RuntimeError("Simulated save failure")
 
+            def clear(self):
+                return None
+
         return BadFig()
 
-    monkeypatch.setattr(ha.plt, "figure", bad_figure)
+    monkeypatch.setattr(ha, "Figure", bad_figure)
 
-    with pytest.raises(RuntimeError):
-        ha._render_tex_to_img("\\invalid\\tex", fontsize=12, dark_mode=False)
+    path, render_w, render_h, display_w, display_h = ha._render_tex_to_img("\\invalid\\tex", fontsize=12, dark_mode=False)
+
+    assert os.path.exists(path)
+    assert (render_w, render_h) == (1, 1)
+    assert display_w >= 0
+    assert display_h >= 0

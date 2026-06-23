@@ -9,7 +9,9 @@ import markdown
 from markdown.extensions.codehilite import CodeHiliteExtension
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
-from matplotlib import pyplot as plt
+from matplotlib import rc_context
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 from mdx_math import MathExtension
 from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
@@ -85,45 +87,41 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
     if key in _IMG_CACHE and out_path.exists():
         return _IMG_CACHE[key]
 
-    # Consistent math font
-    plt.rcParams["mathtext.fontset"] = "stix"
-    plt.rcParams["font.family"] = "DejaVu Sans"
-    plt.rcParams["font.size"] = fontsize
-
-    fig = plt.figure(figsize=(0.01, 0.01), dpi=_RENDER_DPI)
-    fig.patch.set_alpha(0)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.axis("off")
-
-    # Use white text for dark mode, black for light mode
-    text_color = "white" if dark_mode else "black"
-    ax.text(0.5, 0.5, f"${tex}$", ha="center", va="center", fontsize=fontsize, color=text_color)
-
     buf = io.BytesIO()
     png_bytes = b""
+    fig = None
     try:
-        try:
+        with rc_context({"mathtext.fontset": "stix", "font.family": "DejaVu Sans", "font.size": fontsize}):
+            fig = Figure(figsize=(0.01, 0.01), dpi=_RENDER_DPI)
+            FigureCanvasAgg(fig)
+            fig.patch.set_alpha(0)
+            ax = fig.add_axes([0, 0, 1, 1])
+            ax.axis("off")
+
+            # Use white text for dark mode, black for light mode
+            text_color = "white" if dark_mode else "black"
+            ax.text(0.5, 0.5, f"${tex}$", ha="center", va="center", fontsize=fontsize, color=text_color)
+
             fig.savefig(buf, format="png", dpi=_RENDER_DPI, transparent=True, bbox_inches="tight", pad_inches=0.01)
             png_bytes = buf.getvalue()
             out_path.write_bytes(png_bytes)
-        except Exception as e:
-            # If matplotlib backend or fonts fail in frozen app, log and fall back
-            logging.exception(f"Failed to save math image via matplotlib: {e}")
-            # Create a minimal transparent PNG using QImage as a safe fallback
-            try:
-                qimg = QImage(1, 1, QImage.Format_ARGB32)
-                qimg.fill(0)  # fully transparent
-                saved = qimg.save(str(out_path), "PNG")
-                if saved:
-                    logging.debug(f"Wrote fallback transparent image to {out_path}")
-                    # Load the raw bytes from the file for downstream processing
-                    png_bytes = out_path.read_bytes()
-                else:
-                    logging.error("Failed to save fallback QImage PNG.")
-            except Exception as ee:
-                logging.exception(f"Fallback QImage save also failed: {ee}")
+    except Exception as e:
+        # If matplotlib or fonts fail in frozen app, log and fall back.
+        logging.exception(f"Failed to save math image via matplotlib: {e}")
+        try:
+            qimg = QImage(1, 1, QImage.Format_ARGB32)
+            qimg.fill(0)  # fully transparent
+            saved = qimg.save(str(out_path), "PNG")
+            if saved:
+                logging.debug(f"Wrote fallback transparent image to {out_path}")
+                png_bytes = out_path.read_bytes()
+            else:
+                logging.error("Failed to save fallback QImage PNG.")
+        except Exception as ee:
+            logging.exception(f"Fallback QImage save also failed: {ee}")
     finally:
-        plt.close(fig)
+        if fig is not None:
+            fig.clear()
 
     # Get actual image dimensions (at render DPI)
     img = QImage()
