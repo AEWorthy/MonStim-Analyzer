@@ -52,6 +52,11 @@ def _close_completed_futures(futures) -> None:
         _close_loaded_objects([obj])
 
 
+def _path_name_sort_key(path: Path) -> tuple[str, str]:
+    """Sort paths by name consistently across platforms."""
+    return (path.name.casefold(), path.name)
+
+
 class RecordingRepository:
     """
     Knows how to load/save exactly one recording:
@@ -241,7 +246,7 @@ class RecordingRepository:
             RecordingRepository(Path("folder/AA00_0000"))
             RecordingRepository(Path("folder/AA00_0001"))
         """
-        for raw_h5 in folder.glob("*.raw.h5"):
+        for raw_h5 in sorted(folder.glob("*.raw.h5"), key=_path_name_sort_key):
             stem = raw_h5.with_suffix("")  # drop ".raw.h5" → Path("folder/AA00_0000")
             yield RecordingRepository(stem=stem)
 
@@ -459,7 +464,7 @@ class SessionRepository:
             SessionRepository(Path("folder/AA01"))
             SessionRepository(Path("folder/AA02"))
         """
-        for entry in folder.iterdir():
+        for entry in sorted(folder.iterdir(), key=_path_name_sort_key):
             # Only consider directories as session candidates; skip files like dataset.annot.json
             if not entry.is_dir():
                 continue
@@ -732,7 +737,7 @@ class DatasetRepository:
                 dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
 
             # Get session folders without loading them
-            session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            session_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
             session_names = [folder.name for folder in session_folders]
 
             # Construct formatted name like the Dataset domain object does
@@ -831,7 +836,7 @@ class ExperimentRepository:
                 raise RuntimeError("Index missing or stale")
         except Exception:
             logging.debug("Falling back to filesystem discovery for datasets.", exc_info=True)
-            dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            dataset_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
         if preflight_scan:
             try:
                 scan_results = scan_annotation_versions(
@@ -1044,7 +1049,7 @@ class ExperimentRepository:
                 annot = ExperimentAnnot.create_empty()
 
             # Get dataset folders without loading them
-            dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            dataset_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
             dataset_metadata = []
 
             for ds_folder in dataset_folders:
