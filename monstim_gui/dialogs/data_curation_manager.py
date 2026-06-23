@@ -1283,7 +1283,8 @@ class DataCurationManager(QDialog):
         box.setLayout(box_layout)
         # Style title to avoid clipping and look nicer
         try:
-            box.setStyleSheet("""
+            box.setStyleSheet(
+                """
                 QGroupBox {
                     padding: 6px;
                     border: 1px solid rgba(200,200,200,60);
@@ -1297,7 +1298,8 @@ class DataCurationManager(QDialog):
                     color: palette(window-text);
                 }
                 QLabel { padding-left: 0px; margin-left: 0px; }
-                """)
+                """
+            )
         except Exception:
             pass
 
