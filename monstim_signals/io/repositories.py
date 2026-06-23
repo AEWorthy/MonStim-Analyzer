@@ -29,6 +29,29 @@ from monstim_signals.io.data_migrations import (
 from monstim_signals.io.experiment_index import find_session_index
 
 
+def _close_loaded_objects(objects) -> None:
+    """Best-effort close for partially loaded domain objects."""
+    for obj in list(objects):
+        close = getattr(obj, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logging.debug("Failed to close partially loaded object %r", obj, exc_info=True)
+
+
+def _close_completed_futures(futures) -> None:
+    """Close objects produced by completed futures that will not be returned."""
+    for fut in list(futures):
+        if fut.cancelled() or not fut.done():
+            continue
+        try:
+            obj = fut.result()
+        except Exception:
+            continue
+        _close_loaded_objects([obj])
+
+
 class RecordingRepository:
     """
     Knows how to load/save exactly one recording:
@@ -353,27 +376,36 @@ class SessionRepository:
                 session_annot = SessionAnnot.from_dict(session_annot_dict)
             except Exception:
                 logging.exception(f"Unexpected error while reading session annotation {self.session_js}")
+                _close_loaded_objects(recordings)
                 raise
         else:  # If no session.annot.json, initialize a brand‐new one
-            if recordings:
-                logging.debug(
-                    f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one."
-                )
-                session_annot = SessionAnnot.from_meta(recordings[0].meta)
-            else:
-                logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
-                session_annot = SessionAnnot.create_empty()
-            if allow_write:
-                self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
+            try:
+                if recordings:
+                    logging.debug(
+                        f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one."
+                    )
+                    session_annot = SessionAnnot.from_meta(recordings[0].meta)
+                else:
+                    logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
+                    session_annot = SessionAnnot.create_empty()
+                if allow_write:
+                    self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
+            except Exception:
+                _close_loaded_objects(recordings)
+                raise
 
         # 4) Build a Session domain object
-        session = Session(
-            session_id=self.session_id,
-            recordings=recordings,
-            annot=session_annot,
-            repo=self,
-            config=config,
-        )
+        try:
+            session = Session(
+                session_id=self.session_id,
+                recordings=recordings,
+                annot=session_annot,
+                repo=self,
+                config=config,
+            )
+        except Exception:
+            _close_loaded_objects(recordings)
+            raise
         return session
 
     def save(self, session: Session) -> None:
@@ -554,23 +586,32 @@ class DatasetRepository:
                 dataset_annot = DatasetAnnot.from_dict(dataset_annot_dict)
             except Exception:
                 logging.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
+                _close_loaded_objects(sessions)
                 raise
         else:  # If no session.annot.json, initialize a brand‐new one
-            logging.info(
-                f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one (in-memory)."
-            )
-            dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
-            if allow_write:
-                self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
+            try:
+                logging.info(
+                    f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one (in-memory)."
+                )
+                dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+                if allow_write:
+                    self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
+            except Exception:
+                _close_loaded_objects(sessions)
+                raise
 
         # 4) Build a Dataset domain object
-        dataset = Dataset(
-            dataset_id=self.dataset_id,
-            sessions=sessions,
-            annot=dataset_annot,
-            repo=self,
-            config=config,
-        )
+        try:
+            dataset = Dataset(
+                dataset_id=self.dataset_id,
+                sessions=sessions,
+                annot=dataset_annot,
+                repo=self,
+                config=config,
+            )
+        except Exception:
+            _close_loaded_objects(sessions)
+            raise
         return dataset
 
     def save(self, dataset: Dataset) -> None:
@@ -836,7 +877,8 @@ class ExperimentRepository:
                             # Cancel remaining futures
                             for fut in future_map.keys():
                                 fut.cancel()
-                            ex.shutdown(wait=False)
+                            concurrent.futures.wait(list(future_map.keys()))
+                            _close_completed_futures(future_map.keys())
                             raise
                         except Exception:  # pragma: no cover - defensive
                             logging.debug("Progress callback errored (ignored)", exc_info=True)
@@ -970,13 +1012,22 @@ class ExperimentRepository:
                 annot = ExperimentAnnot.from_dict(annot_dict)
             except Exception:
                 logging.exception(f"Unexpected error while reading experiment annotation {self.expt_js}")
+                _close_loaded_objects(datasets)
                 raise
         else:
-            logging.info(f"Experiment annotation file '{self.expt_js}' not found. Using a new empty annotation in-memory.")
-            annot = ExperimentAnnot.create_empty()
-            if allow_write:
-                self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
-        expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
+            try:
+                logging.info(f"Experiment annotation file '{self.expt_js}' not found. Using a new empty annotation in-memory.")
+                annot = ExperimentAnnot.create_empty()
+                if allow_write:
+                    self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
+            except Exception:
+                _close_loaded_objects(datasets)
+                raise
+        try:
+            expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
+        except Exception:
+            _close_loaded_objects(datasets)
+            raise
         return expt
 
     def get_metadata(self) -> dict:

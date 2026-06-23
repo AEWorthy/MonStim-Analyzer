@@ -1025,6 +1025,12 @@ class Session:
 
             gc.collect()
 
+    def __enter__(self) -> "Session":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     # ──────────────────────────────────────────────────────────────────
     # 5) Object representation and reports
     # ──────────────────────────────────────────────────────────────────

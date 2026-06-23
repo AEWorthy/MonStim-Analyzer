@@ -77,6 +77,7 @@ class TestCompleteDataWorkflows:
         """Test complete workflow from CSV import to domain model access."""
         # Step 1: Import CSV data
         output_dir = temp_output_dir / "imported_data"
+        experiment = None
 
         # Import experiment using the csv_importer module function
         try:
@@ -119,6 +120,9 @@ class TestCompleteDataWorkflows:
         except Exception:
             # CSV import may fail with mock data - test that it handles errors gracefully
             assert True, "Import should handle errors gracefully"
+        finally:
+            if experiment is not None:
+                experiment.close()
 
     def test_import_with_error_recovery(self, temp_output_dir):
         """Test import workflow with various error conditions and recovery."""
@@ -438,14 +442,18 @@ class TestErrorRecoveryIntegration:
         invalid_path = temp_output_dir / "nonexistent" / "path"
 
         # Attempt to create repositories with invalid paths
+        loaded_experiment = None
         try:
             exp_repo = ExperimentRepository(invalid_path)
-            _ = exp_repo.load()
+            loaded_experiment = exp_repo.load()
             # If load succeeds unexpectedly, ensure an Experiment-like object
-            assert _ is not None
+            assert loaded_experiment is not None
         except Exception as e:
             # If exceptions occur, they should be specific and handleable
             assert isinstance(e, (FileNotFoundError, PermissionError, OSError))
+        finally:
+            if loaded_experiment is not None:
+                loaded_experiment.close()
 
     def test_command_failure_recovery(self):
         """Test command system recovery from command failures."""
@@ -511,6 +519,7 @@ class TestPerformanceIntegration:
         # Test repository discovery performance
         start_time = time.time()
         exp_repo = ExperimentRepository(exp_dir)
+        experiment = None
         try:
             # Try to load experiment (if structure is valid)
             experiment = exp_repo.load()
@@ -518,6 +527,9 @@ class TestPerformanceIntegration:
         except Exception:
             # May fail with mock data - that's expected
             pass
+        finally:
+            if experiment is not None:
+                experiment.close()
         discovery_time = time.time() - start_time
 
         # Should complete in reasonable time (adjust threshold as needed)
@@ -593,16 +605,12 @@ class TestConfigurationIntegration:
 
         # Create default config
         default_config = config_dir / "config.yml"
-        default_config.write_text(
-            textwrap.dedent(
-                """\
+        default_config.write_text(textwrap.dedent("""\
             default_setting: "default_value"
             analysis:
               method: "default_method"
               threshold: 1.0
-            """
-            )
-        )
+            """))
 
         # Create profile directory
         profile_dir = temp_output_dir / "profiles"
@@ -791,6 +799,7 @@ class TestEndToEndUserScenarios:
 
             # Step 2: Load and analyze
             exp_repo = ExperimentRepository(output_dir)
+            experiment = None
             try:
                 experiment = exp_repo.load()
 
@@ -822,11 +831,17 @@ class TestEndToEndUserScenarios:
 
                             # Step 5: Reload and verify persistence
                             reloaded_session = session_repo.load()
-                            assert len(reloaded_session.annot.latency_windows) > 0, "Latency windows should persist"
-                            assert reloaded_session.annot.latency_windows[0].name == "Test Window"
+                            try:
+                                assert len(reloaded_session.annot.latency_windows) > 0, "Latency windows should persist"
+                                assert reloaded_session.annot.latency_windows[0].name == "Test Window"
+                            finally:
+                                reloaded_session.close()
             except Exception:
                 # Analysis may fail with mock data - that's expected
                 pass
+            finally:
+                if experiment is not None:
+                    experiment.close()
 
         except Exception:
             # Import may fail with mock data - verify graceful handling

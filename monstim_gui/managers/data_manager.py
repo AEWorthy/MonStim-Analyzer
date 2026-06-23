@@ -602,10 +602,13 @@ class DataManager:
                             "Warning",
                             f"Could not remove session cache file. Reload may not work as expected: {e}",
                         )
-                new_sess = self.gui.current_session.repo.load(config=self.gui.config_repo.read_config())
-                idx = self.gui.current_dataset.get_all_sessions(include_excluded=True).index(self.gui.current_session)
+                old_sess = self.gui.current_session
+                new_sess = old_sess.repo.load(config=self.gui.config_repo.read_config())
+                idx = self.gui.current_dataset.get_all_sessions(include_excluded=True).index(old_sess)
                 self.gui.current_dataset.get_all_sessions(include_excluded=True)[idx] = new_sess
                 self.gui.set_current_session(new_sess)
+                if old_sess is not new_sess:
+                    old_sess.close()
             self.gui.plot_widget.on_data_selection_changed()
             self.gui.status_bar.showMessage("Session reloaded successfully.", 5000)
             logging.info("Session reloaded successfully.")
@@ -642,13 +645,18 @@ class DataManager:
                             f"Session JS file does not exist: {sess.repo.session_js if sess.repo else 'No repo'}. Cannot unlink."
                         )
 
-                new_ds = self.gui.current_dataset.repo.load(config=self.gui.config_repo.read_config())
-                if self.gui.current_dataset.parent_experiment is not None:
+                old_ds = self.gui.current_dataset
+                parent_experiment = old_ds.parent_experiment
+                new_ds = old_ds.repo.load(config=self.gui.config_repo.read_config())
+                if parent_experiment is not None:
                     # Update the dataset in the parent experiment's list if it exists.
-                    logging.info(f"Reloading dataset in parent experiment: {self.gui.current_dataset.parent_experiment.id}.")
-                    idx = self.gui.current_dataset.parent_experiment._all_datasets.index(self.gui.current_dataset)
-                    self.gui.current_dataset.parent_experiment._all_datasets[idx] = new_ds
+                    logging.info(f"Reloading dataset in parent experiment: {parent_experiment.id}.")
+                    idx = parent_experiment._all_datasets.index(old_ds)
+                    parent_experiment._all_datasets[idx] = new_ds
+                    new_ds.parent_experiment = parent_experiment
                 self.gui.set_current_dataset(new_ds)
+                if old_ds is not new_ds:
+                    old_ds.close()
 
             self.gui.data_selection_widget.update(levels=("session",))
             self.gui.plot_widget.on_data_selection_changed()
@@ -699,9 +707,12 @@ class DataManager:
                             )
 
                 # Reload the experiment from the repository.
-                logging.info(f"Reloading experiment from repository: {self.gui.current_experiment.repo.folder.name}.")
-                new_expt = self.gui.current_experiment.repo.load(config=self.gui.config_repo.read_config())
+                old_expt = self.gui.current_experiment
+                logging.info(f"Reloading experiment from repository: {old_expt.repo.folder.name}.")
+                new_expt = old_expt.repo.load(config=self.gui.config_repo.read_config())
                 self.gui.set_current_experiment(new_expt)
+                if old_expt is not new_expt:
+                    old_expt.close()
             else:
                 self.gui.set_current_experiment(None)
                 logging.warning("No repository found for the current experiment. Cannot reload.")

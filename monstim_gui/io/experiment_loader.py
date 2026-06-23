@@ -294,6 +294,10 @@ class ExperimentLoadingThread(QThread):
             # Check for cancellation after load completes
             if self._cancel_requested:
                 logging.info("Loading canceled after repo.load()")
+                try:
+                    experiment.close()
+                except Exception:
+                    logging.debug("Failed to close experiment after canceled load", exc_info=True)
                 return
 
             self.progress.emit(90)

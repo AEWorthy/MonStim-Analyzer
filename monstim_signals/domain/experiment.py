@@ -512,7 +512,7 @@ class Experiment:
             force_gc: If True, force garbage collection after closing.
                      Set to False when closing nested objects to avoid redundant GC.
         """
-        for ds in self.datasets:
+        for ds in self._all_datasets:
             try:
                 # Don't GC at dataset level when closing full experiment
                 ds.close(force_gc=False)
@@ -525,6 +525,12 @@ class Experiment:
 
             collected = gc.collect()
             logging.debug(f"Experiment close: GC collected {collected} objects")
+
+    def __enter__(self) -> "Experiment":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
     # ──────────────────────────────────────────────────────────────────
     # 3) Object representation and reports

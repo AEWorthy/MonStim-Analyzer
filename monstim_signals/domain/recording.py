@@ -170,6 +170,12 @@ class Recording:
                     # Ensure we don't raise while cleaning up
                     pass
 
+    def __enter__(self) -> "Recording":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     # ──────────────────────────────────────────────────────────────────
     # 5) Object representation
     # ──────────────────────────────────────────────────────────────────

@@ -767,7 +767,7 @@ class Dataset:
             force_gc: If True, force garbage collection after closing.
                      Set to False when closing as part of full experiment.
         """
-        for sess in self.sessions:
+        for sess in self.get_all_sessions(include_excluded=True):
             if hasattr(sess, "close"):
                 # Don't GC at session level when closing dataset/experiment
                 sess.close(force_gc=False)
@@ -779,6 +779,12 @@ class Dataset:
             import gc
 
             gc.collect()
+
+    def __enter__(self) -> "Dataset":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
     # ──────────────────────────────────────────────────────────────────
     # 3) Object representation and reports

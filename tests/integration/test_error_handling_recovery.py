@@ -190,6 +190,7 @@ class TestGracefulDegradationScenarios:
         # Repository should handle missing data gracefully
         # The current implementation raises IndexError when no recordings exist
         # This tests that the error is predictable and handles gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -200,6 +201,9 @@ class TestGracefulDegradationScenarios:
             assert isinstance(e, (IndexError, FileNotFoundError, OSError, ValueError))
             # Verify the error is informative
             assert len(str(e)) > 0
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_corrupted_annotation_file_recovery(self, temp_workspace):
         """Test recovery when annotation files are corrupted."""
@@ -212,6 +216,7 @@ class TestGracefulDegradationScenarios:
             f.write('{"invalid": json, "syntax":]')  # Invalid JSON
 
         # System should handle corrupted annotations gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -220,6 +225,9 @@ class TestGracefulDegradationScenarios:
         except (json.JSONDecodeError, ValueError, FileNotFoundError) as e:
             # These are acceptable failure modes for corrupted data
             assert isinstance(e, (json.JSONDecodeError, ValueError, FileNotFoundError))
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_partial_data_loading_resilience(self, temp_workspace):
         """Test system resilience when only partial data is available."""
@@ -257,6 +265,7 @@ class TestGracefulDegradationScenarios:
             f.write(b"not an hdf5 file")
 
         # System should load what it can and handle errors gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -265,6 +274,9 @@ class TestGracefulDegradationScenarios:
         except Exception as e:
             # Acceptable if the corruption is too severe
             logging.info(f"Acceptable graceful failure: {e}")
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_memory_pressure_graceful_degradation(self, mock_corrupted_data):
         """Test graceful behavior under memory pressure scenarios."""
@@ -586,6 +598,7 @@ class TestRepositoryErrorHandling:
             f.write(b"corrupted hdf5 data")
 
         # Repository should handle corruption gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -596,6 +609,9 @@ class TestRepositoryErrorHandling:
             assert isinstance(e, (OSError, ValueError, Exception))
             # Error message should be informative
             assert len(str(e)) > 0
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_repository_permission_error_handling(self, temp_workspace):
         """Test handling of permission errors in repository operations."""
@@ -642,6 +658,7 @@ class TestRepositoryErrorHandling:
 
         # Repository should handle unexpected changes
         # Note: Since no recordings exist, this will raise IndexError - that's acceptable
+        loaded_session = None
         try:
             loaded_session = repo.load()
             # May succeed with updated data or detect the change
@@ -650,6 +667,9 @@ class TestRepositoryErrorHandling:
             # IndexError is expected when no recordings exist - acceptable failure
             # ValueError/JSONDecodeError if change detection/validation fails
             assert isinstance(e, (IndexError, ValueError, json.JSONDecodeError))
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
 
 class TestConfigurationErrorRecovery:
