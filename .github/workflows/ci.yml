@@ -231,8 +231,8 @@ jobs:
 
     - name: Check for security vulnerabilities in dependencies
       run: |
-        safety check --json --output safety-report.json || echo "Safety check completed with warnings"
-        safety check || echo "Safety check completed"
+        safety scan --json --output safety-report.json || echo "Safety check completed with warnings"
+        safety scan || echo "Safety check completed"
 
     - name: Run security linter
       run: |
