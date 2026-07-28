@@ -34,6 +34,16 @@ known-first-party = [
 [tool.ruff.format]
 quote-style = "double"
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "monstim-analyzer"
+version = "0.5.2"
+description = "MonStim Analyzer"
+requires-python = ">=3.12"
+
 [tool.setuptools.packages.find]
 include = [
     "monstim_gui*",
