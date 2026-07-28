@@ -33,3 +33,10 @@ known-first-party = [
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.setuptools.packages.find]
+include = [
+    "monstim_gui*",
+    "monstim_signals*"
+]
+exclude = ["assets"]

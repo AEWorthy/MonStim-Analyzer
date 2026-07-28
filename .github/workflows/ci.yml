@@ -1,5 +1,5 @@
 name: CI
-# TODO: Replace all uses of flak8/isort with ruff, and remove flake8/isort from dev-requirements.txt and pyproject.toml
+
 on:
   push:
     branches: [ main, development ]
@@ -191,6 +191,25 @@ jobs:
         ruff --version
         ruff check .
         ruff format --check .
+
+  check-deps:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v7
+
+        - name: Set up Python
+          uses: actions/setup-python@v6
+          with:
+            python-version: '3.14'
+
+        - name: Install YAML
+          run: |
+            python -m pip install --upgrade pip
+            pip install pyyaml
+
+        - name: Run dependency consistency check
+          run: |
+            python tools/check_deps.py
 
   security:
     runs-on: ubuntu-latest
