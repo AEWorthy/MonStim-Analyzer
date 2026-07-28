@@ -7,14 +7,15 @@ import traceback
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from PySide6.QtWidgets import QStatusBar
+
     from monstim_gui.widgets.gui_layout import (
-        MenuBar,
         DataSelectionWidget,
-        ReportsWidget,
+        MenuBar,
         PlotPane,
         PlotWidget,
+        ReportsWidget,
     )
-    from PySide6.QtWidgets import QStatusBar
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
@@ -58,6 +59,8 @@ from monstim_signals.core import (
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.session import Session
+
+logger = logging.getLogger(__name__)
 
 
 class MonstimGUI(QMainWindow):
@@ -159,7 +162,7 @@ class MonstimGUI(QMainWindow):
             else:
                 raise RuntimeError("Left panel layout does not support insertWidget.")
         else:
-            logging.error("Left panel not found or does not have a layout.")
+            logger.error("Left panel not found or does not have a layout.")
 
         self._populate_profile_selector()
         self.profile_selector_combo.currentIndexChanged.connect(self._on_profile_selector_changed)
@@ -180,7 +183,7 @@ class MonstimGUI(QMainWindow):
             # Wire button to trigger background migrations
             self.migration_banner.run_clicked.connect(self._run_background_migrations)
         except Exception:
-            logging.debug("Failed to create migration banner (non-fatal).", exc_info=True)
+            logger.debug("Failed to create migration banner (non-fatal).", exc_info=True)
 
     @staticmethod
     def handle_qt_error_logs():
@@ -206,13 +209,13 @@ class MonstimGUI(QMainWindow):
 
             # Let other messages through to normal logging
             if mode == QtMsgType.QtWarningMsg:
-                logging.warning(f"Qt: {message}")
+                logger.warning(f"Qt: {message}")
             elif mode == QtMsgType.QtCriticalMsg:
-                logging.error(f"Qt: {message}")
+                logger.error(f"Qt: {message}")
             elif mode == QtMsgType.QtFatalMsg:
-                logging.critical(f"Qt: {message}")
+                logger.critical(f"Qt: {message}")
             elif mode == QtMsgType.QtDebugMsg:
-                logging.debug(f"Qt: {message}")
+                logger.debug(f"Qt: {message}")
 
         qInstallMessageHandler(qt_message_handler)
 
@@ -280,7 +283,7 @@ class MonstimGUI(QMainWindow):
             )
         else:
             # Even when no experiment is loaded, ensure we can track profile changes
-            logging.info(f"No experiment loaded, but profile selection saved: {profile_name}")
+            logger.info(f"No experiment loaded, but profile selection saved: {profile_name}")
 
         self.update_domain_configs(config)
         self.status_bar.showMessage(f"Profile applied: {self.profile_selector_combo.currentText()}", 4000)
@@ -333,11 +336,11 @@ class MonstimGUI(QMainWindow):
 
         # Check if profile tracking is enabled
         if not app_state.should_track_analysis_profiles():
-            logging.debug("Profile tracking is disabled - not restoring profile selection")
+            logger.debug("Profile tracking is disabled - not restoring profile selection")
             return False
 
         last_profile = app_state.get_last_profile()
-        logging.debug(f"Attempting to restore last profile selection: '{last_profile}'")
+        logger.debug(f"Attempting to restore last profile selection: '{last_profile}'")
 
         if last_profile:
             idx = self.profile_selector_combo.findText(last_profile)
@@ -351,12 +354,12 @@ class MonstimGUI(QMainWindow):
                 self._set_profile_selector_tooltip(idx)
                 self._apply_profile_configuration(idx, last_profile)
 
-                logging.debug(f"Successfully restored last profile selection: {last_profile}")
+                logger.debug(f"Successfully restored last profile selection: {last_profile}")
                 return True
             else:
-                logging.warning(f"Profile '{last_profile}' not found in available profiles")
+                logger.warning(f"Profile '{last_profile}' not found in available profiles")
 
-        logging.info("No valid analysis profile to restore, using default")
+        logger.info("No valid analysis profile to restore, using default")
         return False
 
     def _apply_profile_configuration(self, idx: int, profile_name: str):
@@ -381,7 +384,7 @@ class MonstimGUI(QMainWindow):
                 config["stimuli_to_plot"] = data["stimuli_to_plot"]
 
         self.update_domain_configs(config)
-        logging.info(f"Applied configuration for profile: {profile_name}")
+        logger.info(f"Applied configuration for profile: {profile_name}")
 
     def _restore_last_session(self):
         """Restore the last session state and analysis profile based on preferences."""
@@ -396,15 +399,15 @@ class MonstimGUI(QMainWindow):
                 success = app_state.restore_last_session(self)
                 if success:
                     self.status_bar.showMessage("Previous session state restored", 5000)
-                    logging.debug("Session restoration completed successfully")
+                    logger.debug("Session restoration completed successfully")
                 else:
-                    logging.warning("Session restoration was attempted, but not possible")
+                    logger.warning("Session restoration was attempted, but not possible")
             else:
-                logging.debug("Session restoration is disabled - not restoring experiment/dataset/session")
+                logger.debug("Session restoration is disabled - not restoring experiment/dataset/session")
 
         except Exception as e:
-            logging.error(f"Error during session restoration: {e}")
-            logging.error(traceback.format_exc())
+            logger.error(f"Error during session restoration: {e}")
+            logger.error(traceback.format_exc())
             # Clear problematic state
             app_state.clear_session_state()
 
@@ -447,19 +450,19 @@ class MonstimGUI(QMainWindow):
                                     self.migration_banner.hide()
 
                         scan.has_work.connect(_on_scan)
-                        scan.error.connect(lambda e: logging.debug(f"Migration re-scan error: {e}"))
+                        scan.error.connect(lambda e: logger.debug(f"Migration re-scan error: {e}"))
                         # Keep a reference to avoid GC during run
                         self._migration_rescan = scan
                         scan.start()
                     except Exception:
-                        logging.debug("Failed to hide banner / rescan after migrations.", exc_info=True)
+                        logger.debug("Failed to hide banner / rescan after migrations.", exc_info=True)
 
                 runner.finished.connect(_on_migrations_complete)
                 self._migration_runner = runner
                 dlg.show()
                 runner.start()
         except Exception:
-            logging.debug("Failed to start background migrations.", exc_info=True)
+            logger.debug("Failed to start background migrations.", exc_info=True)
 
     # Command functions
     def undo(self):
@@ -564,7 +567,7 @@ class MonstimGUI(QMainWindow):
 
     # Menu bar functions
     def manage_latency_windows(self, level: str):
-        logging.debug("Managing latency windows.")
+        logger.debug("Managing latency windows.")
         match level:
             case "experiment":
                 if not self.current_experiment:
@@ -596,7 +599,7 @@ class MonstimGUI(QMainWindow):
 
     def append_replace_latency_windows(self, level: str):
         """Open specialized dialog for appending/replacing a single latency window."""
-        logging.debug(f"Opening append/replace latency window dialog for {level}.")
+        logger.debug(f"Opening append/replace latency window dialog for {level}.")
         match level:
             case "experiment":
                 if not self.current_experiment:
@@ -623,7 +626,7 @@ class MonstimGUI(QMainWindow):
         dialog.exec()
 
     def invert_channel_polarity(self, level: str):
-        logging.debug("Inverting channel polarity.")
+        logger.debug("Inverting channel polarity.")
 
         match level:  # Check the level of the channel polarity inversion.
             case "experiment":
@@ -665,7 +668,7 @@ class MonstimGUI(QMainWindow):
             QApplication.restoreOverrideCursor()
 
     def change_channel_names(self, level: str):
-        logging.debug("Changing channel names.")
+        logger.debug("Changing channel names.")
 
         match level:  # Check the level of the channel name change and set the channel names accordingly.
             case "experiment":
@@ -701,10 +704,10 @@ class MonstimGUI(QMainWindow):
                     command = ChangeChannelNamesCommand(self, level, new_names)
                     self.command_invoker.execute(command)
                     self.status_bar.showMessage("Channel names updated successfully.", 5000)  # Show message for 5 seconds
-                    logging.debug("Channel names updated successfully.")
+                    logger.debug("Channel names updated successfully.")
                 else:
                     self.status_bar.showMessage("No changes made to channel names.", 5000)  # Show message for 5 seconds
-                    logging.debug("No changes made to channel names.")
+                    logger.debug("No changes made to channel names.")
         finally:
             QApplication.restoreOverrideCursor()
 
@@ -782,58 +785,54 @@ class MonstimGUI(QMainWindow):
         from monstim_gui.dialogs import clear_math_cache
 
         # Stop any running background threads gracefully
-        logging.debug("Stopping background threads...")
+        logger.debug("Stopping background threads...")
 
         # Stop loading thread if running
         if hasattr(self.data_manager, "loading_thread") and self.data_manager.loading_thread.isRunning():
-            logging.info("Stopping experiment loading thread...")
+            logger.info("Stopping experiment loading thread...")
             self.data_manager.loading_thread.request_cancel()
             if not self.data_manager.loading_thread.wait(3000):
-                logging.warning("Loading thread did not stop in time, forcing termination")
+                logger.warning("Loading thread did not stop in time, forcing termination")
                 self.data_manager.loading_thread.terminate()
                 self.data_manager.loading_thread.wait()
 
         # Stop import threads if running
-        if (
-            hasattr(self.data_manager, "thread")
-            and hasattr(self.data_manager.thread, "isRunning")
-            and self.data_manager.thread.isRunning()
-        ):
-            logging.info("Stopping import thread...")
+        if hasattr(self.data_manager, "thread") and hasattr(self.data_manager.thread, "isRunning") and self.data_manager.thread.isRunning():
+            logger.info("Stopping import thread...")
             self.data_manager.thread.cancel()
             if not self.data_manager.thread.wait(3000):
-                logging.warning("Import thread did not stop in time")
+                logger.warning("Import thread did not stop in time")
 
         if (
             hasattr(self.data_manager, "multi_thread")
             and hasattr(self.data_manager.multi_thread, "isRunning")
             and self.data_manager.multi_thread.isRunning()
         ):
-            logging.info("Stopping multi-import thread...")
+            logger.info("Stopping multi-import thread...")
             self.data_manager.multi_thread.cancel()
             if not self.data_manager.multi_thread.wait(3000):
-                logging.warning("Multi-import thread did not stop in time")
+                logger.warning("Multi-import thread did not stop in time")
 
         # Stop migration threads if running
         if hasattr(self, "_migration_runner") and self._migration_runner.isRunning():
-            logging.info("Stopping migration runner...")
+            logger.info("Stopping migration runner...")
             self._migration_runner.request_cancel()
             if not self._migration_runner.wait(2000):
-                logging.warning("Migration runner did not stop in time")
+                logger.warning("Migration runner did not stop in time")
 
         if hasattr(self, "_migration_rescan") and self._migration_rescan.isRunning():
-            logging.debug("Stopping migration rescan...")
+            logger.debug("Stopping migration rescan...")
             self._migration_rescan.request_cancel()
             if not self._migration_rescan.wait(2000):
-                logging.warning("Migration rescan did not stop in time")
+                logger.warning("Migration rescan did not stop in time")
 
-        logging.debug("All background threads stopped.")
+        logger.debug("All background threads stopped.")
 
         ui_config.save_window_state(self)
         try:
             clear_math_cache()
         except Exception as e:
-            logging.info(f"Cache clear failed: {e}")
+            logger.info(f"Cache clear failed: {e}")
 
     def closeEvent(self, event):
         """Handle application close event - save current session state."""
@@ -851,19 +850,19 @@ class MonstimGUI(QMainWindow):
                     session_id=(self.current_session.id if self.current_session else None),
                     profile_name=profile_name,
                 )
-                logging.info("Session state saved on application close")
+                logger.info("Session state saved on application close")
 
             # All data changes auto-save via command pattern, so just cleanup and close
             self._cleanup_on_close()
             event.accept()
 
         except Exception as e:
-            logging.error(f"Error during application close: {e}")
+            logger.error(f"Error during application close: {e}")
             # Still save window state and allow closing even if other operations fail
             try:
                 self._cleanup_on_close()
             except Exception as e2:
-                logging.error(f"Error saving window state: {e2}")
+                logger.error(f"Error saving window state: {e2}")
             event.accept()
 
 

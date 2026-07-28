@@ -21,7 +21,7 @@ EXE_NAME = f'MonStim Analyzer v{VERSION}'
 DIST_NAME = f'MonStim_Analyzer_v{VERSION}-WIN'
 
 datas = []
-datas += collect_data_files('src')
+datas += collect_data_files('assets')
 datas += collect_data_files('docs')
 datas += collect_data_files('numpy')
 datas += collect_data_files('scipy')
@@ -66,7 +66,7 @@ exe = EXE( # type: ignore
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/icon.ico'
+    icon='assets/icon.ico'
 )
 
 coll = COLLECT( # type: ignore

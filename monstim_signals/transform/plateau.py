@@ -2,6 +2,8 @@
 
 import logging
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
 from scipy import signal
 
@@ -39,12 +41,12 @@ def detect_plateau(y, max_window_size, min_window_size, threshold):
             plateau_start_idx = None
             plateau_end_idx = None
     if plateau_start_idx is not None and plateau_end_idx is not None:
-        logging.debug(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
+        logger.debug(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
         return plateau_start_idx, plateau_end_idx
     elif max_window_size > min_window_size:
         return detect_plateau(y, max_window_size - 1, min_window_size, threshold)
     else:
-        logging.warning("No plateau region detected.")
+        logger.warning("No plateau region detected.")
         return None, None
 
 
@@ -73,8 +75,8 @@ def get_avg_mmax(
         plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
 
     except Exception as e:
-        logging.exception(f"Exception during plateau detection: {e}")
-        logging.exception("Exception during plateau detection. Proceeding to fallback methods.")
+        logger.exception(f"Exception during plateau detection: {e}")
+        logger.exception("Exception during plateau detection. Proceeding to fallback methods.")
         plateau_start_idx, plateau_end_idx = None, None
 
     if plateau_start_idx is not None and plateau_end_idx is not None:
@@ -133,22 +135,22 @@ def get_avg_mmax(
             selected_approach = "mean_corrected"
             validation_note = "fallback - other approaches exceeded tolerance"
 
-        logging.debug(f"\tM-max calculation: selected '{selected_approach}' approach, value: {m_max}")
-        logging.debug(f"\t  Validation: {validation_note}")
+        logger.debug(f"\tM-max calculation: selected '{selected_approach}' approach, value: {m_max}")
+        logger.debug(f"\t  Validation: {validation_note}")
 
         # Log all approaches for debugging
         for name, val in approaches:
-            logging.debug(f"\t  {name}: {val:.6f}")
-        logging.debug(f"\t  plateau_mean: {plateau_mean:.6f}")
-        logging.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
+            logger.debug(f"\t  {name}: {val:.6f}")
+        logger.debug(f"\t  plateau_mean: {plateau_mean:.6f}")
+        logger.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
 
         # Final validation: ensure M-max is reasonable compared to global maximum
         max_overall = np.max(m_wave_amplitudes)
         if m_max > max_overall:
-            logging.warning(f"\tM-max ({m_max}) > max amplitude ({max_overall}), capping at max")
+            logger.warning(f"\tM-max ({m_max}) > max amplitude ({max_overall}), capping at max")
             m_max = max_overall
 
-        logging.debug(f"\tFinal M-max amplitude: {m_max}")
+        logger.debug(f"\tFinal M-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return (
                 m_max,
@@ -159,7 +161,7 @@ def get_avg_mmax(
 
     # Fallback: if no plateau detected, apply multi-approach method to high-stimulus region
     # Look for the best estimate in the top 25% of stimulus intensities
-    logging.warning("No plateau detected, using fallback multi-approach detection in high-stimulus region")
+    logger.warning("No plateau detected, using fallback multi-approach detection in high-stimulus region")
 
     # Sort by stimulus voltage and take top 25%
     sorted_indices = np.argsort(stimulus_voltages)
@@ -202,16 +204,16 @@ def get_avg_mmax(
             selected_approach = "mean"
             validation_note = "fallback to mean - other approaches exceeded tolerance"
 
-        logging.debug(f"\tFallback M-max calculation: selected '{selected_approach}' approach, value: {m_max}")
-        logging.debug(f"\t  Validation: {validation_note}")
+        logger.debug(f"\tFallback M-max calculation: selected '{selected_approach}' approach, value: {m_max}")
+        logger.debug(f"\t  Validation: {validation_note}")
 
         # Log all approaches for debugging
         for name, val in approaches:
-            logging.debug(f"\t  {name}: {val:.6f}")
-        logging.debug(f"\t  high_stim_region_mean: {region_mean:.6f}")
-        logging.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
+            logger.debug(f"\t  {name}: {val:.6f}")
+        logger.debug(f"\t  high_stim_region_mean: {region_mean:.6f}")
+        logger.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
 
-        logging.debug(f"\tFallback M-max amplitude: {m_max}")
+        logger.debug(f"\tFallback M-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return (
                 m_max,

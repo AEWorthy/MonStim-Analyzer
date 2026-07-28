@@ -274,9 +274,7 @@ class TestPlateauDetection:
     def test_detect_plateau_success(self):
         """Test successful plateau detection."""
         # Use clean amplitudes for reliable plateau detection
-        plateau_start, plateau_end = detect_plateau(
-            self.clean_amplitudes, max_window_size=15, min_window_size=3, threshold=0.3
-        )
+        plateau_start, plateau_end = detect_plateau(self.clean_amplitudes, max_window_size=15, min_window_size=3, threshold=0.3)
 
         assert plateau_start is not None, "Should detect plateau in clean sigmoidal data"
         assert plateau_end is not None, "Should detect plateau in clean sigmoidal data"
@@ -296,7 +294,10 @@ class TestPlateauDetection:
         noisy_linear = linear_base + 0.5 * np.random.normal(0, 1, 50)  # High noise
 
         plateau_start, plateau_end = detect_plateau(
-            noisy_linear, max_window_size=8, min_window_size=3, threshold=0.1  # Smaller window  # Stricter threshold
+            noisy_linear,
+            max_window_size=8,
+            min_window_size=3,
+            threshold=0.1,  # Smaller window  # Stricter threshold
         )
 
         # Should not find a plateau in very noisy linear data with strict threshold
@@ -327,9 +328,7 @@ class TestPlateauDetection:
         linear_voltages = np.linspace(0, 10, 30)
         linear_amplitudes = np.linspace(0, 2, 30)  # No plateau
 
-        mmax = get_avg_mmax(
-            linear_voltages, linear_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, validation_tolerance=1.05
-        )
+        mmax = get_avg_mmax(linear_voltages, linear_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, validation_tolerance=1.05)
 
         assert mmax is not None, "Should calculate M-max using fallback method"
         assert isinstance(mmax, (int, float)), "M-max should be numeric"
@@ -381,7 +380,9 @@ class TestPlateauDetection:
 
         # Test with lenient tolerance
         mmax_lenient = get_avg_mmax(
-            self.stimulus_voltages, self.noisy_amplitudes, validation_tolerance=1.20  # Lenient (20% tolerance)
+            self.stimulus_voltages,
+            self.noisy_amplitudes,
+            validation_tolerance=1.20,  # Lenient (20% tolerance)
         )
 
         assert mmax_strict is not None, "Should calculate M-max with strict tolerance"

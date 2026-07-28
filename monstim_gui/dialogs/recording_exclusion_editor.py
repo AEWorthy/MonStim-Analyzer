@@ -6,7 +6,7 @@ Designed to be extensible for future criteria-based exclusion.
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Set
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PySide6.QtCore import Qt, Signal
@@ -36,6 +36,9 @@ if TYPE_CHECKING:
     from monstim_signals.domain import Session
 
 
+logger = logging.getLogger(__name__)
+
+
 class RecordingExclusionEditor(QDialog):
     """
     Extensible dialog for excluding recordings based on various criteria.
@@ -52,15 +55,13 @@ class RecordingExclusionEditor(QDialog):
         self.current_experiment = parent.current_experiment
 
         # Store original exclusion state for cancel/reset functionality
-        self.original_excluded_recordings = (
-            set(self.current_session.excluded_recordings.copy()) if self.current_session else set()
-        )
+        self.original_excluded_recordings = set(self.current_session.excluded_recordings.copy()) if self.current_session else set()
 
         # Track preview exclusions (not yet applied)
-        self.preview_excluded_recordings: Set[str] = set()
+        self.preview_excluded_recordings: set[str] = set()
 
         # Manual preview flags (from auto-flag or user preview toggles)
-        self.manual_preview_flags: Set[str] = set()
+        self.manual_preview_flags: set[str] = set()
 
         self.setup_ui()
         self.load_data()
@@ -335,7 +336,7 @@ class RecordingExclusionEditor(QDialog):
 
         self.update_preview()
 
-    def get_sessions_for_level(self) -> List["Session"]:
+    def get_sessions_for_level(self) -> list["Session"]:
         """Get list of sessions based on selected application level."""
         level = self.level_combo.currentData()
 
@@ -379,7 +380,7 @@ class RecordingExclusionEditor(QDialog):
 
         return False
 
-    def compute_quality_metrics(self, recording) -> Dict[str, Any]:
+    def compute_quality_metrics(self, recording) -> dict[str, Any]:
         """Compute simple quality metrics for a recording.
 
         Returns a dict with keys: snr, baseline_drift, flatline, line_noise. Values
@@ -440,12 +441,7 @@ class RecordingExclusionEditor(QDialog):
 
         # Line noise detection: rudimentary via fft energy near 50/60 Hz
         try:
-            fs = (
-                getattr(recording, "scan_rate", None)
-                or getattr(recording, "sampling_rate", None)
-                or getattr(recording, "fs", None)
-                or 1000.0
-            )
+            fs = getattr(recording, "scan_rate", None) or getattr(recording, "sampling_rate", None) or getattr(recording, "fs", None) or 1000.0
             freqs = np.fft.rfftfreq(n, 1.0 / float(fs))
             fft = np.abs(np.fft.rfft(arr))
 
@@ -664,17 +660,15 @@ class RecordingExclusionEditor(QDialog):
             command = BulkRecordingExclusionCommand(self.gui, changes)
             self.gui.command_invoker.execute(command)
 
-            self.gui.status_bar.showMessage(
-                f"Toggled exclusion for {sum(len(ch) for ch in changes_by_session.values())} recordings", 5000
-            )
+            self.gui.status_bar.showMessage(f"Toggled exclusion for {sum(len(ch) for ch in changes_by_session.values())} recordings", 5000)
             # Refresh view
             self.update_preview()
 
         except ImportError:
-            logging.error("BulkRecordingExclusionCommand not available - cannot toggle exclusions undoably.")
+            logger.error("BulkRecordingExclusionCommand not available - cannot toggle exclusions undoably.")
             QMessageBox.critical(self, "Internal Error", "Undo/redo command system not available.")
         except Exception as e:
-            logging.error(f"Error toggling exclusions: {e}")
+            logger.error(f"Error toggling exclusions: {e}")
             QMessageBox.critical(self, "Error", f"Failed to toggle exclusions:\n{e}")
 
     def auto_flag_low_quality(self):
@@ -738,7 +732,7 @@ class RecordingExclusionEditor(QDialog):
                 json.dump(profile, f, indent=2)
             self.gui.status_bar.showMessage(f"Saved exclusion profile: {path}", 5000)
         except Exception as e:
-            logging.error(f"Failed to save profile: {e}")
+            logger.error(f"Failed to save profile: {e}")
             QMessageBox.critical(self, "Error", f"Failed to save profile:\n{e}")
 
     def load_profile(self):
@@ -773,7 +767,7 @@ class RecordingExclusionEditor(QDialog):
             self.update_preview()
             self.gui.status_bar.showMessage(f"Loaded exclusion profile: {path}", 5000)
         except Exception as e:
-            logging.error(f"Failed to load profile: {e}")
+            logger.error(f"Failed to load profile: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load profile:\n{e}")
 
     def reset_criteria(self):
@@ -860,15 +854,13 @@ class RecordingExclusionEditor(QDialog):
                 self.exclusions_applied.emit()
                 self.accept()
 
-                self.gui.status_bar.showMessage(
-                    f"Applied exclusion criteria: {total_exclusions} excluded, {total_inclusions} included", 5000
-                )
+                self.gui.status_bar.showMessage(f"Applied exclusion criteria: {total_exclusions} excluded, {total_inclusions} included", 5000)
 
         except ImportError:
             # Fallback: if command class is not importable, raise a clear error
             # instead of silently applying non-undoable changes. This prevents
             # accidental data loss and encourages wiring the command system.
-            logging.error("BulkRecordingExclusionCommand not available - Command pattern not installed or import failed.")
+            logger.error("BulkRecordingExclusionCommand not available - Command pattern not installed or import failed.")
             QMessageBox.critical(
                 self,
                 "Internal Error",
@@ -876,5 +868,5 @@ class RecordingExclusionEditor(QDialog):
             )
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to apply exclusions:\n{str(e)}")
-            logging.error(f"Error applying recording exclusions: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to apply exclusions:\n{e!s}")
+            logger.error(f"Error applying recording exclusions: {e}")

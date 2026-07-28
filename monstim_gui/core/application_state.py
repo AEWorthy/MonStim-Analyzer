@@ -5,7 +5,7 @@ Handles UI state and user preferences that should persist across sessions.
 
 import logging
 import os
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QSettings
 
@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 # Settings version for migration tracking
 # Increment this when making breaking changes to settings structure
 SETTINGS_VERSION = 1
+
+logger = logging.getLogger(__name__)
 
 
 class ApplicationState:
@@ -28,10 +30,7 @@ class ApplicationState:
         self._pending_profile_name = None
         self._pending_experiment_id = None
 
-        logging.debug(
-            "Initializing ApplicationState"
-            f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
-        )
+        logger.debug(f"Initializing ApplicationState QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}")
 
     @property
     def settings(self):
@@ -51,20 +50,19 @@ class ApplicationState:
 
         if stored_version is None:
             # First run with versioning or legacy settings - just set version
-            logging.info(f"Initializing settings version tracking (v{SETTINGS_VERSION})")
+            logger.info(f"Initializing settings version tracking (v{SETTINGS_VERSION})")
             self.settings.setValue("SettingsVersion", SETTINGS_VERSION)
             self.settings.sync()
         elif stored_version < SETTINGS_VERSION:
             # Migration needed
-            logging.info(f"Migrating settings from v{stored_version} to v{SETTINGS_VERSION}")
+            logger.info(f"Migrating settings from v{stored_version} to v{SETTINGS_VERSION}")
             self._migrate_settings(from_version=stored_version, to_version=SETTINGS_VERSION)
             self.settings.setValue("SettingsVersion", SETTINGS_VERSION)
             self.settings.sync()
         elif stored_version > SETTINGS_VERSION:
             # Newer settings than current app version (downgrade scenario)
-            logging.warning(
-                f"Settings version ({stored_version}) is newer than app version ({SETTINGS_VERSION}). "
-                f"Some settings may not be compatible."
+            logger.warning(
+                f"Settings version ({stored_version}) is newer than app version ({SETTINGS_VERSION}). Some settings may not be compatible."
             )
 
     def _migrate_settings(self, from_version: int, to_version: int):
@@ -78,7 +76,7 @@ class ApplicationState:
         #         self.settings.setValue("NewKey", old_val)
         #         self.settings.remove("OldKey")
 
-        logging.info(f"Settings migration from v{from_version} to v{to_version} complete")
+        logger.info(f"Settings migration from v{from_version} to v{to_version} complete")
 
     def _clear_restoration_state(self):
         """Clear restoration flags and pending state."""
@@ -130,7 +128,7 @@ class ApplicationState:
         self.settings.setValue("RecentFiles/experiments", recent)
         self.settings.sync()
 
-    def get_recent_experiments(self) -> List[str]:
+    def get_recent_experiments(self) -> list[str]:
         """Get list of recently opened experiments."""
         if not self.should_track_recent_files():
             return []
@@ -139,18 +137,16 @@ class ApplicationState:
     # === SESSION RESTORATION ===
     def save_current_session_state(
         self,
-        experiment_id: str = None,
-        dataset_id: str = None,
-        session_id: str = None,
-        profile_name: str = None,
+        experiment_id: str | None = None,
+        dataset_id: str | None = None,
+        session_id: str | None = None,
+        profile_name: str | None = None,
     ):
         """Save the current complete session state for restoration on startup."""
 
         # Skip saving if we're currently restoring a session (to avoid redundant saves)
         if self._is_restoring_session:
-            logging.debug(
-                f"Skipping session state save during restoration: experiment={experiment_id}, dataset={dataset_id}, session={session_id}"
-            )
+            logger.debug(f"Skipping session state save during restoration: experiment={experiment_id}, dataset={dataset_id}, session={session_id}")
             return
 
         # Debug: log existing persisted state before modification
@@ -161,21 +157,21 @@ class ApplicationState:
                 "session": self.settings.value("SessionRestore/session", "", type=str),
                 "profile": self.settings.value("SessionRestore/profile", "", type=str),
             }
-            logging.debug(f"save_current_session_state: existing SessionRestore={existing}")
+            logger.debug(f"save_current_session_state: existing SessionRestore={existing}")
         except Exception:
-            logging.debug("save_current_session_state: could not read existing SessionRestore")
+            logger.exception("save_current_session_state: could not read existing SessionRestore")
 
         # Always save profile information if provided (independent of session restoration setting)
         if profile_name is not None:
             self.save_last_profile(profile_name)
 
         if not self.should_track_session_restoration():
-            logging.debug("save_current_session_state: Session restoration tracking is disabled")
+            logger.debug("save_current_session_state: Session restoration tracking is disabled")
             return
 
         # Only save session state if we have at least an experiment
         if experiment_id is not None:
-            logging.debug(
+            logger.debug(
                 f"save_current_session_state: Saving experiment={experiment_id}, dataset={dataset_id}, session={session_id}, profile={profile_name}"
                 f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
             )
@@ -193,12 +189,12 @@ class ApplicationState:
                     try:
                         self.settings.remove("SessionRestore/dataset")
                     except Exception:
-                        logging.debug("Could not remove stale SessionRestore/dataset key")
+                        logger.exception("Could not remove stale SessionRestore/dataset key")
                 if session_id is None:
                     try:
                         self.settings.remove("SessionRestore/session")
                     except Exception:
-                        logging.debug("Could not remove stale SessionRestore/session key")
+                        logger.exception("Could not remove stale SessionRestore/session key")
 
             # Save experiment id
             self.settings.setValue("SessionRestore/experiment", experiment_id)
@@ -213,9 +209,9 @@ class ApplicationState:
 
             self.settings.sync()
         else:
-            logging.debug("save_current_session_state: No experiment_id provided, not saving session state")
+            logger.debug("save_current_session_state: No experiment_id provided, not saving session state")
 
-    def get_last_session_state(self) -> Dict[str, str]:
+    def get_last_session_state(self) -> dict[str, str]:
         """Get the last saved session state."""
         return {
             "experiment": self.settings.value("SessionRestore/experiment", "", type=str),
@@ -237,7 +233,7 @@ class ApplicationState:
         return bool(state.get("experiment"))
 
     # Last selected items (for session restoration)
-    def save_last_selection(self, experiment_id: str = None, dataset_id: str = None, session_id: str = None):
+    def save_last_selection(self, experiment_id: str | None = None, dataset_id: str | None = None, session_id: str | None = None):
         """Save the last selected experiment/dataset/session."""
         if experiment_id is not None:
             self.settings.setValue("LastSelection/experiment", experiment_id)
@@ -247,7 +243,7 @@ class ApplicationState:
             self.settings.setValue("LastSelection/session", session_id)
         self.settings.sync()
 
-    def get_last_selection(self) -> Dict[str, str]:
+    def get_last_selection(self) -> dict[str, str]:
         """Get the last selected items."""
         return {
             "experiment": self.settings.value("LastSelection/experiment", "", type=str),
@@ -268,7 +264,7 @@ class ApplicationState:
         self.settings.setValue("RecentProfiles/names", recent)
         self.settings.sync()
 
-    def get_recent_profiles(self) -> List[str]:
+    def get_recent_profiles(self) -> list[str]:
         """Get list of recently used analysis profiles."""
         if not self.should_track_analysis_profiles():
             return []
@@ -277,19 +273,19 @@ class ApplicationState:
     def save_last_profile(self, profile_name: str):
         """Save the last selected analysis profile."""
         if not self.should_track_analysis_profiles():
-            logging.debug(f"Profile tracking is disabled - not saving profile '{profile_name}'")
+            logger.debug(f"Profile tracking is disabled - not saving profile '{profile_name}'")
             return
-        logging.debug(f"Saving last profile selection: '{profile_name}'")
+        logger.debug(f"Saving last profile selection: '{profile_name}'")
         self.settings.setValue("LastSelection/profile", profile_name)
         self.settings.sync()
 
     def get_last_profile(self) -> str:
         """Get the last selected analysis profile."""
         if not self.should_track_analysis_profiles():
-            logging.debug("Profile tracking is disabled - returning default profile")
+            logger.debug("Profile tracking is disabled - returning default profile")
             return "(default)"
         result = self.settings.value("LastSelection/profile", "(default)", type=str)
-        logging.debug(f"Retrieved last profile selection: '{result}'")
+        logger.debug(f"Retrieved last profile selection: '{result}'")
         return result
 
     # === SESSION RESTORATION METHODS ===
@@ -316,7 +312,7 @@ class ApplicationState:
 
             # Check if experiment still exists
             if experiment_id not in gui.expts_dict_keys:
-                logging.info(f"Cannot restore session: experiment '{experiment_id}' no longer exists")
+                logger.info(f"Cannot restore session: experiment '{experiment_id}' no longer exists")
                 self.clear_session_state()
                 return False
 
@@ -335,9 +331,7 @@ class ApplicationState:
             #   and restore user-facing state by stable IDs to avoid fragile index
             #   based restoring when UI ordering or placeholders change.
 
-            logging.info(
-                f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}."
-            )
+            logger.info(f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}.")
 
             # Restore experiment - this automatically triggers load_experiment() via signal
             # The restoration of dataset/session will happen in the experiment loaded callback
@@ -345,8 +339,8 @@ class ApplicationState:
             gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
             return True
 
-        except Exception as e:
-            logging.error(f"Error during session restoration: {e}")
+        except Exception:
+            logger.exception("Error during session restoration")
             self.clear_session_state()
             # Make sure to clear the flag on error
             self._clear_restoration_state()
@@ -366,13 +360,14 @@ class ApplicationState:
             session_id = self._pending_session_id
             # Check if restoration was canceled (pending IDs would be None)
             if experiment_id is None:
-                logging.debug("Session restoration was canceled - skipping completion")
+                logger.debug("Session restoration was canceled - skipping completion")
                 self._clear_restoration_state()
                 return
             # Verify experiment loaded correctly
             if not gui.current_experiment or gui.current_experiment.id != experiment_id:
-                logging.warning(
-                    f"Session restoration: Experiment mismatch (expected '{experiment_id}', got '{gui.current_experiment.id if gui.current_experiment else 'None'}')"
+                logger.warning(
+                    f"Session restoration: Experiment mismatch (expected '{experiment_id}', got "
+                    f"'{gui.current_experiment.id if gui.current_experiment else 'None'}')"
                 )
                 # Clear restoration flags and pending state before returning
                 self._clear_restoration_state()
@@ -383,7 +378,7 @@ class ApplicationState:
                 dataset_names = [ds.id for ds in gui.current_experiment.datasets]
                 if dataset_id in dataset_names:
                     ds_index = dataset_names.index(dataset_id)
-                    logging.info(f"Session restoration: Restoring dataset '{dataset_id}' at index {ds_index}")
+                    logger.info(f"Session restoration: Restoring dataset '{dataset_id}' at index {ds_index}")
                     gui.data_manager.load_dataset(ds_index)
 
                     # Restore session
@@ -391,14 +386,14 @@ class ApplicationState:
                         session_names = [sess.id for sess in gui.current_dataset.sessions]
                         if session_id in session_names:
                             sess_index = session_names.index(session_id)
-                            logging.info(f"Session restoration: Restoring session '{session_id}' at index {sess_index}")
+                            logger.info(f"Session restoration: Restoring session '{session_id}' at index {sess_index}")
                             gui.data_manager.load_session(sess_index)
                         else:
-                            logging.warning(f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'")
+                            logger.warning(f"Session restoration: session '{session_id}' not found in dataset '{dataset_id}'")
                     elif session_id:
-                        logging.warning(f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded")
+                        logger.warning(f"Session restoration: Cannot restore session '{session_id}' - no dataset loaded")
                 else:
-                    logging.warning(f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'")
+                    logger.warning(f"Session restoration: dataset '{dataset_id}' not found in experiment '{experiment_id}'")
 
             # After loading, ensure visual combo selections are synced with actual state
             gui.data_selection_widget.update()
@@ -416,11 +411,11 @@ class ApplicationState:
                 profile_name=profile_name,
             )
 
-        except Exception as e:
-            logging.error(f"Error completing session restoration: {e}")
+        except Exception:
+            logger.exception("Error completing session restoration")
             import traceback
 
-            logging.error(traceback.format_exc())
+            logger.error(traceback.format_exc())
         finally:
             # For empty experiments, ensure combos show correct state after restoration
             if gui.current_experiment and not gui.current_experiment.datasets:
@@ -431,7 +426,7 @@ class ApplicationState:
 
     # === PROGRAM PREFERENCES ===
     def get_preference(self, key: str, default_value=True) -> bool:
-        logging.debug(
+        logger.debug(
             f"Getting preference '{key}' with default={default_value}"
             f" QSettings org={self.settings.organizationName()}, app={self.settings.applicationName()}"
         )
@@ -481,7 +476,7 @@ class ApplicationState:
         # is disabled we must not enable parallel loading because that would
         # risk opening many HDF5 handles concurrently (unsafe/slow).
         if pref and not self.should_use_lazy_open_h5():
-            logging.debug("Parallel loading requested but disabled because lazy_open_h5 is False")
+            logger.debug("Parallel loading requested but disabled because lazy_open_h5 is False")
             return False
         return pref
 
@@ -500,9 +495,9 @@ class ApplicationState:
             val = self.settings.value("ProgramPreferences/parallel_load_workers", None, type=int)
             if isinstance(val, int) and val > 0:
                 return val
-        except Exception as e:
+        except Exception:
             # Failed to read parallel_load_workers from QSettings; falling back to default.
-            logging.warning(f"Error reading ProgramPreferences/parallel_load_workers: {e}")
+            logger.exception("Error reading ProgramPreferences/parallel_load_workers")
 
         # Default to CPU count - 1 (leave one core spare); if single-core, use 1
         try:
@@ -511,6 +506,7 @@ class ApplicationState:
             count = os.cpu_count() or 1
             return max(1, count - 1)
         except Exception:
+            logger.exception("Error determining CPU count for parallel load workers; defaulting to 1")
             return 1
 
     def should_build_index_on_load(self) -> bool:
@@ -537,7 +533,7 @@ class ApplicationState:
         self.settings.remove("RecentProfiles")
 
         self.settings.sync()
-        logging.info("All tracked user data cleared (preferences preserved)")
+        logger.info("All tracked user data cleared (preferences preserved)")
 
     def clear_all_settings(self):
         """Clear ALL settings including preferences and version (nuclear option).
@@ -548,7 +544,7 @@ class ApplicationState:
         """
         self.settings.clear()
         self.settings.sync()
-        logging.warning("All settings cleared (including preferences and version)")
+        logger.warning("All settings cleared (including preferences and version)")
 
     def get_settings_diagnostics(self) -> dict:
         """Get detailed diagnostics about current settings state.

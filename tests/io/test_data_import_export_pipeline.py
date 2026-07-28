@@ -220,9 +220,7 @@ class TestCSVToStoreConversion:
         with patch("monstim_signals.io.csv_importer.parse") as mock_parse:
             mock_parse.return_value = ({"scan_rate": 1000, "num_channels": 4, "channel_types": ["EMG"] * 4}, sample_csv_data)
 
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
         # Verify HDF5 file was created
         h5_path = output_path.with_suffix(".raw.h5")
@@ -277,9 +275,7 @@ class TestCSVToStoreConversion:
             mock_parse.return_value = ({"scan_rate": 1000, "num_channels": 4, "channel_types": ["EMG"] * 4}, sample_csv_data)
 
             # This should succeed and create annotation file only
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=False, overwrite_meta=False, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=False, overwrite_meta=False, overwrite_annot=True)
 
         # Verify existing meta file was not overwritten
         with open(meta_path) as f:
@@ -310,9 +306,7 @@ class TestCSVToStoreConversion:
                 sample_csv_data[:, :2],  # Use only first 2 channels
             )
 
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
         # Check that session_id and recording_id are correctly extracted
         meta_path = output_path.with_suffix(".meta.json")
@@ -460,9 +454,7 @@ class TestErrorHandlingAndEdgeCases:
             mock_parse.return_value = ({"scan_rate": 1000, "num_channels": 4, "channel_types": ["EMG"] * 4}, sample_csv_data)
 
             # Should still work without STM file
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
         h5_path = output_path.with_suffix(".raw.h5")
         assert h5_path.exists()
@@ -502,9 +494,7 @@ class TestErrorHandlingAndEdgeCases:
         # Mock parse to raise an exception
         with patch("monstim_signals.io.csv_importer.parse", side_effect=ValueError("Invalid CSV format")):
             with pytest.raises(ValueError, match="Invalid CSV format"):
-                csv_to_store(
-                    csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-                )
+                csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
 
 class TestCleanupAndFileManagement:
@@ -527,9 +517,7 @@ class TestCleanupAndFileManagement:
         with patch("monstim_signals.io.csv_importer.parse") as mock_parse:
             mock_parse.return_value = ({"scan_rate": 1000, "num_channels": 4, "channel_types": ["EMG"] * 4}, sample_csv_data)
 
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
         # Count files after conversion
         files_after = list(temp_workspace.rglob("*"))
@@ -558,13 +546,9 @@ class TestCleanupAndFileManagement:
             mock_parse.return_value = ({"scan_rate": 1000, "num_channels": 4, "channel_types": ["EMG"] * 4}, sample_csv_data)
 
             # Run conversion twice with overwrite
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
-            csv_to_store(
-                csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True
-            )
+            csv_to_store(csv_path=csv_path, output_fp=output_path, overwrite_h5=True, overwrite_meta=True, overwrite_annot=True)
 
         # Should still have exactly one of each file type
         annot_files = list(temp_workspace.glob("*.annot.json"))

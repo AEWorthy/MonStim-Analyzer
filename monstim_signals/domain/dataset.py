@@ -1,6 +1,6 @@
 # monstim_signals/domain/dataset.py
 import logging
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from monstim_signals.domain.experiment import Experiment
     from monstim_signals.io.repositories import DatasetRepository
 
+logger = logging.getLogger(__name__)
+
 
 class Dataset:
     """
@@ -22,16 +24,16 @@ class Dataset:
     def __init__(
         self,
         dataset_id: str,
-        sessions: List[Session],
+        sessions: list[Session],
         annot: DatasetAnnot,
         repo: Any = None,
         config: dict | None = None,
     ):
         self.id: str = dataset_id
-        self._all_sessions: List[Session] = sessions
+        self._all_sessions: list[Session] = sessions
         self.annot: DatasetAnnot = annot
         self.repo: DatasetRepository = repo
-        self.parent_experiment: "Experiment | None" = None
+        self.parent_experiment: Experiment | None = None
         self._config = config
         for sess in self._all_sessions:
             sess.parent_dataset = self
@@ -47,14 +49,14 @@ class Dataset:
             self.scan_rate: int = self.sessions[0].scan_rate
             self.stim_start: float = self.sessions[0].stim_start
         except IndexError:
-            logging.warning(
+            logger.warning(
                 f"Dataset {self.id} has no sessions to check for consistency. Skipping consistency check. Setting scan_rate and stim_start to zeroes."
             )
             self.scan_rate = 0
             self.stim_start = 0.0
 
         self.update_latency_window_parameters()
-        logging.debug(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
+        logger.debug(f"Dataset {self.id} initialized with {len(self.sessions)} sessions.")
 
     @property
     def is_completed(self) -> bool:
@@ -126,7 +128,7 @@ class Dataset:
         return set(self.annot.excluded_sessions)
 
     @property
-    def sessions(self) -> List[Session]:
+    def sessions(self) -> list[Session]:
         return self.get_all_sessions(include_excluded=False)
 
     @property
@@ -136,13 +138,13 @@ class Dataset:
         return min(session.num_channels for session in self.sessions)
 
     @property
-    def channel_names(self) -> List[str]:
+    def channel_names(self) -> list[str]:
         if not self.sessions:
             return []
         return max((session.channel_names for session in self.sessions), key=len)
 
     @property
-    def latency_windows(self) -> List[LatencyWindow]:
+    def latency_windows(self) -> list[LatencyWindow]:
         """Return a representative list of latency windows.
 
         NOTE: Historically this returned the first session's windows and higher-level code
@@ -166,7 +168,7 @@ class Dataset:
     # ------------------------------------------------------------------
     # Heterogeneous latency window inspection helpers
     # ------------------------------------------------------------------
-    def unique_latency_window_names(self) -> List[str]:
+    def unique_latency_window_names(self) -> list[str]:
         """Return sorted list of the union of latency window names across sessions.
 
         Case-insensitive uniqueness; original case of first occurrence is preserved.
@@ -192,9 +194,9 @@ class Dataset:
         for name in self.unique_latency_window_names():
             yield name
 
-    def window_presence_map(self) -> dict[str, List[str]]:
+    def window_presence_map(self) -> dict[str, list[str]]:
         """Return mapping of window name -> list of session IDs that contain it."""
-        presence: dict[str, List[str]] = {name: [] for name in self.unique_latency_window_names()}
+        presence: dict[str, list[str]] = {name: [] for name in self.unique_latency_window_names()}
         for sess in self.sessions:
             sess_names = {w.name for w in getattr(sess.annot, "latency_windows", [])}
             for name in presence.keys():
@@ -337,7 +339,7 @@ class Dataset:
                     )
 
         except Exception as e:
-            logging.debug(f"Notice collection error (dataset {self.id}): {e}")
+            logger.debug(f"Notice collection error (dataset {self.id}): {e}")
         return notices
 
     @property
@@ -366,13 +368,13 @@ class Dataset:
     def add_latency_window(
         self,
         name: str,
-        start_times: List[float],
-        durations: List[float],
+        start_times: list[float],
+        durations: list[float],
         color: str | None = None,
         linestyle: str | None = None,
     ) -> None:
         if not self.sessions:
-            logging.warning(f"No sessions available to add latency window '{name}' in dataset {self.id}.")
+            logger.warning(f"No sessions available to add latency window '{name}' in dataset {self.id}.")
             return
         for session in self.sessions:
             session.add_latency_window(name, start_times, durations, color=color, linestyle=linestyle)
@@ -380,7 +382,7 @@ class Dataset:
 
     def remove_latency_window(self, name: str) -> None:
         if not self.sessions:
-            logging.warning(f"No sessions available to remove latency window '{name}' in dataset {self.id}.")
+            logger.warning(f"No sessions available to remove latency window '{name}' in dataset {self.id}.")
             return
         for session in self.sessions:
             session.remove_latency_window(name)
@@ -389,7 +391,7 @@ class Dataset:
     def apply_latency_window_preset(self, preset_name: str) -> None:
         """Apply a latency window preset to all sessions in the dataset."""
         if not self.sessions:
-            logging.warning(f"No sessions available to apply preset '{preset_name}' in dataset {self.id}.")
+            logger.warning(f"No sessions available to apply preset '{preset_name}' in dataset {self.id}.")
             return
         for session in self.sessions:
             session.apply_latency_window_preset(preset_name)
@@ -453,8 +455,11 @@ class Dataset:
             - **kwargs: Additional keyword arguments to pass to the plotting function.
 
                 The most common keyword arguments include:
-                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'. Default method is set in config.yml under 'default_method'.
-                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True) or as the actual recorded amplitude (False). Default is False.
+                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include
+                    'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+                    Default method is set in config.yml under 'default_method'.
+                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True)
+                    or as the actual recorded amplitude (False). Default is False.
                 - 'mmax_report' (bool): Whether to print the details of the M-max calculations (True) or not (False). Default is False.
                 - 'manual_mmax' (float): The manually set M-wave amplitude to use for plotting the reflex curves. Default is None.
 
@@ -472,7 +477,7 @@ class Dataset:
             dataset.plot(plot_type='reflexCurves', mmax_report=True)
         """
         # Call the appropriate plotting method from the plotter object
-        raw_data = getattr(self.plotter, f'plot_{"reflexCurves" if not plot_type else plot_type}')(**kwargs)
+        raw_data = getattr(self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}")(**kwargs)
         return raw_data
 
     def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
@@ -480,7 +485,8 @@ class Dataset:
         Calculates the average M-wave amplitude for a specific channel in the dataset.
 
         Args:
-            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            method (str): The method to use for calculating the M-wave amplitude.
+                Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
             channel_index (int): The index of the channel to calculate the M-wave amplitude for.
             return_avg_mmax_thresholds (bool): Whether to return the average M-max threshold values along with the amplitude. Default is False.
 
@@ -497,7 +503,7 @@ class Dataset:
                 m_max_thresholds.append(mmax_low_stim)
 
             except ValueError as e:
-                logging.warning(f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}")
+                logger.warning(f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}")
 
         if not m_max_amplitudes:
             if return_avg_mmax_thresholds:
@@ -515,9 +521,9 @@ class Dataset:
             final_mmax = float(np.mean(m_max_amplitudes))
             final_mthresh = float(np.mean(m_max_thresholds))
 
-            logging.debug(f"Dataset M-max: Using mean from {len(m_max_amplitudes)} sessions")
-            logging.debug(f"  M-max values: {m_max_amplitudes}")
-            logging.debug(f"  Mean M-max: {final_mmax}")
+            logger.debug(f"Dataset M-max: Using mean from {len(m_max_amplitudes)} sessions")
+            logger.debug(f"  M-max values: {m_max_amplitudes}")
+            logger.debug(f"  Mean M-max: {final_mmax}")
 
         if return_avg_mmax_thresholds:
             return final_mmax, final_mthresh
@@ -533,10 +539,7 @@ class Dataset:
             for volt, amp in zip(binned, m_wave):
                 m_wave_bins[volt].append(amp)
         avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
-        sem = [
-            (float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan)
-            for v in self.stimulus_voltages
-        ]
+        sem = [(float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan) for v in self.stimulus_voltages]
         return avg, sem
 
     def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
@@ -572,9 +575,7 @@ class Dataset:
                 amps.append(session.get_h_wave_amplitudes(method, channel_index)[idx])
         return np.array(amps)
 
-    def get_lw_reflex_amplitudes(
-        self, method: str, channel_index: int, window: str | LatencyWindow
-    ) -> dict[str, List[np.ndarray]]:
+    def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> dict[str, list[np.ndarray]]:
         """Return reflex amplitudes for a latency window across sessions.
 
         The window is resolved per session by name (case-insensitive). Sessions missing
@@ -591,7 +592,7 @@ class Dataset:
         else:
             window_name = str(window)
 
-        result: dict[str, List[np.ndarray]] = {}
+        result: dict[str, list[np.ndarray]] = {}
         missing_sessions: list[str] = []
         for session in self.sessions:
             if self.get_session_latency_window(session, window_name) is None:
@@ -600,12 +601,10 @@ class Dataset:
             result[session.id] = session.get_lw_reflex_amplitudes(method, channel_index, window_name)
 
         if missing_sessions:
-            logging.warning(f"Dataset {self.id}: latency window '{window_name}' absent in sessions: {missing_sessions}.")
+            logger.warning(f"Dataset {self.id}: latency window '{window_name}' absent in sessions: {missing_sessions}.")
         return result
 
-    def get_average_lw_reflex_curve(
-        self, method: str, channel_index: int, window: str | LatencyWindow
-    ) -> dict[str, np.ndarray]:
+    def get_average_lw_reflex_curve(self, method: str, channel_index: int, window: str | LatencyWindow) -> dict[str, np.ndarray]:
         """
         Returns the average reflex curve for a specific latency window across all sessions in the dataset.
 
@@ -627,7 +626,7 @@ class Dataset:
 
         voltages_union = self.stimulus_voltages
         bin_amplitudes: dict[float, list[float]] = {v: [] for v in voltages_union}
-        contrib_counts: dict[float, int] = {v: 0 for v in voltages_union}
+        contrib_counts: dict[float, int] = dict.fromkeys(voltages_union, 0)
 
         for session_id, amps in all_amplitudes.items():
             session = next((s for s in self.sessions if s.id == session_id), None)
@@ -668,12 +667,12 @@ class Dataset:
         for session in self.sessions:
             session.invert_channel_polarity(channel_index)
         self.reset_all_caches()
-        logging.info(f"Inverted polarity of channel {channel_index} in dataset {self.id}.")
+        logger.info(f"Inverted polarity of channel {channel_index} in dataset {self.id}.")
 
     def exclude_session(self, session_id: str) -> None:
         """Exclude a session from this dataset by its ID."""
         if session_id not in [s.id for s in self.get_all_sessions(include_excluded=True)]:
-            logging.warning(f"Session {session_id} not found in dataset {self.id}.")
+            logger.warning(f"Session {session_id} not found in dataset {self.id}.")
             return
         if session_id not in self.annot.excluded_sessions:
             self.annot.excluded_sessions.append(session_id)
@@ -681,12 +680,12 @@ class Dataset:
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(f"Session {session_id} already excluded in dataset {self.id}.")
+            logger.warning(f"Session {session_id} already excluded in dataset {self.id}.")
 
         # Note: We log when all sessions are excluded but don't auto-exclude the dataset.
         # This prevents silent cascading exclusions that can cause GUI sync issues.
         if self.sessions == []:
-            logging.info(f"All sessions in dataset {self.id} have been excluded. Dataset remains active.")
+            logger.info(f"All sessions in dataset {self.id} have been excluded. Dataset remains active.")
 
     def restore_session(self, session_id: str) -> None:
         """Restore a previously excluded session by its ID."""
@@ -696,7 +695,7 @@ class Dataset:
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(f"Session {session_id} is not excluded from dataset {self.id}.")
+            logger.warning(f"Session {session_id} is not excluded from dataset {self.id}.")
 
     def rename_channels(self, new_names: dict[str, str]) -> None:
         """
@@ -707,7 +706,7 @@ class Dataset:
         """
         for session in self.sessions:
             session.rename_channels(new_names)
-        logging.info(f"Renamed channels in dataset {self.id} according to mapping: {new_names}.")
+        logger.info(f"Renamed channels in dataset {self.id} according to mapping: {new_names}.")
 
     # ──────────────────────────────────────────────────────────────────
     # Utility methods
@@ -742,9 +741,7 @@ class Dataset:
 
         for session in self.sessions[1:]:
             if session.scan_rate != reference_scan_rate:
-                raise ValueError(
-                    f"Inconsistent scan rate for {session.id} in {self.formatted_name}: {session.scan_rate} != {reference_scan_rate}."
-                )
+                raise ValueError(f"Inconsistent scan rate for {session.id} in {self.formatted_name}: {session.scan_rate} != {reference_scan_rate}.")
             if session.num_channels != reference_num_channels:
                 raise ValueError(
                     f"Inconsistent number of channels for {session.id} in {self.formatted_name}: {session.num_channels} != {reference_num_channels}."
@@ -754,7 +751,8 @@ class Dataset:
                 continue
             if session.primary_stim.stim_type != reference_stim_type:
                 raise ValueError(
-                    f"Inconsistent primary stimulus for {session.id} in {self.formatted_name}: {session.primary_stim.stim_type} != {reference_stim_type}."
+                    f"Inconsistent primary stimulus for {session.id} in {self.formatted_name}: {session.primary_stim.stim_type} "
+                    f":= {reference_stim_type}."
                 )
 
     # ──────────────────────────────────────────────────────────────────
@@ -803,7 +801,7 @@ class Dataset:
         ]
 
         for line in report:
-            logging.info(line)
+            logger.info(line)
         return report
 
     def __repr__(self) -> str:

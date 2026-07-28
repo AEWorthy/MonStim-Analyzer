@@ -78,6 +78,7 @@ In `main.py`, DPI awareness is enabled before creating the QApplication:
 
 ```python
 from monstim_gui.core.ui_scaling import setup_dpi_awareness
+
 setup_dpi_awareness()
 app = QApplication(sys.argv)
 ```

@@ -25,10 +25,12 @@ SPLASH_INFO = {
     "copyright": "© 2024 Andrew Worthy",
 }
 
+logger = logging.getLogger(__name__)
+
 
 class SplashScreen(QSplashScreen):
     def __init__(self):
-        logging.debug("Creating splash screen.")
+        logger.debug("Creating splash screen.")
         pixmap = QPixmap(400, 300)
         offwhite = QColor(245, 245, 240)
         pixmap.fill(offwhite)

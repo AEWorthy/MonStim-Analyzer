@@ -25,6 +25,8 @@ from monstim_gui.core.application_state import ApplicationState
 from monstim_gui.core.ui_config import ui_config
 from monstim_gui.core.ui_scaling import ui_scaling
 
+logger = logging.getLogger(__name__)
+
 
 class ProgramSettingsDialog(QDialog):
     settings_changed = Signal()  # Signal emitted when settings change
@@ -57,9 +59,7 @@ class ProgramSettingsDialog(QDialog):
 
         # Reset to defaults button
         self.reset_button = QPushButton("Reset to Defaults")
-        self.reset_button.setToolTip(
-            "Reset all settings to their default values. " "This will not clear any saved data, only the settings themselves."
-        )
+        self.reset_button.setToolTip("Reset all settings to their default values. This will not clear any saved data, only the settings themselves.")
         self.reset_button.clicked.connect(self.reset_to_defaults)
         button_layout.addWidget(self.reset_button)
 
@@ -212,7 +212,8 @@ class ProgramSettingsDialog(QDialog):
         self.opengl_checkbox.setToolTip(
             "Use hardware-accelerated OpenGL for plot rendering to improve performance and responsiveness. "
             "(Requires restart; may not be supported on all systems.)\n"
-            "Warning: Enabling OpenGL may increase instability and trigger silent crashes, especially on Windows or with certain graphics drivers. Use at your own risk."
+            "Warning: Enabling OpenGL may increase instability and trigger silent crashes, "
+            "especially on Windows or with certain graphics drivers. Use at your own risk."
         )
         layout.addRow("Use OpenGL acceleration:", self.opengl_checkbox)
 
@@ -369,7 +370,7 @@ class ProgramSettingsDialog(QDialog):
         try:
             self.app_state.set_build_index_on_load(self.build_index_on_load_checkbox.isChecked())
         except Exception:
-            logging.debug("Failed to save build_index_on_load setting", exc_info=True)
+            logger.debug("Failed to save build_index_on_load setting", exc_info=True)
 
         # Save tracking settings
         self.app_state.set_setting("track_session_restoration", self.session_tracking_checkbox.isChecked())
@@ -387,8 +388,7 @@ class ProgramSettingsDialog(QDialog):
             QMessageBox.information(
                 self,
                 "Restart Required",
-                "Some settings have been changed that require a restart.\n\n"
-                "Please restart the application for all changes to take effect.",
+                "Some settings have been changed that require a restart.\n\nPlease restart the application for all changes to take effect.",
             )
         else:
             QMessageBox.information(
@@ -397,7 +397,7 @@ class ProgramSettingsDialog(QDialog):
                 "Settings have been saved successfully.",
             )
 
-        logging.info("Program settings saved")
+        logger.info("Program settings saved")
         self.settings_changed.emit()
 
     def reset_to_defaults(self):
@@ -405,7 +405,7 @@ class ProgramSettingsDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Reset Settings",
-            "Reset all program settings to their default values?\n\n" "This will not clear any saved data, only the settings.",
+            "Reset all program settings to their default values?\n\nThis will not clear any saved data, only the settings.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -439,7 +439,7 @@ class ProgramSettingsDialog(QDialog):
             self.path_tracking_checkbox.setChecked(True)
             self.recent_files_checkbox.setChecked(True)
 
-            logging.info("Program settings reset to defaults")
+            logger.info("Program settings reset to defaults")
 
     def clear_all_data(self):
         """Clear all saved tracking data."""
@@ -465,10 +465,10 @@ class ProgramSettingsDialog(QDialog):
                     "Data Cleared",
                     "All saved tracking data has been cleared successfully.",
                 )
-                logging.info("All tracked user data cleared via settings dialog")
+                logger.info("All tracked user data cleared via settings dialog")
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"An error occurred while clearing data:\n{str(e)}")
-                logging.error(f"Error clearing tracked data: {e}")
+                QMessageBox.critical(self, "Error", f"An error occurred while clearing data:\n{e!s}")
+                logger.error(f"Error clearing tracked data: {e}")
 
     def accept(self):
         """Accept the dialog and save settings."""

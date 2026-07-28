@@ -781,7 +781,7 @@ class TestConfigurationIntegration:
         for profile in profiles:
             profile_manager.save_profile(profile)
 
-        # List and verify all profiles
+        # list and verify all profiles
         listed_profiles = profile_manager.list_profiles()
         assert len(listed_profiles) == 3
 

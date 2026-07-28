@@ -37,7 +37,7 @@ def _make_session(session_id: str, scan_rate=1000, stim_start=0.0, windows=None,
     session.m_max_args = {"validation_tolerance": 1.05}
     # Provide minimal properties used downstream
     session.num_channels = n_channels
-    session.channel_names = [f"Ch{i+1}" for i in range(n_channels)]
+    session.channel_names = [f"Ch{i + 1}" for i in range(n_channels)]
     session.primary_stim = type("Stim", (), {"stim_type": "square"})()
 
     # Minimal dummy recordings so Session.stimulus_voltages property works
@@ -97,10 +97,8 @@ def _make_session(session_id: str, scan_rate=1000, stim_start=0.0, windows=None,
         [
             calculate_emg_amplitude(
                 rec[:, channel_index],
-                (next(w for w in session.annot.latency_windows if w.name == window).start_times[channel_index])
-                + session.stim_start,
-                (next(w for w in session.annot.latency_windows if w.name == window).end_times[channel_index])
-                + session.stim_start,
+                (next(w for w in session.annot.latency_windows if w.name == window).start_times[channel_index]) + session.stim_start,
+                (next(w for w in session.annot.latency_windows if w.name == window).end_times[channel_index]) + session.stim_start,
                 session.scan_rate,
                 method=method,
             )

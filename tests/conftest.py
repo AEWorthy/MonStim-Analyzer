@@ -72,12 +72,8 @@ class FakeDataSelectionWidget:
     def __init__(self):
         # Minimal API used by commands
         self.experiment_combo = types.SimpleNamespace(setCurrentIndex=lambda *_: None, blockSignals=lambda *_: None)
-        self.dataset_combo = types.SimpleNamespace(
-            setCurrentIndex=lambda *_: None, setEnabled=lambda *_: None, blockSignals=lambda *_: None
-        )
-        self.session_combo = types.SimpleNamespace(
-            setCurrentIndex=lambda *_: None, setEnabled=lambda *_: None, blockSignals=lambda *_: None
-        )
+        self.dataset_combo = types.SimpleNamespace(setCurrentIndex=lambda *_: None, setEnabled=lambda *_: None, blockSignals=lambda *_: None)
+        self.session_combo = types.SimpleNamespace(setCurrentIndex=lambda *_: None, setEnabled=lambda *_: None, blockSignals=lambda *_: None)
 
     # New unified API in real widget
     def update(self, levels: tuple[str, ...] | None = None, preserve_selection: bool = True):
@@ -101,9 +97,7 @@ class FakeDataSelectionWidget:
 
 class FakePlotWidget:
     def __init__(self):
-        self.current_option_widget = types.SimpleNamespace(
-            recording_cycler=types.SimpleNamespace(reset_max_recordings=lambda: None)
-        )
+        self.current_option_widget = types.SimpleNamespace(recording_cycler=types.SimpleNamespace(reset_max_recordings=lambda: None))
 
     def on_data_selection_changed(self):
         pass

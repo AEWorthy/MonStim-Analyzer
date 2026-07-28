@@ -1,21 +1,35 @@
-[tool.isort]
-profile = "black"
-line_length = 127
+# Linting commands:
+#   1. ruff check . --fix
+#   2. ruff format .
 
-[tool.black]
-line-length = 127
-target-version = ['py310', 'py311', 'py312']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+
+[tool.ruff]
+line-length = 150
+target-version = "py310"
+exclude = [
+    ".git",
+    ".github",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "dist",
+    "docs",
+    "data",
+    "export",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "C"]
+ignore = ["E402", "C901"] # skip module-level import not at top of file and McCabe complexity
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "monstim_gui",
+    "monstim_signals",
+]
+
+[tool.ruff.format]
+quote-style = "double"

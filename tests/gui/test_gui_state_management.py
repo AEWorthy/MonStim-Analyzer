@@ -257,9 +257,7 @@ class TestApplicationStateBasics:
 
         # Test that saves are skipped during restoration
         # We can test the actual save_current_session_state method
-        clean_app_state.save_current_session_state(
-            experiment_id="test_exp", dataset_id="test_dataset", session_id="test_session"
-        )
+        clean_app_state.save_current_session_state(experiment_id="test_exp", dataset_id="test_dataset", session_id="test_session")
 
         # During restoration, setValue should not be called
         clean_app_state._mock_settings.setValue.assert_not_called()
@@ -289,9 +287,7 @@ class TestSessionStateManagement:
         # Reset restoration flag for this test
         clean_app_state._is_restoring_session = False
 
-        clean_app_state.save_current_session_state(
-            experiment_id="exp123", dataset_id="ds456", session_id="sess789", profile_name="test_profile"
-        )
+        clean_app_state.save_current_session_state(experiment_id="exp123", dataset_id="ds456", session_id="sess789", profile_name="test_profile")
 
         # Verify values were saved
         assert saved_values.get("SessionRestore/experiment") == "exp123"

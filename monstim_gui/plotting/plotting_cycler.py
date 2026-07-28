@@ -1,4 +1,6 @@
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QValidator
@@ -171,16 +173,16 @@ class RecordingCyclerWidget(QGroupBox):
         if not self.gui or not self.gui.current_session:
             return
         selected_recording_id = self.gui.current_session.all_recordings[self.recording_spinbox.value()].id
-        logging.info(f"Excluding/including recording ID {selected_recording_id}")
-        logging.info(f"Current excluded recordings: {self.gui.current_session.excluded_recordings}")
+        logger.info(f"Excluding/including recording ID {selected_recording_id}")
+        logger.info(f"Current excluded recordings: {self.gui.current_session.excluded_recordings}")
         if selected_recording_id in self.gui.current_session.excluded_recordings:
             self.exclude_button.setText("Exclude")
             self.gui.restore_recording(selected_recording_id)
-            logging.info(f"Restored recording ID {selected_recording_id}")
+            logger.info(f"Restored recording ID {selected_recording_id}")
         else:
             self.exclude_button.setText("Include")
             self.gui.exclude_recording(selected_recording_id)
-            logging.info(f"Excluded recording ID {selected_recording_id}")
+            logger.info(f"Excluded recording ID {selected_recording_id}")
 
     def on_recording_changed(self, value):
         max_val = self.recording_spinbox.maximum()
@@ -206,7 +208,7 @@ class RecordingCyclerWidget(QGroupBox):
             else:
                 # Out-of-range index: disable exclude button defensively
                 self.exclude_button.setEnabled(False)
-                logging.warning("Recording index %s out of range after change; disabling exclude button", recording_index)
+                logger.warning("Recording index %s out of range after change; disabling exclude button", recording_index)
         else:
             # No active session or no recordings
             self.exclude_button.setEnabled(False)

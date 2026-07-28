@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 INDEX_FILENAME = ".index.json"
 INDEX_VERSION = 1
@@ -38,7 +40,7 @@ class RecordingIndex:
 class SessionIndex:
     id: str
     path: str
-    recordings: List[RecordingIndex]
+    recordings: list[RecordingIndex]
     meta_path: Optional[str] = None
     size: Optional[int] = None
     mtime: Optional[float] = None
@@ -48,7 +50,7 @@ class SessionIndex:
 class DatasetIndex:
     id: str
     path: str
-    sessions: List[SessionIndex]
+    sessions: list[SessionIndex]
     meta_path: Optional[str] = None
     size: Optional[int] = None
     mtime: Optional[float] = None
@@ -58,12 +60,12 @@ class DatasetIndex:
 class ExperimentIndex:
     id: str
     path: str
-    datasets: List[DatasetIndex]
+    datasets: list[DatasetIndex]
     version: int = INDEX_VERSION
     generated_at: float = 0.0
 
 
-def _stat_safe(p: Path) -> Tuple[Optional[int], Optional[float]]:
+def _stat_safe(p: Path) -> tuple[Optional[int], Optional[float]]:
     try:
         st = p.stat()
         return st.st_size, st.st_mtime
@@ -84,7 +86,7 @@ def index_path(exp_path: Path) -> Path:
 
 
 def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[callable] = None) -> ExperimentIndex:
-    datasets: List[DatasetIndex] = []
+    datasets: list[DatasetIndex] = []
     ds_names = sorted([d.name for d in exp_path.iterdir() if d.is_dir()])
     total_ds = len(ds_names)
     for i, ds_name in enumerate(ds_names, start=1):
@@ -92,13 +94,13 @@ def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[ca
         ds_meta = ds_path / "dataset.annot.json"
         ds_size, ds_mtime = _stat_safe(ds_meta)
 
-        sessions: List[SessionIndex] = []
+        sessions: list[SessionIndex] = []
         for sess_name in sorted([s.name for s in ds_path.iterdir() if s.is_dir()]):
             sess_path = ds_path / sess_name
             sess_meta = sess_path / "session.annot.json"
             sess_size, sess_mtime = _stat_safe(sess_meta)
 
-            recordings: List[RecordingIndex] = []
+            recordings: list[RecordingIndex] = []
             # Recordings can be files or subfolders depending on pipeline; include known extensions
             items = sorted(sess_path.iterdir())
             for item in items:
@@ -134,7 +136,7 @@ def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[ca
                                         primary_stim_v = stim_clusters[primary_stim - 1].get("stim_v")
                             except Exception:
                                 # If metadata extraction fails, continue without it
-                                logging.debug(f"Failed to extract metadata from {meta_file}", exc_info=True)
+                                logger.debug(f"Failed to extract metadata from {meta_file}", exc_info=True)
                         recordings.append(
                             RecordingIndex(
                                 path=str(item),
@@ -192,7 +194,7 @@ def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[ca
             except Exception:
                 # Silently ignore callback errors to ensure index building continues
                 # even if the progress callback fails (e.g., disconnected, GUI closed)
-                logging.debug("Progress callback failed during index build.", exc_info=True)
+                logger.debug("Progress callback failed during index build.", exc_info=True)
 
     idx = ExperimentIndex(id=exp_id, path=str(exp_path), datasets=datasets, generated_at=time.time())
     return idx

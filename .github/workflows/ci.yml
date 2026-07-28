@@ -1,5 +1,5 @@
 name: CI
-
+# TODO: Replace all uses of flak8/isort with ruff, and remove flake8/isort from dev-requirements.txt and pyproject.toml
 on:
   push:
     branches: [ main, development ]
@@ -115,13 +115,11 @@ jobs:
         Write-Host "Listing Qt-related packages"
         conda run --name monstim conda list | findstr /i "pyside6 qt pyqtgraph" || exit 0
 
-    - name: Lint with flake8
+    - name: Lint with Ruff
       run: |
-        pip install flake8
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Exit-zero treats all errors as warnings. GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        conda run --name monstim python -m pip install ruff
+        conda run --name monstim ruff --version
+        conda run --name monstim ruff check .
 
     - name: Test import capabilities
       run: |
@@ -186,24 +184,13 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -e . --no-deps
         pip install -r dev-requirements.txt
 
-    - name: Check code formatting with black
+    - name: Check formatting and linting with Ruff
       run: |
-        black --version
-        black --check --diff .
-
-    - name: Check import sorting with isort
-      run: |
-        isort --version
-        isort --check-only --diff .
-
-    - name: Advanced linting with flake8
-      run: |
-        flake8 --version
-        flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+        ruff --version
+        ruff check .
+        ruff format --check .
 
   security:
     runs-on: ubuntu-latest

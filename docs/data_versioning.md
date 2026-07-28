@@ -51,14 +51,14 @@ if 'excluded_session_ids' in data and 'excluded_sessions' not in data:
 2. Implement function:
    ```python
    def migrate_2_0_0_to_2_1_0(data: dict) -> dict:
-       if 'new_field' not in data:
-           data['new_field'] = []
-       data['data_version'] = '2.1.0'
+       if "new_field" not in data:
+           data["new_field"] = []
+       data["data_version"] = "2.1.0"
        return data
    ```
 3. Append to `MIGRATIONS`:
    ```python
-   MIGRATIONS.append(MigrationStep('2.0.0', '2.1.0', migrate_2_0_0_to_2_1_0))
+   MIGRATIONS.append(MigrationStep("2.0.0", "2.1.0", migrate_2_0_0_to_2_1_0))
    ```
 4. Update `DATA_VERSION = "2.1.0"` in `version.py`.
 5. Add / update tests in `tests/test_data_migrations.py`.

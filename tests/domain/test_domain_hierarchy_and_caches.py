@@ -8,8 +8,6 @@ Notes: Avoid PySide6 in domain; use create_empty annotations and small stubs.
 
 from __future__ import annotations
 
-from typing import List
-
 import numpy as np
 import pytest
 
@@ -20,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 
 def make_dummy_session(num_recs: int = 3, num_channels: int = 2) -> Session:
-    recs: List[Recording] = []
+    recs: list[Recording] = []
     for i in range(num_recs):
         stim = StimCluster(
             stim_delay=2.0,
@@ -73,7 +71,7 @@ class TestHierarchyAndCaches:
         # dynamic properties (recordings_*) should return new lists but same elements (since all_* is cached)
         raw1 = sess.recordings_raw
         raw2 = sess.recordings_raw
-        assert raw1 is not raw2  # List object is new
+        assert raw1 is not raw2  # list object is new
         assert raw1[0] is raw2[0]  # Element is cached
 
         filt1 = sess.recordings_filtered

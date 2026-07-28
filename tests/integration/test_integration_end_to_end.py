@@ -138,9 +138,7 @@ class TestCompleteDataWorkflows:
 
         # Import should handle errors gracefully
         try:
-            csv_importer.import_experiment(
-                expt_path=invalid_dir, output_path=output_dir, progress_callback=lambda v: None, is_canceled=lambda: False
-            )
+            csv_importer.import_experiment(expt_path=invalid_dir, output_path=output_dir, progress_callback=lambda v: None, is_canceled=lambda: False)
             # Import may succeed or fail, but shouldn't crash
             assert True, "Import completed without crashing"
         except Exception:
@@ -297,7 +295,6 @@ class TestUIStateManagementIntegration:
             patch("monstim_gui.core.ui_config.QSettings") as mock_ui_qsettings,
             patch("monstim_gui.core.application_state.QSettings") as mock_app_qsettings,
         ):
-
             # Setup separate storage for each component
             ui_storage = {}
             app_storage = {}
@@ -605,12 +602,14 @@ class TestConfigurationIntegration:
 
         # Create default config
         default_config = config_dir / "config.yml"
-        default_config.write_text(textwrap.dedent("""\
+        default_config.write_text(
+            textwrap.dedent("""\
             default_setting: "default_value"
             analysis:
               method: "default_method"
               threshold: 1.0
-            """))
+            """)
+        )
 
         # Create profile directory
         profile_dir = temp_output_dir / "profiles"
@@ -793,9 +792,7 @@ class TestEndToEndUserScenarios:
         output_dir = temp_output_dir / "analysis_output"
 
         try:
-            csv_importer.import_experiment(
-                expt_path=exp_dir, output_path=output_dir, progress_callback=lambda v: None, is_canceled=lambda: False
-            )
+            csv_importer.import_experiment(expt_path=exp_dir, output_path=output_dir, progress_callback=lambda v: None, is_canceled=lambda: False)
 
             # Step 2: Load and analyze
             exp_repo = ExperimentRepository(output_dir)

@@ -18,7 +18,7 @@ from monstim_gui.commands import Command
 pytestmark = pytest.mark.integration
 
 
-# List of all command classes that should exist
+# list of all command classes that should exist
 EXPECTED_COMMANDS = {
     "ExcludeRecordingCommand",
     "RestoreRecordingCommand",

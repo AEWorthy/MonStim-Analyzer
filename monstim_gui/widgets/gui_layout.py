@@ -23,7 +23,7 @@ def setup_main_layout(parent: "MonstimGUI") -> dict:
     Returns
     -------
     dict
-        Dictionary containing all created widgets.
+        dictionary containing all created widgets.
     """
     # Central widget and main layout
     central_widget = QWidget()

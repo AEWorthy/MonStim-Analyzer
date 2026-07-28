@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pyqtgraph as pg
@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from monstim_signals.domain.dataset import Dataset
     from monstim_signals.domain.experiment import Experiment
     from monstim_signals.domain.session import Session
+
+logger = logging.getLogger(__name__)
 
 
 class BasePlotterPyQtGraph:
@@ -24,8 +26,8 @@ class BasePlotterPyQtGraph:
 
     def __init__(self, emg_object):
         self.emg_object: "Session" | "Dataset" | "Experiment" = emg_object
-        self.current_plot_items: List[pg.PlotItem] = []
-        self.current_regions: List[pg.LinearRegionItem] = []
+        self.current_plot_items: list[pg.PlotItem] = []
+        self.current_regions: list[pg.LinearRegionItem] = []
 
         # Set up default colors
         self.default_colors = [
@@ -60,9 +62,7 @@ class BasePlotterPyQtGraph:
             # If errors, ignore overrides
             pass
 
-    def create_plot_layout(
-        self, canvas: "PlotPane", channel_indices: List[int] = None
-    ) -> Tuple[List[pg.PlotItem], pg.GraphicsLayout]:
+    def create_plot_layout(self, canvas: "PlotPane", channel_indices: list[int] = None) -> tuple[list[pg.PlotItem], pg.GraphicsLayout]:
         """
         Create plot layout with subplots for multiple channels with performance optimizations.
 
@@ -70,8 +70,8 @@ class BasePlotterPyQtGraph:
         ----------
         canvas : PlotPane
             The plot pane to draw on
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
 
         Returns
         -------
@@ -145,9 +145,7 @@ class BasePlotterPyQtGraph:
             v_lines.append(v_line)
             h_lines.append(h_line)
             # Add a cursor indicator (TextItem) to each plot
-            cursor_text = pg.TextItem(
-                "", anchor=(1, 0), color="black", fill=pg.mkBrush(255, 255, 255, 200), border=pg.mkPen(color="black", width=1)
-            )
+            cursor_text = pg.TextItem("", anchor=(1, 0), color="black", fill=pg.mkBrush(255, 255, 255, 200), border=pg.mkPen(color="black", width=1))
             plot_item.addItem(cursor_text)
             cursor_text.hide()
             cursor_texts.append(cursor_text)
@@ -262,11 +260,7 @@ class BasePlotterPyQtGraph:
 
                 # Only update if position changed significantly
                 position_changed = (
-                    last_active_plot_idx != active_plot_idx
-                    or last_x is None
-                    or last_y is None
-                    or abs(x - last_x) > 0.01
-                    or abs(y - last_y) > 0.01
+                    last_active_plot_idx != active_plot_idx or last_x is None or last_y is None or abs(x - last_x) > 0.01 or abs(y - last_y) > 0.01
                 )
 
                 if position_changed:
@@ -373,16 +367,10 @@ class BasePlotterPyQtGraph:
 
         # Optional pre-plot decimation to reduce memory and draw time for very long series
         try:
-            if (
-                self.enable_decimation
-                and self.max_points_per_curve > 0
-                and len(data) >= self.min_decimation_factor * self.max_points_per_curve
-            ):
+            if self.enable_decimation and self.max_points_per_curve > 0 and len(data) >= self.min_decimation_factor * self.max_points_per_curve:
                 from .decimation import decimate_series
 
-                time_axis, data = decimate_series(
-                    time_axis, data, max_points=self.max_points_per_curve, strategy=self.decimation_strategy
-                )
+                time_axis, data = decimate_series(time_axis, data, max_points=self.max_points_per_curve, strategy=self.decimation_strategy)
         except Exception:
             # Fail open: if decimation fails, plot the original data
             pass
@@ -532,9 +520,7 @@ class BasePlotterPyQtGraph:
         """Clear all current plot items and regions with memory safety."""
 
         try:
-            logging.debug(
-                f"Clearing current plots. Items: {len(self.current_plot_items)}, Regions: {len(self.current_regions)}"
-            )
+            logger.debug(f"Clearing current plots. Items: {len(self.current_plot_items)}, Regions: {len(self.current_regions)}")
 
             # Clear local references
             self.current_plot_items = []
@@ -543,12 +529,12 @@ class BasePlotterPyQtGraph:
             # Clear canvas plots
             if canvas is not None:
                 canvas.clear_plots()
-                logging.debug("Canvas plots cleared successfully.")
+                logger.debug("Canvas plots cleared successfully.")
             else:
-                logging.warning("Canvas is None, skipping canvas.clear_plots()")
+                logger.warning("Canvas is None, skipping canvas.clear_plots()")
 
         except Exception as e:
-            logging.error(f"Error clearing plots: {e}", exc_info=True)
+            logger.error(f"Error clearing plots: {e}", exc_info=True)
             # Re-raise as UnableToPlotError so it's handled properly upstream
             raise UnableToPlotError(f"Failed to clear existing plots: {e}")
 
@@ -595,7 +581,7 @@ class BasePlotterPyQtGraph:
         )
         return pale
 
-    def auto_range_y_axis_linked_plots(self, plot_items: List[pg.PlotItem], padding: float = 0.05):
+    def auto_range_y_axis_linked_plots(self, plot_items: list[pg.PlotItem], padding: float = 0.05):
         """
         Auto-range Y-axis for linked plots by calculating the optimal range across all plots.
 
@@ -604,8 +590,8 @@ class BasePlotterPyQtGraph:
 
         Parameters
         ----------
-        plot_items : List[pg.PlotItem]
-            List of plot items that are Y-linked
+        plot_items : list[pg.PlotItem]
+            list of plot items that are Y-linked
         padding : float, optional
             Fraction of padding to add above and below the data range (default: 0.05 = 5%)
         """
@@ -632,7 +618,7 @@ class BasePlotterPyQtGraph:
                             overall_y_max = max(overall_y_max, y_max)
                 except (AttributeError, TypeError, ValueError):
                     # Item doesn't have getData() or data is invalid, skip it
-                    logging.warning(f"Unable to extract data from item {item} in plot {plot_item}")
+                    logger.warning(f"Unable to extract data from item {item} in plot {plot_item}")
                     continue
 
         # Check if we found valid bounds

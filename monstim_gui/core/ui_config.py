@@ -3,13 +3,15 @@ Configuration file for UI scaling and responsive design settings.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
+
+logger = logging.getLogger(__name__)
 
 
 class UIConfig:
@@ -19,7 +21,7 @@ class UIConfig:
         self.settings = QSettings()
         self._load_defaults()
 
-    def _load_defaults(self) -> Dict[str, Any]:
+    def _load_defaults(self) -> dict[str, Any]:
         """Load default UI configuration values."""
         return {
             # Scaling settings
@@ -130,7 +132,7 @@ class UIConfig:
 
     def save_window_state(self, window: "MonstimGUI", key: str = "main_window"):
         """Save window geometry and state."""
-        logging.debug(
+        logger.debug(
             f"Saving window state for {key}"
             f" QSettings org={QApplication.instance().organizationName()}, app={QApplication.instance().applicationName()}"
         )
@@ -156,6 +158,7 @@ class UIConfig:
 
             return restored
         except Exception:
+            logger.exception(f"Failed to restore window state for {key}")
             return False
 
 

@@ -5,11 +5,9 @@ from typing import Any
 
 import pandas as pd
 
-# # Ensure the project root is in sys.path for sibling imports
-# project_root = Path(__file__).resolve().parent.parent
-# if str(project_root) not in sys.path:
-#     sys.path.insert(0, str(project_root))
 from monstim_signals.core import StimCluster
+
+logger = logging.getLogger(__name__)
 
 
 def detect_format(path: Path) -> str:
@@ -26,7 +24,7 @@ def detect_format(path: Path) -> str:
                 return "v3h"
             if line.lower().startswith("file version"):
                 return "v3d"
-    raise ValueError(f"Could not detect MonStim version for {path}. " "Please ensure it is a valid MonStim CSV file.")
+    raise ValueError(f"Could not detect MonStim version for {path}. Please ensure it is a valid MonStim CSV file.")
 
 
 def parse(path: Path):
@@ -120,7 +118,7 @@ def parse_v3d(path: Path):
         df = pd.read_csv(path, sep=",", skiprows=data_start, header=None)
         data = df.values.astype("float32")
     except (ValueError, pd.errors.ParserError) as e:
-        raise ValueError(f"Could not parse numeric data from v3d file {path}: {str(e)}")
+        raise ValueError(f"Could not parse numeric data from v3d file {path}: {e!s}")
     meta = normalize_meta(raw_meta)
 
     # Set channel types and number of channels
@@ -134,7 +132,7 @@ def parse_v3d(path: Path):
     n = 4  # hardcoded for v3d, as it has 4 stimulus channels
     clusters = []
     for i in range(n):
-        stim_type_int = int(float(raw_meta[f"Stim Type {i+1}"]))
+        stim_type_int = int(float(raw_meta[f"Stim Type {i + 1}"]))
         if stim_type_int == 0:
             stim_type = "Optical"
         elif stim_type_int == 2:
@@ -144,7 +142,7 @@ def parse_v3d(path: Path):
             continue
         else:
             stim_type = "Unknown"
-        stim_v = float(raw_meta[f"Stim Value {i+1}"])
+        stim_v = float(raw_meta[f"Stim Value {i + 1}"])
 
         clusters.append(
             StimCluster(
@@ -165,9 +163,7 @@ def parse_v3d(path: Path):
 
     # Set additional metadata
     meta["num_samples"] = int(data.shape[0])
-    meta["emg_amp_gains"] = [
-        int(float(raw_meta[f"EMG amp gain ch {i}"])) for i in range(1, int(float(meta["num_emg_channels"])) + 1)
-    ]
+    meta["emg_amp_gains"] = [int(float(raw_meta[f"EMG amp gain ch {i}"])) for i in range(1, int(float(meta["num_emg_channels"])) + 1)]
     meta["primary_stim"] = 1  # default to channel 1 for v3d
 
     return meta, data
@@ -203,7 +199,7 @@ def parse_v3h(path: Path):
     clusters = []
     for i in range(n):
         stim_type = raw_meta[f"Stim type cluster array {i}.Stimulus Output"]
-        stim_v = float(raw_meta[f"Stim. {i+1}"])
+        stim_v = float(raw_meta[f"Stim. {i + 1}"])
 
         # TODO: Remove this correction, or use only when recordings are from the old V3H version
         # If stim_type is Motor Length and stim_v is 0, extract from length channel
@@ -239,15 +235,15 @@ def parse_v3h(path: Path):
                     # TODO: Fix this magic number
                     if stim_v < 0.002:  # if still too low, set to 0
                         stim_v = 0.0
-                        logging.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
+                        logger.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
                     else:
-                        logging.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
+                        logger.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
                 else:
                     stim_v = 0.0
-                    logging.debug(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
+                    logger.debug(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
             except Exception as e:
                 # fallback: leave stim_v as 0 if any error
-                logging.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
+                logger.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
                 pass
 
         clusters.append(

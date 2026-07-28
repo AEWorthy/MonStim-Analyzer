@@ -52,6 +52,7 @@ Markers are defined in `pytest.ini`:
 
   ```python
   from monstim_signals.io.csv_importer import import_experiment
+
   import_experiment(golden_root, tmp_out_dir, overwrite=True, max_workers=1)
   ```
 

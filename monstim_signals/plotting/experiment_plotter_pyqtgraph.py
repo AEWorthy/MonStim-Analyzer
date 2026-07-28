@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,8 @@ from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.experiment import Experiment
+
+logger = logging.getLogger(__name__)
 
 
 class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
@@ -31,7 +33,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_averageReflexCurves(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method: str | None = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
@@ -79,9 +81,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     plot_item.addLegend()
 
                 for window_name in window_names:
-                    curve = self.emg_object.get_average_lw_reflex_curve(
-                        method=method, channel_index=channel_idx, window=window_name
-                    )
+                    curve = self.emg_object.get_average_lw_reflex_curve(method=method, channel_index=channel_idx, window=window_name)
                     voltages = curve.get("voltages")
                     means = curve.get("means")
                     stdevs = curve.get("stdevs")
@@ -116,7 +116,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                             if found:
                                 break
                     except Exception:
-                        logging.exception("Failed to retrieve latency window color for plotting.")
+                        logger.exception("Failed to retrieve latency window color for plotting.")
                         pass
 
                     color = self._convert_matplotlib_color(color_hex)
@@ -173,7 +173,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_maxH(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method=None,
         relative_to_mmax=False,
         manual_mmax=None,
@@ -231,7 +231,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting max H-reflex: {str(e)}")
+            raise UnableToPlotError(f"Error plotting max H-reflex: {e!s}")
 
     def _plot_max_h_data(
         self,
@@ -431,7 +431,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_mmax(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] | None = None,
         method: str = None,
         interactive_cursor: bool = False,
         canvas=None,
@@ -481,7 +481,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting M-max: {str(e)}")
+            raise UnableToPlotError(f"Error plotting M-max: {e!s}")
 
     def _plot_mmax_data(self, plot_item, channel_idx, method, raw_data_dict):
         """Plot M-max data for a specific channel."""

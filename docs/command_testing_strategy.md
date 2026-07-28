@@ -193,12 +193,9 @@ def test_no_unexpected_commands():
     """Alert if new commands are added without updating tests."""
     actual_commands = set(get_all_command_classes().keys())
     unexpected = actual_commands - EXPECTED_COMMANDS
-    
+
     if unexpected:
-        pytest.fail(
-            f"New command classes detected: {unexpected}\n"
-            f"Please add them to EXPECTED_COMMANDS and create tests."
-        )
+        pytest.fail(f"New command classes detected: {unexpected}\nPlease add them to EXPECTED_COMMANDS and create tests.")
 ```
 
 This ensures:

@@ -2,10 +2,12 @@
 UI scaling utilities for handling different screen resolutions and DPI settings.
 """
 
-from typing import Tuple
+import logging
 
 from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QApplication, QWidget
+
+logger = logging.getLogger(__name__)
 
 
 class UIScaling:
@@ -94,7 +96,7 @@ class UIScaling:
 
         return max(scaled_min, min(scaled_max, percentage_width))
 
-    def get_window_geometry(self, base_width: int = 800, base_height: int = 770) -> Tuple[int, int]:
+    def get_window_geometry(self, base_width: int = 800, base_height: int = 770) -> tuple[int, int]:
         """Get optimal window size based on screen resolution."""
         screen = QApplication.instance().primaryScreen()
         if not screen:
@@ -158,7 +160,7 @@ def setup_dpi_awareness():
 
             windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_DPI_AWARE
         except Exception:
-            pass  # Fallback gracefully if not available
+            logger.exception("Failed to set DPI awareness")
 
     # Qt DPI settings
     app = QApplication.instance()
@@ -167,7 +169,7 @@ def setup_dpi_awareness():
         app.setAttribute(app.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
 
 
-def get_responsive_margins(base_margin: int = 8) -> Tuple[int, int, int, int]:
+def get_responsive_margins(base_margin: int = 8) -> tuple[int, int, int, int]:
     """Get responsive margins based on UI scaling."""
     scaled = ui_scaling.scale_size(base_margin)
     return (scaled, scaled, scaled, scaled)

@@ -23,6 +23,8 @@ from monstim_signals.core import get_source_path
 # Cache stores tuples of (path, render_w, render_h, display_w, display_h)
 _IMG_CACHE: dict[str, tuple[str, int, int, int, int]] = {}
 
+logger = logging.getLogger(__name__)
+
 
 # Persist math images in a user-specific cache directory
 def _get_cache_dir() -> Path:
@@ -105,20 +107,20 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
             fig.savefig(buf, format="png", dpi=_RENDER_DPI, transparent=True, bbox_inches="tight", pad_inches=0.01)
             png_bytes = buf.getvalue()
             out_path.write_bytes(png_bytes)
-    except Exception as e:
+    except Exception:
         # If matplotlib or fonts fail in frozen app, log and fall back.
-        logging.exception(f"Failed to save math image via matplotlib: {e}")
+        logger.exception("Failed to save math image via matplotlib")
         try:
             qimg = QImage(1, 1, QImage.Format_ARGB32)
             qimg.fill(0)  # fully transparent
             saved = qimg.save(str(out_path), "PNG")
             if saved:
-                logging.debug(f"Wrote fallback transparent image to {out_path}")
+                logger.debug(f"Wrote fallback transparent image to {out_path}")
                 png_bytes = out_path.read_bytes()
             else:
-                logging.error("Failed to save fallback QImage PNG.")
-        except Exception as ee:
-            logging.exception(f"Fallback QImage save also failed: {ee}")
+                logger.error("Failed to save fallback QImage PNG.")
+        except Exception:
+            logger.exception("Fallback QImage save also failed")
     finally:
         if fig is not None:
             fig.clear()
@@ -135,12 +137,14 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
                 loaded = img.load(str(out_path))
             except Exception:
                 loaded = False
+                logger.exception(f"Failed to load generated math PNG for tex='{tex}' from file {out_path}")
     except Exception:
         loaded = False
+        logger.exception(f"Failed to load generated math PNG for tex='{tex}' from data or file {out_path}")
 
     if not loaded:
         tex_display = f"{tex[:40]}..." if len(tex) > 40 else tex
-        logging.error(f"Failed to load generated math PNG for tex='{tex_display}' from data or file {out_path}")
+        logger.error(f"Failed to load generated math PNG for tex='{tex_display}' from data or file {out_path}")
 
     render_w, render_h = img.width(), img.height()
 
@@ -167,17 +171,19 @@ def _make_img_tag(tex: str, is_display: bool, scale: float = 1.0, dark_mode: boo
     render_fontsize = int(base_fontsize * scale)
     render_fontsize = max(8, min(72, render_fontsize))  # Clamp to reasonable range
 
-    img_path, render_w, render_h, display_w, display_h = _render_tex_to_img(tex, fontsize=render_fontsize, dark_mode=dark_mode)
+    img_path, _, _, display_w, display_h = _render_tex_to_img(tex, fontsize=render_fontsize, dark_mode=dark_mode)
 
     # Use proper file:// URI formatting for cross-platform compatibility
     # Use QUrl.fromLocalFile for reliable file:// URIs (works with frozen apps)
     try:
         img_url = QUrl.fromLocalFile(str(img_path)).toString()
     except Exception:
+        logger.exception(f"Failed to create QUrl for math image {img_path}, falling back to manual URI")
         try:
             img_url = Path(img_path).resolve().as_uri()
         except Exception:
-            img_url = f'file:///{str(img_path).replace(chr(92), "/")}'
+            logger.exception(f"Failed to create URI for math image {img_path}, using raw path")
+            img_url = f"file:///{str(img_path).replace(chr(92), '/')}"
 
     # Use the display dimensions (scaled down from high-DPI render)
     if is_display:
@@ -224,9 +230,7 @@ def _replace_math_with_placeholders(html: str) -> tuple[str, list[tuple[str, boo
     return html, math_items
 
 
-def _replace_placeholders_with_images(
-    html: str, math_items: list[tuple[str, bool]], scale: float = 1.0, dark_mode: bool = False
-) -> str:
+def _replace_placeholders_with_images(html: str, math_items: list[tuple[str, bool]], scale: float = 1.0, dark_mode: bool = False) -> str:
     """Replace math placeholders with actual image tags at the given scale."""
 
     def _sub(m):
@@ -262,7 +266,7 @@ class HelpWindow(QDialog):
         self._math_items: list[tuple[str, bool]] = []
         self._dark_mode = _is_dark_mode()  # Cache dark mode state
 
-        # Listen for application palette changes so we can update math images
+        # listen for application palette changes so we can update math images
         # if the user toggles system theme while the help window is open.
         # Use the `paletteChanged` signal when available instead of installing
         # an application event filter (avoids QObject lifetime issues).
@@ -274,7 +278,7 @@ class HelpWindow(QDialog):
                 self._app_palette_connected = True
             except Exception:
                 self._app_palette_connected = False
-                logging.error("Failed to connect paletteChanged signal on HelpWindow.")
+                logger.exception("Failed to connect paletteChanged signal on HelpWindow.")
 
         # Debounce timer for zoom - waits for user to stop scrolling
         self._zoom_timer = QTimer(self)
@@ -323,9 +327,7 @@ class HelpWindow(QDialog):
 
     def _update_html(self):
         """Update HTML with math images at current scale."""
-        final_html = _replace_placeholders_with_images(
-            self._html_template, self._math_items, self._zoom_scale, self._dark_mode
-        )
+        final_html = _replace_placeholders_with_images(self._html_template, self._math_items, self._zoom_scale, self._dark_mode)
 
         # Store scroll position (as fraction of total)
         scrollbar = self.text_browser.verticalScrollBar()
@@ -378,7 +380,7 @@ class HelpWindow(QDialog):
             # Reset pending step counter
             self._pending_zoom_steps = 0
 
-            logging.debug(f"Zoom applied: {self._zoom_scale:.2f}")
+            logger.debug(f"Zoom applied: {self._zoom_scale:.2f}")
             self._update_html()
 
     def eventFilter(self, watched, event):
@@ -388,12 +390,11 @@ class HelpWindow(QDialog):
         # intercepting Ctrl+wheel on the text browser viewport.
 
         # Then handle Ctrl+wheel for zooming inside the text browser viewport.
-        if watched is self.text_browser.viewport():
-            if event.type() == QEvent.Type.Wheel:
-                modifiers = event.modifiers()
-                if modifiers & Qt.KeyboardModifier.ControlModifier:
-                    self._update_zoom(event.angleDelta().y())
-                    return True  # Consume the event
+        if watched is self.text_browser.viewport() and event.type() == QEvent.Type.Wheel:
+            modifiers = event.modifiers()
+            if modifiers & Qt.KeyboardModifier.ControlModifier:
+                self._update_zoom(event.angleDelta().y())
+                return True  # Consume the event
 
         return super().eventFilter(watched, event)
 
@@ -404,7 +405,7 @@ class HelpWindow(QDialog):
             try:
                 app.paletteChanged.disconnect(self._on_app_palette_changed)
             except Exception:
-                logging.error("Failed to disconnect paletteChanged signal on HelpWindow close.")
+                logger.exception("Failed to disconnect paletteChanged signal on HelpWindow close.")
         return super().closeEvent(event)
 
     def _on_app_palette_changed(self):
@@ -412,7 +413,7 @@ class HelpWindow(QDialog):
         new_dark = _is_dark_mode()
         if new_dark != self._dark_mode:
             self._dark_mode = new_dark
-            logging.debug(f"Palette changed (signal), dark_mode={self._dark_mode}")
+            logger.debug(f"Palette changed (signal), dark_mode={self._dark_mode}")
             self._update_html()
 
 
@@ -430,11 +431,11 @@ def clear_math_cache():
             for p in list(_CACHE_DIR.glob("mtx_*.png")):
                 try:
                     p.unlink()
-                except Exception as e:
-                    logging.info(f"Failed to remove cache file {p}: {e}")
-            logging.info("Cleared math image cache.")
-    except Exception as e:
-        logging.info(f"Failed to clear math cache: {e}")
+                except Exception:
+                    logger.exception(f"Failed to remove cache file {p}")
+            logger.info("Cleared math image cache.")
+    except Exception:
+        logger.exception("Failed to clear math cache.")
 
 
 class AboutDialog(QWidget):

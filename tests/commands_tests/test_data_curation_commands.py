@@ -75,9 +75,7 @@ class TestDataCurationCommands:
         fake_gui.data_selection_widget.refresh()
 
         inv = CommandInvoker(fake_gui)
-        cmd = MoveDatasetCommand(
-            fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2"
-        )
+        cmd = MoveDatasetCommand(fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2")
         inv.execute(cmd)
         assert not (temp_output_dir / "Exp1" / "240101 A1 cond").exists()
         assert (temp_output_dir / "Exp2" / "240101 A1 cond").exists()
@@ -93,9 +91,7 @@ class TestDataCurationCommands:
         fake_gui.data_selection_widget.refresh()
 
         inv = CommandInvoker(fake_gui)
-        cmd = CopyDatasetCommand(
-            fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2"
-        )
+        cmd = CopyDatasetCommand(fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2")
         inv.execute(cmd)
 
         # A new folder should appear in Exp2; could be same name or suffixed with _copyN

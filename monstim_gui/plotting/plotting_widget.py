@@ -1,5 +1,7 @@
 import copy
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer
@@ -169,7 +171,7 @@ class PlotWidget(QGroupBox):
             # Deep copy to avoid later mutation
             self.last_options[self.view][plot_type] = copy.deepcopy(current_options)
         except Exception as e:
-            logging.debug(f"Failed to save current options: {e}")
+            logger.debug(f"Failed to save current options: {e}")
 
     def connect_option_change_signals(self):
         """Connect common option widget signals to save_current_options.
@@ -195,28 +197,28 @@ class PlotWidget(QGroupBox):
                 try:
                     w.method_combo.currentTextChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect method_combo signal for {w}: {e}")
+                    logger.debug(f"Failed to connect method_combo signal for {w}: {e}")
 
             # data type combo or other QComboBox children
             for cb in w.findChildren(QComboBox):
                 try:
                     cb.currentTextChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QComboBox signal for {cb}: {e}")
+                    logger.debug(f"Failed to connect QComboBox signal for {cb}: {e}")
 
             # checkboxes
             for chk in w.findChildren(QCheckBox):
                 try:
                     chk.stateChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QCheckBox signal for {chk}: {e}")
+                    logger.debug(f"Failed to connect QCheckBox signal for {chk}: {e}")
 
             # line edits
             for le in w.findChildren(QLineEdit):
                 try:
                     le.textChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QLineEdit signal for {le}: {e}")
+                    logger.debug(f"Failed to connect QLineEdit signal for {le}: {e}")
 
             # spin boxes
             for child in w.findChildren(QWidget):
@@ -224,10 +226,10 @@ class PlotWidget(QGroupBox):
                     if isinstance(child, (QSpinBox, QDoubleSpinBox)):
                         child.valueChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {child}: {e}")
+                    logger.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {child}: {e}")
 
         except Exception as e:
-            logging.debug(f"Failed to connect option change signals: {e}")
+            logger.debug(f"Failed to connect option change signals: {e}")
 
     def connect_channel_selection_updates(self):
         """Connect channel selector checkboxes to update persistent selection."""
@@ -259,7 +261,7 @@ class PlotWidget(QGroupBox):
                     # Deep copy to ensure no reference sharing
                     self.last_options[self.view][current_plot_type] = copy.deepcopy(current_options)
             except Exception as e:
-                logging.warning(f"Failed to save options for {self.view} - {current_plot_type}: {e}")
+                logger.warning(f"Failed to save options for {self.view} - {current_plot_type}: {e}")
 
         # Change to new view
         self.view = new_view
@@ -309,7 +311,7 @@ class PlotWidget(QGroupBox):
                 # Deep copy to ensure no reference sharing
                 self.last_options[self.view][previous_plot_type] = copy.deepcopy(current_options)
             except Exception as e:
-                logging.warning(f"Failed to save options for {self.view} - {previous_plot_type}: {e}")
+                logger.warning(f"Failed to save options for {self.view} - {previous_plot_type}: {e}")
 
         # Update the last plot type and refresh the options widget
         self.last_plot_type[self.view] = plot_type
@@ -353,22 +355,18 @@ class PlotWidget(QGroupBox):
 
                         self.current_option_widget.set_options(filtered_options)
                     except Exception as e:
-                        logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                        logger.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
                 else:
                     # Apply persistent channel selection even if no other saved options exist
-                    if hasattr(self, "persistent_channel_selection") and hasattr(
-                        self.current_option_widget, "channel_selector"
-                    ):
+                    if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
                         # If persistent selection is empty (first load), populate with all available channels
                         if not self.persistent_channel_selection:
                             all_channels = self.current_option_widget.channel_selector.get_selected_channels()
                             if all_channels:  # Only update if there are channels available
                                 self.persistent_channel_selection = all_channels
-                                logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                                logger.debug(f"First load: auto-selected all {len(all_channels)} channels")
                         else:
-                            self.current_option_widget.channel_selector.set_selected_channels(
-                                self.persistent_channel_selection
-                            )
+                            self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
                 # Connect channel selection updates for real-time persistence
                 self.connect_channel_selection_updates()
@@ -383,7 +381,7 @@ class PlotWidget(QGroupBox):
                     self.current_option_widget.recording_cycler.reset_max_recordings()
 
         except AttributeError as e:
-            logging.warning(f"Error refreshing plot options widget: {e}", exc_info=True)
+            logger.warning(f"Error refreshing plot options widget: {e}", exc_info=True)
 
     def update_plot_types(self):
         self.plot_type_combo.blockSignals(True)
@@ -426,7 +424,7 @@ class PlotWidget(QGroupBox):
 
                     self.current_option_widget.set_options(filtered_options)
                 except Exception as e:
-                    logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                    logger.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
             else:
                 # Apply persistent channel selection even if no other saved options exist
                 if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
@@ -435,7 +433,7 @@ class PlotWidget(QGroupBox):
                         all_channels = self.current_option_widget.channel_selector.get_selected_channels()
                         if all_channels:  # Only update if there are channels available
                             self.persistent_channel_selection = all_channels
-                            logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                            logger.debug(f"First load: auto-selected all {len(all_channels)} channels")
                     else:
                         self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 

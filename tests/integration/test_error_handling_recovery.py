@@ -8,6 +8,8 @@ patterns, repository failures, data corruption scenarios, and recovery mechanism
 
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 import shutil
 import tempfile
 from pathlib import Path
@@ -273,7 +275,7 @@ class TestGracefulDegradationScenarios:
             assert loaded_session is not None
         except Exception as e:
             # Acceptable if the corruption is too severe
-            logging.info(f"Acceptable graceful failure: {e}")
+            logger.info(f"Acceptable graceful failure: {e}")
         finally:
             if loaded_session is not None:
                 loaded_session.close()
@@ -471,9 +473,7 @@ class TestSystemResilienceUnderFailureConditions:
                 assert "space" in str(e).lower() or "device" in str(e).lower()
 
                 # Recovery guidance should be provided
-                recovery_msg = (
-                    "Insufficient disk space. Please free up space and try again, " "or select a different output location."
-                )
+                recovery_msg = "Insufficient disk space. Please free up space and try again, or select a different output location."
                 assert "disk space" in recovery_msg.lower()
                 assert "free up space" in recovery_msg.lower()
 
@@ -812,7 +812,7 @@ class TestMemoryAndResourceManagement:
                 return "completed"
             except Exception as e:
                 # Log error but don't crash
-                logging.error(f"Worker error: {e}")
+                logger.error(f"Worker error: {e}")
                 return None
 
         try:
@@ -828,7 +828,7 @@ class TestMemoryAndResourceManagement:
 
                 # Check if thread completed properly
                 if thread.is_alive():
-                    logging.warning("Thread did not complete within timeout")
+                    logger.warning("Thread did not complete within timeout")
 
         except RuntimeError as e:
             # Thread creation errors should be handled gracefully
@@ -839,7 +839,7 @@ class TestMemoryAndResourceManagement:
             for thread in threads:
                 if thread.is_alive():
                     # In real implementation, would use proper cleanup
-                    logging.warning("Thread still alive during cleanup")
+                    logger.warning("Thread still alive during cleanup")
 
 
 # Ensure proper cleanup after all tests

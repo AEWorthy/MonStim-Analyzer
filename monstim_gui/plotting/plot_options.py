@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIntValidator
@@ -19,6 +19,8 @@ from monstim_gui.core.responsive_widgets import ResponsiveComboBox
 from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
 
 from .plotting_cycler import RecordingCyclerWidget
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
@@ -90,7 +92,7 @@ class ChannelSelectorWidget(QGroupBox):
         # Set size policy to make it as compact as possible
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.checkboxes: List[QCheckBox] = []
+        self.checkboxes: list[QCheckBox] = []
 
         # Hide the widget if there are no channels to avoid taking up space
         if max_ch == 0:
@@ -110,10 +112,10 @@ class ChannelSelectorWidget(QGroupBox):
 
         self.setLayout(grid)
 
-    def get_selected_channels(self) -> List[int]:
+    def get_selected_channels(self) -> list[int]:
         return [i for i, cb in enumerate(self.checkboxes) if cb.isChecked()]
 
-    def set_selected_channels(self, selected: List[int]):
+    def set_selected_channels(self, selected: list[int]):
         for i, cb in enumerate(self.checkboxes):
             if cb.isEnabled():
                 cb.setChecked(i in selected)
@@ -298,9 +300,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
         self.relative_to_mmax_checkbox.setChecked(True)
 
@@ -361,9 +361,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
@@ -464,7 +462,7 @@ class LatencyWindowDistributionOptions(BasePlotOptions):
                 self.bins_spin.setValue(int(options["bins"]))
             except Exception as e:
                 # If bins value is invalid, log the error and set to default (30)
-                logging.warning(f"Invalid bins value in set_options: {options.get('bins')!r} ({e}) - using default 30")
+                logger.warning(f"Invalid bins value in set_options: {options.get('bins')!r} ({e}) - using default 30")
                 self.bins_spin.setValue(30)
         if "density" in options:
             self.density_checkbox.setChecked(bool(options["density"]))
@@ -484,9 +482,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         self.interactive_cursor_checkbox = QCheckBox()
@@ -591,17 +587,13 @@ class MaxHReflexOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
         self.relative_to_mmax_checkbox.setChecked(False)
 
         self.max_stim_value = FloatLineEdit(default_value=10.0)
         self.max_stim_value.setPlaceholderText("(float)")
-        self.max_stim_value.setToolTip(
-            "Maximum value of the stimulus (in V) that will be used to calculate the average reflex amplitudes."
-        )
+        self.max_stim_value.setToolTip("Maximum value of the stimulus (in V) that will be used to calculate the average reflex amplitudes.")
         self.max_stim_value.setMaximumWidth(80)
         form.addRow("Max Stimulus Value:", self.max_stim_value)
 

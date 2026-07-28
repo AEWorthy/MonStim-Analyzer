@@ -176,6 +176,7 @@ python tools/settings_manager.py inspect
 **Fix**: If tracking is disabled, enable it in application preferences or manually:
 ```python
 from monstim_gui.core.application_state import app_state
+
 app_state.set_setting("track_session_restoration", True)
 ```
 

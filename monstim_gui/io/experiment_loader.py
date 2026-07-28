@@ -13,6 +13,8 @@ from monstim_gui.core.application_state import app_state
 # Post-load migrations can be initiated separately in a background task.
 from monstim_signals.io.repositories import ExperimentRepository
 
+logger = logging.getLogger(__name__)
+
 
 class DatasetSkipLogHandler(logging.Handler):
     """Logging handler to capture dataset skip warnings during load."""
@@ -54,7 +56,7 @@ class ExperimentLoadingThread(QThread):
 
     def request_cancel(self):
         """Request graceful cancellation of the loading operation."""
-        logging.info("Cancellation requested for experiment loading thread")
+        logger.info("Cancellation requested for experiment loading thread")
         self._cancel_requested = True
 
     def _analyze_load_requirements(self, exp_path: Path) -> tuple[bool, int, int]:
@@ -101,7 +103,7 @@ class ExperimentLoadingThread(QThread):
             return is_first_load, expected_annotations, missing_annotations
 
         except Exception as e:
-            logging.warning(f"Error analyzing load requirements: {e}")
+            logger.warning(f"Error analyzing load requirements: {e}")
             return True, 0, 0  # Assume first load if analysis fails
 
     def _count_files_to_load(self, exp_path: Path) -> int:
@@ -118,7 +120,7 @@ class ExperimentLoadingThread(QThread):
             return file_count
 
         except Exception as e:
-            logging.debug(f"Error counting files: {e}")
+            logger.debug(f"Error counting files: {e}")
             return 0
 
     def run(self):
@@ -130,7 +132,7 @@ class ExperimentLoadingThread(QThread):
         root_logger.addHandler(skip_handler)
 
         try:
-            logging.debug(f"Starting async load of experiment: '{self.experiment_name}'")
+            logger.debug(f"Starting async load of experiment: '{self.experiment_name}'")
             self.status_update.emit(f"Loading experiment: '{self.experiment_name}'")
 
             # Check if path exists
@@ -143,7 +145,7 @@ class ExperimentLoadingThread(QThread):
 
             # Check for cancellation early
             if self._cancel_requested:
-                logging.info("Loading canceled before analysis")
+                logger.info("Loading canceled before analysis")
                 return
 
             self.progress.emit(10)
@@ -155,23 +157,25 @@ class ExperimentLoadingThread(QThread):
 
             files_to_load = self._count_files_to_load(exp_path)
 
-            logging.debug(
-                f"First load: {is_first_load}, Total files: {files_to_load}, Total Annotations Required: {annotations_required}, Missing annotations: {missing_annotations}"
+            logger.debug(
+                f"First load: {is_first_load}, Total files: {files_to_load}, Total Annotations Required: {annotations_required}, "
+                f"Missing annotations: {missing_annotations}"
             )
 
             # Provide appropriate time estimates in logging
             if is_first_load:
                 estimated_time = int(missing_annotations / 100 * 60)  # Rough estimate: 100 files per minute
                 self._estimated_time = estimated_time
-                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created. Estimated time: {estimated_time} seconds for {annotations_required} annotations."
-                logging.info(time_msg)
+                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created. "
+                f"Estimated time: {estimated_time} seconds for {annotations_required} annotations."
+                logger.info(time_msg)
             elif files_to_load > 5000:
                 time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
-                logging.info(time_msg)
+                logger.info(time_msg)
 
             # Check for cancellation before repository creation
             if self._cancel_requested:
-                logging.info("Loading canceled before repository creation")
+                logger.info("Loading canceled before repository creation")
                 return
 
             # Create repository
@@ -181,12 +185,12 @@ class ExperimentLoadingThread(QThread):
             # This is the slow part - the actual repo.load() call
             if is_first_load:
                 self.status_update.emit(
-                    f"First-time load detected for '{self.experiment_name}'.\n\nCreating {missing_annotations} annotation files and building indexes.\nEstimated time: {estimated_time} seconds."
+                    f"First-time load detected for '{self.experiment_name}'."
+                    f"\n\nCreating {missing_annotations} annotation files and building indexes."
+                    f"\nEstimated time: {estimated_time} seconds."
                 )
             elif files_to_load > 5000:
-                self.status_update.emit(
-                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found."
-                )
+                self.status_update.emit(f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found.")
             else:
                 self.status_update.emit(f"Loading '{self.experiment_name}'...")
             self.progress.emit(20)
@@ -202,7 +206,7 @@ class ExperimentLoadingThread(QThread):
 
                 # Check cancellation in callback - do this FIRST before any processing
                 if self._cancel_requested:
-                    logging.info("Progress callback detected cancellation flag")
+                    logger.info("Progress callback detected cancellation flag")
                     raise InterruptedError("Loading canceled by user")
 
                 if level == "dataset" and total > 0:
@@ -230,7 +234,7 @@ class ExperimentLoadingThread(QThread):
                         self.status_update.emit(f"Building index {index}/{total}:\n'{name}'")
                     except Exception as exc:
                         # Progress UI failures must not abort experiment loading; log for diagnostics.
-                        logging.debug("Non-fatal error while updating index progress: %s", exc)
+                        logger.debug("Non-fatal error while updating index progress: %s", exc)
 
             # Show a distinct "Indexing..." step only when needed and requested
             needs_index = False
@@ -252,7 +256,7 @@ class ExperimentLoadingThread(QThread):
                 try:
                     ensure_fresh_index(self.experiment_name, exp_path, progress_cb=_progress_cb)
                 except Exception as exc:
-                    logging.warning("Index build failed before load; continuing without index: %s", exc)
+                    logger.warning("Index build failed before load; continuing without index: %s", exc)
 
             # Overlay application preferences (QSettings) for loading:
             cfg = dict(self.config or {})
@@ -276,7 +280,7 @@ class ExperimentLoadingThread(QThread):
 
             # Check for cancellation before starting the actual load
             if self._cancel_requested:
-                logging.info("Loading canceled before repo.load()")
+                logger.info("Loading canceled before repo.load()")
                 return
 
             try:
@@ -287,17 +291,17 @@ class ExperimentLoadingThread(QThread):
                 )
             except InterruptedError as e:
                 # Graceful cancellation from progress callback
-                logging.info(f"Loading interrupted: {e}")
+                logger.info(f"Loading interrupted: {e}")
                 self.status_update.emit("Loading canceled by user...")
                 return
 
             # Check for cancellation after load completes
             if self._cancel_requested:
-                logging.info("Loading canceled after repo.load()")
+                logger.info("Loading canceled after repo.load()")
                 try:
                     experiment.close()
                 except Exception:
-                    logging.debug("Failed to close experiment after canceled load", exc_info=True)
+                    logger.debug("Failed to close experiment after canceled load", exc_info=True)
                 return
 
             self.progress.emit(90)
@@ -309,7 +313,7 @@ class ExperimentLoadingThread(QThread):
 
             if loaded_datasets < expected_datasets:
                 skipped = expected_datasets - loaded_datasets
-                logging.warning(
+                logger.warning(
                     f"{skipped} dataset(s) could not be loaded from '{self.experiment_name}'. "
                     f"Check the log for details about validation errors or data inconsistencies."
                 )
@@ -319,24 +323,25 @@ class ExperimentLoadingThread(QThread):
                     self.datasets_skipped.emit(self._skipped_datasets)
 
             self.progress.emit(100)
-            logging.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
+            logger.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
             self.finished.emit(experiment)
 
         except OSError as e:
             if "Too many open files" in str(e):
-                error_msg = f"Too many files open while loading experiment '{self.experiment_name}'. This experiment may be too large or have corrupted files. Try closing other applications and retry."
+                error_msg = f"Too many files open while loading experiment '{self.experiment_name}'. "
+                error_msg += "This experiment may be too large or have corrupted files. Try closing other applications and retry."
             else:
                 error_msg = f"File system error while loading experiment '{self.experiment_name}': {e}"
-            logging.error(error_msg)
+            logger.error(error_msg)
             self.error.emit(error_msg)
         except FileNotFoundError as e:
             error_msg = f"Experiment file not found or corrupted: {e}"
-            logging.error(error_msg)
+            logger.error(error_msg)
             self.error.emit(error_msg)
         except Exception as e:
             error_msg = f"An error occurred while loading experiment '{self.experiment_name}': {e}"
-            logging.error(error_msg)
-            logging.error(traceback.format_exc())
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
             self.error.emit(error_msg)
         finally:
             # Clean up logging handler
@@ -344,12 +349,12 @@ class ExperimentLoadingThread(QThread):
 
             # If cancellation was requested, ensure cleanup
             if self._cancel_requested:
-                logging.debug("Performing cleanup after canceled load")
+                logger.debug("Performing cleanup after canceled load")
                 try:
                     # Force garbage collection to clean up any partially loaded objects
                     import gc
 
                     collected = gc.collect()
-                    logging.debug(f"Post-cancellation cleanup: collected {collected} objects")
+                    logger.debug(f"Post-cancellation cleanup: collected {collected} objects")
                 except Exception as cleanup_error:
-                    logging.warning(f"Error during post-cancellation cleanup: {cleanup_error}")
+                    logger.warning(f"Error during post-cancellation cleanup: {cleanup_error}")

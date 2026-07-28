@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -20,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 # TODO: Fix filter dialog to align with valid search terms and keys. May require revamping the data curation search system.
+logger = logging.getLogger(__name__)
 
 
 class FilterDialog(QDialog):
@@ -34,13 +34,13 @@ class FilterDialog(QDialog):
     - Builds a tokenized query string suitable for the manager's `_apply_filter` method.
     """
 
-    def __init__(self, qualifiers: List[Tuple[str, str]], terms_by_key: Dict[str, Dict[str, int]], parent=None):
+    def __init__(self, qualifiers: list[tuple[str, str]], terms_by_key: dict[str, dict[str, int]], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Filter Builder")
         self.resize(560, 500)
         self._qualifiers = qualifiers
         self._terms_by_key = terms_by_key or {}
-        self._checkboxes: Dict[str, List[QCheckBox]] = {}
+        self._checkboxes: dict[str, list[QCheckBox]] = {}
 
         main = QVBoxLayout(self)
         main.setContentsMargins(10, 10, 10, 10)
@@ -74,7 +74,7 @@ class FilterDialog(QDialog):
             vbox = QVBoxLayout()
             vbox.setContentsMargins(6, 6, 6, 6)
             vbox.setSpacing(4)
-            boxes: List[QCheckBox] = []
+            boxes: list[QCheckBox] = []
             for v in values:
                 count = values_map.get(v, 0)
                 label_text = f"{v} ({count})" if v else f"(empty) ({count})"
@@ -138,12 +138,12 @@ class FilterDialog(QDialog):
                     cb.setChecked(False)
             self.free_text.clear()
         except Exception:
-            pass
+            logger.exception("Failed to clear filter dialog checkboxes and free-text field")
 
     def _apply(self):
         """Build a query string like 'animal:WT cond:rev-light "extra phrase" foxp2' and accept."""
         try:
-            tokens: List[str] = []
+            tokens: list[str] = []
             for key, _label in self._qualifiers:
                 for cb in self._checkboxes.get(key, []):
                     if cb.isChecked():
@@ -163,8 +163,8 @@ class FilterDialog(QDialog):
             if extra:
                 tokens.append(extra)
             self._result_query = " ".join(tokens).strip()
-        except Exception as e:
-            logging.error(f"Failed to build filter tokens: {e}")
+        except Exception:
+            logger.exception("Failed to build filter tokens")
             self._result_query = ""
         self.accept()
 

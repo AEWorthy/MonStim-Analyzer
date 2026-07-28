@@ -222,9 +222,7 @@ def test_session_load_uses_index_sorting(tmp_path):
     sorted_stim_values = [r.primary_stim_v for r in sorted_by_index]
 
     # Verify the index-based sorting produces correct order
-    assert sorted_stim_values == sorted(
-        stim_values
-    ), f"Index-based sorting incorrect: {sorted_stim_values} != {sorted(stim_values)}"
+    assert sorted_stim_values == sorted(stim_values), f"Index-based sorting incorrect: {sorted_stim_values} != {sorted(stim_values)}"
 
 
 def test_index_handles_missing_metadata_gracefully(tmp_path):

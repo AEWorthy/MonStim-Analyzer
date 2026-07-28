@@ -27,7 +27,7 @@ __all__ = [
     "CustomYAMLLoader",
 ]
 
-from .data_models import (  # Factory and utility methods; (from grep: create_empty, from_dict, from_meta, from_ds_name, get_legend_element, end_times)
+from .data_models import (  # Factory and utility methods
     DatasetAnnot,
     ExperimentAnnot,
     LatencyWindow,

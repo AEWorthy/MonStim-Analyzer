@@ -38,7 +38,8 @@ class ReportsWidget(QGroupBox):
             (
                 "M-max Report (RMS)",
                 self.parent.report_manager.show_mmax_report,
-                "Generate a report for the currently selected data level's M-max analysis including RMS values, plateau detection results, and normalization data",
+                "Generate a report for the currently selected data level's M-max analysis including RMS values, "
+                "plateau detection results, and normalization data",
             ),
             # Add new buttons here as tuples in the format:
             # ("Button Label", callback_function, "Tooltip text").

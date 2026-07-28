@@ -261,9 +261,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument(
-        "command", choices=["inspect", "version", "migrate", "clear", "backup", "restore"], help="Command to execute"
-    )
+    parser.add_argument("command", choices=["inspect", "version", "migrate", "clear", "backup", "restore"], help="Command to execute")
     parser.add_argument("--file", help="File path for backup/restore operations")
     parser.add_argument("--force", action="store_true", help="Skip confirmation prompts")
 

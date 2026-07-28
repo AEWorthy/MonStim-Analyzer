@@ -39,7 +39,6 @@ class TestSessionAnnotationOverlay:
     def test_exclude_and_restore_recording(self, temp_copied_session: Path):
         session = SessionRepository(temp_copied_session).load()
         try:
-
             # Precondition: at least one recording
             assert session.num_recordings > 0
             all_recs = session.get_all_recordings(include_excluded=True)
@@ -67,7 +66,6 @@ class TestSessionAnnotationOverlay:
     def test_channel_rename_persists_in_overlay(self, temp_copied_session: Path):
         session = SessionRepository(temp_copied_session).load()
         try:
-
             orig_names = list(session.channel_names)
             # Map each name to name+'_x'
             mapping = {name: f"{name}_x" for name in orig_names}
@@ -91,7 +89,6 @@ class TestSessionAnnotationOverlay:
     def test_add_and_remove_latency_window(self, temp_copied_session: Path):
         session = SessionRepository(temp_copied_session).load()
         try:
-
             n_channels = session.num_channels
             assert n_channels > 0
 
@@ -153,18 +150,14 @@ class TestSessionAnnotationOverlay:
         # (This would fail before the fix, when auto-exclusion was happening)
         dataset = DatasetRepository(dataset_path).load()  # Reload to get fresh state
         try:
-            assert (
-                session_id not in dataset.annot.excluded_sessions
-            ), "Session should NOT be auto-excluded when all recordings are excluded"
+            assert session_id not in dataset.annot.excluded_sessions, "Session should NOT be auto-excluded when all recordings are excluded"
         finally:
             dataset.close()
 
         # The session object itself remains valid even with no active recordings
         session = SessionRepository(temp_copied_session).load()
         try:
-            assert len(session.all_recordings) == len(
-                recording_ids
-            ), "Session should still have all recordings (just excluded)"
+            assert len(session.all_recordings) == len(recording_ids), "Session should still have all recordings (just excluded)"
             assert len(session.recordings) == 0, "But no active recordings should remain"
         finally:
             session.close()

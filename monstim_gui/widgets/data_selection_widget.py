@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
+logger = logging.getLogger(__name__)
+
 
 class CircleDelegate(QStyledItemDelegate):
     """
@@ -123,9 +125,7 @@ class DataSelectionWidget(QGroupBox):
             lab.setMaximumWidth(16)
             lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lab.setToolTip("")
-            lab.setStyleSheet(
-                f"QLabel#{name} {{ color: #e0b000; font-weight: bold; }}"
-            )  # Base style (color adjusted dynamically in update)
+            lab.setStyleSheet(f"QLabel#{name} {{ color: #e0b000; font-weight: bold; }}")  # Base style (color adjusted dynamically in update)
             return lab
 
         self.experiment_notice_label = _make_notice("experimentNotice")
@@ -166,9 +166,7 @@ class DataSelectionWidget(QGroupBox):
         btn_layout.setSpacing(4)
 
         self.manage_recordings_button = QPushButton("Manage Recordings")
-        self.manage_recordings_button.setToolTip(
-            "Open the recording exclusion editor to manage which recordings are included in analysis"
-        )
+        self.manage_recordings_button.setToolTip("Open the recording exclusion editor to manage which recordings are included in analysis")
         self.manage_recordings_button.clicked.connect(self._on_manage_recordings_clicked)
         self.manage_recordings_button.setEnabled(False)
         btn_layout.addWidget(self.manage_recordings_button)
@@ -314,9 +312,7 @@ class DataSelectionWidget(QGroupBox):
                     and data_manager.loading_thread.isRunning()
                 ):
                     self.dataset_combo.addItem("-- Loading Experiment --")
-                    self.dataset_combo.setItemData(
-                        0, "Please wait while experiment loads...", role=Qt.ItemDataRole.ToolTipRole
-                    )
+                    self.dataset_combo.setItemData(0, "Please wait while experiment loads...", role=Qt.ItemDataRole.ToolTipRole)
                     self.dataset_combo.setEnabled(False)
                 elif parent.current_experiment:
                     if parent.current_experiment.datasets:
@@ -366,9 +362,7 @@ class DataSelectionWidget(QGroupBox):
                 else:
                     if parent.current_experiment and len(parent.current_experiment) == 0:
                         self.session_combo.addItem("-- Empty Experiment --")
-                        self.session_combo.setItemData(
-                            0, "This experiment contains no datasets", role=Qt.ItemDataRole.ToolTipRole
-                        )
+                        self.session_combo.setItemData(0, "This experiment contains no datasets", role=Qt.ItemDataRole.ToolTipRole)
                     else:
                         self.session_combo.addItem("-- No Dataset Selected --")
                         self.session_combo.setItemData(0, "Please select a dataset first", role=Qt.ItemDataRole.ToolTipRole)
@@ -483,9 +477,7 @@ class DataSelectionWidget(QGroupBox):
         if global_pos is None:
             # If we can't map the position from the sender or combo, fall back to the current cursor position
             global_pos = QCursor.pos()
-            logging.warning(
-                "Could not determine context menu position from sender nor combo box; falling back to cursor position"
-            )
+            logger.warning("Could not determine context menu position from sender nor combo box; falling back to cursor position")
 
         selected = menu.exec(global_pos)
 
@@ -570,9 +562,7 @@ class DataSelectionWidget(QGroupBox):
                             exp_path = Path(self.parent.expts_dict[expt_id])
                             repo = ExperimentRepository(exp_path)
                             meta = repo.get_metadata()
-                            self.experiment_combo.setItemData(
-                                i, bool(meta.get("is_completed", False)), Qt.ItemDataRole.UserRole + 1
-                            )
+                            self.experiment_combo.setItemData(i, bool(meta.get("is_completed", False)), Qt.ItemDataRole.UserRole + 1)
                         except Exception:
                             # If metadata not available, clear status (no circle)
                             self.experiment_combo.setItemData(i, None, Qt.ItemDataRole.UserRole + 1)
@@ -582,11 +572,7 @@ class DataSelectionWidget(QGroupBox):
 
         # Datasets
         try:
-            if (
-                self.parent.current_experiment
-                and getattr(self.parent.current_experiment, "datasets", None)
-                and self.dataset_combo.isEnabled()
-            ):
+            if self.parent.current_experiment and getattr(self.parent.current_experiment, "datasets", None) and self.dataset_combo.isEnabled():
                 datasets = self.parent.current_experiment.datasets
                 # The dataset combo, when enabled, contains only dataset items (no placeholder)
                 for i, ds in enumerate(datasets):
@@ -598,11 +584,7 @@ class DataSelectionWidget(QGroupBox):
 
         # Sessions
         try:
-            if (
-                self.parent.current_dataset
-                and getattr(self.parent.current_dataset, "sessions", None)
-                and self.session_combo.isEnabled()
-            ):
+            if self.parent.current_dataset and getattr(self.parent.current_dataset, "sessions", None) and self.session_combo.isEnabled():
                 sessions = self.parent.current_dataset.sessions
                 for i, s in enumerate(sessions):
                     if i < self.session_combo.count():
@@ -639,7 +621,7 @@ class DataSelectionWidget(QGroupBox):
 
         # Check if we have experiments available
         if not self.parent.expts_dict_keys or index > len(self.parent.expts_dict_keys):
-            logging.warning(f"Invalid experiment index: {index}")
+            logger.warning(f"Invalid experiment index: {index}")
             return
 
         # Adjust index to account for placeholder item
@@ -783,15 +765,15 @@ class DataSelectionWidget(QGroupBox):
                     self.refresh()
 
         except ImportError as e:
-            logging.error(f"Failed to import Data Curation Manager: {e}")
+            logger.error(f"Failed to import Data Curation Manager: {e}")
             from PySide6.QtWidgets import QMessageBox
 
             QMessageBox.warning(self, "Error", "Data Curation Manager is not available.")
         except Exception as e:
-            logging.error(f"Failed to open data curation manager: {e}")
+            logger.error(f"Failed to open data curation manager: {e}")
             from PySide6.QtWidgets import QMessageBox
 
-            QMessageBox.warning(self, "Error", f"Failed to open data manager:\n{str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to open data manager:\n{e!s}")
 
     def sync_combo_selections(self):
         """Synchronize combo box selections with current objects without rebuilding them."""
@@ -808,10 +790,10 @@ class DataSelectionWidget(QGroupBox):
                     self.experiment_combo.blockSignals(False)
             except ValueError:
                 # Experiment not found in list - set to placeholder
-                logging.warning("Current experiment not found in combo list. Refreshing Data Selection Widget.")
+                logger.warning("Current experiment not found in combo list. Refreshing Data Selection Widget.")
                 self.refresh()
         else:
-            logging.warning("No current experiment to sync. Refreshing Data Selection Widget.")
+            logger.warning("No current experiment to sync. Refreshing Data Selection Widget.")
             self.refresh()
 
         # Sync dataset combo (should rarely be needed for recording operations)
@@ -823,22 +805,22 @@ class DataSelectionWidget(QGroupBox):
                     self.dataset_combo.setCurrentIndex(dataset_index)
                     self.dataset_combo.blockSignals(False)
             except ValueError:
-                logging.warning("Current dataset not found in combo list. Selecting first available dataset.")
+                logger.warning("Current dataset not found in combo list. Selecting first available dataset.")
                 if self.parent.current_experiment.datasets:
                     self.dataset_combo.blockSignals(True)
                     self.dataset_combo.setCurrentIndex(0)
                     self.dataset_combo.blockSignals(False)
                 else:
-                    logging.warning("Current experiment has no datasets. Refreshing Data Selection Widget.")
+                    logger.warning("Current experiment has no datasets. Refreshing Data Selection Widget.")
                     self.refresh()
         else:
-            logging.warning("No current dataset to sync. Selecting first available dataset if possible.")
+            logger.warning("No current dataset to sync. Selecting first available dataset if possible.")
             if self.parent.current_experiment and self.parent.current_experiment.datasets:
                 self.dataset_combo.blockSignals(True)
                 self.dataset_combo.setCurrentIndex(0)
                 self.dataset_combo.blockSignals(False)
             else:
-                logging.warning("No current experiment or datasets. Refreshing Data Selection Widget.")
+                logger.warning("No current experiment or datasets. Refreshing Data Selection Widget.")
                 self.refresh()
 
         # Sync session combo (should rarely be needed for recording operations)
@@ -850,22 +832,22 @@ class DataSelectionWidget(QGroupBox):
                     self.session_combo.setCurrentIndex(session_index)
                     self.session_combo.blockSignals(False)
             except ValueError:
-                logging.warning("Current session not found in combo list. Selecting first available session.")
+                logger.warning("Current session not found in combo list. Selecting first available session.")
                 if self.parent.current_dataset.sessions:
                     self.session_combo.blockSignals(True)
                     self.session_combo.setCurrentIndex(0)
                     self.session_combo.blockSignals(False)
                 else:
-                    logging.warning("Current dataset has no sessions. Refreshing Data Selection Widget.")
+                    logger.warning("Current dataset has no sessions. Refreshing Data Selection Widget.")
                     self.refresh()
         else:
-            logging.warning("No current session to sync. Selecting first available session if possible.")
+            logger.warning("No current session to sync. Selecting first available session if possible.")
             if self.parent.current_dataset and self.parent.current_dataset.sessions:
                 self.session_combo.blockSignals(True)
                 self.session_combo.setCurrentIndex(0)
                 self.session_combo.blockSignals(False)
             else:
-                logging.warning("No current dataset or sessions. Refreshing Data Selection Widget.")
+                logger.warning("No current dataset or sessions. Refreshing Data Selection Widget.")
                 self.refresh()
 
     def update_combos_and_sync(self):

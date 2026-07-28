@@ -1,5 +1,7 @@
 import copy
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer
@@ -64,13 +66,9 @@ class LatencyWindowsDialog(QDialog):
         self.data = data
         self.gui: MonstimGUI = parent
         self.setModal(False)  # Allow interaction with main window
-        self.setWindowFlags(
-            Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint
-        )  # Make it a standalone window that stays on top
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)  # Make it a standalone window that stays on top
         self.setWindowTitle("Manage Latency Windows")
-        self.window_entries = (
-            []
-        )  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, list[QDoubleSpinBox]]]
+        self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, list[QDoubleSpinBox]]]
         self.config_repo = config_repo or ConfigRepository(get_config_path())
         self.init_ui()
         self._reposition_to_left_middle_of_parent()
@@ -174,16 +172,12 @@ class LatencyWindowsDialog(QDialog):
         layout.addLayout(action_row)
 
         button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel
-            | QDialogButtonBox.StandardButton.Apply,
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Apply,
             self,
         )
         button_box.button(QDialogButtonBox.StandardButton.Ok).setToolTip("Save all changes and close the dialog")
         button_box.button(QDialogButtonBox.StandardButton.Cancel).setToolTip("Discard all changes and close the dialog")
-        button_box.button(QDialogButtonBox.StandardButton.Apply).setToolTip(
-            "Save changes and update plots, but keep dialog open"
-        )
+        button_box.button(QDialogButtonBox.StandardButton.Apply).setToolTip("Save changes and update plots, but keep dialog open")
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
         button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
@@ -193,7 +187,7 @@ class LatencyWindowsDialog(QDialog):
         num_channels = len(self.data.channel_names)
         if window is None:
             window = LatencyWindow(
-                name=f"Window {len(self.window_entries)+1}",
+                name=f"Window {len(self.window_entries) + 1}",
                 start_times=[0.0] * num_channels,
                 durations=[1.0] * num_channels,
                 color="black",
@@ -689,7 +683,7 @@ class LatencyWindowsDialog(QDialog):
         else:
             level = "session"
 
-        logging.info(f"Setting latency windows for {level}: {self.data.id}")
+        logger.info(f"Setting latency windows for {level}: {self.data.id}")
         command = SetLatencyWindowsCommand(self.gui, level, new_windows)
         self.gui.command_invoker.execute(command)
 
@@ -755,7 +749,7 @@ class LatencyWindowsDialog(QDialog):
         else:
             level = "session"
 
-        logging.info(f"Setting latency windows for {level}: {self.data.id}")
+        logger.info(f"Setting latency windows for {level}: {self.data.id}")
         command = SetLatencyWindowsCommand(self.gui, level, new_windows)
         self.gui.command_invoker.execute(command)
 

@@ -21,7 +21,6 @@ def test_experiment_parallel_load(tmp_path: Path):
     repo = ExperimentRepository(exp)
     expt = repo.load(config=cfg)
     try:
-
         assert expt is not None
         assert len(expt.datasets) == 2
 

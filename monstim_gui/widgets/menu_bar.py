@@ -34,7 +34,7 @@ class MenuBar(QMenuBar):
         file_menu.addSeparator()
 
         # refresh existing datasets button
-        refresh_datasets_action = file_menu.addAction("Refresh Experiments List")
+        refresh_datasets_action = file_menu.addAction("Refresh Experiments list")
         refresh_datasets_action.triggered.connect(self._refresh_experiments_list)
         refresh_datasets_action.setShortcut(QKeySequence.StandardKey.Refresh)
 
@@ -185,7 +185,8 @@ class MenuBar(QMenuBar):
         reply = QMessageBox.warning(
             self,
             "Confirm Reload",
-            "Are you sure you want to restore the current session to its original state?\n\nNote: This will add back any recordings that were removed.",
+            "Are you sure you want to restore the current session to its original state?"
+            "\n\nNote: This will add back any recordings that were removed.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -196,7 +197,8 @@ class MenuBar(QMenuBar):
         reply = QMessageBox.warning(
             self,
             "Confirm Reload",
-            "Are you sure you want to restore the current dataset to its original state?\n\nNote: This will add back any sessions/recordings that were removed.",
+            "Are you sure you want to restore the current dataset to its original state?"
+            "\n\nNote: This will add back any sessions/recordings that were removed.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -207,7 +209,9 @@ class MenuBar(QMenuBar):
         reply = QMessageBox.warning(
             self,
             "Confirm Reload",
-            "Are you sure you want to restore the current experiment to its original state?\n\nNote: THIS ACTION IS NOT REVERSIBLE. This will add back any datasets/sessions/recordings that were removed and will completely reset any changes you made to the data contained within this experiment.",
+            "Are you sure you want to restore the current experiment to its original state?\n\nNote: THIS ACTION IS NOT REVERSIBLE. "
+            "This will add back any datasets/sessions/recordings that were removed and will completely reset any changes you made to "
+            "the data contained within this experiment.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -290,7 +294,7 @@ class MenuBar(QMenuBar):
             QMessageBox.critical(
                 self.parent,
                 "Error",
-                f"Failed to open recording exclusion editor:\n{str(e)}",
+                f"Failed to open recording exclusion editor:\n{e!s}",
             )
 
     def _refresh_experiments_list(self):
@@ -348,5 +352,5 @@ class MenuBar(QMenuBar):
             QMessageBox.critical(
                 self.parent,
                 "Error",
-                f"Failed to open data curation manager:\n{str(e)}",
+                f"Failed to open data curation manager:\n{e!s}",
             )

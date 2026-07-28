@@ -4,6 +4,8 @@ from PySide6.QtWidgets import QMessageBox
 
 from monstim_signals.core import format_report
 
+logger = logging.getLogger(__name__)
+
 
 class ReportManager:
     """Show various reports for the current selection."""
@@ -12,7 +14,7 @@ class ReportManager:
         self.gui = gui
 
     def show_session_report(self):
-        logging.debug("Showing session parameters report.")
+        logger.debug("Showing session parameters report.")
         if self.gui.current_session:
             from ..dialogs import CopyableReportDialog
 
@@ -24,7 +26,7 @@ class ReportManager:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
 
     def show_dataset_report(self):
-        logging.debug("Showing dataset parameters report.")
+        logger.debug("Showing dataset parameters report.")
         if self.gui.current_dataset:
             from ..dialogs import CopyableReportDialog
 
@@ -36,7 +38,7 @@ class ReportManager:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
     def show_experiment_report(self):
-        logging.debug("Showing experiment parameters report.")
+        logger.debug("Showing experiment parameters report.")
         if self.gui.current_experiment:
             from ..dialogs import CopyableReportDialog
 
@@ -48,7 +50,7 @@ class ReportManager:
             QMessageBox.warning(self.gui, "Warning", "Please select an experiment first.")
 
     def show_mmax_report(self):
-        logging.debug("Showing M-max report.")
+        logger.debug("Showing M-max report.")
         if self.gui.current_session:
             from ..dialogs import CopyableReportDialog
 
@@ -58,7 +60,7 @@ class ReportManager:
                 dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self.gui)
                 dialog.exec()
             except ValueError as e:
-                logging.error(f"Error generating M-max report: {str(e)}")
-                QMessageBox.critical(self.gui, "Error", f"Failed to generate M-max report: {str(e)}")
+                logger.error(f"Error generating M-max report: {e!s}")
+                QMessageBox.critical(self.gui, "Error", f"Failed to generate M-max report: {e!s}")
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")

@@ -3,7 +3,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -23,7 +23,9 @@ if TYPE_CHECKING:
     from monstim_signals.io.repositories import SessionRepository
 
 
-# ──────────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+
 class Session:
     """
     A collection of multiple Recordings, each at a different stimulus amplitude,
@@ -33,16 +35,16 @@ class Session:
     def __init__(
         self,
         session_id: str,
-        recordings: List["Recording"],
+        recordings: list["Recording"],
         annot: "SessionAnnot",
-        repo: Any = None,
-        config: dict = None,
+        repo: "SessionRepository | None" = None,
+        config: dict | None = None,
     ):
         self.id: str = session_id
-        self._all_recordings: List["Recording"] = recordings
-        self.annot: "SessionAnnot" = annot
-        self.repo: "SessionRepository" = repo
-        self.parent_dataset: "Dataset | None" = None
+        self._all_recordings: list[Recording] = recordings
+        self.annot: SessionAnnot = annot
+        self.repo: SessionRepository = repo
+        self.parent_dataset: Dataset | None = None
         self._config = config
         self._load_config_settings()
 
@@ -80,7 +82,7 @@ class Session:
         self.m_max_args = _config["m_max_args"]
         self.butter_filter_args = _config["butter_filter_args"]
         self.default_method: str = _config["default_method"]
-        self.default_channel_names: List[str] = _config.get("default_channel_names", [])
+        self.default_channel_names: list[str] = _config.get("default_channel_names", [])
 
     def _load_session_parameters(self):
         # ---------- Pull session‐wide parameters from the first recording's meta ----------
@@ -91,20 +93,16 @@ class Session:
             self.scan_rate = first_meta.scan_rate  # Hz
             self.num_samples = first_meta.num_samples  # samples/channel
             self.num_channels = first_meta.num_channels  # number of channels
-            self._channel_types: List[str] = first_meta.channel_types.copy()  # list of channel types
+            self._channel_types: list[str] = first_meta.channel_types.copy()  # list of channel types
 
             # Stimulus parameters
-            self.stim_clusters: List[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
-            self.primary_stim: StimCluster = getattr(
-                first_meta, "primary_stim", None
-            )  # the primary StimCluster for this session
+            self.stim_clusters: list[StimCluster] = first_meta.stim_clusters.copy()  # list of StimCluster objects
+            self.primary_stim: StimCluster = getattr(first_meta, "primary_stim", None)  # the primary StimCluster for this session
             if self.primary_stim is None:
-                logging.warning(
-                    f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster."
-                )
+                logger.warning(f"Session {self.id} does not have a primary stimulus defined. Defaulting to the first StimCluster.")
                 self.primary_stim = self.stim_clusters[0] if self.stim_clusters else None
                 if self.primary_stim is None:
-                    logging.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
+                    logger.error(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
                     raise ValueError(f"Session {self.id} has no StimClusters defined. Cannot determine primary stimulus.")
             self.pre_stim_acquired = first_meta.pre_stim_acquired
             self.post_stim_acquired = first_meta.post_stim_acquired
@@ -113,10 +111,8 @@ class Session:
             self.stim_start: float = self.stim_delay + self.pre_stim_acquired
 
             # Parameters that may sometimes be None
-            self.recording_interval: float = getattr(
-                first_meta, "recording_interval", None
-            )  # in seconds, time between recordings (if applicable)
-            self.emg_amp_gains: List[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
+            self.recording_interval: float = getattr(first_meta, "recording_interval", None)  # in seconds, time between recordings (if applicable)
+            self.emg_amp_gains: list[int] = getattr(first_meta, "emg_amp_gains", None)  # default to 1000 if not specified
         else:
             raise ValueError(f"Session {self.id} has no recordings associated with it.")
 
@@ -125,12 +121,13 @@ class Session:
         if len(self.annot.channels) != self.num_channels:
             from monstim_signals.core import SignalChannel
 
-            logging.warning(
-                f"Session {self.id} has {len(self.annot.channels)} channels in annot, but {self.num_channels} channels in recordings. Reinitializing channel annotations."
+            logger.warning(
+                f"Session {self.id} has {len(self.annot.channels)} channels in annot, but {self.num_channels} channels in recordings."
+                " Reinitializing channel annotations."
             )
             self.annot.channels = [
                 SignalChannel(
-                    name=(self.default_channel_names[i] if i < len(self.default_channel_names) else f"Channel {i+1}"),
+                    name=(self.default_channel_names[i] if i < len(self.default_channel_names) else f"Channel {i + 1}"),
                     invert=False,
                     type_override=None,
                 )
@@ -183,7 +180,7 @@ class Session:
         return len(self.all_recordings)
 
     @property
-    def latency_windows(self) -> List[LatencyWindow]:
+    def latency_windows(self) -> list[LatencyWindow]:
         """
         Return the list of latency windows defined in the session annotations.
         """
@@ -216,9 +213,7 @@ class Session:
                 # Stim delay / start relative metrics
                 if hasattr(m, "primary_stim") and hasattr(first, "primary_stim"):
                     if m.primary_stim.stim_delay != first.primary_stim.stim_delay:
-                        warnings.append(
-                            f"Recording {rec.id} stim_delay {m.primary_stim.stim_delay} != {first.primary_stim.stim_delay}."
-                        )
+                        warnings.append(f"Recording {rec.id} stim_delay {m.primary_stim.stim_delay} != {first.primary_stim.stim_delay}.")
             # Stimulus voltage issues
             volts = [r.meta.primary_stim.stim_v for r in self.recordings if getattr(r.meta, "primary_stim", None)]
             if volts:
@@ -236,7 +231,7 @@ class Session:
             # Store for notice system
             self._consistency_warnings = warnings
             for w in warnings:
-                logging.warning(f"Session {self.id} consistency: {w}")
+                logger.warning(f"Session {self.id} consistency: {w}")
 
     # ------------------------------------------------------------------
     # Latency window helper methods
@@ -244,8 +239,8 @@ class Session:
     def add_latency_window(
         self,
         name: str,
-        start_times: List[float],
-        durations: List[float],
+        start_times: list[float],
+        durations: list[float],
         color: str | None = None,
         linestyle: str | None = None,
     ) -> None:
@@ -268,7 +263,7 @@ class Session:
 
         presets = load_config().get("latency_window_presets", {})
         if preset_name not in presets:
-            logging.warning(f"Preset '{preset_name}' not found in config.")
+            logger.warning(f"Preset '{preset_name}' not found in config.")
             return
 
         self.annot.latency_windows = []
@@ -321,7 +316,7 @@ class Session:
         return np.array([rec.meta.primary_stim.stim_v for rec in self.all_recordings])
 
     @property
-    def recordings(self) -> List[Recording]:
+    def recordings(self) -> list[Recording]:
         """
         Return a list of active recordings in the session.
         This filters out any recordings that are marked as excluded in the session annotations.
@@ -329,13 +324,13 @@ class Session:
         return self.get_all_recordings(include_excluded=False)
 
     @property
-    def all_recordings(self) -> List[Recording]:
+    def all_recordings(self) -> list[Recording]:
         """
         Return a list of all recordings in the session, including excluded ones.
         """
         return self.get_all_recordings(include_excluded=True)
 
-    def get_all_recordings(self, include_excluded: bool = False) -> List[Recording]:
+    def get_all_recordings(self, include_excluded: bool = False) -> list[Recording]:
         """
         Return a list of recordings in the session.
 
@@ -344,7 +339,7 @@ class Session:
                                    If False, returns only active (non-excluded) recordings.
 
         Returns:
-            List[Recording]: The list of recordings based on the include_excluded parameter.
+            list[Recording]: The list of recordings based on the include_excluded parameter.
         """
         if include_excluded:
             return self._all_recordings
@@ -457,10 +452,10 @@ class Session:
                                     }
                                 )
         except Exception as e:
-            logging.debug(f"Notice collection error (session {self.id}): {e}")
+            logger.debug(f"Notice collection error (session {self.id}): {e}")
         return notices
 
-    def _filter_active(self, source_list: List[Any]) -> List[Any]:
+    def _filter_active(self, source_list: list[Any]) -> list[Any]:
         """
         Helper to filter a list of data corresponding to all_recordings,
         returning only items corresponding to active (non-excluded) recordings.
@@ -472,7 +467,7 @@ class Session:
     # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
     @cached_property
-    def all_recordings_raw(self) -> List[np.ndarray]:
+    def all_recordings_raw(self) -> list[np.ndarray]:
         """
         Return a list of raw data arrays for all recordings (including excluded).
         Each array is of shape (num_samples, num_channels).
@@ -487,12 +482,12 @@ class Session:
         return recordings
 
     @property
-    def recordings_raw(self) -> List[np.ndarray]:
+    def recordings_raw(self) -> list[np.ndarray]:
         """Return a list of raw data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_raw)
 
     @cached_property
-    def all_recordings_filtered(self) -> List[np.ndarray]:
+    def all_recordings_filtered(self) -> list[np.ndarray]:
         """
         Return a list of processed data arrays for all recordings (including excluded).
         Each array is of shape (num_samples, num_channels).
@@ -540,7 +535,7 @@ class Session:
                             order=bf_args["order"],
                         )
                     else:
-                        logging.warning(f"No specific processing for channel type: {channel_type}")
+                        logger.warning(f"No specific processing for channel type: {channel_type}")
                         filtered = channel_data
 
                     if self.annot.channels[ch].invert:
@@ -564,7 +559,7 @@ class Session:
             cpu_count = os.cpu_count()
             max_workers = (cpu_count - 1) if cpu_count and cpu_count > 1 else 1
 
-        filtered_recordings: List[np.ndarray] = []
+        filtered_recordings: list[np.ndarray] = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit futures and maintain order by storing them in a list
             ordered_futures = []
@@ -580,12 +575,12 @@ class Session:
         return filtered_recordings
 
     @property
-    def recordings_filtered(self) -> List[np.ndarray]:
+    def recordings_filtered(self) -> list[np.ndarray]:
         """Return a list of processed data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_filtered)
 
     @cached_property
-    def all_recordings_rectified_raw(self) -> List[np.ndarray]:
+    def all_recordings_rectified_raw(self) -> list[np.ndarray]:
         """
         Return a list of rectified raw data arrays for all recordings.
         """
@@ -597,12 +592,12 @@ class Session:
         return recordings
 
     @property
-    def recordings_rectified_raw(self) -> List[np.ndarray]:
+    def recordings_rectified_raw(self) -> list[np.ndarray]:
         """Return a list of rectified raw data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_rectified_raw)
 
     @cached_property
-    def all_recordings_rectified_filtered(self) -> List[np.ndarray]:
+    def all_recordings_rectified_filtered(self) -> list[np.ndarray]:
         """
         Return a list of rectified filtered data arrays for all recordings.
         """
@@ -613,12 +608,12 @@ class Session:
         return recordings
 
     @property
-    def recordings_rectified_filtered(self) -> List[np.ndarray]:
+    def recordings_rectified_filtered(self) -> list[np.ndarray]:
         """Return a list of rectified filtered data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_rectified_filtered)
 
     @cached_property
-    def m_max(self) -> List[float]:
+    def m_max(self) -> list[float]:
         """
         Return the maximum M-wave value for each recording in the session.
         This is computed from the raw data using the M-wave latency windows.
@@ -630,10 +625,10 @@ class Session:
                     channel_mmax = self.get_m_max(self.default_method, channel_index, return_mmax_stim_range=False)
                     results.append(channel_mmax)
                 except NoCalculableMmaxError:
-                    logging.info(f"Channel {channel_index} does not have a valid M-max amplitude.")
+                    logger.info(f"Channel {channel_index} does not have a valid M-max amplitude.")
                     results.append(None)
                 except ValueError as e:
-                    logging.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {str(e)}")
+                    logger.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {e!s}")
                     results.append(None)
         return results
 
@@ -725,15 +720,20 @@ class Session:
         Plots EMG data from a single session using the specified plot_type.
 
         Args:
-            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH', 'mmax', 'reflexCurves', 'reflexAverages', and 'mCurvesSmoothened'.
+            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH', 'mmax',
+                'reflexCurves', 'reflexAverages', and 'mCurvesSmoothened'.
                 Plot types are defined in the EMGSessionPlotter class in Plot_EMG.py.
             - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
             - **kwargs: Additional keyword arguments to pass to the plotting function.
 
                 The most common keyword arguments include:
-                - 'data_type' (str): The type of data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'. Default is 'filtered'.
-                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'. Default method is set in config.yml under 'default_method'.
-                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True) or as the actual recorded amplitude (False). Default is False.
+                - 'data_type' (str): The type of data to plot. Options are 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.
+                    Default is 'filtered'.
+                - 'method' (str): The method to use for calculating the M-wave/reflex amplitudes. Options include
+                    'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+                    Default method is set in config.yml under 'default_method'.
+                - 'relative_to_mmax' (bool): Whether to plot the data proportional to the M-wave amplitude (True) or as the
+                    actual recorded amplitude (False). Default is False.
                 - 'all_flags' (bool): Whether to plot flags at all windows (True) or not (False). Default is False.
 
                 Less common keyword arguments include:
@@ -760,7 +760,7 @@ class Session:
             session.plot(plot_type='reflexCurves')
         """
         # Call the appropriate plotting method from the plotter object
-        raw_data = getattr(self.plotter, f'plot_{"emg" if not plot_type else plot_type}')(**kwargs)
+        raw_data = getattr(self.plotter, f"plot_{'emg' if not plot_type else plot_type}")(**kwargs)
         return raw_data
 
     def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
@@ -768,7 +768,8 @@ class Session:
         Calculates the M-wave amplitude for a specific channel in the session.
 
         Args:
-            method (str): The method to use for calculating the M-wave amplitude. Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
+            method (str): The method to use for calculating the M-wave amplitude.
+                Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
             channel_index (int): The index of the channel to calculate the M-wave amplitude for.
 
         Returns:
@@ -792,7 +793,7 @@ class Session:
         window_end = window_start + self.m_duration[channel_index]
 
         if window_end - window_start <= 0:
-            logging.warning(
+            logger.warning(
                 f"Invalid or missing M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}."
             )
             raise ValueError(
@@ -842,7 +843,7 @@ class Session:
             window_start = window.start_times[channel_index] + self.stim_start
             window_end = window.end_times[channel_index] + self.stim_start
         else:
-            logging.warning(f"Latency window '{window}' not found.")
+            logger.warning(f"Latency window '{window}' not found.")
             return []
 
         # Calculate the reflex amplitudes for the specified window
@@ -883,9 +884,9 @@ class Session:
                     ch.name = new_name
                     matched = True
             if matched:
-                logging.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
+                logger.info(f"Renamed channel '{old_name}' to '{new_name}' in session {self.id}.")
             else:
-                logging.warning(f"Channel '{old_name}' not found in session {self.id}. No action taken.")
+                logger.warning(f"Channel '{old_name}' not found in session {self.id}. No action taken.")
         # Optionally update cached names and save
         self.channel_names = [ch.name for ch in self.annot.channels]
         if self.repo is not None:
@@ -926,13 +927,13 @@ class Session:
                     self.annot.excluded_recordings.remove(recording_id)
                     break
             else:
-                logging.warning(f"Recording {recording_id} not found in session {self.id}.")
+                logger.warning(f"Recording {recording_id} not found in session {self.id}.")
                 return
             self.reset_all_caches()
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(f"Recording {recording_id} is not excluded from session {self.id}. No action taken.")
+            logger.warning(f"Recording {recording_id} is not excluded from session {self.id}. No action taken.")
 
     def restore_recording(self, recording_id: str):
         """Alias for :meth:`include_recording` for GUI commands."""
@@ -950,14 +951,14 @@ class Session:
                     self.annot.excluded_recordings.append(recording_id)
                     break
             else:
-                logging.warning(f"Recording {recording_id} not found in session {self.id}.")
+                logger.warning(f"Recording {recording_id} not found in session {self.id}.")
                 return
 
             self.reset_all_caches()
             if self.repo is not None:
                 self.repo.save(self)
         else:
-            logging.warning(f"Recording {recording_id} is already excluded in session {self.id}.")
+            logger.warning(f"Recording {recording_id} is already excluded in session {self.id}.")
 
         # Note: We no longer auto-exclude sessions when all recordings are excluded.
         # This prevents silent state changes that can cause GUI synchronization issues.
@@ -999,9 +1000,7 @@ class Session:
         To update window settings, please use the main GUI application or modify
         the `session.annot` object directly in your script.
         """
-        logging.warning(
-            "Session.update_window_settings() is deprecated and has been removed to avoid PySide6 dependencies in domain logic."
-        )
+        logger.warning("Session.update_window_settings() is deprecated and has been removed to avoid PySide6 dependencies in domain logic.")
 
     # ──────────────────────────────────────────────────────────────────
     # 4) Clean‐up
@@ -1017,7 +1016,7 @@ class Session:
             try:
                 rec.close()
             except Exception as e:
-                logging.warning(f"Error closing recording {rec.id}: {e}")
+                logger.warning(f"Error closing recording {rec.id}: {e}")
 
         # Force GC when closing session individually (not as part of dataset)
         if force_gc:
@@ -1058,7 +1057,7 @@ class Session:
         ]
 
         for line in report:
-            logging.info(line)
+            logger.info(line)
         return report
 
     def m_max_report(self):
@@ -1080,7 +1079,7 @@ class Session:
                 report.append(line)
 
         for line in report:
-            logging.info(line)
+            logger.info(line)
         return report
 
     def __repr__(self):

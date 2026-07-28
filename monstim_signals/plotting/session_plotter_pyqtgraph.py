@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,8 @@ from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 if TYPE_CHECKING:
     from monstim_gui.plotting import PlotPane
     from monstim_signals.domain.session import Session
+
+logger = logging.getLogger(__name__)
 
 
 class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
@@ -32,8 +34,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Shared colormap for both data and colorbar. Get viridis_r from matplotlib
         self.stim_colormap = pg.colormap.get("viridis_r", source="matplotlib")
         # Store references to plotted curves for dynamic updates
-        self.plotted_curves: List[pg.PlotDataItem] = []
-        self.curve_stimulus_voltages: List[float] = []
+        self.plotted_curves: list[pg.PlotDataItem] = []
+        self.curve_stimulus_voltages: list[float] = []
         self.colorbar_item: pg.ColorBarItem = None
         # Brightness adjustment for colormap (0.0 = no adjustment, 0.5 = much brighter)
         # For viridis_r: higher values make colors brighter by avoiding dark end of colormap
@@ -43,9 +45,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     def get_time_axis(self):
         """Get time axis for plotting."""
         # Calculate time values based on the scan rate
-        time_values_ms = (
-            np.arange(self.emg_object.num_samples) * 1000 / self.emg_object.scan_rate
-        )  # Time values in milliseconds
+        time_values_ms = np.arange(self.emg_object.num_samples) * 1000 / self.emg_object.scan_rate  # Time values in milliseconds
 
         # Define the start and end times for the window
         # Start pre_stim_time ms before stimulus onset
@@ -60,17 +60,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Ensure we don't have negative indexing issues that could cause confusion
         # If the calculated start is negative, it means we're asking for data before recording started
         if window_start_sample < 0:
-            logging.warning(
-                f"Requested time window starts before recording began. "
-                f"window_start_sample={window_start_sample}, adjusting to 0."
-            )
+            logger.warning(f"Requested time window starts before recording began. window_start_sample={window_start_sample}, adjusting to 0.")
             window_start_sample = 0
 
         # Ensure end sample doesn't exceed available data
         if window_end_sample > self.emg_object.num_samples:
-            logging.warning(
-                f"Requested time window extends beyond recording. "
-                f"window_end_sample={window_end_sample}, clamping to {self.emg_object.num_samples}."
+            logger.warning(
+                f"Requested time window extends beyond recording. window_end_sample={window_end_sample}, clamping to {self.emg_object.num_samples}."
             )
             window_end_sample = self.emg_object.num_samples
 
@@ -79,7 +75,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         return time_axis, window_start_sample, window_end_sample
 
-    def get_emg_recordings(self, data_type, use_all=False) -> List[np.ndarray]:
+    def get_emg_recordings(self, data_type, use_all=False) -> list[np.ndarray]:
         """
         Get the EMG recordings based on the specified data type.
 
@@ -93,8 +89,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Returns
         -------
-        List[np.ndarray]
-            List of EMG recordings corresponding to the specified data type and exclusion criteria.
+        list[np.ndarray]
+            list of EMG recordings corresponding to the specified data type and exclusion criteria.
 
         """
 
@@ -104,13 +100,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             data = getattr(self.emg_object, attribute_name)
             if data is None:
                 raise AttributeError(
-                    f"Data type '{attribute_name}' is not available in the Session object. Please ensure that the data has been processed and stored correctly."
+                    f"Data type '{attribute_name}' is not available in the Session object."
+                    f" Please ensure that the data has been processed and stored correctly."
                 )
             return data
         else:
-            raise ValueError(
-                f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'."
-            )
+            raise ValueError(f"Data type '{data_type}' is not supported. Please use 'filtered', 'raw', 'rectified_raw', or 'rectified_filtered'.")
 
     def plot_channel_data(
         self,
@@ -260,8 +255,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     def add_colormap_scalebar(
         self,
         layout: pg.GraphicsLayout,
-        plot_items: List[pg.PlotItem],
-        value_range: Tuple[float, float],
+        plot_items: list[pg.PlotItem],
+        value_range: tuple[float, float],
     ):
         colorbar = pg.ColorBarItem(
             colorMap=self.stim_colormap,
@@ -282,12 +277,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_emg(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         all_flags: bool = True,
         plot_legend: bool = True,
         plot_colormap: bool = False,
         data_type: str = "filtered",
-        stimuli_to_plot: List[str] = None,
+        stimuli_to_plot: list[str] = None,
         interactive_cursor: bool = True,
         canvas: "PlotPane" = None,
     ):
@@ -296,8 +291,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Parameters
         ----------
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
         all_flags : bool, optional
             Whether to show all latency windows (default: True)
         plot_legend : bool, optional
@@ -306,8 +301,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             Whether to show colormap (default: False)
         data_type : str, optional
             Type of data to plot (default: 'filtered')
-        stimuli_to_plot : List[str], optional
-            List of stimuli to plot
+        stimuli_to_plot : list[str], optional
+            list of stimuli to plot
         interactive_cursor : bool, optional
             Whether to enable interactive crosshair cursor (default: True)
         canvas : PlotPane, optional
@@ -329,7 +324,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
         # Create plot layout
-        plot_items: List[pg.PlotItem]
+        plot_items: list[pg.PlotItem]
         layout: pg.GraphicsLayout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
 
@@ -351,9 +346,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Check for empty recordings
         if not emg_recordings:
-            raise UnableToPlotError(
-                "No active recordings available to plot in this session. " "All recordings may have been excluded."
-            )
+            raise UnableToPlotError("No active recordings available to plot in this session. All recordings may have been excluded.")
 
         # Create normalization for stimulus voltages (matching matplotlib version)
         norm = self.get_brightness_adjusted_norm()
@@ -457,7 +450,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_singleEMG(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         recording_index: int = 0,
         fixed_y_axis: bool = True,
         all_flags: bool = True,
@@ -472,8 +465,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Parameters
         ----------
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
         recording_index : int, optional
             Index of recording to plot (default: 0)
         fixed_y_axis : bool, optional
@@ -529,7 +522,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if not emg_recordings:
             raise UnableToPlotError("No recordings available to plot in this session")
         if recording_index < 0 or recording_index >= len(emg_recordings):
-            raise UnableToPlotError(f"Recording index {recording_index} out of range (0-{len(emg_recordings)-1})")
+            raise UnableToPlotError(f"Recording index {recording_index} out of range (0-{len(emg_recordings) - 1})")
 
         # Calculate fixed y-axis limits if needed
         # Note: We likely want to scale the y-axis based on valid (non-excluded) recordings only,
@@ -556,7 +549,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 else:
                     y_min, y_max = None, None  # No valid data found; will fallback to auto-scaling
             except Exception as e:
-                logging.warning(f"Error calculating fixed y-axis limits: {e}")
+                logger.warning(f"Error calculating fixed y-axis limits: {e}")
                 y_max, y_min = None, None  # Fallback to auto-scaling if error occurs
 
         # call this after calculating y_min and y_max
@@ -567,7 +560,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if recording_index < len(self.emg_object.all_stimulus_voltages):
             stimulus_v = self.emg_object.all_stimulus_voltages[recording_index]
         else:
-            logging.warning(f"Recording index {recording_index} out of range for stimulus voltages.")
+            logger.warning(f"Recording index {recording_index} out of range for stimulus voltages.")
 
         # Prepare colormap normalization if needed
         norm = None
@@ -667,7 +660,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             first_plot.addItem(text_item)
         except Exception:
             # Fail silently for non-critical UI addition
-            logging.error("Failed to add stimulus info inlay to single EMG plot", exc_info=True)
+            logger.error("Failed to add stimulus info inlay to single EMG plot", exc_info=True)
 
         if not fixed_y_axis:
             # Auto-range Y-axis for all linked plots
@@ -680,7 +673,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_reflexCurves(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method=None,
         plot_legend=True,
         relative_to_mmax=False,
@@ -693,8 +686,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Parameters
         ----------
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
         method : str, optional
             Method for amplitude calculation
         plot_legend : bool, optional
@@ -724,9 +717,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Check for empty recordings - reflex curves require active recordings
         if not self.emg_object.recordings_filtered:
-            raise UnableToPlotError(
-                "No active recordings available to plot reflex curves. " "All recordings may have been excluded."
-            )
+            raise UnableToPlotError("No active recordings available to plot reflex curves. All recordings may have been excluded.")
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -747,10 +738,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             window_amplitudes_dict = {}  # window label -> amplitude list
             window_colors = {}
             for window in self.emg_object.latency_windows:
-                amps: np.ndarray = self.emg_object.get_lw_reflex_amplitudes(
-                    method=method, channel_index=channel_index, window=window
-                )
-                logging.info(f"Channel {channel_index}, Window {window.label}: {len(amps)} amplitudes")
+                amps: np.ndarray = self.emg_object.get_lw_reflex_amplitudes(method=method, channel_index=channel_index, window=window)
+                logger.info(f"Channel {channel_index}, Window {window.label}: {len(amps)} amplitudes")
 
                 # Normalize if requested
                 if relative_to_mmax:
@@ -812,7 +801,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_mmax(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method: str = None,
         interactive_cursor: bool = True,
         canvas: "PlotPane" = None,
@@ -822,8 +811,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Parameters
         ----------
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
         method : str, optional
             Method for amplitude calculation
         interactive_cursor : bool, optional
@@ -847,7 +836,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Check for empty recordings - M-max requires active recordings
         if not self.emg_object.recordings_filtered:
-            raise UnableToPlotError("No active recordings available to plot M-max. " "All recordings may have been excluded.")
+            raise UnableToPlotError("No active recordings available to plot M-max. All recordings may have been excluded.")
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -879,7 +868,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     return_mmax_stim_range=True,
                 )
             except Exception as e:
-                logging.error(f"Error getting M-max for channel {channel_index}: {e}")
+                logger.error(f"Error getting M-max for channel {channel_index}: {e}")
                 continue
 
             # Filter out NaN values for plotting
@@ -890,9 +879,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # Plot M-max values as scatter with white edge
             x_pos = 0  # Single position on x-axis
-            m_color = (
-                self._convert_matplotlib_color(self.emg_object.m_color) if hasattr(self.emg_object, "m_color") else "#ff3333"
-            )
+            m_color = self._convert_matplotlib_color(self.emg_object.m_color) if hasattr(self.emg_object, "m_color") else "#ff3333"
 
             if len(valid_amplitudes) > 0:
                 mean_amp = np.mean(valid_amplitudes)
@@ -996,7 +983,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Get current colormap from colorbar
         current_colormap = self.colorbar_item.colorMap() if self.colorbar_item else self.stim_colormap
-        logging.debug(f"colormap type: {type(current_colormap)}, {current_colormap}")
+        logger.debug(f"colormap type: {type(current_colormap)}, {current_colormap}")
 
         # Get current value range from colorbar
         if self.colorbar_item:
@@ -1016,7 +1003,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_reflexAverages(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method: str = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
@@ -1032,8 +1019,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Parameters
         ----------
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
         method : str, optional
             Method for amplitude calculation
         plot_legend : bool, optional
@@ -1063,9 +1050,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Check for empty recordings - reflex averages require active recordings
         if not self.emg_object.recordings_filtered:
-            raise UnableToPlotError(
-                "No active recordings available to plot reflex averages. " "All recordings may have been excluded."
-            )
+            raise UnableToPlotError("No active recordings available to plot reflex averages. All recordings may have been excluded.")
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -1101,7 +1086,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 valid_amps = [amp for amp in amps if not np.isnan(amp)]
 
                 if len(valid_amps) == 0:
-                    logging.warning(f"No valid amplitudes found for channel {channel_index}, window {window.label}")
+                    logger.warning(f"No valid amplitudes found for channel {channel_index}, window {window.label}")
                     continue
 
                 # Normalize if requested
@@ -1131,19 +1116,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 raw_data_dict["std_amplitude"].append(std_amp)
                 raw_data_dict["n_recordings"].append(n_recordings)
 
-                logging.info(
-                    f"Channel {channel_index}, Window {window_labels[-1]}: "
-                    f"mean={mean_amp:.3f}, std={std_amp:.3f}, n={n_recordings}"
-                )
+                logger.info(f"Channel {channel_index}, Window {window_labels[-1]}: mean={mean_amp:.3f}, std={std_amp:.3f}, n={n_recordings}")
 
             if not window_data:
-                logging.warning(f"No valid data found for channel {channel_index}")
+                logger.warning(f"No valid data found for channel {channel_index}")
                 continue
 
             # Plot scatter points with error bars for each window
-            for i, ((mean_amp, std_amp, n_rec), x_pos, label, color) in enumerate(
-                zip(window_data, x_positions, window_labels, window_colors)
-            ):
+            for i, ((mean_amp, std_amp, n_rec), x_pos, label, color) in enumerate(zip(window_data, x_positions, window_labels, window_colors)):
                 # Get the actual individual amplitudes for this window to plot as scatter
                 amps = self.emg_object.get_lw_reflex_amplitudes(
                     method=method,
@@ -1257,7 +1237,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_averageReflexCurves(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method: str = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
@@ -1273,8 +1253,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         Parameters
         ----------
-        channel_indices : List[int], optional
-            List of channel indices to plot
+        channel_indices : list[int], optional
+            list of channel indices to plot
         method : str, optional
             Method for amplitude calculation
         plot_legend : bool, optional
@@ -1304,9 +1284,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Check for empty recordings - average reflex curves require active recordings
         if not self.emg_object.recordings_filtered:
-            raise UnableToPlotError(
-                "No active recordings available to plot average reflex curves. " "All recordings may have been excluded."
-            )
+            raise UnableToPlotError("No active recordings available to plot average reflex curves. All recordings may have been excluded.")
 
         # Create plot layout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
@@ -1384,7 +1362,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                         raw_data_dict["n_recordings"].append(len(amps_at_voltage))
 
                 if len(plot_voltages) == 0:
-                    logging.warning(f"No valid data found for channel {channel_index}, window {window.label}")
+                    logger.warning(f"No valid data found for channel {channel_index}, window {window.label}")
                     continue
 
                 plot_voltages = np.array(plot_voltages)
@@ -1428,7 +1406,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     name=window_label,
                 )
 
-                logging.info(f"Channel {channel_index}, Window {window.label}: " f"plotted {len(plot_voltages)} voltage bins")
+                logger.info(f"Channel {channel_index}, Window {window.label}: plotted {len(plot_voltages)} voltage bins")
 
             # Set labels and formatting
             channel_name = self.emg_object.channel_names[channel_index]
@@ -1463,7 +1441,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_latency_window_distribution(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] = None,
         method: str = None,
         bins: int | np.ndarray = 30,
         density: bool = False,
@@ -1530,9 +1508,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             if len(all_amps) == 0:
                 # Nothing to plot for this channel
-                self.set_labels(
-                    plot_item, title=f"{self.emg_object.channel_names[channel_index]}", x_label="EMG Amp.", y_label="Frequency"
-                )
+                self.set_labels(plot_item, title=f"{self.emg_object.channel_names[channel_index]}", x_label="EMG Amp.", y_label="Frequency")
                 plot_item.showGrid(True, True)
                 continue
 

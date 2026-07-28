@@ -55,13 +55,13 @@ The plateau detection uses a sliding window approach with adaptive sizing:
 ```python
 def detect_plateau(y, max_window_size=20, min_window_size=3, threshold=0.3):
     y_filtered = savitzky_golay_filter(y)
-    
-    for window_size in range(max_window_size, min_window_size-1, -1):
+
+    for window_size in range(max_window_size, min_window_size - 1, -1):
         for i in range(len(y_filtered) - window_size):
-            window = y_filtered[i:i + window_size]
+            window = y_filtered[i : i + window_size]
             if std(window) < threshold * std(y_filtered):
                 return i, i + window_size  # plateau found
-    
+
     return None, None  # no plateau detected
 ```
 
@@ -107,7 +107,7 @@ tolerance = validation_tolerance  # Configurable tolerance (default: 1.05 = 5%)
 if M_max_maximum <= plateau_mean * tolerance:
     selected = M_max_maximum, "maximum"
 elif M_max_p95 <= plateau_mean * tolerance:
-    selected = M_max_p95, "95th_percentile"  
+    selected = M_max_p95, "95th_percentile"
 elif M_max_top20 <= plateau_mean * tolerance:
     selected = M_max_top20, "top_20_percent_mean"
 else:

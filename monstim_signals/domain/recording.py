@@ -1,5 +1,7 @@
 # monstim_signals/domain/recording.py
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import Any
 
 import h5py
@@ -85,12 +87,12 @@ class Recording:
         if self._raw is not None:
             return
         if self.repo is None:
-            logging.debug(f"Recording '{self.id}' has no repo to reopen raw data.")
+            logger.debug(f"Recording '{self.id}' has no repo to reopen raw data.")
             return
         try:
             raw_path = getattr(self.repo, "raw_h5", None)
             if raw_path is None:
-                logging.debug(f"Recording '{self.id}' repo has no raw_h5 attribute.")
+                logger.debug(f"Recording '{self.id}' repo has no raw_h5 attribute.")
                 return
             raw_path_str = str(raw_path)
             # Check file exists before attempting to open
@@ -98,7 +100,7 @@ class Recording:
                 from pathlib import Path
 
                 if not Path(raw_path_str).exists():
-                    logging.warning(f"Raw HDF5 not found for recording '{getattr(self, 'id', '<unknown>')}': {raw_path_str}")
+                    logger.warning(f"Raw HDF5 not found for recording '{getattr(self, 'id', '<unknown>')}': {raw_path_str}")
                     return
             except Exception:
                 pass
@@ -115,7 +117,7 @@ class Recording:
                 try:
                     h5file.close()
                 except Exception:
-                    logging.exception("Failed to close HDF5 file after dataset access failure.")
+                    logger.exception("Failed to close HDF5 file after dataset access failure.")
                     pass
                 raise
             # Update num_samples in metadata in case it changed
@@ -123,9 +125,9 @@ class Recording:
                 self.meta.num_samples = int(self._raw.shape[0])
             except Exception:
                 pass
-            logging.debug(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
+            logger.debug(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
         except Exception as err:
-            logging.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
+            logger.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
 
     def raw_view(self, ch: int | slice | list[int] = slice(None), t: slice = slice(None)) -> np.ndarray:
         """
@@ -160,7 +162,7 @@ class Recording:
                 # Close the underlying HDF5 file
                 self._raw.file.close()
             except Exception as exception:
-                logging.exception(f"Failed to close HDF5 file for recording '{self.id}': {exception}")
+                logger.exception(f"Failed to close HDF5 file for recording '{self.id}': {exception}")
                 pass
             finally:
                 # Release the reference so the h5py objects can be garbage collected

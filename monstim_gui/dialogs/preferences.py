@@ -2,6 +2,8 @@ import ast
 import copy
 import logging
 
+logger = logging.getLogger(__name__)
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -241,7 +243,7 @@ class LatencyWindowPresetEditor(QWidget):
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
             window = LatencyWindow(
-                name=f"Window {len(self.window_entries)+1}",
+                name=f"Window {len(self.window_entries) + 1}",
                 start_times=[0.0],
                 durations=[1.0],
                 color="black",
@@ -339,11 +341,7 @@ class PreferencesDialog(QDialog):
                         return [self.parse_field_value(str(v), global_value[0] if global_value else None) for v in parsed]
                 except Exception:
                     # fallback: comma split
-                    return [
-                        self.parse_field_value(v.strip(), global_value[0] if global_value else None)
-                        for v in value.split(",")
-                        if v.strip()
-                    ]
+                    return [self.parse_field_value(v.strip(), global_value[0] if global_value else None) for v in value.split(",") if v.strip()]
             if isinstance(global_value, dict):
                 try:
                     parsed = ast.literal_eval(value)
@@ -603,10 +601,7 @@ class PreferencesDialog(QDialog):
 
         def remove_row():
             for i in range(layout.rowCount()):
-                if (
-                    layout.itemAt(i, QFormLayout.ItemRole.FieldRole)
-                    and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is row_widget
-                ):
+                if layout.itemAt(i, QFormLayout.ItemRole.FieldRole) and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is row_widget:
                     layout.removeRow(i)
                     break
             self.fields[f"analysis_parameters.{key}"] = None
@@ -622,10 +617,7 @@ class PreferencesDialog(QDialog):
         row_layout.addWidget(remove_btn)
         if before_widget:
             for i in range(layout.rowCount()):
-                if (
-                    layout.itemAt(i, QFormLayout.ItemRole.FieldRole)
-                    and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is before_widget
-                ):
+                if layout.itemAt(i, QFormLayout.ItemRole.FieldRole) and layout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget() is before_widget:
                     layout.insertRow(i, row_widget)
                     break
             else:
@@ -640,7 +632,7 @@ class PreferencesDialog(QDialog):
         latency_keys = {"latency_window_presets", "latency_window_preset"}
         global_keys = set(self.config.keys()) - latency_keys
         already = set(self.analysis_param_fields.keys())
-        available = sorted(list(global_keys - already))
+        available = sorted(global_keys - already)
         if not available:
             QMessageBox.information(self, "No Parameters", "No more global parameters available to add.")
             return
@@ -790,7 +782,7 @@ class PreferencesDialog(QDialog):
             desc_edit = self.fields.get("profile_description")
             profile_name = name_edit.text().strip() if name_edit else name
             profile_desc = desc_edit.toPlainText().strip() if desc_edit else data.get("description", "")
-            profile_data = dict(name=profile_name, description=profile_desc)
+            profile_data = {"name": profile_name, "description": profile_desc}
             stimuli_widget = self.fields.get("stimuli_to_plot")
             if stimuli_widget:
                 profile_data["stimuli_to_plot"] = stimuli_widget.get_selected()
@@ -815,12 +807,7 @@ class PreferencesDialog(QDialog):
                     else:
                         analysis_params[param] = parsed_val
             if invalid_colors:
-                msg = "\n".join(
-                    [
-                        f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}"
-                        for k, v in invalid_colors
-                    ]
-                )
+                msg = "\n".join([f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}" for k, v in invalid_colors])
                 QMessageBox.warning(
                     self,
                     "Invalid Color",
@@ -860,9 +847,7 @@ class PreferencesDialog(QDialog):
                     value = norm if norm else value
                 if "." in key:
                     main_key, sub_key = key.split(".")
-                    ref_val = (
-                        self.config.get(main_key, {}).get(sub_key) if isinstance(self.config.get(main_key), dict) else None
-                    )
+                    ref_val = self.config.get(main_key, {}).get(sub_key) if isinstance(self.config.get(main_key), dict) else None
                     try:
                         parsed_val = ast.literal_eval(value)  # type: ignore
                     except Exception:
@@ -886,12 +871,7 @@ class PreferencesDialog(QDialog):
                         coerced = parsed_val
                     new_config[key] = coerced
             if invalid_colors:
-                msg = "\n".join(
-                    [
-                        f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}"
-                        for k, v in invalid_colors
-                    ]
-                )
+                msg = "\n".join([f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}" for k, v in invalid_colors])
                 QMessageBox.warning(
                     self,
                     "Invalid Color",
@@ -900,7 +880,7 @@ class PreferencesDialog(QDialog):
                 return
             self.config = new_config
             self.config_repo.write_config(self.config)
-            logging.info(f"Saved user config: {self.config}")
+            logger.info(f"Saved user config: {self.config}")
             self.accept()
 
     # The parse_value, parse_color, and convert_to_number functions are no longer used for config/profile type handling.

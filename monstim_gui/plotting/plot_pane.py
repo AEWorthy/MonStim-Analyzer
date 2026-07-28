@@ -1,4 +1,6 @@
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
 import pyqtgraph as pg
@@ -28,9 +30,9 @@ class PlotPane(QGroupBox):
                 pg.setConfigOption("antialias", True)
                 pg.setConfigOption("enableExperimental", False)
                 self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
-                logging.info("OpenGL acceleration enabled for plot rendering")
+                logger.info("OpenGL acceleration enabled for plot rendering")
             except Exception as e:
-                logging.warning(f"Failed to enable OpenGL acceleration: {e}. Falling back to software rendering.")
+                logger.warning(f"Failed to enable OpenGL acceleration: {e}. Falling back to software rendering.")
                 pg.setConfigOption("useOpenGL", False)
                 pg.setConfigOption("antialias", True)
                 pg.setConfigOption("enableExperimental", False)
@@ -40,7 +42,7 @@ class PlotPane(QGroupBox):
             pg.setConfigOption("antialias", True)
             pg.setConfigOption("enableExperimental", False)
             self.graphics_layout: pg.GraphicsLayoutWidget = pg.GraphicsLayoutWidget()
-            logging.info("OpenGL acceleration disabled (software rendering)")
+            logger.info("OpenGL acceleration disabled (software rendering)")
 
         self.graphics_layout.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.graphics_layout.setMinimumSize(800, 400)
@@ -54,12 +56,12 @@ class PlotPane(QGroupBox):
         self.current_plot_items = []
 
         self.setLayout(self.layout)
-        logging.debug("PyQtGraph canvas created and added to layout.")
+        logger.debug("PyQtGraph canvas created and added to layout.")
 
     def clear_plots(self):
         """Clear all current plots with comprehensive cleanup."""
         try:
-            logging.debug(f"Clearing plots. Current plot count: {len(self.current_plots)}")
+            logger.debug(f"Clearing plots. Current plot count: {len(self.current_plots)}")
 
             # Clear references first to help garbage collector
             self.current_plots = []
@@ -68,18 +70,18 @@ class PlotPane(QGroupBox):
             # Clear the graphics layout
             if self.graphics_layout:
                 try:
-                    logging.debug("Calling graphics_layout.clear()...")
+                    logger.debug("Calling graphics_layout.clear()...")
                     self.graphics_layout.clear()
-                    logging.debug("Graphics layout cleared successfully.")
+                    logger.debug("Graphics layout cleared successfully.")
                 except RuntimeError as e:
                     # Widget may have been destroyed
-                    logging.debug(f"Graphics layout already destroyed or invalid: {e}")
+                    logger.debug(f"Graphics layout already destroyed or invalid: {e}")
                 except AttributeError as e:
-                    logging.debug(f"Graphics layout attribute error during clear: {e}")
+                    logger.debug(f"Graphics layout attribute error during clear: {e}")
                 except Exception as e:
-                    logging.warning(f"Unexpected error clearing graphics layout: {e}", exc_info=True)
+                    logger.warning(f"Unexpected error clearing graphics layout: {e}", exc_info=True)
             else:
-                logging.warning("Graphics layout is None, cannot clear")
+                logger.warning("Graphics layout is None, cannot clear")
 
         except Exception as e:
-            logging.error(f"CRITICAL: Error in clear_plots: {e}", exc_info=True)
+            logger.error(f"CRITICAL: Error in clear_plots: {e}", exc_info=True)

@@ -1,5 +1,7 @@
 import glob
 import logging
+
+logger = logging.getLogger(__name__)
 import os
 
 import yaml
@@ -30,7 +32,7 @@ class ProfileManager:
                 try:
                     profiles.append((data.get("name", os.path.splitext(os.path.basename(f))[0]), f, data))  # type: ignore
                 except AttributeError as e:
-                    logging.error(f"Error loading profile {f}: {e}")
+                    logger.error(f"Error loading profile {f}: {e}")
                     continue
         return profiles
 

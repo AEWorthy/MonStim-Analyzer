@@ -130,9 +130,7 @@ class TestGoldenCSVImport:
         # Load domain objects and verify structure
         expt = ExperimentRepository(out_expt).load()
         try:
-            assert len(expt.datasets) == len(
-                expected_layout
-            ), f"Dataset count mismatch: expected {len(expected_layout)}, got {len(expt.datasets)}"
+            assert len(expt.datasets) == len(expected_layout), f"Dataset count mismatch: expected {len(expected_layout)}, got {len(expt.datasets)}"
 
             # Check sessions and recording counts per dataset
             got_by_id = {ds.id: ds for ds in expt.datasets}
@@ -142,9 +140,7 @@ class TestGoldenCSVImport:
 
                 # Domain exposes sessions via get_all_sessions
                 sessions = ds.get_all_sessions(include_excluded=True)
-                assert len(sessions) == len(
-                    sessions_map
-                ), f"Session count mismatch for {ds_name}: expected {len(sessions_map)}, got {len(sessions)}"
+                assert len(sessions) == len(sessions_map), f"Session count mismatch for {ds_name}: expected {len(sessions_map)}, got {len(sessions)}"
 
                 for sess in sessions:
                     want_stems = sessions_map.get(sess.id)
@@ -152,9 +148,7 @@ class TestGoldenCSVImport:
 
                     # 1:1 mapping of recordings to stems
                     got_stems = {rec.repo.stem.stem for rec in sess.recordings}
-                    assert (
-                        got_stems == want_stems
-                    ), f"Recording mismatch in {ds_name}/{sess.id}: expected {want_stems}, got {got_stems}"
+                    assert got_stems == want_stems, f"Recording mismatch in {ds_name}/{sess.id}: expected {want_stems}, got {got_stems}"
         finally:
             expt.close()
 

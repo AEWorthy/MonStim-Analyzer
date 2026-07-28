@@ -13,11 +13,14 @@ Responsibilities
 from __future__ import annotations
 
 import logging
+
+logger = logging.getLogger(__name__)
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -146,7 +149,7 @@ def _count_dataset_recording_files(ds_folder: Path) -> int:
     try:
         return sum(1 for _ in ds_folder.rglob("*.meta.json"))
     except OSError as exc:
-        logging.warning("Could not estimate recording count for '%s': %s", ds_folder, exc)
+        logger.warning("Could not estimate recording count for '%s': %s", ds_folder, exc)
         return 0
 
 
@@ -179,7 +182,7 @@ def _get_mmax_cache(obj, config: BulkExportConfig) -> dict[tuple[int, str], Opti
                 val = obj.get_avg_m_max(method, ch_idx)
                 cache[(ch_idx, method)] = float(val) if val is not None else None
             except Exception as exc:
-                logging.debug("M-max unavailable for ch=%d method=%s: %s", ch_idx, method, exc)
+                logger.debug("M-max unavailable for ch=%d method=%s: %s", ch_idx, method, exc)
                 cache[(ch_idx, method)] = None
     return cache
 
@@ -226,7 +229,7 @@ def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.Dat
 
             for ch_idx in config.channel_indices:
                 if ch_idx >= getattr(session, "num_channels", 0):
-                    logging.debug(
+                    logger.debug(
                         "_compute_longform_reflex_amplitudes: channel index %d out of range for session %s - skipped.",
                         ch_idx,
                         session_id,
@@ -261,7 +264,7 @@ def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.Dat
                                 dtype=float,
                             )
                         except Exception as exc:
-                            logging.warning(
+                            logger.warning(
                                 "longform_reflex_amplitudes error dataset=%s session=%s ch=%s window=%s method=%s: %s",
                                 dataset_id,
                                 session_id,
@@ -324,7 +327,7 @@ def _compute_avg_reflex_curves(obj, config: BulkExportConfig) -> pd.DataFrame:
             windows = []
 
     if not windows:
-        logging.warning("No latency windows found – skipping avg_reflex_curves.")
+        logger.warning("No latency windows found – skipping avg_reflex_curves.")
         return pd.DataFrame()
 
     mmax_cache = _get_mmax_cache(obj, config) if config.normalize_to_mmax else {}
@@ -357,13 +360,13 @@ def _compute_avg_reflex_curves(obj, config: BulkExportConfig) -> pd.DataFrame:
                             method_cols[f"mean_amplitude_norm_mmax_{method}"] = means / mmax
                             method_cols[f"stdev_amplitude_norm_mmax_{method}"] = stdevs / mmax
                         else:
-                            logging.warning(
+                            logger.warning(
                                 "M-max unavailable or zero for ch=%s method=%s – normalized columns skipped.",
                                 ch_name,
                                 method,
                             )
                 except Exception as exc:
-                    logging.warning(
+                    logger.warning(
                         "avg_reflex_curves error ch=%s window=%s method=%s: %s",
                         ch_name,
                         window_name,
@@ -394,7 +397,7 @@ def _compute_mmax(obj, config: BulkExportConfig) -> pd.DataFrame:
     rows: list[dict] = []
     for ch_idx in config.channel_indices:
         if n_channels > 0 and ch_idx >= n_channels:
-            logging.debug("_compute_mmax: channel index %d out of range (%d) – skipped.", ch_idx, n_channels)
+            logger.debug("_compute_mmax: channel index %d out of range (%d) – skipped.", ch_idx, n_channels)
             continue
         ch_name = _safe_channel_name(obj, ch_idx)
         row: dict = {"channel": ch_name, "channel_index": ch_idx}
@@ -404,7 +407,7 @@ def _compute_mmax(obj, config: BulkExportConfig) -> pd.DataFrame:
                 row[f"mmax_{method}"] = mmax
                 row[f"mmax_threshold_{method}"] = mthresh
             except Exception as exc:
-                logging.warning("mmax error ch=%s method=%s: %s", ch_name, method, exc)
+                logger.warning("mmax error ch=%s method=%s: %s", ch_name, method, exc)
                 row[f"mmax_{method}"] = None
                 row[f"mmax_threshold_{method}"] = None
         rows.append(row)
@@ -416,7 +419,7 @@ def _compute_max_h(obj, config: BulkExportConfig) -> pd.DataFrame:
     try:
         voltages = obj.stimulus_voltages
     except Exception:
-        logging.warning("Could not obtain stimulus_voltages – skipping max_h.")
+        logger.warning("Could not obtain stimulus_voltages – skipping max_h.")
         return pd.DataFrame()
 
     if voltages is None or len(voltages) == 0:
@@ -430,7 +433,7 @@ def _compute_max_h(obj, config: BulkExportConfig) -> pd.DataFrame:
     rows: list[dict] = []
     for ch_idx in config.channel_indices:
         if n_channels > 0 and ch_idx >= n_channels:
-            logging.debug("_compute_max_h: channel index %d out of range (%d) – skipped.", ch_idx, n_channels)
+            logger.debug("_compute_max_h: channel index %d out of range (%d) – skipped.", ch_idx, n_channels)
             continue
         ch_name = _safe_channel_name(obj, ch_idx)
         method_data: dict[str, np.ndarray] = {}
@@ -449,15 +452,15 @@ def _compute_max_h(obj, config: BulkExportConfig) -> pd.DataFrame:
                             method_data[f"avg_h_amplitude_norm_mmax_{method}"] = avg_arr / float(mmax)
                             method_data[f"std_h_amplitude_norm_mmax_{method}"] = std_arr / float(mmax)
                         else:
-                            logging.warning(
+                            logger.warning(
                                 "M-max unavailable or zero for ch=%s method=%s – normalized columns skipped.",
                                 ch_name,
                                 method,
                             )
                     except Exception as exc:
-                        logging.warning("M-max lookup failed for ch=%s method=%s: %s", ch_name, method, exc)
+                        logger.warning("M-max lookup failed for ch=%s method=%s: %s", ch_name, method, exc)
             except Exception as exc:
-                logging.warning("max_h error ch=%s method=%s: %s", ch_name, method, exc)
+                logger.warning("max_h error ch=%s method=%s: %s", ch_name, method, exc)
 
         if not method_data:
             continue
@@ -500,21 +503,21 @@ def _write_object_export(
     for data_type in config.data_types:
         handler = _DATA_TYPE_HANDLERS.get(data_type)
         if handler is None:
-            logging.warning("Unknown data type '%s' – skipped.", data_type)
+            logger.warning("Unknown data type '%s' – skipped.", data_type)
             continue
         try:
             df = handler(obj, config)
         except Exception as exc:
-            logging.error("Error computing '%s' for '%s/%s': %s", data_type, expt_name, obj_id, exc)
+            logger.error("Error computing '%s' for '%s/%s': %s", data_type, expt_name, obj_id, exc)
             df = pd.DataFrame()
         if df is not None and not df.empty:
             sheet_name = DATA_TYPE_LABELS.get(data_type, data_type)[:31]  # Excel sheet name limit
             sheets.append((sheet_name, df))
         else:
-            logging.debug("No data for type '%s' in '%s/%s' – sheet skipped.", data_type, expt_name, obj_id)
+            logger.debug("No data for type '%s' in '%s/%s' – sheet skipped.", data_type, expt_name, obj_id)
 
     if not sheets:
-        logging.warning("No data written for '%s/%s' – file not created.", expt_name, obj_id)
+        logger.warning("No data written for '%s/%s' – file not created.", expt_name, obj_id)
         return out_file  # file was never created; caller can check existence
 
     with pd.ExcelWriter(out_file, engine="openpyxl") as writer:
@@ -545,34 +548,34 @@ def _load_and_export_dataset_task(
 
     ds_folder = expt_folder / ds_id
     if not ds_folder.is_dir():
-        logging.error("Dataset folder not found for '%s/%s' at '%s' – skipping.", expt_name, ds_id, ds_folder)
+        logger.error("Dataset folder not found for '%s/%s' at '%s' – skipping.", expt_name, ds_id, ds_folder)
         return None, f"Not found: {ds_id}"
 
     # Check before starting the (potentially slow) load
     if is_canceled and is_canceled():
-        logging.info("Bulk export: skipping dataset '%s/%s' – canceled.", expt_name, ds_id)
+        logger.info("Bulk export: skipping dataset '%s/%s' – canceled.", expt_name, ds_id)
         return None, f"Canceled: {ds_id}"
 
     try:
-        logging.info("Bulk export: loading dataset '%s/%s'", expt_name, ds_id)
+        logger.info("Bulk export: loading dataset '%s/%s'", expt_name, ds_id)
         dataset = DatasetRepository(ds_folder).load(
             config=_bulk_export_load_config(),
             lazy_open_h5=True,
             allow_write=False,
         )
     except Exception as exc:
-        logging.error("Failed to load dataset '%s/%s': %s", expt_name, ds_id, exc)
+        logger.error("Failed to load dataset '%s/%s': %s", expt_name, ds_id, exc)
         return None, f"Error loading: {ds_id}"
 
     # Check again after loading (load may have taken seconds/minutes)
     if is_canceled and is_canceled():
-        logging.info("Bulk export: skipping write for '%s/%s' – canceled after load.", expt_name, ds_id)
+        logger.info("Bulk export: skipping write for '%s/%s' – canceled after load.", expt_name, ds_id)
         try:
             close = getattr(dataset, "close", None)
             if callable(close):
                 close()
         except Exception as exc:
-            logging.debug("Bulk export: failed to close canceled dataset '%s/%s': %s", expt_name, ds_id, exc)
+            logger.debug("Bulk export: failed to close canceled dataset '%s/%s': %s", expt_name, ds_id, exc)
         del dataset
         gc.collect()
         return None, f"Canceled: {ds_id}"
@@ -581,16 +584,16 @@ def _load_and_export_dataset_task(
     try:
         out_file = _write_object_export(dataset, expt_name, ds_id, config)
         out_path = str(out_file)
-        logging.info("Wrote: %s", out_file)
+        logger.info("Wrote: %s", out_file)
     except Exception as exc:
-        logging.error("Export error for dataset '%s/%s': %s", expt_name, ds_id, exc)
+        logger.error("Export error for dataset '%s/%s': %s", expt_name, ds_id, exc)
     finally:
         try:
             close = getattr(dataset, "close", None)
             if callable(close):
                 close()
         except Exception as exc:
-            logging.debug("Bulk export: failed to close dataset '%s/%s': %s", expt_name, ds_id, exc)
+            logger.debug("Bulk export: failed to close dataset '%s/%s': %s", expt_name, ds_id, exc)
         del dataset
         gc.collect()
 
@@ -650,7 +653,7 @@ def run_bulk_export(
         for expt_name, ds_ids in config.selected_objects.items():
             expt_path_str = config.experiment_paths.get(expt_name)
             if not expt_path_str:
-                logging.error("No path found for experiment '%s' – skipping.", expt_name)
+                logger.error("No path found for experiment '%s' – skipping.", expt_name)
                 if progress_callback:
                     progress_callback(len(tasks), total_objects, f"Skipped: {expt_name}")
                 continue
@@ -661,7 +664,7 @@ def run_bulk_export(
                 tasks.append((expt_name, ds_id, expt_folder))
 
         max_workers = _auto_max_workers(len(tasks), max_dataset_recordings=max_dataset_recordings)
-        logging.info(
+        logger.info(
             "Bulk export: using %d dataset worker(s) for %d task(s); largest selected dataset has %d recording(s).",
             max_workers,
             len(tasks),
@@ -705,7 +708,7 @@ def run_bulk_export(
                         # already-running tasks will complete their current step then
                         # see is_canceled() and exit early.
                         executor.shutdown(wait=False, cancel_futures=True)
-                        logging.info("Bulk export: parallel export canceled by user.")
+                        logger.info("Bulk export: parallel export canceled by user.")
                         break
                     try:
                         result = fut.result()
@@ -713,7 +716,7 @@ def run_bulk_export(
                             written_files.append(result)
                     except Exception as exc:
                         expt_n, ds, _ = future_map[fut]
-                        logging.error("Unhandled error for dataset '%s/%s': %s", expt_n, ds, exc)
+                        logger.error("Unhandled error for dataset '%s/%s': %s", expt_n, ds, exc)
             finally:
                 # Ensure threads are cleaned up whether we finished, broke, or raised
                 executor.shutdown(wait=True)
@@ -723,7 +726,7 @@ def run_bulk_export(
             current = 0
             for expt_name, ds_id, expt_folder in tasks:
                 if is_canceled and is_canceled():
-                    logging.info("Bulk export canceled by user.")
+                    logger.info("Bulk export canceled by user.")
                     break
                 if progress_callback:
                     progress_callback(current, total_objects, f"Loading: {expt_name} / {ds_id}…")
@@ -739,12 +742,12 @@ def run_bulk_export(
         current = 0
         for expt_name, ds_ids in config.selected_objects.items():
             if is_canceled and is_canceled():
-                logging.info("Bulk export canceled by user.")
+                logger.info("Bulk export canceled by user.")
                 break
 
             expt_path_str = config.experiment_paths.get(expt_name)
             if not expt_path_str:
-                logging.error("No path found for experiment '%s' – skipping.", expt_name)
+                logger.error("No path found for experiment '%s' – skipping.", expt_name)
                 current += 1
                 if progress_callback:
                     progress_callback(current, total_objects, f"Skipped: {expt_name}")
@@ -754,14 +757,14 @@ def run_bulk_export(
             if progress_callback:
                 progress_callback(current, total_objects, f"Loading: {expt_name}…")
             try:
-                logging.info("Bulk export: loading experiment '%s' from '%s'", expt_name, expt_folder)
+                logger.info("Bulk export: loading experiment '%s' from '%s'", expt_name, expt_folder)
                 experiment = ExperimentRepository(expt_folder).load(
                     config=_bulk_export_load_config(),
                     lazy_open_h5=True,
                     allow_write=False,
                 )
             except Exception as exc:
-                logging.error("Failed to load experiment '%s': %s", expt_name, exc)
+                logger.error("Failed to load experiment '%s': %s", expt_name, exc)
                 current += 1
                 if progress_callback:
                     progress_callback(current, total_objects, f"Error loading: {expt_name}")
@@ -769,16 +772,16 @@ def run_bulk_export(
             try:
                 out_file = _write_object_export(experiment, expt_name, expt_name, config)
                 written_files.append(str(out_file))
-                logging.info("Wrote: %s", out_file)
+                logger.info("Wrote: %s", out_file)
             except Exception as exc:
-                logging.error("Export error for experiment '%s': %s", expt_name, exc)
+                logger.error("Export error for experiment '%s': %s", expt_name, exc)
             finally:
                 try:
                     close = getattr(experiment, "close", None)
                     if callable(close):
                         close()
                 except Exception as exc:
-                    logging.debug("Bulk export: failed to close experiment '%s': %s", expt_name, exc)
+                    logger.debug("Bulk export: failed to close experiment '%s': %s", expt_name, exc)
                 del experiment
                 gc.collect()
             current += 1

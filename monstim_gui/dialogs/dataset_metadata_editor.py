@@ -78,10 +78,7 @@ class DatasetMetadataEditor(QDialog):
         self.date_edit = QLineEdit()
         self.date_edit.setPlaceholderText("YYYY-MM-DD or YYMMDD or YYYYMMDD")
         self.date_edit.setToolTip(
-            "Enter date in one of these formats:\n"
-            "• YYYY-MM-DD (e.g., 2024-08-15)\n"
-            "• YYMMDD (e.g., 240815)\n"
-            "• YYYYMMDD (e.g., 20240815)"
+            "Enter date in one of these formats:\n• YYYY-MM-DD (e.g., 2024-08-15)\n• YYMMDD (e.g., 240815)\n• YYYYMMDD (e.g., 20240815)"
         )
         form_layout.addRow("Date:", self.date_edit)
 

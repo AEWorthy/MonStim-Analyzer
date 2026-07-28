@@ -2,7 +2,6 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 import yaml
 from PySide6.QtCore import QStandardPaths
@@ -25,7 +24,7 @@ def to_camel_case(text: str) -> str:
     return camel_case_text
 
 
-def format_report(report: List[str]) -> str:
+def format_report(report: list[str]) -> str:
     """Join a list of strings into a single newline-separated string."""
     formatted_report = ""
     for line in report:
@@ -77,11 +76,11 @@ def get_export_path() -> str:
 
 
 def get_source_path() -> str:
-    """Return the path to the ``src`` folder containing resource files."""
+    """Return the path to the ``assets`` folder containing resource files."""
     if getattr(sys, "frozen", False):
-        source_path = os.path.join(get_bundle_path(), "src")
+        source_path = os.path.join(get_bundle_path(), "assets")
     else:
-        source_path = os.path.join(get_base_path(), "src")
+        source_path = os.path.join(get_base_path(), "assets")
     return source_path
 
 

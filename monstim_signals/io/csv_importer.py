@@ -1,11 +1,14 @@
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 import traceback
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable
+from typing import Any
 
 import h5py
 import numpy as np
@@ -66,7 +69,7 @@ def detect_format(path: Path) -> str:
                 return "v3h"
             if line.lower().startswith("file version"):
                 return "v3d"
-    raise ValueError(f"Could not detect MonStim version for {path}. " "Please ensure it is a valid MonStim CSV file.")
+    raise ValueError(f"Could not detect MonStim version for {path}. Please ensure it is a valid MonStim CSV file.")
 
 
 def csv_to_store(
@@ -89,12 +92,12 @@ def csv_to_store(
 
     h5_path = output_fp.with_suffix(".raw.h5")
     if h5_path.exists() and not overwrite_h5:
-        logging.warning(f"HDF5 file {h5_path} already exists. Use 'overwrite=True' to replace it.")
+        logger.warning(f"HDF5 file {h5_path} already exists. Use 'overwrite=True' to replace it.")
     else:
         if h5_path.exists() and overwrite_h5:
-            logging.warning(f"HDF5 file {h5_path} already exists. Overwriting it.")
+            logger.warning(f"HDF5 file {h5_path} already exists. Overwriting it.")
         elif not h5_path.parent.exists():
-            logging.info(f"Creating directory {h5_path.parent} for HDF5 file.")
+            logger.info(f"Creating directory {h5_path.parent} for HDF5 file.")
             h5_path.parent.mkdir(parents=True, exist_ok=True)
         with h5py.File(h5_path, "w") as h5:
             h5.create_dataset(
@@ -111,20 +114,20 @@ def csv_to_store(
     # Write meta JSON
     meta_path = output_fp.with_suffix(".meta.json")
     if meta_path.exists() and not overwrite_meta:
-        logging.warning(f"Meta file {meta_path} already exists. Use 'overwrite_meta=True' to replace it.")
+        logger.warning(f"Meta file {meta_path} already exists. Use 'overwrite_meta=True' to replace it.")
     else:
         if meta_path.exists() and overwrite_meta:
-            logging.warning(f"Meta file {meta_path} already exists. Overwriting it.")
+            logger.warning(f"Meta file {meta_path} already exists. Overwriting it.")
         with meta_path.open("w") as f:
             json.dump(meta_dict, f, indent=4)
 
     # Write annotation JSON
     annot_path = output_fp.with_suffix(".annot.json")
     if annot_path.exists() and not overwrite_annot:
-        logging.warning(f"Annotation file {annot_path} already exists. Use 'overwrite_annot=True' to replace it.")
+        logger.warning(f"Annotation file {annot_path} already exists. Use 'overwrite_annot=True' to replace it.")
     else:
         if annot_path.exists() and overwrite_annot:
-            logging.warning(f"Annotation file {annot_path} already exists. Overwriting it.")
+            logger.warning(f"Annotation file {annot_path} already exists. Overwriting it.")
         with annot_path.open("w") as f:
             annot = RecordingAnnot.create_empty()
             json.dump(asdict(annot), f, indent=2)
@@ -199,18 +202,18 @@ def import_experiment(
                         f.result()
                     except Exception:
                         csv_path, ds_name, sess_name = future_to_args[f]
-                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
-                        logging.error(traceback.format_exc())
+                        logger.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
+                        logger.error(traceback.format_exc())
         else:
             for sess_name, paths in sess_map.items():
                 for csv_path in paths:
                     try:
                         process_csv(csv_path, ds_name, sess_name)
                     except Exception:
-                        logging.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
-                        logging.error(traceback.format_exc())
+                        logger.error(f"Error processing CSV: {csv_path} in dataset {ds_name}, session {sess_name}")
+                        logger.error(traceback.format_exc())
 
-    logging.info("Processing complete.")
+    logger.info("Processing complete.")
 
 
 from PySide6.QtCore import QThread, Signal  # noqa: E402
@@ -258,15 +261,15 @@ class GUIExptImportingThread(QThread):
         except Exception as e:
             if not self._is_canceled:
                 self.error.emit(e)
-                logging.error(f"Error in GUIExptImportingThread: {e}")
-                logging.error(traceback.format_exc())
+                logger.error(f"Error in GUIExptImportingThread: {e}")
+                logger.error(traceback.format_exc())
 
     def report_progress(self, value: int) -> None:
         if not self._is_canceled:
             self.progress.emit(value)
         # Only log every 5% increment
         if value >= self._last_logged_progress + 5 or value == 100:
-            logging.info(f"CSV conversion progress: {value}%")
+            logger.info(f"CSV conversion progress: {value}%")
             self._last_logged_progress = value
 
     def cancel(self) -> None:
@@ -318,7 +321,7 @@ class MultiExptImportingThread(QThread):
                 output_path.mkdir(parents=True, exist_ok=True)
 
                 # Update status
-                self.status_update.emit(f"Importing experiment {i+1}/{self.total_experiments}: '{expt_name}'")
+                self.status_update.emit(f"Importing experiment {i + 1}/{self.total_experiments}: '{expt_name}'")
 
                 try:
                     import_experiment(
@@ -332,10 +335,10 @@ class MultiExptImportingThread(QThread):
 
                     if not self._is_canceled:
                         self.successful_imports += 1
-                        logging.info(f"Successfully imported experiment: '{expt_name}'")
+                        logger.info(f"Successfully imported experiment: '{expt_name}'")
 
                 except Exception as e:
-                    logging.error(f"Failed to import experiment '{expt_name}': {e}")
+                    logger.error(f"Failed to import experiment '{expt_name}': {e}")
                     # Continue with other experiments instead of stopping
                     continue
 
@@ -346,8 +349,8 @@ class MultiExptImportingThread(QThread):
         except Exception as e:
             if not self._is_canceled:
                 self.error.emit(e)
-                logging.error(f"Error in MultiExptImportingThread: {e}")
-                logging.error(traceback.format_exc())
+                logger.error(f"Error in MultiExptImportingThread: {e}")
+                logger.error(traceback.format_exc())
 
     def report_progress(self, experiment_index: int, experiment_progress: int) -> None:
         if not self._is_canceled:
