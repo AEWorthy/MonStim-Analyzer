@@ -200,7 +200,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
 
         except Exception as e:
-            print(f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}")
+            logger.exception(f"Could not plot reflex curves for channel {channel_idx}: {e}")
 
     def plot_maxH(
         self,

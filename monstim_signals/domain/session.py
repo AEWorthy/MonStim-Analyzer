@@ -1068,7 +1068,6 @@ class Session:
             f"Session M-max Report for '{self.formatted_name}'",
             "===============================",
         ]
-        print(self.m_max)
         for i, channel_name in enumerate(self.channel_names):
             try:
                 channel_m_max = self.get_m_max(self.default_method, i, return_mmax_stim_range=False)

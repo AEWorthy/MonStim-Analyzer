@@ -427,7 +427,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             plot_item.setXRange(m_x - 1, h_x + 1)
 
         except Exception as e:
-            print(f"Warning: Could not plot max H data for channel {channel_idx}: {e}")
+            logger.exception(f"Could not plot max H data for channel {channel_idx}: {e}")
 
     def plot_mmax(
         self,
@@ -569,4 +569,4 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             plot_item.setXRange(m_x - 1, m_x + 1.5)
 
         except Exception as e:
-            print(f"Warning: Could not plot M-max data for channel {channel_idx}: {e}")
+            logger.exception(f"Could not plot M-max data for channel {channel_idx}: {e}")

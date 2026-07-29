@@ -95,7 +95,7 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
     try:
         with rc_context({"mathtext.fontset": "stix", "font.family": "DejaVu Sans", "font.size": fontsize}):
             fig = Figure(figsize=(0.01, 0.01), dpi=_RENDER_DPI)
-            FigureCanvasAgg(fig)
+            canvas = FigureCanvasAgg(fig)
             fig.patch.set_alpha(0)
             ax = fig.add_axes([0, 0, 1, 1])
             ax.axis("off")
@@ -123,7 +123,12 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
             logger.exception("Fallback QImage save also failed")
     finally:
         if fig is not None:
-            fig.clear()
+            try:
+                fig.clear()
+                del canvas
+                del fig
+            except TypeError:
+                logger.exception("Failed to clear matplotlib figure during cleanup")
 
     # Get actual image dimensions (at render DPI)
     img = QImage()

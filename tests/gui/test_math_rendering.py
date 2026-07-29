@@ -1,5 +1,7 @@
 import os
 
+from matplotlib.figure import Figure
+
 from monstim_gui.dialogs import help_about as ha
 
 
@@ -74,31 +76,11 @@ def test_render_failure_uses_fallback(monkeypatch):
     # Simulate a failure inside the matplotlib figure/text path.
 
     def bad_figure(*args, **kwargs):
-        class BadFig:
-            def __init__(self):
-                class Patch:
-                    def set_alpha(self, v):
-                        return None
-
-                self.patch = Patch()
-
-            def add_axes(self, *a, **kw):
-                class Ax:
-                    def axis(self, *a, **kw):
-                        return None
-
-                    def text(self, *a, **kw):
-                        raise RuntimeError("Simulated math render failure")
-
-                return Ax()
-
-            def savefig(self, *a, **kw):
+        class BadFigure(Figure):
+            def savefig(self, *args, **kwargs):
                 raise RuntimeError("Simulated save failure")
 
-            def clear(self):
-                return None
-
-        return BadFig()
+        return BadFigure()
 
     monkeypatch.setattr(ha, "Figure", bad_figure)
 

@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import numpy as np
-from scipy import signal
+from scipy.signal import savgol_filter
 
 
 def savgol_filter_y(y, polyorder=3):
@@ -14,7 +14,7 @@ def savgol_filter_y(y, polyorder=3):
     window_length = max(window_length, polyorder + 2)  # Ensure minimum size
     if window_length % 2 == 0:  # Ensure oddness
         window_length += 1
-    return signal.savgol_filter(y, window_length, min(polyorder, window_length - 1))
+    return savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
 
 # TODO: UX / Visualization

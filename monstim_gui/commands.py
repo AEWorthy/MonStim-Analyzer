@@ -32,7 +32,7 @@ class Command(abc.ABC):
 
 class CommandInvoker:
     def __init__(self, parent: "MonstimGUI"):
-        self.parent = parent  # type: MonstimGUI
+        self.parent: "MonstimGUI" = parent  # type: MonstimGUI
         # Limit history to avoid unbounded memory growth in long-running sessions
         # Default max history retains the most recent 100 commands (configurable)
         self.max_history = 100
@@ -759,7 +759,7 @@ class BulkRecordingExclusionCommand(Command):
 class CreateExperimentCommand(Command):
     def __init__(self, gui, exp_name: str):
         self.command_name = f"Create Experiment '{exp_name}'"
-        self.gui = gui
+        self.gui: MonstimGUI = gui
         self.exp_name = exp_name
 
     def execute(self):
@@ -801,7 +801,7 @@ class CreateExperimentCommand(Command):
 class MoveDatasetCommand(Command):
     def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str):
         self.command_name = f"Move '{dataset_name}' from '{from_exp}' to '{to_exp}'"
-        self.gui = gui
+        self.gui: "MonstimGUI" = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.from_exp = from_exp
@@ -851,7 +851,7 @@ class MoveDatasetsCommand(Command):
                         ds_name,
                         from_exp,
                         to_exp,
-                        close_open_data=False,
+                        close_open_data=False,  # Already closed all data at start
                     )
                     self._succeeded.append((ds_id, ds_name, from_exp, to_exp))
                 except Exception as e:
@@ -898,7 +898,7 @@ class MoveDatasetsCommand(Command):
 class CopyDatasetCommand(Command):
     def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
         self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
-        self.gui = gui
+        self.gui: "MonstimGUI" = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.from_exp = from_exp
