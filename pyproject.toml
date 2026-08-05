@@ -1,11 +1,93 @@
-# Linting commands:
-#   1. ruff check . --fix
-#   2. ruff format .
+# ============================================================
+# MonStim Analyzer
+# Project configuration
+# ============================================================
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+
+# ============================================================
+# Project metadata
+# ============================================================
+
+[project]
+name = "monstim-analyzer"
+dynamic = ["version"]
+description = "GUI application for analyzing MonStim electrophysiology data."
+readme = "README.md"
+requires-python = ">=3.12"
+
+authors = [
+    {name = "Andrew Worthy"}
+]
+
+license = {text = "Proprietary"}
+
+
+# ============================================================
+# setuptools
+# ============================================================
+
+[tool.setuptools.dynamic]
+version = {attr = "monstim_gui.__version__"}
+
+include = [
+    "monstim_gui*",
+    "monstim_signals*",
+]
+
+exclude = [
+    "assets",
+]
+
+
+# ============================================================
+# pytest
+# ============================================================
+
+[tool.pytest.ini_options]
+
+testpaths = [
+    "tests",
+]
+
+pythonpath = [
+    ".",
+]
+
+norecursedirs = [
+    "build",
+    "dist",
+    ".git",
+    ".venv",
+    "tests/legacy",
+]
+
+addopts = [
+    "-q",
+    "-m",
+    "not legacy",
+]
+
+markers = [
+    "unit: Fast, isolated unit tests",
+    "integration: Cross-module/integration tests",
+    "slow: Slow tests (performance, large data)",
+    "legacy: Out-of-date tests kept for reference; excluded from default runs",
+]
+
+
+# ============================================================
+# Ruff
+# ============================================================
 
 [tool.ruff]
+
+target-version = "py314"
 line-length = 150
-target-version = "py310"
+
 exclude = [
     ".git",
     ".github",
@@ -22,36 +104,30 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "C"]
-ignore = ["E402", "C901"] # skip module-level import not at top of file and McCabe complexity
+
+select = [
+    "E",
+    "F",
+    "I",
+    "C",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
+]
+
+ignore = [
+    "E402",   # module level import not at top
+    "C901",   # McCabe complexity
+]
 
 [tool.ruff.lint.isort]
+
 known-first-party = [
     "monstim_gui",
     "monstim_signals",
 ]
 
 [tool.ruff.format]
+
 quote-style = "double"
-
-
-
-[build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "monstim-analyzer"
-dynamic = ["version"]
-description = "A tool for analyzing MonStim data"
-requires-python = ">=3.12"
-
-[tool.setuptools.dynamic]
-version = {attr = "monstim_gui.__version__"}
-
-[tool.setuptools.packages.find]
-include = [
-    "monstim_gui*",
-    "monstim_signals*"
-]
-exclude = ["assets"]
