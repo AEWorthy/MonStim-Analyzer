@@ -150,7 +150,7 @@ class DataManager:
                 for dataset_dir in os.listdir(expt_path):
                     dataset_path = os.path.join(expt_path, dataset_dir)
                     if os.path.isdir(dataset_path):
-                        validated_path, metadata = self.validate_dataset_name(dataset_path)
+                        validated_path, _metadata = self.validate_dataset_name(dataset_path)
                         # Update the dataset_path to the validated path (in case it was renamed)
                         dataset_path = validated_path
                         csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
@@ -424,7 +424,7 @@ class DataManager:
                 for dataset_dir in os.listdir(exp_path):
                     dataset_path = os.path.join(exp_path, dataset_dir)
                     if os.path.isdir(dataset_path):
-                        validated_path, metadata = self.validate_dataset_name(dataset_path)
+                        validated_path, _metadata = self.validate_dataset_name(dataset_path)
                         # Update the dataset_path to the validated path (in case it was renamed)
                         dataset_path = validated_path
                         csv_files = [f for f in os.listdir(dataset_path) if f.endswith(".csv")]
@@ -819,11 +819,8 @@ class DataManager:
         combo_index = index + 1  # Add 1 to account for placeholder
         stored_experiment_id = self.gui.data_selection_widget.experiment_combo.itemData(combo_index, Qt.ItemDataRole.UserRole)
 
-        if stored_experiment_id:
-            experiment_name = stored_experiment_id
-        else:
-            # Fallback to the old method if UserRole data is not available
-            experiment_name = self.gui.expts_dict_keys[index]
+        experiment_name = stored_experiment_id or self.gui.expts_dict_keys[index]
+
         exp_path = os.path.join(self.gui.output_path, experiment_name)
         logger.info(f"Loading experiment: '{experiment_name}'.")
 
@@ -936,7 +933,7 @@ class DataManager:
         except Exception:
             pass
 
-    def _on_experiment_loaded(self, experiment: "Experiment"):
+    def _on_experiment_loaded(self, experiment: Experiment):
         """Handle successful experiment loading."""
         try:
             # Mark loading as completed successfully
@@ -1064,7 +1061,7 @@ class DataManager:
         message = f"{num_skipped} dataset(s) could not be loaded due to data validation errors:\n\n"
 
         # Show up to 5 datasets in the message
-        for i, (dataset_name, error) in enumerate(skipped_list[:5]):
+        for _i, (dataset_name, error) in enumerate(skipped_list[:5]):
             message += f"• {dataset_name}\n  Error: {error}\n\n"
 
         if num_skipped > 5:
@@ -1678,8 +1675,8 @@ class DataManager:
             logger.info(f"Created empty experiment: {exp_name}")
 
         except Exception as e:
-            logger.error(f"Failed to create experiment {exp_name}: {e}")
-            raise Exception(f"Failed to create experiment '{exp_name}': {e!s}")
+            logger.exception(f"Failed to create experiment {exp_name}: {e}")
+            raise Exception(f"Failed to create experiment '{exp_name}': {e!s}") from e
 
     def delete_experiment_by_id(self, exp_id: str):
         """Delete an experiment by ID (used by data curation manager)."""
@@ -1725,8 +1722,8 @@ class DataManager:
             logger.info(f"Deleted experiment: {exp_id}")
 
         except Exception as e:
-            logger.error(f"Failed to delete experiment {exp_id}: {e}")
-            raise Exception(f"Failed to delete experiment '{exp_id}': {e!s}")
+            logger.exception(f"Failed to delete experiment {exp_id}: {e}")
+            raise Exception(f"Failed to delete experiment '{exp_id}': {e!s}") from e
 
     def rename_experiment_by_id(self, old_name: str, new_name: str):
         """Rename an experiment by ID, regardless of what's currently selected."""
@@ -1849,10 +1846,10 @@ class DataManager:
             logger.info(f"Moved dataset {dataset_name} from {from_exp} to {to_exp}")
 
         except Exception as e:
-            logger.error(f"Failed to move dataset {dataset_name}: {e}")
-            raise Exception(f"Failed to move dataset '{dataset_name}': {e!s}")
+            logger.exception(f"Failed to move dataset {dataset_name}: {e}")
+            raise Exception(f"Failed to move dataset '{dataset_name}': {e!s}") from e
 
-    def copy_dataset(self, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
+    def copy_dataset(self, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str | None = None):
         """Copy a dataset from one experiment to another, optionally with a new name."""
         from pathlib import Path
 
@@ -1870,10 +1867,7 @@ class DataManager:
             source_path = from_exp_path / dataset_folder_name
 
             # Use new_name if provided, otherwise use original folder name
-            if new_name:
-                dest_folder_name = new_name
-            else:
-                dest_folder_name = dataset_folder_name
+            dest_folder_name = new_name or dataset_folder_name
 
             dest_path = to_exp_path / dest_folder_name
 
@@ -1894,8 +1888,8 @@ class DataManager:
             logger.info(f"Copied dataset {dataset_name} from {from_exp} to {to_exp} as {dest_path.name}")
 
         except Exception as e:
-            logger.error(f"Failed to copy dataset {dataset_name}: {e}")
-            raise Exception(f"Failed to copy dataset '{dataset_name}': {e!s}")
+            logger.exception(f"Failed to copy dataset {dataset_name}: {e}")
+            raise Exception(f"Failed to copy dataset '{dataset_name}': {e!s}") from e
 
     def delete_dataset(self, dataset_id: str, dataset_name: str, exp_id: str):
         """Delete a dataset from an experiment."""
@@ -1923,8 +1917,8 @@ class DataManager:
             logger.info(f"Deleted dataset {dataset_name} from {exp_id}")
 
         except Exception as e:
-            logger.error(f"Failed to delete dataset {dataset_name}: {e}")
-            raise Exception(f"Failed to delete dataset '{dataset_name}': {e!s}")
+            logger.exception(f"Failed to delete dataset {dataset_name}: {e}")
+            raise Exception(f"Failed to delete dataset '{dataset_name}': {e!s}") from e
 
     def _find_dataset_folder(self, exp_path: Path, dataset_id: str, dataset_name: str) -> str:
         """Find the actual dataset folder name in the experiment directory."""
@@ -1935,10 +1929,8 @@ class DataManager:
         # Search through folders for a match
         for folder_name in os.listdir(exp_path):
             folder_path = exp_path / folder_name
-            if folder_path.is_dir():
-                # Check if this folder contains the dataset we're looking for
-                if folder_name in dataset_name or dataset_name in folder_name:
-                    return folder_name
+            if folder_path.is_dir() and (folder_name in dataset_name or dataset_name in folder_name):
+                return folder_name
 
         # Fallback: use the dataset_id directly
         return dataset_id

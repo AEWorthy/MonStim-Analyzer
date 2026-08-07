@@ -190,17 +190,15 @@ class ProgramSettingsDialog(QDialog):
 
     def _on_parallel_toggled(self, checked: bool):
         """When parallel loading is enabled, ensure lazy-open is also enabled."""
-        if checked:
+        if checked and hasattr(self, "lazy_open_checkbox") and not self.lazy_open_checkbox.isChecked():
             # If user enables parallel loading, force lazy open on.
-            if hasattr(self, "lazy_open_checkbox") and not self.lazy_open_checkbox.isChecked():
-                self.lazy_open_checkbox.setChecked(True)
+            self.lazy_open_checkbox.setChecked(True)
 
     def _on_lazy_toggled(self, checked: bool):
         """If lazy-open is turned off, disable/turn off parallel loading to keep them consistent."""
-        if not checked:
-            if hasattr(self, "parallel_load_checkbox") and self.parallel_load_checkbox.isChecked():
-                # Turn off parallel loading if lazy open is disabled
-                self.parallel_load_checkbox.setChecked(False)
+        if not checked and hasattr(self, "parallel_load_checkbox") and self.parallel_load_checkbox.isChecked():
+            # Turn off parallel loading if lazy open is disabled
+            self.parallel_load_checkbox.setChecked(False)
 
     def create_performance_group(self):
         """Create the performance settings group."""

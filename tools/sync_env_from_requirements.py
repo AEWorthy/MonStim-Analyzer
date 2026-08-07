@@ -93,7 +93,7 @@ def sync(env_path="environment.yml", req_path="requirements.txt"):
             equivalent_conda_names = set(equivalent_names(name))
             # If requirements contain this package, update the conda style to name=version
             match = None
-            for rname in reqs.keys():
+            for rname in reqs:
                 if normalize_name(rname) in equivalent_conda_names:
                     match = rname
                     break

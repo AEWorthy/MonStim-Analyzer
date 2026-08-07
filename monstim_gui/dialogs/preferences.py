@@ -162,10 +162,7 @@ class LatencyWindowPresetEditor(QWidget):
         self._commit_preset_name()
         typed = self.preset_combo.currentText().strip()
         existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
-        if typed and typed not in existing:
-            name = typed
-        else:
-            name = self._unique_name("Preset")
+        name = typed if typed and typed not in existing else self._unique_name("Preset")
         self.preset_combo.addItem(name)
         self.presets.append([])
         self.preset_combo.setCurrentIndex(self.preset_combo.count() - 1)
@@ -534,7 +531,7 @@ class PreferencesDialog(QDialog):
             self.form_layout.addWidget(tab_widget, 1)
         else:
             # Show only profile fields
-            name, path, data = self.profiles[idx - 1]
+            _name, _path, data = self.profiles[idx - 1]
             vbox = QVBoxLayout()
             vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
             # --- Name and Description fields ---
@@ -609,7 +606,7 @@ class PreferencesDialog(QDialog):
             try:
                 row_widget.setParent(None)
             except RuntimeError:
-                pass
+                logger.warning(f"Failed to remove row widget for analysis parameter '{key}'")
 
         remove_btn.clicked.connect(remove_row)
         row_layout.addWidget(name_label)
@@ -645,7 +642,7 @@ class PreferencesDialog(QDialog):
         self.profile_combo.clear()
         self.profile_combo.addItem("(default)", userData=None)  # Add a global config option
         self.profiles = self.profile_manager.list_profiles()
-        for name, path, data in self.profiles:
+        for name, path, _data in self.profiles:
             self.profile_combo.addItem(name, userData=path)
         self.profile_combo.blockSignals(False)
         self.profile_combo.setCurrentIndex(0)
@@ -663,8 +660,8 @@ class PreferencesDialog(QDialog):
                 elif isinstance(field, QDoubleSpinBox):
                     try:
                         field.setValue(float(value))  # type: ignore
-                    except (TypeError, ValueError):
-                        pass
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Invalid value for {key}: {value} ({e})")
                 # Add more widget types as needed
             # Set latency window preset
             if "latency_window_presets" in self.fields:
@@ -674,7 +671,7 @@ class PreferencesDialog(QDialog):
                 if idx >= 0:
                     editor.preset_combo.setCurrentIndex(idx)
             return
-        name, path, data = self.profiles[idx - 1]  # -1 because of global
+        _name, path, data = self.profiles[idx - 1]  # -1 because of global
         self.active_profile_path = path
         self.active_profile_data = data
         # Update stimuli fields
@@ -852,10 +849,9 @@ class PreferencesDialog(QDialog):
                         parsed_val = ast.literal_eval(value)  # type: ignore
                     except Exception:
                         parsed_val = value
-                    if ref_val is not None:
-                        coerced = ConfigRepository.coerce_types(parsed_val, ref_val)
-                    else:
-                        coerced = parsed_val
+
+                    coerced = ConfigRepository.coerce_types(parsed_val, ref_val) if ref_val is not None else parsed_val
+
                     if main_key not in new_config or not isinstance(new_config.get(main_key), dict):
                         new_config[main_key] = {}
                     new_config[main_key][sub_key] = coerced
@@ -865,10 +861,9 @@ class PreferencesDialog(QDialog):
                         parsed_val = ast.literal_eval(value)  # type: ignore
                     except Exception:
                         parsed_val = value
-                    if ref_val is not None:
-                        coerced = ConfigRepository.coerce_types(parsed_val, ref_val)
-                    else:
-                        coerced = parsed_val
+
+                    coerced = ConfigRepository.coerce_types(parsed_val, ref_val) if ref_val is not None else parsed_val
+
                     new_config[key] = coerced
             if invalid_colors:
                 msg = "\n".join([f"'{v}' is not a valid color for '{k}'. Valid options: {', '.join(COLOR_OPTIONS)}" for k, v in invalid_colors])

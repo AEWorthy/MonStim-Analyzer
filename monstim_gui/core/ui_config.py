@@ -130,7 +130,7 @@ class UIConfig:
         else:
             return 30, 30, width, height
 
-    def save_window_state(self, window: "MonstimGUI", key: str = "main_window"):
+    def save_window_state(self, window: MonstimGUI, key: str = "main_window"):
         """Save window geometry and state."""
         logger.debug(
             f"Saving window state for {key}"

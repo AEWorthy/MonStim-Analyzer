@@ -10,8 +10,8 @@ from .responsive_widgets import (
 from .ui_scaling import setup_dpi_awareness
 
 __all__ = [
-    "setup_dpi_awareness",
+    "CollapsibleGroupBox",
     "ResponsiveComboBox",
     "ResponsiveScrollArea",
-    "CollapsibleGroupBox",
+    "setup_dpi_awareness",
 ]

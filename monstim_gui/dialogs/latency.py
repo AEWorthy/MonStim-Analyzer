@@ -111,7 +111,7 @@ class LatencyWindowsDialog(QDialog):
             self.preset_combo = NoScrollComboBox()
             self.preset_combo.setToolTip("Select a preset configuration to quickly apply predefined latency windows")
             self.preset_combo.setMinimumWidth(200)  # Make combo box wider for longer preset names
-            for name in self.presets.keys():
+            for name in self.presets:
                 self.preset_combo.addItem(name)
             apply_btn = QPushButton("Apply Preset")
             apply_btn.setToolTip("Replace all current windows with the selected preset configuration")
@@ -197,18 +197,12 @@ class LatencyWindowsDialog(QDialog):
         # Ensure window data matches current channel count
         if len(window.start_times) != num_channels:
             # Extend or truncate start_times to match current channels
-            if len(window.start_times) > 0:
-                default_start = window.start_times[0]
-            else:
-                default_start = 0.0
+            default_start = window.start_times[0] if len(window.start_times) > 0 else 0.0
             window.start_times = [default_start] * num_channels
 
         if len(window.durations) != num_channels:
             # Extend or truncate durations to match current channels
-            if len(window.durations) > 0:
-                default_duration = window.durations[0]
-            else:
-                default_duration = 1.0
+            default_duration = window.durations[0] if len(window.durations) > 0 else 1.0
             window.durations = [default_duration] * num_channels
         group = QGroupBox(window.name)
         group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -301,7 +295,7 @@ class LatencyWindowsDialog(QDialog):
 
         per_channel_spins = []
 
-        for i, (channel_name, start_time) in enumerate(zip(self.data.channel_names, window.start_times)):
+        for _i, (channel_name, start_time) in enumerate(zip(self.data.channel_names, window.start_times, strict=True)):
             row_layout = QHBoxLayout()
             row_layout.addWidget(QLabel(f"{channel_name}:"))
             spin = NoScrollDoubleSpinBox()
@@ -489,7 +483,7 @@ class LatencyWindowsDialog(QDialog):
         windows = []
         num_channels = len(self.data.channel_names)
         for (
-            group,
+            _group,
             window,
             name_edit,
             global_start_spin,
@@ -499,10 +493,7 @@ class LatencyWindowsDialog(QDialog):
             per_channel_spins,
         ) in self.window_entries:
             # Build a fresh LatencyWindow snapshot (respecting global/per-channel state)
-            if global_radio.isChecked():
-                start_times = [global_start_spin.value()] * num_channels
-            else:
-                start_times = [spin.value() for spin in per_channel_spins]
+            start_times = [global_start_spin.value()] * num_channels if global_radio.isChecked() else [spin.value() for spin in per_channel_spins]
             durations = [dur_spin.value()] * num_channels
             win_copy = LatencyWindow(
                 name=name_edit.text().strip() or "Window",
@@ -587,7 +578,7 @@ class LatencyWindowsDialog(QDialog):
                 return
             elif clicked == replace_btn:
                 # Find and remove the existing window with that name
-                for i, (grp, _, name_edit, *_) in enumerate(self.window_entries):
+                for _i, (grp, _, name_edit, *_) in enumerate(self.window_entries):
                     if name_edit.text().strip() == window.name:
                         self._remove_window_group(grp)
                         break
@@ -627,10 +618,7 @@ class LatencyWindowsDialog(QDialog):
             if grp is group:
                 # Build a fresh LatencyWindow snapshot
                 num_channels = len(self.data.channel_names)
-                if global_radio.isChecked():
-                    start_times = [global_start_spin.value()] * num_channels
-                else:
-                    start_times = [spin.value() for spin in per_channel_spins]
+                start_times = [global_start_spin.value()] * num_channels if global_radio.isChecked() else [spin.value() for spin in per_channel_spins]
                 durations = [dur_spin.value()] * num_channels
 
                 win_copy = LatencyWindow(
@@ -651,7 +639,7 @@ class LatencyWindowsDialog(QDialog):
         new_windows = []
         num_channels = len(self.data.channel_names)
         for (
-            group,
+            _group,
             window,
             name_edit,
             global_start_spin,
@@ -717,7 +705,7 @@ class LatencyWindowsDialog(QDialog):
         new_windows = []
 
         for (
-            group,
+            _group,
             window,
             name_edit,
             global_start_spin,

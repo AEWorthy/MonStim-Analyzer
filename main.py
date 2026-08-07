@@ -162,7 +162,7 @@ def main(is_frozen: bool) -> int:
         get_logger().debug("Application launched successfully.")
         return app.exec()
 
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger = get_logger()
         logger.error(f"Error in main function: {e!s}")
         logger.error(traceback.format_exc())

@@ -198,5 +198,5 @@ class TestGoldenCSVImport:
         assert single_paths == multi_paths, "Threading affects file organization"
 
         # Spot check: file sizes should match
-        for single_f, multi_f in zip(single_files[:5], multi_files[:5]):  # Check first 5
+        for single_f, multi_f in zip(single_files[:5], multi_files[:5], strict=True):  # Check first 5
             assert single_f.stat().st_size == multi_f.stat().st_size, f"Size mismatch: {single_f.name}"

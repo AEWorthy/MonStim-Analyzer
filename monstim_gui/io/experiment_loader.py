@@ -111,10 +111,10 @@ class ExperimentLoadingThread(QThread):
         try:
             file_count = 0
             # Count meta.json files (recordings)
-            for meta_file in exp_path.rglob("*.meta.json"):
+            for _meta_file in exp_path.rglob("*.meta.json"):
                 file_count += 1
             # Count annotation files
-            for annot_file in exp_path.rglob("*.annot.json"):
+            for _annot_file in exp_path.rglob("*.annot.json"):
                 file_count += 1
 
             return file_count
@@ -219,10 +219,7 @@ class ExperimentLoadingThread(QThread):
                     frac = index / total
                     pct = base + int(span * frac)
                     # Truncate very long dataset names to keep dialog width stable
-                    if len(name) > 48:
-                        name_display = f"{name[:22]}…{name[-22:]}"
-                    else:
-                        name_display = name
+                    name_display = f"{name[:22]}…{name[-22:]}" if len(name) > 48 else name
                     self.progress.emit(pct)
                     self.status_update.emit(f"Loading dataset {index}/{total}:\n'{name_display}'")
                     _last_emit_ts = now

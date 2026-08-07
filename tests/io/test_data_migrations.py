@@ -42,7 +42,7 @@ def test_future_version_error():
         migrate_annotation_dict(raw, strict_version=True)
     except FutureVersionError:
         return
-    assert False, "FutureVersionError not raised"
+    raise AssertionError("FutureVersionError not raised for future version string")
 
 
 def test_idempotent_second_run():
@@ -61,7 +61,7 @@ def test_invalid_version_string():
         migrate_annotation_dict(raw)
     except InvalidVersionStringError:
         return
-    assert False, "InvalidVersionStringError not raised for malformed version"
+    raise AssertionError("InvalidVersionStringError not raised for malformed version string")
 
 
 def test_lenient_major_minor_parsing(tmp_path: Path):
@@ -76,8 +76,8 @@ def test_non_strict_future_version_allowed(tmp_path: Path):
     raw = {"data_version": "999.0.0"}
     try:
         report = migrate_annotation_dict(raw, strict_version=False, dry_run=True)
-    except FutureVersionError:  # pragma: no cover - shouldn't happen
-        assert False, "Should not raise in non-strict mode"
+    except FutureVersionError as exc:  # pragma: no cover - shouldn't happen
+        raise AssertionError("FutureVersionError raised in non-strict mode") from exc
     assert report.original_version == "999.0.0"
     assert report.final_version == "999.0.0"
 

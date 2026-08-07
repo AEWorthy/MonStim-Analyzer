@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class ReportsWidget(QGroupBox):
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__("Reports", parent)
         self.parent = parent  # type: MonstimGUI
         self.layout = QGridLayout()

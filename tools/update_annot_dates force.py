@@ -88,7 +88,7 @@ def main() -> int:
         logger.error(f"Root not found: {root}")
         return 2
 
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
     updated = 0
     files_to_process = list(root.rglob("*.annot.json"))
     logger.info(f"Found {len(files_to_process)} annot.json files to process in {root}")

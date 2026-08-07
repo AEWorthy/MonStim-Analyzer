@@ -118,7 +118,7 @@ class TestConfigRepository:
         assert os.path.exists(self.user_config_path)
 
         # Verify written content
-        with open(self.user_config_path, "r") as f:
+        with open(self.user_config_path) as f:
             written_config = yaml.safe_load(f)
 
         assert written_config == test_config
@@ -317,7 +317,7 @@ class TestProfileManager:
         filename = pm.save_profile(self.profile1_data)
 
         # Read raw YAML to check ordering
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, encoding="utf-8") as f:
             content = f.read()
 
         # Check that name comes first, then description, etc.
@@ -791,7 +791,7 @@ class TestConfigurationIntegration:
         assert "Force Analysis" in profile_names
 
         # Test loading each profile
-        for name, filepath, data in listed_profiles:
+        for name, filepath, _data in listed_profiles:
             loaded = profile_manager.load_profile(filepath)
             assert loaded["name"] == name
             assert "analysis_parameters" in loaded

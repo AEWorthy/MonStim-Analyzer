@@ -23,14 +23,14 @@ class Experiment:
         datasets: list[Dataset],
         annot: ExperimentAnnot | None = None,
         repo: Any = None,
-        config: dict = None,
+        config: dict | None = None,
     ):
         self.id = expt_id
         self._all_datasets: list[Dataset] = datasets
         for ds in self._all_datasets:
             ds.parent_experiment = self
         self.annot: ExperimentAnnot = annot or ExperimentAnnot.create_empty()
-        self.repo: "ExperimentRepository" = repo
+        self.repo: ExperimentRepository = repo
         self._config = config
 
         self._load_config_settings()
@@ -145,7 +145,7 @@ class Experiment:
             ds_names = set()
             for sess in ds.sessions:
                 ds_names.update(w.name for w in getattr(sess.annot, "latency_windows", []))
-            for n in presence.keys():
+            for n in presence:
                 if n in ds_names:
                     presence[n].append(ds.id)
         return presence
@@ -157,10 +157,7 @@ class Experiment:
             # Check nested session-level heterogeneity anyway
             return any(ds.has_heterogeneous_latency_windows for ds in self.datasets)
         first = [w.name for w in self.datasets[0].latency_windows]
-        for ds in self.datasets[1:]:
-            if [w.name for w in ds.latency_windows] != first or ds.has_heterogeneous_latency_windows:
-                return True
-        return False
+        return any([w.name for w in ds.latency_windows] != first or ds.has_heterogeneous_latency_windows for ds in self.datasets[1:])
 
     # ------------------------------------------------------------------
     # Diagnostic / notice helpers
@@ -232,11 +229,11 @@ class Experiment:
     # ──────────────────────────────────────────────────────────────────
     # 1) Useful properties for GUI & analysis code
     # ──────────────────────────────────────────────────────────────────
-    # Example: gather session “H‐reflex curves” for every dataset & session:
+    # Example: gather session “H-reflex curves” for every dataset & session:
     #    Returns a nested dict: { "Animal_A": { "Session_01": [ … ], … }, … }
     # ──────────────────────────────────────────────────────────────────
-    def plot(self, plot_type: str = None, **kwargs):
-        raw_data = getattr(self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}")(**kwargs)
+    def plot(self, plot_type: str | None = None, **kwargs):
+        raw_data = getattr(self.plotter, f"plot_{plot_type if plot_type else 'reflexCurves'}")(**kwargs)
         return raw_data
 
     def invert_channel_polarity(self, channel_index: int) -> None:
@@ -300,7 +297,7 @@ class Experiment:
         for ds in self.datasets:
             binned_voltages = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
             m_wave, _ = ds.get_avg_m_wave_amplitudes(method, channel_index)
-            for volt, amp in zip(binned_voltages, m_wave):
+            for volt, amp in zip(binned_voltages, m_wave, strict=True):
                 m_wave_bins[volt].append(amp)
 
         avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else 0.0 for v in self.stimulus_voltages]
@@ -313,7 +310,7 @@ class Experiment:
         for ds in self.datasets:
             binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
             avg_vals, _ = amplitude_func(ds)
-            for volt, amp in zip(binned, avg_vals):
+            for volt, amp in zip(binned, avg_vals, strict=True):
                 wave_bins[volt].append(amp)
         avg = [float(np.mean(wave_bins[v])) if wave_bins[v] else np.nan for v in self.stimulus_voltages]
         sem = [(float(np.std(wave_bins[v]) / np.sqrt(len(wave_bins[v]))) if wave_bins[v] else np.nan) for v in self.stimulus_voltages]
@@ -334,7 +331,7 @@ class Experiment:
         for ds in self.datasets:
             binned = np.round(np.array(ds.stimulus_voltages) / self.bin_size) * self.bin_size
             h_wave, _ = ds.get_avg_h_wave_amplitudes(method, channel_index)
-            for volt, amp in zip(binned, h_wave):
+            for volt, amp in zip(binned, h_wave, strict=True):
                 h_wave_bins[volt].append(amp)
         avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
@@ -372,7 +369,7 @@ class Experiment:
                     continue
                 binned = np.round(np.array(sess.stimulus_voltages) / self.bin_size) * self.bin_size
                 seen_bins: set[float] = set()
-                for v, amp in zip(binned, amps):
+                for v, amp in zip(binned, amps, strict=True):
                     if v in bin_amplitudes:
                         bin_amplitudes[v].append(amp)
                         seen_bins.add(v)
@@ -520,7 +517,7 @@ class Experiment:
             collected = gc.collect()
             logger.debug(f"Experiment close: GC collected {collected} objects")
 
-    def __enter__(self) -> "Experiment":
+    def __enter__(self) -> Experiment:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

@@ -31,8 +31,8 @@ def parse(path: Path):
     version = detect_format(path)
     try:
         return PARSERS[version](path)
-    except KeyError:
-        raise RuntimeError(f"No parser for {version}")
+    except KeyError as e:
+        raise RuntimeError(f"No parser for {version}") from e
 
 
 # registry of parser functions
@@ -70,20 +70,17 @@ def normalize_meta(raw_meta: dict[str, str]) -> dict[str, Any]:
         val: Any = v
         try:
             float_val = float(v)
-            if float_val.is_integer():
-                val = int(float_val)
-            else:
-                val = float_val
+            val = int(float_val) if float_val.is_integer() else float_val
         except ValueError:
-            pass
+            logger.debug(f"Could not convert {k}={v} to number, keeping as string")
 
         key = k.strip()
         canon = REVERSE_META_MAP.get(key.lower())
         if not canon:
-            # if it’s completely unknown, carry it under its original name
+            # if it's completely unknown, carry it under its original name
             meta[key.lower().replace(" ", "_")] = val
             continue
-        # if it’s known, use the canonical name
+        # if it's known, use the canonical name
         meta[canon] = val
 
     return meta
@@ -118,7 +115,7 @@ def parse_v3d(path: Path):
         df = pd.read_csv(path, sep=",", skiprows=data_start, header=None)
         data = df.values.astype("float32")
     except (ValueError, pd.errors.ParserError) as e:
-        raise ValueError(f"Could not parse numeric data from v3d file {path}: {e!s}")
+        raise ValueError(f"Could not parse numeric data from v3d file {path}: {e!s}") from e
     meta = normalize_meta(raw_meta)
 
     # Set channel types and number of channels

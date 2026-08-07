@@ -34,11 +34,11 @@ if TYPE_CHECKING:
 
 # Plotting Widget
 class PlotWidget(QGroupBox):
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__("Plotting", parent)
-        self.current_option_widget: "BasePlotOptions" = None
-        self.parent: "MonstimGUI" = parent
-        self.layout: "QVBoxLayout" = QVBoxLayout()
+        self.current_option_widget: BasePlotOptions = None
+        self.parent: MonstimGUI = parent
+        self.layout: QVBoxLayout = QVBoxLayout()
         self.layout.setContentsMargins(4, 4, 4, 4)
         self.layout.setSpacing(4)
 

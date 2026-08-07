@@ -1,6 +1,6 @@
 # monstim_gui/dialogs/bulk_export_dialog.py
 """
-BulkExportDialog – wizard-style dialog for the Bulk Data Export feature.
+BulkExportDialog - wizard-style dialog for the Bulk Data Export feature.
 
 The dialog collects:
   - Data level    : Dataset or Experiment
@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -115,7 +115,7 @@ class BulkExportProgressWindow(QDialog):
 
     def __init__(self, total: int, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Bulk Export – In Progress")
+        self.setWindowTitle("Bulk Export - In Progress")
         self.setMinimumSize(500, 340)
         self._total = total
         self._done = False
@@ -154,7 +154,7 @@ class BulkExportProgressWindow(QDialog):
 
     def update_progress(self, cur: int, tot: int, msg: str) -> None:
         """Append *msg* to the log and advance the progress bar."""
-        ts = datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
+        ts = datetime.now(UTC).astimezone().strftime("%H:%M:%S")
         self._bar.setMaximum(max(tot, 1))
         self._bar.setValue(cur)
         self._status_lbl.setText(f"Progress: {cur} / {tot}")
@@ -170,7 +170,7 @@ class BulkExportProgressWindow(QDialog):
         try:
             self._cancel_btn.clicked.disconnect()
         except RuntimeError:
-            pass
+            logger.warning("Could not disconnect cancel button clicked signal; it may have already been disconnected.")
         self._cancel_btn.clicked.connect(self.accept)
 
     # ── cancel / close ────────────────────────────────────────────────────
@@ -181,7 +181,7 @@ class BulkExportProgressWindow(QDialog):
             return
         self._cancel_btn.setEnabled(False)
         self._cancel_btn.setText("Canceling\u2026")
-        ts = datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
+        ts = datetime.now(UTC).astimezone().strftime("%H:%M:%S")
         self._log.appendPlainText(f"[{ts}]  Cancellation requested\u2026")
         self.canceled.emit()
 

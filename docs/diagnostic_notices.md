@@ -45,7 +45,7 @@ Absence at a hierarchy level produces `missing_m_wave_window`.
 | `inconsistent_num_channels` | warning | Recordings have different channel counts. |
 | `inconsistent_stim_delay` | warning | Stim delay differs across recordings. |
 | `duplicate_stim_voltages` | warning | (Currently suppressed) Duplicate stimulus voltages detected. |
-| `unsorted_stim_voltages` | warning | Voltages not monotonic non‑decreasing. |
+| `unsorted_stim_voltages` | warning | Voltages not monotonic non-decreasing. |
 
 ### Dataset-Level Codes
 | Code | Level | Meaning |

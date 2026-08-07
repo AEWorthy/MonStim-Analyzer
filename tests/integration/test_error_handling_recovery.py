@@ -97,7 +97,7 @@ class TestUnableToPlotErrorHandling:
             ("Insufficient data points", "Plot Error"),
         ]
 
-        for error_msg, expected_title in test_cases:
+        for error_msg, _ in test_cases:
             error = UnableToPlotError(error_msg)
 
             # Mock QMessageBox to capture the message
@@ -144,7 +144,7 @@ class TestUnableToPlotErrorHandling:
     def test_canvas_validation_error_handling(self):
         """Test error handling when canvas is None or invalid."""
         # This tests the pattern where canvas=None should raise UnableToPlotError
-        with pytest.raises(UnableToPlotError, match="Canvas.*required"):
+        with pytest.raises(UnableToPlotError, match=r"Canvas.*required"):
             raise UnableToPlotError("Canvas is required for plotting")
 
         # Test invalid canvas scenarios
@@ -287,7 +287,7 @@ class TestGracefulDegradationScenarios:
             try:
                 # Attempt operation that would normally succeed
                 _ = np.array([1, 2, 3, 4, 5])
-                assert False, "Should have raised MemoryError"
+                raise AssertionError("Should have raised MemoryError")
             except MemoryError as e:
                 # This is the expected graceful failure
                 assert "memory" in str(e).lower()
@@ -320,7 +320,7 @@ class TestGracefulDegradationScenarios:
 
             with open(invalid_config) as f:
                 _ = yaml.safe_load(f)
-            assert False, "Should have failed to parse invalid YAML"
+            raise AssertionError("Should have failed to parse invalid YAML")
         except yaml.YAMLError:
             # Expected graceful failure - system should use defaults
             default_config = {"default": True}
@@ -467,7 +467,7 @@ class TestSystemResilienceUnderFailureConditions:
                 output_file = temp_workspace / "large_output.h5"
                 with open(output_file, "w") as f:
                     f.write("data")
-                assert False, "Should have raised OSError"
+                raise AssertionError("Should have raised OSError for disk full")
             except OSError as e:
                 # System should handle disk full gracefully
                 assert "space" in str(e).lower() or "device" in str(e).lower()
@@ -624,7 +624,7 @@ class TestRepositoryErrorHandling:
             try:
                 new_dir = restricted_dir / "new_folder"
                 new_dir.mkdir()
-                assert False, "Should have raised PermissionError"
+                raise AssertionError("Should have raised PermissionError")
             except PermissionError as e:
                 # Repository should provide helpful error messages
                 error_msg = f"Unable to create directory due to permissions: {e}"
@@ -787,7 +787,7 @@ class TestMemoryAndResourceManagement:
                     assert "data" in f
                     assert f["data"].shape == (100, 2)
 
-        except (OSError, IOError) as e:
+        except OSError as e:
             # Acceptable if system resource limits are hit
             assert "too many" in str(e).lower() or "resource" in str(e).lower()
 
@@ -817,7 +817,7 @@ class TestMemoryAndResourceManagement:
 
         try:
             # Create multiple threads
-            for i in range(5):
+            for _i in range(5):
                 thread = threading.Thread(target=worker_function)
                 thread.start()
                 threads.append(thread)

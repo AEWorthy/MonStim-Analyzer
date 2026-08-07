@@ -20,11 +20,15 @@ class ProfileManager:
         os.makedirs(self.profile_dir, exist_ok=True)
         self.reference_config = reference_config
 
-    def list_profiles(self):
+    def list_profiles(self) -> list[tuple[str, str, dict]]:
+        """
+        Returns a list of tuples containing (profile_name, profile_path, profile_data).
+
+        """
         files = glob.glob(os.path.join(self.profile_dir, "*.yml"))
         profiles = []
         for f in files:
-            with open(f, "r", encoding="utf-8") as fp:
+            with open(f, encoding="utf-8") as fp:
                 data = yaml.safe_load(fp)
                 if data and self.reference_config:
                     # Coerce types for the whole profile using reference config
@@ -37,7 +41,7 @@ class ProfileManager:
         return profiles
 
     def load_profile(self, filename):
-        with open(filename, "r", encoding="utf-8") as fp:
+        with open(filename, encoding="utf-8") as fp:
             data = yaml.safe_load(fp)
             if data and self.reference_config:
                 data = ConfigRepository.coerce_types(data, self.reference_config)

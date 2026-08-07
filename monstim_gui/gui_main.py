@@ -130,12 +130,12 @@ class MonstimGUI(QMainWindow):
 
     def init_ui(self):
         widgets = setup_main_layout(self)
-        self.menu_bar: "MenuBar" = widgets["menu_bar"]
-        self.data_selection_widget: "DataSelectionWidget" = widgets["data_selection_widget"]
-        self.reports_widget: "ReportsWidget" = widgets["reports_widget"]
-        self.plot_pane: "PlotPane" = widgets["plot_pane"]
-        self.plot_widget: "PlotWidget" = widgets["plot_widget"]
-        self.status_bar: "QStatusBar" = widgets["status_bar"]
+        self.menu_bar: MenuBar = widgets["menu_bar"]
+        self.data_selection_widget: DataSelectionWidget = widgets["data_selection_widget"]
+        self.reports_widget: ReportsWidget = widgets["reports_widget"]
+        self.plot_pane: PlotPane = widgets["plot_pane"]
+        self.plot_widget: PlotWidget = widgets["plot_widget"]
+        self.status_bar: QStatusBar = widgets["status_bar"]
 
         # --- Add Profile Selector to Main Window ---
         from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
@@ -176,7 +176,7 @@ class MonstimGUI(QMainWindow):
             self.migration_banner = MigrationBanner(self)
             # Place the banner just above the status bar in main layout if available
             main = self.centralWidget()
-            if main and hasattr(main, "layout") and callable(getattr(main, "layout")):
+            if main and hasattr(main, "layout") and callable(main.layout):
                 lay = main.layout()
                 if hasattr(lay, "addWidget"):
                     lay.addWidget(self.migration_banner)
@@ -258,7 +258,7 @@ class MonstimGUI(QMainWindow):
             self.active_profile_data = None
             config = self.config_repo.read_config()
         else:
-            name, path, data = self._profile_list[idx - 1]
+            _name, path, data = self._profile_list[idx - 1]
             self.active_profile_path = path
             self.active_profile_data = data
             # Merge profile data with global config for fallback
@@ -370,7 +370,7 @@ class MonstimGUI(QMainWindow):
             self.active_profile_data = None
             config = self.config_repo.read_config()
         else:
-            name, path, data = self._profile_list[idx - 1]
+            _name, path, data = self._profile_list[idx - 1]
             self.active_profile_path = path
             self.active_profile_data = data
             # Merge profile data with global config for fallback

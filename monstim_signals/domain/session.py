@@ -3,6 +3,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import cached_property
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -35,9 +36,9 @@ class Session:
     def __init__(
         self,
         session_id: str,
-        recordings: list["Recording"],
-        annot: "SessionAnnot",
-        repo: "SessionRepository | None" = None,
+        recordings: list[Recording],
+        annot: SessionAnnot,
+        repo: SessionRepository | None = None,
         config: dict | None = None,
     ):
         self.id: str = session_id
@@ -85,7 +86,7 @@ class Session:
         self.default_channel_names: list[str] = _config.get("default_channel_names", [])
 
     def _load_session_parameters(self):
-        # ---------- Pull session‐wide parameters from the first recording's meta ----------
+        # ---------- Pull session-wide parameters from the first recording's meta ----------
         # Use all_recordings (including excluded) so session can load even with all recordings excluded
         if self.all_recordings:
             first_meta = self.all_recordings[0].meta
@@ -211,9 +212,8 @@ class Session:
                 if m.num_channels != first.num_channels:
                     warnings.append(f"Recording {rec.id} num_channels {m.num_channels} != {first.num_channels}.")
                 # Stim delay / start relative metrics
-                if hasattr(m, "primary_stim") and hasattr(first, "primary_stim"):
-                    if m.primary_stim.stim_delay != first.primary_stim.stim_delay:
-                        warnings.append(f"Recording {rec.id} stim_delay {m.primary_stim.stim_delay} != {first.primary_stim.stim_delay}.")
+                if hasattr(m, "primary_stim") and hasattr(first, "primary_stim") and m.primary_stim.stim_delay != first.primary_stim.stim_delay:
+                    warnings.append(f"Recording {rec.id} stim_delay {m.primary_stim.stim_delay} != {first.primary_stim.stim_delay}.")
             # Stimulus voltage issues
             volts = [r.meta.primary_stim.stim_v for r in self.recordings if getattr(r.meta, "primary_stim", None)]
             if volts:
@@ -225,7 +225,7 @@ class Session:
                     # warnings.append(f"Duplicate stimulus voltages detected: {sorted(set(dupes))}.")
                     pass  # do nothing; duplicates are allowed
                 # Monotonicity expectation (optional): should be non-decreasing sequence
-                if any(b < a for a, b in zip(volts, volts[1:])):
+                if any(b < a for a, b in pairwise(volts)):
                     warnings.append("Stimulus voltages are not sorted non-decreasing.")
         finally:
             # Store for notice system
@@ -379,7 +379,7 @@ class Session:
 
             # Latency window sanity checks (per-session)
             for w in self.latency_windows:
-                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations)):
+                for ch, (_start, dur) in enumerate(zip(w.start_times, w.durations, strict=True)):
                     if dur <= 0:
                         notices.append(
                             {
@@ -414,7 +414,7 @@ class Session:
             # Window bounds validation
             total_window_ms = self.time_window_ms  # configured acquisition window
             for w in self.latency_windows:
-                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations)):
+                for ch, (start, dur) in enumerate(zip(w.start_times, w.durations, strict=True)):
                     if start < 0 or (start + dur) > total_window_ms:
                         notices.append(
                             {
@@ -618,8 +618,9 @@ class Session:
         Return the maximum M-wave value for each recording in the session.
         This is computed from the raw data using the M-wave latency windows.
         """
+        # TODO: Check that this is implemented as intended. (Note by AEW, 2024-08-05)
         results = []
-        for rec in self.recordings:
+        for _rec in self.recordings:
             for channel_index in range(self.num_channels):
                 try:  # Check if the channel has a valid M-max amplitude.
                     channel_mmax = self.get_m_max(self.default_method, channel_index, return_mmax_stim_range=False)
@@ -715,7 +716,7 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     # 1) Properties for GUI & analysis code
     # ──────────────────────────────────────────────────────────────────
-    def plot(self, plot_type: str = None, **kwargs):
+    def plot(self, plot_type: str | None = None, **kwargs):
         """
         Plots EMG data from a single session using the specified plot_type.
 
@@ -760,7 +761,7 @@ class Session:
             session.plot(plot_type='reflexCurves')
         """
         # Call the appropriate plotting method from the plotter object
-        raw_data = getattr(self.plotter, f"plot_{'emg' if not plot_type else plot_type}")(**kwargs)
+        raw_data = getattr(self.plotter, f"plot_{plot_type if plot_type else 'emg'}")(**kwargs)
         return raw_data
 
     def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
@@ -879,7 +880,7 @@ class Session:
         # Support renaming when multiple channels share the same name by updating all matches
         for old_name, new_name in new_names.items():
             matched = False
-            for i, ch in enumerate(self.annot.channels):
+            for ch in self.annot.channels:
                 if ch.name == old_name:
                     ch.name = new_name
                     matched = True
@@ -1003,7 +1004,7 @@ class Session:
         logger.warning("Session.update_window_settings() is deprecated and has been removed to avoid PySide6 dependencies in domain logic.")
 
     # ──────────────────────────────────────────────────────────────────
-    # 4) Clean‐up
+    # 4) Clean-up
     # ──────────────────────────────────────────────────────────────────
     def close(self, force_gc: bool = True):
         """Close all recording HDF5 file handles.
@@ -1024,7 +1025,7 @@ class Session:
 
             gc.collect()
 
-    def __enter__(self) -> "Session":
+    def __enter__(self) -> Session:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

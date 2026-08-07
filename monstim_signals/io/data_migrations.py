@@ -107,11 +107,11 @@ def parse_version_tuple(v: str) -> tuple[int, int, int]:
     """Parse a semantic version string into a (major, minor, patch) tuple.
 
     Supported forms (most to least strict):
-    * MAJOR.MINOR.PATCH  (e.g. 2.0.1) – canonical
+    * MAJOR.MINOR.PATCH  (e.g. 2.0.1) - canonical
     * MAJOR.MINOR        (e.g. 2.1) → interpreted as (MAJOR, MINOR, 0) with warning
-    * Date-like YYYY.MM-suffix (e.g. 2025.09-test) – treated as legacy (1,0,0) with warning
+    * Date-like YYYY.MM-suffix (e.g. 2025.09-test) - treated as legacy (1,0,0) with warning
 
-    The relaxed MAJOR.MINOR form exists to tolerate hand‑edited files or early
+    The relaxed MAJOR.MINOR form exists to tolerate hand-edited files or early
     prototype exports. A structured warning is emitted so calling code / users
     can normalize their annotation files over time.
     """
@@ -240,7 +240,7 @@ def migrate_2_0_1_to_2_1_0(data: dict) -> dict:
     refresh date_modified.
     """
 
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
     if not data.get("date_added"):
         data["date_added"] = now
     # Always update modified to reflect migration time
@@ -343,7 +343,7 @@ def migrate_annotation_dict(
 
     # Future version guard. In strict mode raise immediately. In non-strict
     # mode we downgrade to a warning so that users with newer annotations can
-    # still *attempt* to open them (best‑effort forward compatibility) but are
+    # still *attempt* to open them (best-effort forward compatibility) but are
     # encouraged to upgrade.
     if parse_version_tuple(bootstrap_version) > parse_version_tuple(CURRENT_DATA_VERSION):
         msg = f"Stored data_version {bootstrap_version} is newer than supported {CURRENT_DATA_VERSION}. Please upgrade package."
@@ -355,7 +355,7 @@ def migrate_annotation_dict(
 
     if not needs_migration(bootstrap_version):
         # Ensure version key exists when missing but no migration needed (e.g., already current but absent)
-        if "data_version" not in raw or not raw["data_version"] and not dry_run:
+        if "data_version" not in raw or (not raw["data_version"] and not dry_run):
             raw["data_version"] = CURRENT_DATA_VERSION
         return MigrationReport(bootstrap_version, bootstrap_version, [], changed=False, dry_run=dry_run)
 
@@ -421,14 +421,14 @@ def migrate_annotation_dict(
 
 
 __all__ = [
+    "MIGRATIONS",
     "FutureVersionError",
     "InvalidVersionStringError",
-    "migrate_annotation_dict",
     "MigrationReport",
     "MigrationStep",
-    "MIGRATIONS",
-    "needs_migration",
     "UnknownVersionError",
+    "migrate_annotation_dict",
+    "needs_migration",
     "validate_annotation_schema",
 ]
 
@@ -448,11 +448,11 @@ def scan_annotation_versions(root: Path | str, *, include_levels: Iterable[str] 
     Returns
     -------
     list of dict with keys:
-        path: str – file path
-        level: str – annotation level
-        version: str – discovered version (or 'missing')
+        path: str - file path
+        level: str - annotation level
+        version: str - discovered version (or 'missing')
         needs_migration: bool
-        planned_steps: list[str] – empty if none or unknown path
+        planned_steps: list[str] - empty if none or unknown path
     """
     from pathlib import Path  # local import to avoid circulars in some contexts
 

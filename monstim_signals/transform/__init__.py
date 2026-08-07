@@ -10,13 +10,13 @@ from .plateau import (
 )
 
 __all__ = [
+    "NoCalculableMmaxError",
     "butter_bandpass",
     "butter_bandpass_filter",
-    "correct_emg_to_baseline",
-    "rectify_emg",
     "calculate_emg_amplitude",
-    "savgol_filter_y",
+    "correct_emg_to_baseline",
     "detect_plateau",
     "get_avg_mmax",
-    "NoCalculableMmaxError",
+    "rectify_emg",
+    "savgol_filter_y",
 ]

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class MenuBar(QMenuBar):
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__(parent)
         self.parent = parent  # type: MonstimGUI
         self.create_file_menu()

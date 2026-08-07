@@ -289,7 +289,7 @@ class ApplicationState:
         return result
 
     # === SESSION RESTORATION METHODS ===
-    def restore_last_session(self, gui: "MonstimGUI") -> bool:
+    def restore_last_session(self, gui: MonstimGUI) -> bool:
         """
         Attempt to restore the last session state.
         Returns True if restoration was attempted, False if no valid state exists.
@@ -346,7 +346,7 @@ class ApplicationState:
             self._clear_restoration_state()
             return False
 
-    def complete_session_restoration(self, gui: "MonstimGUI"):
+    def complete_session_restoration(self, gui: MonstimGUI):
         """
         Complete session restoration after experiment has loaded.
         Called by data_manager after experiment loading finishes.

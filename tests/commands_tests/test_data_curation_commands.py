@@ -18,7 +18,7 @@ from monstim_gui.commands import (
 pytestmark = pytest.mark.integration
 
 
-def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str, sessions: list[str] = None):
+def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str, sessions: list[str] | None = None):
     """Create a minimal experiment folder with a dataset and empty session folders and annotations."""
     sessions = sessions or ["S01", "S02"]
     exp_path = root / exp_name

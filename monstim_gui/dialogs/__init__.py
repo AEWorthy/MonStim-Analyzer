@@ -8,15 +8,15 @@ from .program_settings import ProgramSettingsDialog
 from .reporting import CopyableReportDialog
 
 __all__ = [
+    "AboutDialog",
     "BulkExportDialog",
     "ChangeChannelNamesDialog",
-    "DatasetMetadataEditor",
-    "InvertChannelPolarityDialog",
     "CopyableReportDialog",
-    "PreferencesDialog",
+    "DatasetMetadataEditor",
     "HelpWindow",
-    "AboutDialog",
-    "clear_math_cache",
+    "InvertChannelPolarityDialog",
     "LatencyWindowsDialog",
+    "PreferencesDialog",
     "ProgramSettingsDialog",
+    "clear_math_cache",
 ]

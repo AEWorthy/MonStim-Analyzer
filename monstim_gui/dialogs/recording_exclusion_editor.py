@@ -47,7 +47,7 @@ class RecordingExclusionEditor(QDialog):
 
     exclusions_applied = Signal()  # Signal emitted when exclusions are applied
 
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__(parent)
         self.gui = parent
         self.current_session = parent.current_session
@@ -336,7 +336,7 @@ class RecordingExclusionEditor(QDialog):
 
         self.update_preview()
 
-    def get_sessions_for_level(self) -> list["Session"]:
+    def get_sessions_for_level(self) -> list[Session]:
         """Get list of sessions based on selected application level."""
         level = self.level_combo.currentData()
 
@@ -366,13 +366,14 @@ class RecordingExclusionEditor(QDialog):
             threshold1 = self.threshold_spinbox.value()
             threshold2 = self.threshold2_spinbox.value()
 
-            if threshold_type == "above":
+        match threshold_type:
+            case "above":
                 return stimulus_value > threshold1
-            elif threshold_type == "below":
+            case "below":
                 return stimulus_value < threshold1
-            elif threshold_type == "outside":
+            case "outside":
                 return stimulus_value < threshold1 or stimulus_value > threshold2
-            elif threshold_type == "inside":
+            case "inside":
                 return threshold1 <= stimulus_value <= threshold2
 
         # Future criteria can be added here
@@ -741,7 +742,7 @@ class RecordingExclusionEditor(QDialog):
         if not path:
             return
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 profile = json.load(f)
 
             stim = profile.get("stimulus", {})

@@ -32,13 +32,13 @@ def test_placeholder_regex_extraction():
 
     # Display math using $$
     html2 = "before $$E=mc^2$$ after"
-    out2, items2 = ha._replace_math_with_placeholders(html2)
+    _, items2 = ha._replace_math_with_placeholders(html2)
     assert len(items2) == 1
     assert items2[0] == ("E=mc^2", True)
 
     # Inline math using single $
     html3 = "a $b+c$ d"
-    out3, items3 = ha._replace_math_with_placeholders(html3)
+    _, items3 = ha._replace_math_with_placeholders(html3)
     assert len(items3) == 1
     assert items3[0] == ("b+c", False)
 

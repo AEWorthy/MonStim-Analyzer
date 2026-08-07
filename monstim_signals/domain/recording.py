@@ -12,12 +12,12 @@ from monstim_signals.core import RecordingAnnot, RecordingMeta, StimCluster
 
 class Recording:
     """
-    Pure‐Python object representing one recording (one stimulus amplitude).
+    Pure-Python object representing one recording (one stimulus amplitude).
     Holds:
       - meta: RecordingMeta (immutable facts, e.g. scan_rate, stim_v, etc.)
       - annot: RecordingAnnot (user edits, e.g. invert flags)
-      - raw: either an h5py.Dataset (lazy) or a 2D np.ndarray [samples × channels]
-      - repo: back‐pointer to its RecordingRepository
+      - raw: either an h5py.Dataset (lazy) or a 2D np.ndarray [samples * channels]
+      - repo: back-pointer to its RecordingRepository
     """
 
     def __init__(
@@ -26,7 +26,7 @@ class Recording:
         annot: RecordingAnnot,
         raw: h5py.Dataset | np.ndarray,
         repo: Any = None,
-        config: dict = None,
+        config: dict | None = None,
     ):
         self.meta = meta
         self.annot = annot
@@ -70,7 +70,7 @@ class Recording:
 
     @property
     def stim_amplitude(self) -> float:
-        # Assume the primary StimCluster’s stim_v is the amplitude for this recording
+        # Assume the primary StimCluster's stim_v is the amplitude for this recording
         return self.meta.primary_stim.stim_v
 
     # ──────────────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ class Recording:
             try:
                 self.meta.num_samples = int(self._raw.shape[0])
             except Exception:
-                pass
+                logger.exception(f"Failed to update num_samples for recording '{getattr(self, 'id', '<unknown>')}' after reopening raw data.")
             logger.debug(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
         except Exception as err:
             logger.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
@@ -154,7 +154,7 @@ class Recording:
         self._config = config or {}
 
     # ──────────────────────────────────────────────────────────────────
-    # 4) Clean‐up (close HDF5 file when you’re done)
+    # 4) Clean-up (close HDF5 file when you're done)
     # ──────────────────────────────────────────────────────────────────
     def close(self) -> None:
         if isinstance(self._raw, h5py.Dataset):
@@ -169,10 +169,9 @@ class Recording:
                 try:
                     self._raw = None
                 except Exception:
-                    # Ensure we don't raise while cleaning up
-                    pass
+                    logger.exception(f"Failed to release raw dataset reference for recording '{self.id}'")
 
-    def __enter__(self) -> "Recording":
+    def __enter__(self) -> Recording:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

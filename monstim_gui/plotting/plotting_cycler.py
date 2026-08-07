@@ -75,7 +75,7 @@ class RecordingCyclerWidget(QGroupBox):
     def __init__(self, parent):
         super().__init__("Recording Cycler", parent)
 
-        self.gui: "MonstimGUI" = get_main_window()
+        self.gui: MonstimGUI = get_main_window()
         if not self.gui or not self.gui.current_session:
             self.max_recording_idxs = 0
         else:
@@ -150,7 +150,7 @@ class RecordingCyclerWidget(QGroupBox):
         self.recording_spinbox.setMaximum(self.max_recording_idxs)
         if old_val > self.max_recording_idxs:
             # Wrap to 0 (expected UX) rather than clamping to last
-            self.recording_spinbox.setValue(0 if self.max_recording_idxs >= 0 else 0)
+            self.recording_spinbox.setValue(0)
         new_val = self.recording_spinbox.value()
         self.recording_spinbox.blockSignals(False)
         # If the value actually changed while signals were blocked, manually propagate

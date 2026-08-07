@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class PlotPane(QGroupBox):
-    def __init__(self, parent: "MonstimGUI", use_opengl: bool = None):
+    def __init__(self, parent: MonstimGUI, use_opengl: bool | None = None):
         super().__init__("Plot Pane", parent)
         self.parent = parent
         self.layout = QVBoxLayout()

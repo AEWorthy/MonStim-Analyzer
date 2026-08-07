@@ -191,15 +191,14 @@ class Dataset:
 
     def iter_latency_window_names(self):
         """Yield latency window names (union) in sorted order."""
-        for name in self.unique_latency_window_names():
-            yield name
+        yield from self.unique_latency_window_names()
 
     def window_presence_map(self) -> dict[str, list[str]]:
         """Return mapping of window name -> list of session IDs that contain it."""
         presence: dict[str, list[str]] = {name: [] for name in self.unique_latency_window_names()}
         for sess in self.sessions:
             sess_names = {w.name for w in getattr(sess.annot, "latency_windows", [])}
-            for name in presence.keys():
+            for name in presence:
                 if name in sess_names:
                     presence[name].append(sess.id)
         return presence
@@ -210,10 +209,7 @@ class Dataset:
         if len(self.sessions) <= 1:
             return False
         first = [w.name for w in self.sessions[0].annot.latency_windows]
-        for sess in self.sessions[1:]:
-            if [w.name for w in sess.annot.latency_windows] != first:
-                return True
-        return False
+        return any([w.name for w in sess.annot.latency_windows] != first for sess in self.sessions[1:])
 
     def get_session_latency_window(self, session: Session, window_name: str) -> LatencyWindow | None:
         """Fetch a latency window by name (case-insensitive) from a specific session."""
@@ -477,7 +473,7 @@ class Dataset:
             dataset.plot(plot_type='reflexCurves', mmax_report=True)
         """
         # Call the appropriate plotting method from the plotter object
-        raw_data = getattr(self.plotter, f"plot_{'reflexCurves' if not plot_type else plot_type}")(**kwargs)
+        raw_data = getattr(self.plotter, f"plot_{plot_type if plot_type else 'reflexCurves'}")(**kwargs)
         return raw_data
 
     def get_avg_m_max(self, method, channel_index, return_avg_mmax_thresholds=False):
@@ -536,7 +532,7 @@ class Dataset:
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             m_wave = session.get_m_wave_amplitudes(method, channel_index)
-            for volt, amp in zip(binned, m_wave):
+            for volt, amp in zip(binned, m_wave, strict=True):
                 m_wave_bins[volt].append(amp)
         avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         sem = [(float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan) for v in self.stimulus_voltages]
@@ -560,7 +556,7 @@ class Dataset:
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             h_wave = session.get_h_wave_amplitudes(method, channel_index)
-            for volt, amp in zip(binned, h_wave):
+            for volt, amp in zip(binned, h_wave, strict=True):
                 h_wave_bins[volt].append(amp)
         avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
@@ -587,10 +583,7 @@ class Dataset:
             return {}
 
         window_name: str
-        if isinstance(window, LatencyWindow):
-            window_name = window.name
-        else:
-            window_name = str(window)
+        window_name = window.name if isinstance(window, LatencyWindow) else str(window)
 
         result: dict[str, list[np.ndarray]] = {}
         missing_sessions: list[str] = []
@@ -614,10 +607,7 @@ class Dataset:
             return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
 
         window_name: str
-        if isinstance(window, LatencyWindow):
-            window_name = window.name
-        else:
-            window_name = str(window)
+        window_name = window.name if isinstance(window, LatencyWindow) else str(window)
 
         # Get all reflex amplitudes across available sessions
         all_amplitudes = self.get_lw_reflex_amplitudes(method, channel_index, window_name)
@@ -635,7 +625,7 @@ class Dataset:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             # Build a temporary mapping for the session to count contribution per voltage bin
             seen_bins: set[float] = set()
-            for v, amp in zip(binned, amps):
+            for v, amp in zip(binned, amps, strict=True):
                 if v in bin_amplitudes:
                     bin_amplitudes[v].append(amp)
                     seen_bins.add(v)
@@ -778,7 +768,7 @@ class Dataset:
 
             gc.collect()
 
-    def __enter__(self) -> "Dataset":
+    def __enter__(self) -> Dataset:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

@@ -21,7 +21,7 @@ from pathlib import Path
 # Add parent directory to path so we can import from monstim_gui
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PySide6.QtCore import QCoreApplication, QSettings  # noqa: E402
+from PySide6.QtCore import QCoreApplication, QSettings
 
 # Constants
 SETTINGS_VERSION_KEY = "SettingsVersion"
@@ -268,7 +268,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize Qt application
-    app, settings = initialize_app()
+    _, settings = initialize_app()
 
     # Execute command
     if args.command == "inspect":

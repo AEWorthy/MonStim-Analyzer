@@ -31,8 +31,8 @@ class Command(abc.ABC):
 
 
 class CommandInvoker:
-    def __init__(self, parent: "MonstimGUI"):
-        self.parent: "MonstimGUI" = parent  # type: MonstimGUI
+    def __init__(self, parent: MonstimGUI):
+        self.parent: MonstimGUI = parent  # type: MonstimGUI
         # Limit history to avoid unbounded memory growth in long-running sessions
         # Default max history retains the most recent 100 commands (configurable)
         self.max_history = 100
@@ -184,10 +184,7 @@ class ExcludeSessionCommand(Command):
         new_current = None
         remaining_sessions = self.gui.current_dataset.sessions
         if remaining_sessions:
-            if self.idx < len(remaining_sessions):
-                new_current = remaining_sessions[self.idx]
-            else:
-                new_current = remaining_sessions[-1]
+            new_current = remaining_sessions[self.idx] if self.idx < len(remaining_sessions) else remaining_sessions[-1]
         self.gui.current_session = new_current
         # Update session list; keep dataset selection
         self.gui.data_selection_widget.update(levels=("session",))
@@ -277,10 +274,7 @@ class ExcludeDatasetCommand(Command):
         remaining = self.gui.current_experiment.datasets
         new_dataset = None
         if remaining:
-            if self.idx is not None and self.idx < len(remaining):
-                new_dataset = remaining[self.idx]
-            else:
-                new_dataset = remaining[-1]
+            new_dataset = remaining[self.idx] if self.idx is not None and self.idx < len(remaining) else remaining[-1]
 
         self.gui.current_dataset = new_dataset
         # Reset session selection relative to new dataset
@@ -779,8 +773,8 @@ class CreateExperimentCommand(Command):
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
         except Exception as e:
-            logger.error(f"Failed to create experiment: {e!s}")
-            raise Exception(f"Failed to create experiment: {e!s}")
+            logger.exception(f"Failed to create experiment: {e!s}")
+            raise Exception(f"Failed to create experiment: {e!s}") from e
 
     def undo(self):
         """Delete the created experiment."""
@@ -791,8 +785,8 @@ class CreateExperimentCommand(Command):
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
         except Exception as e:
-            logger.error(f"Failed to undo experiment creation: {e!s}")
-            raise Exception(f"Failed to undo experiment creation: {e!s}")
+            logger.exception(f"Failed to undo experiment creation: {e!s}")
+            raise Exception(f"Failed to undo experiment creation: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Created experiment '{self.exp_name}'"
@@ -801,7 +795,7 @@ class CreateExperimentCommand(Command):
 class MoveDatasetCommand(Command):
     def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str):
         self.command_name = f"Move '{dataset_name}' from '{from_exp}' to '{to_exp}'"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.from_exp = from_exp
@@ -812,14 +806,16 @@ class MoveDatasetCommand(Command):
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
         except Exception as e:
-            raise Exception(f"Failed to move dataset: {e!s}")
+            logger.exception(f"Failed to move dataset: {e!s}")
+            raise Exception(f"Failed to move dataset: {e!s}") from e
 
     def undo(self):
         """Move the dataset back to original location."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
         except Exception as e:
-            raise Exception(f"Failed to undo dataset move: {e!s}")
+            logger.exception(f"Failed to undo dataset move: {e!s}")
+            raise Exception(f"Failed to undo dataset move: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Moved dataset '{self.dataset_name}' from '{self.from_exp}' to '{self.to_exp}'"
@@ -864,7 +860,7 @@ class MoveDatasetsCommand(Command):
 
         except Exception as e:
             logger.exception(f"Failed to execute batched dataset moves: {e!s}")
-            raise Exception(f"Failed to execute batched dataset moves: {e!s}")
+            raise Exception(f"Failed to execute batched dataset moves: {e!s}") from e
 
     def undo(self):
         """Undo by moving succeeded items back in reverse order."""
@@ -889,16 +885,16 @@ class MoveDatasetsCommand(Command):
 
         except Exception as e:
             logger.exception(f"Failed to undo batched dataset moves: {e!s}")
-            raise Exception(f"Failed to undo batched dataset moves: {e!s}")
+            raise Exception(f"Failed to undo batched dataset moves: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Moved {len(self._succeeded)} dataset(s) in batch"
 
 
 class CopyDatasetCommand(Command):
-    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
+    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str | None = None):
         self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.from_exp = from_exp
@@ -921,7 +917,7 @@ class CopyDatasetCommand(Command):
             new_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
             added_datasets = new_datasets - original_datasets
             if added_datasets:
-                self.copied_folder_name = list(added_datasets)[0]
+                self.copied_folder_name = next(iter(added_datasets))  # Get the first added dataset folder
             else:
                 self.copied_folder_name = self.dataset_id  # fallback
 
@@ -939,7 +935,7 @@ class CopyDatasetCommand(Command):
                 logger.debug("Non-fatal: index refresh after dataset copy failed.", exc_info=True)
         except Exception as e:
             logger.exception(f"Failed to copy dataset: {e!s}")
-            raise Exception(f"Failed to copy dataset: {e!s}")
+            raise Exception(f"Failed to copy dataset: {e!s}") from e
 
     def undo(self):
         """Delete the copied dataset."""
@@ -959,7 +955,8 @@ class CopyDatasetCommand(Command):
                 except Exception:
                     logger.debug("Non-fatal: index refresh after undo dataset copy failed.", exc_info=True)
         except Exception as e:
-            raise Exception(f"Failed to undo dataset copy: {str(e)}")
+            logger.exception(f"Failed to undo dataset copy: {e!s}")
+            raise Exception(f"Failed to undo dataset copy: {e!s}") from e
 
     def get_description(self) -> str:
         if self.from_exp == self.to_exp:
@@ -991,7 +988,8 @@ class DeleteExperimentCommand(Command):
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
         except Exception as e:
-            raise Exception(f"Failed to delete experiment: {str(e)}")
+            logger.exception(f"Failed to delete experiment: {e!s}")
+            raise Exception(f"Failed to delete experiment: {e!s}") from e
 
     def undo(self):
         """Cannot undo experiment deletion - show warning."""
@@ -1061,7 +1059,8 @@ class RenameExperimentCommand(Command):
                     # Re-raise to prevent silent failures
                     raise
         except Exception as e:
-            raise Exception(f"Failed to undo experiment rename: {str(e)}")
+            logger.exception(f"Failed to undo experiment rename: {e!s}")
+            raise Exception(f"Failed to undo experiment rename: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Renamed experiment '{self.old_name}' to '{self.new_name}'"
@@ -1093,7 +1092,8 @@ class DeleteDatasetCommand(Command):
             except Exception:
                 logger.debug("Non-fatal: index refresh after dataset deletion failed.", exc_info=True)
         except Exception as e:
-            raise Exception(f"Failed to delete dataset: {str(e)}")
+            logger.exception(f"Failed to delete dataset: {e!s}")
+            raise Exception(f"Failed to delete dataset: {e!s}") from e
 
     def undo(self):
         QMessageBox.warning(
@@ -1152,7 +1152,8 @@ class ToggleDatasetInclusionCommand(Command):
 
             repo.expt_js.write_text(json.dumps(asdict(annot), indent=2))
         except Exception as e:
-            raise Exception(f"Failed to update dataset inclusion: {e}")
+            logger.exception(f"Failed to update dataset inclusion: {e!s}")
+            raise Exception(f"Failed to update dataset inclusion: {e!s}") from e
 
         # Refresh open dialog/UI if present
         if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:

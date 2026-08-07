@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
 
-def setup_main_layout(parent: "MonstimGUI") -> dict:
+def setup_main_layout(parent: MonstimGUI) -> dict:
     """Create and apply the main window layout.
 
     Parameters

@@ -51,10 +51,7 @@ def get_base_path() -> Path:
 
 def get_bundle_path() -> str:
     """Return the path to the bundled resources when running a frozen build."""
-    if getattr(sys, "frozen", False):
-        bundle_path = sys._MEIPASS
-    else:
-        bundle_path = os.path.dirname(os.path.abspath(__file__))
+    bundle_path = os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, "frozen", False) else sys._MEIPASS
 
     return bundle_path
 
@@ -77,19 +74,13 @@ def get_export_path() -> str:
 
 def get_source_path() -> str:
     """Return the path to the ``assets`` folder containing resource files."""
-    if getattr(sys, "frozen", False):
-        source_path = os.path.join(get_bundle_path(), "assets")
-    else:
-        source_path = os.path.join(get_base_path(), "assets")
+    source_path = os.path.join(get_base_path(), "assets") if not getattr(sys, "frozen", False) else os.path.join(get_bundle_path(), "assets")
     return source_path
 
 
 def get_docs_path() -> str:
     """Return the path to bundled documentation files."""
-    if getattr(sys, "frozen", False):
-        docs_path = os.path.join(get_bundle_path(), "docs")
-    else:
-        docs_path = os.path.join(get_base_path(), "docs")
+    docs_path = os.path.join(get_base_path(), "docs") if not getattr(sys, "frozen", False) else os.path.join(get_bundle_path(), "docs")
     return docs_path
 
 
@@ -154,7 +145,7 @@ def deep_equal(val1, val2) -> bool:
     if isinstance(val1, list) and isinstance(val2, list):
         if len(val1) != len(val2):
             return False
-        return all(deep_equal(v1, v2) for v1, v2 in zip(val1, val2))
+        return all(deep_equal(v1, v2) for v1, v2 in zip(val1, val2, strict=True))
     return val1 == val2
 
 
@@ -169,11 +160,8 @@ def load_config(config_file=None):
         default_config_file = get_config_path()
         user_config_file = os.path.join(os.path.dirname(default_config_file), "config-user.yml")
         # if it exists, get user config file
-        if os.path.exists(user_config_file):
-            config_file = user_config_file
-        else:
-            config_file = default_config_file
-    with open(config_file, "r") as file:
+        config_file = user_config_file if os.path.exists(user_config_file) else default_config_file
+    with open(config_file) as file:
         config = yaml.safe_load(file)
     return config
 

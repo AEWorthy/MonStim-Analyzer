@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pyqtgraph as pg
+from pyqtgraph.graphicsItems.PlotItem import PlotItem
 
 if TYPE_CHECKING:
     from monstim_gui.plotting import PlotPane
@@ -25,8 +26,8 @@ class BasePlotterPyQtGraph:
     """
 
     def __init__(self, emg_object):
-        self.emg_object: "Session" | "Dataset" | "Experiment" = emg_object
-        self.current_plot_items: list[pg.PlotItem] = []
+        self.emg_object: Session | Dataset | Experiment = emg_object
+        self.current_plot_items: list[PlotItem] = []
         self.current_regions: list[pg.LinearRegionItem] = []
 
         # Set up default colors
@@ -62,7 +63,7 @@ class BasePlotterPyQtGraph:
             # If errors, ignore overrides
             pass
 
-    def create_plot_layout(self, canvas: "PlotPane", channel_indices: list[int] = None) -> tuple[list[pg.PlotItem], pg.GraphicsLayout]:
+    def create_plot_layout(self, canvas: PlotPane, channel_indices: list[int] | None = None) -> tuple[list[PlotItem], pg.GraphicsLayout]:
         """
         Create plot layout with subplots for multiple channels with performance optimizations.
 
@@ -90,7 +91,7 @@ class BasePlotterPyQtGraph:
 
         if num_channels == 1:
             # Single plot
-            plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
+            plot_item: PlotItem = canvas.graphics_layout.addPlot(row=0, col=0)
             # Enable performance optimizations
             plot_item.setClipToView(True)
             plot_item.setDownsampling(auto=True)
@@ -99,8 +100,8 @@ class BasePlotterPyQtGraph:
             raise UnableToPlotError("No channels to plot. Select at least one channel.")
         else:
             # Multiple plots in a row
-            for i, channel_index in enumerate(channel_indices):
-                plot_item: pg.PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
+            for i, _channel_index in enumerate(channel_indices):
+                plot_item: PlotItem = canvas.graphics_layout.addPlot(row=0, col=i)
                 # Enable performance optimizations for each plot
                 plot_item.setClipToView(True)
                 plot_item.setDownsampling(auto=True)
@@ -207,7 +208,7 @@ class BasePlotterPyQtGraph:
                                 cursor_texts[idx].show()
                             else:
                                 cursor_texts[idx].hide()
-                        except (IndexError, TypeError, AttributeError):
+                        except IndexError, TypeError, AttributeError:
                             # Fallback: hide text if positioning fails
                             cursor_texts[idx].hide()
                     else:
@@ -218,7 +219,7 @@ class BasePlotterPyQtGraph:
 
         # Hide all lines and text
         def hide_all_indicators():
-            for h, v, t in zip(h_lines, v_lines, cursor_texts):
+            for h, v, t in zip(h_lines, v_lines, cursor_texts, strict=True):
                 h.hide()
                 v.hide()
                 t.hide()
@@ -239,10 +240,7 @@ class BasePlotterPyQtGraph:
             show_text = False
 
             # Extract position from event
-            if isinstance(evt, (list, tuple)):
-                pos = evt[0]
-            else:
-                pos = evt
+            pos = evt[0] if isinstance(evt, (list, tuple)) else evt
 
             # Find which plot contains the cursor
             active_plot_idx = None
@@ -283,7 +281,7 @@ class BasePlotterPyQtGraph:
 
     def add_latency_region(
         self,
-        plot_item: pg.PlotItem,
+        plot_item: PlotItem,
         start_time: float,
         end_time: float,
         color: str = "#ff000030",
@@ -294,7 +292,7 @@ class BasePlotterPyQtGraph:
 
         Parameters
         ----------
-        plot_item : pg.PlotItem
+        plot_item : PlotItem
             The plot item to add region to
         start_time : float
             Start time of the region in milliseconds
@@ -330,11 +328,11 @@ class BasePlotterPyQtGraph:
 
     def plot_time_series(
         self,
-        plot_item: pg.PlotItem,
+        plot_item: PlotItem,
         time_axis: np.ndarray,
         data: np.ndarray,
-        color: str = None,
-        label: str = None,
+        color: str | None = None,
+        label: str | None = None,
         line_width: float = 1.0,
     ) -> pg.PlotDataItem:
         """
@@ -342,7 +340,7 @@ class BasePlotterPyQtGraph:
 
         Parameters
         ----------
-        plot_item : pg.PlotItem
+        plot_item : PlotItem
             The plot item to draw on
         time_axis : np.ndarray
             Time axis data
@@ -387,20 +385,20 @@ class BasePlotterPyQtGraph:
 
     def plot_scatter(
         self,
-        plot_item: pg.PlotItem,
+        plot_item: PlotItem,
         x_data: np.ndarray,
         y_data: np.ndarray,
-        color: str = None,
+        color: str | None = None,
         size: float = 5.0,
         symbol: str = "o",
-        label: str = None,
+        label: str | None = None,
     ) -> pg.ScatterPlotItem:
         """
         Plot scatter data on a plot item.
 
         Parameters
         ----------
-        plot_item : pg.PlotItem
+        plot_item : PlotItem
             The plot item to draw on
         x_data : np.ndarray
             X-axis data
@@ -439,18 +437,18 @@ class BasePlotterPyQtGraph:
 
     def add_error_bars(
         self,
-        plot_item: pg.PlotItem,
+        plot_item: PlotItem,
         x_data: np.ndarray,
         y_data: np.ndarray,
         y_error: np.ndarray,
-        color: str = None,
+        color: str | None = None,
     ) -> pg.ErrorBarItem:
         """
         Add error bars to a plot.
 
         Parameters
         ----------
-        plot_item : pg.PlotItem
+        plot_item : PlotItem
             The plot item to draw on
         x_data : np.ndarray
             X-axis data
@@ -478,17 +476,17 @@ class BasePlotterPyQtGraph:
 
     def set_labels(
         self,
-        plot_item: pg.PlotItem,
-        title: str = None,
-        x_label: str = None,
-        y_label: str = None,
+        plot_item: PlotItem,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
     ):
         """
         Set labels for a plot.
 
         Parameters
         ----------
-        plot_item : pg.PlotItem
+        plot_item : PlotItem
             The plot item to set labels for
         title : str, optional
             Plot title
@@ -504,19 +502,19 @@ class BasePlotterPyQtGraph:
         if y_label:
             plot_item.setLabel("left", y_label)
 
-    def add_legend(self, plot_item: pg.PlotItem):
+    def add_legend(self, plot_item: PlotItem):
         """
         Add a legend to a plot.
 
         Parameters
         ----------
-        plot_item : pg.PlotItem
+        plot_item : PlotItem
             The plot item to add legend to
         """
         legend = plot_item.addLegend()
         return legend
 
-    def clear_current_plots(self, canvas: "PlotPane"):
+    def clear_current_plots(self, canvas: PlotPane):
         """Clear all current plot items and regions with memory safety."""
 
         try:
@@ -536,7 +534,7 @@ class BasePlotterPyQtGraph:
         except Exception as e:
             logger.error(f"Error clearing plots: {e}", exc_info=True)
             # Re-raise as UnableToPlotError so it's handled properly upstream
-            raise UnableToPlotError(f"Failed to clear existing plots: {e}")
+            raise UnableToPlotError(f"Failed to clear existing plots: {e}") from e
 
     def _convert_matplotlib_color(self, mpl_color):
         """Convert matplotlib color names to PyQtGraph-compatible colors."""
@@ -581,7 +579,7 @@ class BasePlotterPyQtGraph:
         )
         return pale
 
-    def auto_range_y_axis_linked_plots(self, plot_items: list[pg.PlotItem], padding: float = 0.05):
+    def auto_range_y_axis_linked_plots(self, plot_items: list[PlotItem], padding: float = 0.05):
         """
         Auto-range Y-axis for linked plots by calculating the optimal range across all plots.
 
@@ -590,7 +588,7 @@ class BasePlotterPyQtGraph:
 
         Parameters
         ----------
-        plot_items : list[pg.PlotItem]
+        plot_items : list[PlotItem]
             list of plot items that are Y-linked
         padding : float, optional
             Fraction of padding to add above and below the data range (default: 0.05 = 5%)
@@ -607,7 +605,7 @@ class BasePlotterPyQtGraph:
             for item in plot_item.listDataItems():
                 # Get the actual y-data directly from the item
                 try:
-                    x_data, y_data = item.getData()
+                    _x_data, y_data = item.getData()
                     if y_data is not None and len(y_data) > 0:
                         # Filter out NaN and Inf values
                         valid_data = y_data[~(np.isnan(y_data) | np.isinf(y_data))]
@@ -616,7 +614,7 @@ class BasePlotterPyQtGraph:
                             y_max = np.max(valid_data)
                             overall_y_min = min(overall_y_min, y_min)
                             overall_y_max = max(overall_y_max, y_max)
-                except (AttributeError, TypeError, ValueError):
+                except AttributeError, TypeError, ValueError:
                     # Item doesn't have getData() or data is invalid, skip it
                     logger.warning(f"Unable to extract data from item {item} in plot {plot_item}")
                     continue

@@ -8,7 +8,7 @@ class ConfigRepository:
     Handles reading and writing of configuration files for the GUI.
     """
 
-    def __init__(self, default_config_file: str, user_config_file: str = None):
+    def __init__(self, default_config_file: str, user_config_file: str | None = None):
         self.default_config_file = default_config_file
         self.user_config_file = user_config_file or self._get_user_config_path()
 
@@ -17,10 +17,10 @@ class ConfigRepository:
         return os.path.join(config_dir, "config-user.yml")
 
     def read_config(self) -> dict:
-        with open(self.default_config_file, "r") as file:
+        with open(self.default_config_file) as file:
             config = yaml.safe_load(file)
         if os.path.exists(self.user_config_file):
-            with open(self.user_config_file, "r") as file:
+            with open(self.user_config_file) as file:
                 user_config = yaml.safe_load(file)
             if user_config:
                 # Coerce user config types to match default config

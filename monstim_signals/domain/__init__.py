@@ -1,4 +1,4 @@
-__all__ = ["Recording", "Session", "Dataset", "Experiment"]
+__all__ = ["Dataset", "Experiment", "Recording", "Session"]
 
 from .dataset import Dataset
 from .experiment import Experiment

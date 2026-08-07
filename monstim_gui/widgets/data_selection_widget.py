@@ -54,10 +54,7 @@ class CircleDelegate(QStyledItemDelegate):
         # Some combos store non-bool data in UserRole (e.g., experiment id).
         # If UserRole isn't a bool, fall back to UserRole+1 for the completion flag.
         data_user = index.data(Qt.ItemDataRole.UserRole)
-        if isinstance(data_user, bool):
-            is_completed = data_user
-        else:
-            is_completed = index.data(Qt.ItemDataRole.UserRole + 1)
+        is_completed = data_user if isinstance(data_user, bool) else index.data(Qt.ItemDataRole.UserRole + 1)
 
         # For placeholder items or unknown status, don't draw a circle
         if is_completed is None:
@@ -76,9 +73,9 @@ class CircleDelegate(QStyledItemDelegate):
 
 
 class DataSelectionWidget(QGroupBox):
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__("Data Selection", parent)
-        self.parent: "MonstimGUI" = parent
+        self.parent: MonstimGUI = parent
         self.circle_delegate = CircleDelegate(self)
         # Form layout
         form = QFormLayout()
@@ -233,13 +230,13 @@ class DataSelectionWidget(QGroupBox):
                 try:
                     c.blockSignals(val)
                 except Exception:
-                    pass
+                    logger.exception("Failed to block combo signals")
 
         def _select_by_index(combo: QComboBox, idx: int):
             try:
                 combo.setCurrentIndex(idx)
             except Exception:
-                pass
+                logger.exception("Failed to select combo index")
 
         _block_all(True)
         try:
@@ -342,7 +339,7 @@ class DataSelectionWidget(QGroupBox):
                         ds_idx = parent.current_experiment.datasets.index(target_dataset)
                     except ValueError:
                         # Target dataset not found, fall back to first available dataset
-                        ds_idx = 0 if parent.current_experiment.datasets else 0
+                        ds_idx = 0
                 elif parent.current_experiment and parent.current_experiment.datasets:
                     # No target to preserve, select first available dataset
                     ds_idx = 0
@@ -375,7 +372,7 @@ class DataSelectionWidget(QGroupBox):
                         s_idx = parent.current_dataset.sessions.index(target_session)
                     except ValueError:
                         # Target session not found, fall back to first available session
-                        s_idx = 0 if parent.current_dataset.sessions else 0
+                        s_idx = 0
                 elif parent.current_dataset and parent.current_dataset.sessions:
                     # No target to preserve, select first available session
                     s_idx = 0
@@ -501,7 +498,7 @@ class DataSelectionWidget(QGroupBox):
                     try:
                         self.parent.plot_widget.on_data_selection_changed()
                     except Exception:
-                        pass
+                        logger.exception("Failed to notify plot widget of data selection change after dataset exclusion")
             else:
                 self.parent.exclude_session()
                 # Rebuild sessions to keep statuses aligned
@@ -511,7 +508,7 @@ class DataSelectionWidget(QGroupBox):
                     try:
                         self.parent.plot_widget.on_data_selection_changed()
                     except Exception:
-                        pass
+                        logger.exception("Failed to notify plot widget of data selection change after session exclusion")
         elif restore_menu and selected in restore_menu.actions():
             if level == "dataset":
                 self.parent.restore_dataset(selected.text())
@@ -724,7 +721,7 @@ class DataSelectionWidget(QGroupBox):
                 return
             # Choose highest severity icon: warning > info
             has_warn = any(n["level"] == "warning" for n in notices)
-            icon = "⚠" if has_warn else "ℹ"
+            icon = "⚠" if has_warn else "ℹ"  # noqa: RUF001
             label.setText(icon)
             # Set color based on severity: warning -> yellow, info -> light grey
             if has_warn:
@@ -743,8 +740,7 @@ class DataSelectionWidget(QGroupBox):
         try:
             self._update_notice_icons()
         except Exception:
-            # Suppress any UI refresh errors (non-fatal)
-            pass
+            logger.exception("Failed to refresh notice icons")
 
     def _on_manage_data_clicked(self):
         """Open the data curation manager dialog."""

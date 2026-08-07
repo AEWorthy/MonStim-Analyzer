@@ -182,7 +182,7 @@ class PandasModel(QAbstractTableModel):
             if orientation == Qt.Orientation.Vertical:
                 idx = self._data.index
                 if isinstance(idx, pd.MultiIndex):
-                    names = [f"{n}:{v}" for n, v in zip(idx.names, idx[section]) if n]
+                    names = [f"{n}:{v}" for n, v in zip(idx.names, idx[section], strict=True) if n]
                     return " | ".join(names)
                 else:
                     name = idx.name or ""
@@ -192,7 +192,7 @@ class PandasModel(QAbstractTableModel):
 
 
 class DataFrameDialog(QDialog):
-    def __init__(self, df: pd.DataFrame, parent=None, plot_type: str = None, data_level: str = None, plot_options: dict | None = None):
+    def __init__(self, df: pd.DataFrame, parent=None, plot_type: str | None = None, data_level: str | None = None, plot_options: dict | None = None):
         super().__init__(parent)
         self.df = df
         self.plot_type = plot_type

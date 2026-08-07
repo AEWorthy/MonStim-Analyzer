@@ -117,7 +117,7 @@ class DatasetTreeWidget(QTreeWidget):
                 self.setAutoScrollMargin(self._auto_scroll_margin)
             except Exception:
                 # Non-fatal: setAutoScrollMargin may not be available on all platforms/PyQt versions
-                pass
+                logger.warning("setAutoScrollMargin not available; using default margin for autoscroll.")
         except Exception:
             # Non-fatal if attributes aren't present on the platform
             self._auto_scroll_margin = 30
@@ -143,13 +143,9 @@ class DatasetTreeWidget(QTreeWidget):
                 except Exception:
                     # Some items may not support checkState (e.g., corrupted or custom widgets).
                     # Safe to ignore and skip these items for drag selection.
-                    pass
+                    logger.warning("Failed to check state of item; skipping.")
 
-        if checked_items:
-            items = checked_items
-        else:
-            # Use selection as a fallback
-            items = [it for it in self.selectedItems() if it and it.parent()]
+        items = checked_items or [it for it in self.selectedItems() if it and it.parent()]
 
         # If still nothing, fallback to default behavior
         if not items:
@@ -342,10 +338,7 @@ class DatasetTreeWidget(QTreeWidget):
             return
 
         # Get the target experiment (either the dropped-on item or its parent)
-        if drop_item.parent():  # Dropped on a dataset
-            target_exp_item = drop_item.parent()
-        else:  # Dropped on an experiment
-            target_exp_item = drop_item
+        target_exp_item = drop_item.parent() if drop_item.parent() else drop_item
 
         target_exp_data = target_exp_item.data(0, Qt.ItemDataRole.UserRole)
         if not target_exp_data or target_exp_data.get("type") != "experiment":
@@ -366,7 +359,7 @@ class DatasetTreeWidget(QTreeWidget):
             self.dataset_move_batch_start.emit()
         except Exception:
             # If anything goes wrong emitting the signal, continue gracefully
-            pass
+            logger.warning("Failed to emit dataset_move_batch_start signal; proceeding with move.")
 
         # Collect checked dataset children across all experiments
         for i in range(self.topLevelItemCount()):
@@ -417,7 +410,7 @@ class DataCurationManager(QDialog):
 
     data_structure_changed = Signal()  # Signal emitted when data structure changes
 
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__(parent)
         try:
             self.gui = parent
@@ -491,7 +484,7 @@ class DataCurationManager(QDialog):
         try:
             header_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         except Exception:
-            pass
+            logger.warning("Failed to set size policy for header label; using default.")
         layout.addWidget(header_label)
 
         # Instructions
@@ -504,7 +497,7 @@ class DataCurationManager(QDialog):
         try:
             instructions.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         except Exception:
-            pass
+            logger.warning("Failed to set size policy for instructions label; using default.")
         layout.addWidget(instructions)
 
         # Batch operations
@@ -622,7 +615,7 @@ class DataCurationManager(QDialog):
             try:
                 header.resizeSection(0, 420)
             except Exception:
-                pass
+                logger.debug("Failed to resize first column; using default width.")
         except Exception:
             # Fallback for older Qt versions
             header.setSectionResizeMode(0, header.Interactive)
@@ -643,7 +636,7 @@ class DataCurationManager(QDialog):
         try:
             self.details_pane.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for details pane; using default.")
         # Favor the tree horizontally, but let both panes expand
         try:
             splitter.setStretchFactor(0, 3)
@@ -673,7 +666,7 @@ class DataCurationManager(QDialog):
         try:
             self.dataset_summary.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for dataset summary; using default.")
 
         # TODO: Consider adding a small 'Views' / 'Saved Filters' pane here in the future
         # to let users save common filter criteria or tag-based views for fast access.
@@ -897,7 +890,7 @@ class DataCurationManager(QDialog):
                     try:
                         exp_item.setData(0, Qt.ItemDataRole.ToolTipRole, exp_id)
                     except Exception:
-                        pass
+                        logger.warning(f"Failed to set tooltip for experiment '{exp_id}'", exc_info=True)
 
                     # Add dataset children using metadata
                     for ds_metadata in exp_metadata.get("datasets", []):
@@ -929,7 +922,7 @@ class DataCurationManager(QDialog):
                         try:
                             ds_item.setData(0, Qt.ItemDataRole.ToolTipRole, ds_name)
                         except Exception:
-                            pass
+                            logger.warning(f"Failed to set tooltip for dataset '{ds_name}'", exc_info=True)
 
                         # Light styling for excluded datasets: italic + gray text
                         if is_excluded:
@@ -1140,7 +1133,7 @@ class DataCurationManager(QDialog):
         try:
             scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for details scroll area; using default.")
 
         # Inner content: wrap form in vertical and horizontal layouts
         content = QWidget()
@@ -1170,7 +1163,7 @@ class DataCurationManager(QDialog):
             try:
                 lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             except Exception:
-                pass
+                logger.warning("Failed to set text interaction flags for label; using default.")
             return lbl
 
         self.detail_type = _mk_label()
@@ -1223,7 +1216,7 @@ class DataCurationManager(QDialog):
         try:
             self.detail_path.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for path label; using default.")
 
         # Helper: build right-aligned, fixed-width label
         def _mk_title(text: str) -> QLabel:
@@ -1287,14 +1280,14 @@ class DataCurationManager(QDialog):
                 QLabel { padding-left: 0px; margin-left: 0px; }
                 """)
         except Exception:
-            pass
+            logger.debug("Failed to set stylesheet for details pane; using default.")
 
         # Constrain width so long text doesn't expand the splitter/window
         try:
             box.setMinimumWidth(260)
             box.setMaximumWidth(380)
         except Exception:
-            pass
+            logger.debug("Failed to set width constraints for details pane; using default.")
 
         return box
 
@@ -1458,7 +1451,7 @@ class DataCurationManager(QDialog):
                     exp_item.text(4) or "",
                 ]
 
-                def exp_token_matches(token: str) -> bool:
+                def exp_token_matches(token: str, exp_meta: dict, exp_name: str) -> bool:
                     t = token.strip()
                     if not t:
                         return True
@@ -1499,7 +1492,7 @@ class DataCurationManager(QDialog):
                     fields = [norm(exp_name)] + [norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")]
                     return any(tt in f for f in fields)
 
-                exp_visible = True if not tokens else all(exp_token_matches(t) for t in tokens)
+                exp_visible = True if not tokens else all(exp_token_matches(t, exp_meta, exp_name) for t in tokens)
                 # Build highlighted HTML per column for experiment
                 if q:
                     exp_html_cols = self._build_highlight_html(exp_cols, tokens)
@@ -1668,7 +1661,7 @@ class DataCurationManager(QDialog):
             self._refresh_undo_last_button()
         except Exception:
             # Non-fatal; ensure UI still updates
-            pass
+            logger.warning("Failed to refresh Undo Last button state; continuing without update.")
 
     def _refresh_undo_last_button(self):
         """Enable/disable the Undo Last button and set its tooltip to the last command name."""
@@ -1780,7 +1773,7 @@ class DataCurationManager(QDialog):
                 self.dataset_tree.setEnabled(enabled)
             except Exception:
                 # Ignore errors if the widget is missing or in a transient state; safe to skip in UI enable/disable.
-                pass
+                logger.warning("Failed to set dataset_tree enabled state; widget may be missing or deleted.")
 
             for btn_name in (
                 "create_blank_experiment_button",
@@ -1835,7 +1828,7 @@ class DataCurationManager(QDialog):
                 QApplication.restoreOverrideCursor()
             except Exception:
                 # Ignore errors restoring cursor; not critical if cursor was not set
-                pass
+                logger.warning("Failed to restore cursor after import; cursor state may be inconsistent.")
             try:
                 _set_dataset_ui_enabled(True)
             except Exception as e:

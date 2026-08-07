@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 
 
-def parse_date(date_string: str, preferred_format: str = None):
+def parse_date(date_string: str, preferred_format: str | None = None):
     """
     Parses a date string and returns a datetime object and its format.
     Args:
@@ -69,7 +69,7 @@ def parse_date(date_string: str, preferred_format: str = None):
     return valid_formats[0]
 
 
-def parse_dataset_name(dataset_name: str, preferred_date_format: str = None) -> tuple:
+def parse_dataset_name(dataset_name: str, preferred_date_format: str | None = None) -> tuple:
     """
     Extracts information from a dataset' directory name.
 

@@ -11,5 +11,5 @@ class HelpFileRepository:
 
     def read_help_file(self, file: str) -> str:
         file_path = os.path.join(self.docs_path, file)
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             return f.read()

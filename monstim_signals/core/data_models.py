@@ -22,7 +22,7 @@ class LatencyWindow:
 
     @property
     def end_times(self):
-        return [start + dur for start, dur in zip(self.start_times, self.durations)]
+        return [start + dur for start, dur in zip(self.start_times, self.durations, strict=True)]
 
     @property
     def label(self):
@@ -69,7 +69,7 @@ class StimCluster:
             self.ramp_duration = 0.0  # Default to 0 if not specified
 
     @classmethod
-    def from_meta(cls, meta: dict[str, Any]) -> "StimCluster":
+    def from_meta(cls, meta: dict[str, Any]) -> StimCluster:
         """
         Create a StimCluster from a metadata dictionary.
         This is useful for converting from JSON or other formats.
@@ -88,7 +88,7 @@ class SignalChannel:
     type_override: str | None = None  # e.g. "EMG", "Force", "Accelerometer"
 
     @staticmethod
-    def create_empty() -> "SignalChannel":
+    def create_empty() -> SignalChannel:
         """
         Create an empty ChannelAnnot with default values.
         """
@@ -126,7 +126,7 @@ class RecordingMeta:
                 logger.warning(f"primary_stim should be a StimCluster, got {type(self.primary_stim)}. Setting to None.")
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "RecordingMeta":
+    def from_dict(cls, raw: dict[str, Any]) -> RecordingMeta:
         """
         Build a RecordingMeta from a JSON dict that may contain extra keys,
         and convert nested stim_clusters from dicts → StimCluster.
@@ -149,7 +149,7 @@ class RecordingMeta:
 @dataclass
 class RecordingAnnot:
     """
-    Holds user‐editable flags for one recording.
+    Holds user-editable flags for one recording.
     e.g., which channels to invert, exclude, or cached computations.
     """
 
@@ -159,16 +159,16 @@ class RecordingAnnot:
     date_modified: str | None = None
 
     @staticmethod
-    def create_empty() -> "RecordingAnnot":
+    def create_empty() -> RecordingAnnot:
         """
         Create an empty RecordingAnnot with default values.
         """
 
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         return RecordingAnnot(data_version=DATA_VERSION, cache={}, date_added=now, date_modified=now)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "RecordingAnnot":
+    def from_dict(cls, raw: dict[str, Any]) -> RecordingAnnot:
         """
         Build a RecordingAnnot from a JSON dict that may contain extra keys.
         """
@@ -216,12 +216,12 @@ class SessionAnnot:
     date_modified: str | None = None
 
     @staticmethod
-    def create_empty(num_channels: int = 0) -> "SessionAnnot":
+    def create_empty(num_channels: int = 0) -> SessionAnnot:
         """
         Create an empty SessionAnnot with default values.
         """
 
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         return SessionAnnot(
             excluded_recordings=[],
             latency_windows=[],
@@ -234,7 +234,7 @@ class SessionAnnot:
         )
 
     @classmethod
-    def from_meta(cls, recording_meta: RecordingMeta) -> "SessionAnnot":
+    def from_meta(cls, recording_meta: RecordingMeta) -> SessionAnnot:
         """
         Create a RecordingAnnot from a RecordingMeta object.
         Initializes channels based on the number of channels in the meta.
@@ -252,7 +252,7 @@ class SessionAnnot:
         return annot
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SessionAnnot":
+    def from_dict(cls, raw: dict[str, Any]) -> SessionAnnot:
         """
         Build a SessionAnnot from a JSON dict that may contain extra keys.
         """
@@ -291,15 +291,15 @@ class DatasetAnnot:
     date_modified: str | None = None
 
     @staticmethod
-    def create_empty(num_channels: int = 0) -> "DatasetAnnot":
+    def create_empty(num_channels: int = 0) -> DatasetAnnot:
         """
         Create an empty DatasetAnnot with default values.
         """
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         return DatasetAnnot(excluded_sessions=[], is_completed=False, data_version=DATA_VERSION, date_added=now, date_modified=now)
 
     @classmethod
-    def from_ds_name(cls, dataset_name: str) -> "DatasetAnnot":
+    def from_ds_name(cls, dataset_name: str) -> DatasetAnnot:
         """
         Create a DatasetAnnot from a dataset name.
         This is useful for initializing an annotation object for a new dataset.
@@ -314,7 +314,7 @@ class DatasetAnnot:
         except ValueError:
             date = animal_id = condition = None
 
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         return DatasetAnnot(
             date=date,
             animal_id=animal_id,
@@ -327,7 +327,7 @@ class DatasetAnnot:
         )
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "DatasetAnnot":
+    def from_dict(cls, raw: dict[str, Any]) -> DatasetAnnot:
         """
         Build a DatasetAnnot from a JSON dict that may contain extra keys.
         """
@@ -357,14 +357,14 @@ class ExperimentAnnot:
     date_modified: str | None = None
 
     @staticmethod
-    def create_empty() -> "ExperimentAnnot":
+    def create_empty() -> ExperimentAnnot:
         """Return a blank annotation object."""
 
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         return ExperimentAnnot(excluded_datasets=[], is_completed=False, data_version=DATA_VERSION, date_added=now, date_modified=now)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "ExperimentAnnot":
+    def from_dict(cls, raw: dict[str, Any]) -> ExperimentAnnot:
         valid = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in raw.items() if k in valid}
         for invalid_key in raw.keys() - valid:

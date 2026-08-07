@@ -18,7 +18,7 @@ Frequently, the same latency windows are appropriate across multiple sessions in
 ## How It Works
 1. Open the Latency Windows dialog for any Session / Dataset / Experiment.
 2. Configure the windows as desired.
-3. Click **Copy All** – the current list of windows (including per‑channel start times) is stored in an in‑memory clipboard.
+3. Click **Copy All** - the current list of windows (including per‑channel start times) is stored in an in‑memory clipboard.
 4. Open the Latency Windows dialog for another scope and click **Paste**.
 5. Confirm replacement (the paste always replaces the existing list in the dialog view).
 6. Press **Apply** or **OK** to persist them via the existing command/undo system.
@@ -35,7 +35,7 @@ Paste itself only changes the dialog contents. The change is committed when you 
 If you paste into a session with a different number of channels, the start times & durations are automatically broadcast/truncated to fit the channel count (matching the existing Add/Apply behavior).
 
 ## Limitations / Future Ideas
-* No multi‑item history – only the most recent copy is stored.
+* No multi‑item history - only the most recent copy is stored.
 * Clipboard is not shared across separate running instances of the application.
 * Could be extended later for other annotation types if needed.
 

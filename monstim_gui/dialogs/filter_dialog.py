@@ -149,10 +149,7 @@ class FilterDialog(QDialog):
                     if cb.isChecked():
                         # Extract original value without the appended count
                         txt = cb.text().strip()
-                        if txt.endswith(")") and "(" in txt:
-                            val = txt[: txt.rfind("(")].strip()
-                        else:
-                            val = txt
+                        val = txt[: txt.rfind("(")].strip() if txt.endswith(")") and "(" in txt else txt
                         if val:
                             # Quote values that contain spaces
                             if " " in val:

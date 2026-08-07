@@ -33,7 +33,7 @@ DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
-    def __init__(self, parent: "PlotWidget"):
+    def __init__(self, parent: PlotWidget):
         super().__init__(parent)
         self.gui_main = parent.parent
         self.layout: QVBoxLayout = QVBoxLayout(self)
@@ -68,7 +68,7 @@ class BasePlotOptions(QWidget):
 
 
 class ChannelSelectorWidget(QGroupBox):
-    def __init__(self, gui_main: "MonstimGUI", parent=None):
+    def __init__(self, gui_main: MonstimGUI, parent=None):
         super().__init__("Channel Selector", parent)
 
         # Figure out how many channels we should allow for the current view

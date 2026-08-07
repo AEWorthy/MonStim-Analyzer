@@ -7,7 +7,6 @@ logger = logging.getLogger(__name__)
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 INDEX_FILENAME = ".index.json"
 INDEX_VERSION = 1
@@ -23,17 +22,17 @@ class FileInfo:
 @dataclass
 class RecordingIndex:
     path: str
-    meta_path: Optional[str] = None
-    size: Optional[int] = None
-    mtime: Optional[float] = None
+    meta_path: str | None = None
+    size: int | None = None
+    mtime: float | None = None
     # Metadata extracted from meta.json for fast loading
-    meta_size: Optional[int] = None  # size of meta.json file
-    meta_mtime: Optional[float] = None  # mtime of meta.json file
-    recording_id: Optional[str] = None
-    num_channels: Optional[int] = None
-    num_samples: Optional[int] = None
-    scan_rate: Optional[int] = None
-    primary_stim_v: Optional[float] = None  # For sorting recordings
+    meta_size: int | None = None  # size of meta.json file
+    meta_mtime: float | None = None  # mtime of meta.json file
+    recording_id: str | None = None
+    num_channels: int | None = None
+    num_samples: int | None = None
+    scan_rate: int | None = None
+    primary_stim_v: float | None = None  # For sorting recordings
 
 
 @dataclass
@@ -41,9 +40,9 @@ class SessionIndex:
     id: str
     path: str
     recordings: list[RecordingIndex]
-    meta_path: Optional[str] = None
-    size: Optional[int] = None
-    mtime: Optional[float] = None
+    meta_path: str | None = None
+    size: int | None = None
+    mtime: float | None = None
 
 
 @dataclass
@@ -51,9 +50,9 @@ class DatasetIndex:
     id: str
     path: str
     sessions: list[SessionIndex]
-    meta_path: Optional[str] = None
-    size: Optional[int] = None
-    mtime: Optional[float] = None
+    meta_path: str | None = None
+    size: int | None = None
+    mtime: float | None = None
 
 
 @dataclass
@@ -65,7 +64,7 @@ class ExperimentIndex:
     generated_at: float = 0.0
 
 
-def _stat_safe(p: Path) -> tuple[Optional[int], Optional[float]]:
+def _stat_safe(p: Path) -> tuple[int | None, float | None]:
     try:
         st = p.stat()
         return st.st_size, st.st_mtime
@@ -85,7 +84,7 @@ def index_path(exp_path: Path) -> Path:
     return exp_path / INDEX_FILENAME
 
 
-def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: Optional[callable] = None) -> ExperimentIndex:
+def build_experiment_index(exp_id: str, exp_path: Path, progress_cb: callable | None = None) -> ExperimentIndex:
     datasets: list[DatasetIndex] = []
     ds_names = sorted([d.name for d in exp_path.iterdir() if d.is_dir()])
     total_ds = len(ds_names)
@@ -206,7 +205,7 @@ def save_experiment_index(index: ExperimentIndex) -> None:
     _dump_json(asdict(index), dest)
 
 
-def load_experiment_index(exp_path: Path) -> Optional[ExperimentIndex]:
+def load_experiment_index(exp_path: Path) -> ExperimentIndex | None:
     p = index_path(exp_path)
     if not p.exists():
         return None
@@ -328,7 +327,7 @@ def is_index_stale(index: ExperimentIndex) -> bool:
     return False
 
 
-def ensure_fresh_index(exp_id: str, exp_path: Path, progress_cb: Optional[callable] = None) -> ExperimentIndex:
+def ensure_fresh_index(exp_id: str, exp_path: Path, progress_cb: callable | None = None) -> ExperimentIndex:
     idx = load_experiment_index(exp_path)
     if idx is None or is_index_stale(idx):
         idx = build_experiment_index(exp_id, exp_path, progress_cb=progress_cb)
@@ -339,7 +338,7 @@ def ensure_fresh_index(exp_id: str, exp_path: Path, progress_cb: Optional[callab
 # Helper for repositories: provide lightweight tree without opening payloads
 
 
-def get_lazy_tree(exp_id: str, exp_path: Path, progress_cb: Optional[callable] = None) -> ExperimentIndex:
+def get_lazy_tree(exp_id: str, exp_path: Path, progress_cb: callable | None = None) -> ExperimentIndex:
     """
     Return an ExperimentIndex ensuring freshness. Intended to be used by repository
     loaders to build domain objects lazily: datasets/sessions/recordings with metadata
@@ -348,7 +347,7 @@ def get_lazy_tree(exp_id: str, exp_path: Path, progress_cb: Optional[callable] =
     return ensure_fresh_index(exp_id, exp_path, progress_cb=progress_cb)
 
 
-def find_session_index(exp_path: Path, session_path: Path) -> Optional[SessionIndex]:
+def find_session_index(exp_path: Path, session_path: Path) -> SessionIndex | None:
     """Return SessionIndex for a given session folder using the experiment index.
 
     Falls back to None if index missing or session not found.

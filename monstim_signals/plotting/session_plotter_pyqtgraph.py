@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
+from pyqtgraph.graphicsItems.PlotItem import PlotItem
 
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
@@ -28,9 +29,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     whether crosshair cursors are enabled (True by default).
     """
 
-    def __init__(self, emg_object: "Session"):
+    def __init__(self, emg_object: Session):
         super().__init__(emg_object)
-        self.emg_object: "Session" = emg_object
+        self.emg_object: Session = emg_object
         # Shared colormap for both data and colorbar. Get viridis_r from matplotlib
         self.stim_colormap = pg.colormap.get("viridis_r", source="matplotlib")
         # Store references to plotted curves for dynamic updates
@@ -109,7 +110,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_channel_data(
         self,
-        plot_item: pg.PlotItem,
+        plot_item: PlotItem,
         time_axis: np.ndarray,
         channel_data: np.ndarray,
         start: int,
@@ -157,7 +158,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         return curve
 
-    def plot_latency_windows(self, plot_item: pg.PlotItem, all_flags: bool, channel_index: int):
+    def plot_latency_windows(self, plot_item: PlotItem, all_flags: bool, channel_index: int):
         """
         Plot latency windows as vertical lines.
 
@@ -191,7 +192,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 plot_item.addItem(start_line)
                 plot_item.addItem(end_line)
 
-    def add_latency_window_legend(self, plot_item: pg.PlotItem):
+    def add_latency_window_legend(self, plot_item: PlotItem):
         """
         Add a native PyQtGraph legend to the plot item for latency windows.
         """
@@ -217,7 +218,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         }
         return style_map.get(matplotlib_style, pg.QtCore.Qt.PenStyle.SolidLine)
 
-    def get_brightness_adjusted_norm(self, min_val: float = None, max_val: float = None):
+    def get_brightness_adjusted_norm(self, min_val: float | None = None, max_val: float | None = None):
         """
         Create a normalization function that shifts values to brighter colors.
 
@@ -255,7 +256,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
     def add_colormap_scalebar(
         self,
         layout: pg.GraphicsLayout,
-        plot_items: list[pg.PlotItem],
+        plot_items: list[PlotItem],
         value_range: tuple[float, float],
     ):
         colorbar = pg.ColorBarItem(
@@ -277,14 +278,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_emg(
         self,
-        channel_indices: list[int] = None,
+        channel_indices: list[int] | None = None,
         all_flags: bool = True,
         plot_legend: bool = True,
         plot_colormap: bool = False,
         data_type: str = "filtered",
-        stimuli_to_plot: list[str] = None,
+        stimuli_to_plot: list[str] | None = None,
         interactive_cursor: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """
         Plot EMG data with interactive features and performance optimizations.
@@ -324,7 +325,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
         # Create plot layout
-        plot_items: list[pg.PlotItem]
+        plot_items: list[PlotItem]
         layout: pg.GraphicsLayout
         plot_items, layout = self.create_plot_layout(canvas, channel_indices)
 
@@ -402,8 +403,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     overall_y_max = max(overall_y_max, np.max(valid_data))
 
         # Set labels for each plot
-        for plot_idx, channel_index in enumerate(channel_indices):
-            current_plot: pg.PlotItem = plot_items[plot_idx]
+        for plot_idx, _channel_index in enumerate(channel_indices):
+            current_plot: PlotItem = plot_items[plot_idx]
             current_plot.setLabel("bottom", "Time (ms)")
             current_plot.setLabel("left", "EMG (mV)")
 
@@ -450,7 +451,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_singleEMG(
         self,
-        channel_indices: list[int] = None,
+        channel_indices: list[int] | None = None,
         recording_index: int = 0,
         fixed_y_axis: bool = True,
         all_flags: bool = True,
@@ -458,7 +459,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         plot_colormap: bool = False,
         data_type: str = "filtered",
         interactive_cursor: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """
         Plot single EMG recording with interactive features.
@@ -673,13 +674,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_reflexCurves(
         self,
-        channel_indices: list[int] = None,
+        channel_indices: list[int] | None = None,
         method=None,
         plot_legend=True,
         relative_to_mmax=False,
         manual_mmax=None,
         interactive_cursor: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """
         Plot reflex curves (M-wave and H-reflex vs stimulus voltage).
@@ -720,7 +721,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise UnableToPlotError("No active recordings available to plot reflex curves. All recordings may have been excluded.")
 
         # Create plot layout
-        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
         # Add synchronized crosshairs to all plots (if enabled)
         if interactive_cursor:
@@ -743,10 +744,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Normalize if requested
                 if relative_to_mmax:
-                    if manual_mmax is not None:
-                        m_max = manual_mmax
-                    else:
-                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                    m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index) if manual_mmax is None else manual_mmax
                     if m_max != 0:
                         amps = [amp / m_max for amp in amps]
                 window_amplitudes_dict[window.label] = amps
@@ -801,10 +799,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_mmax(
         self,
-        channel_indices: list[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         interactive_cursor: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """
         Plot M-max values for each channel.
@@ -839,7 +837,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise UnableToPlotError("No active recordings available to plot M-max. All recordings may have been excluded.")
 
         # Create plot layout
-        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
         # Add synchronized crosshairs to all plots (if enabled)
         if interactive_cursor:
@@ -860,9 +858,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             current_plot = plot_items[plot_idx]
 
             # Get M-max data
+            # TODO: Make sure this plot type is implemented correcty (Note from AEW, 2026-08-05)
             try:
                 m_max_amplitudes = self.emg_object.get_m_wave_amplitudes(method=method, channel_index=channel_index)
-                m_max, mmax_low_stim, _ = self.emg_object.get_m_max(
+                _m_max, mmax_low_stim, _ = self.emg_object.get_m_max(
                     method=method,
                     channel_index=channel_index,
                     return_mmax_stim_range=True,
@@ -996,20 +995,20 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         norm = self.get_brightness_adjusted_norm(min_val, max_val)
 
         # Update colors for all stored curves
-        for curve, stimulus_v in zip(self.plotted_curves, self.curve_stimulus_voltages):
+        for curve, stimulus_v in zip(self.plotted_curves, self.curve_stimulus_voltages, strict=True):
             color_value = norm(stimulus_v)
             new_color = current_colormap.map(color_value, mode="qcolor")
             curve.setPen(pg.mkPen(color=new_color, width=1.0))
 
     def plot_reflexAverages(
         self,
-        channel_indices: list[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
-        manual_mmax: float = None,
+        manual_mmax: float | None = None,
         interactive_cursor: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """
         Plot average reflex amplitudes with error bars for all latency windows.
@@ -1053,7 +1052,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise UnableToPlotError("No active recordings available to plot reflex averages. All recordings may have been excluded.")
 
         # Create plot layout
-        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
         # Add synchronized crosshairs to all plots (if enabled)
         if interactive_cursor:
@@ -1091,10 +1090,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Normalize if requested
                 if relative_to_mmax:
-                    if manual_mmax is not None:
-                        m_max = manual_mmax
-                    else:
-                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                    m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index) if manual_mmax is None else manual_mmax
                     if m_max != 0:
                         valid_amps = [amp / m_max for amp in valid_amps]
 
@@ -1123,7 +1119,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 continue
 
             # Plot scatter points with error bars for each window
-            for i, ((mean_amp, std_amp, n_rec), x_pos, label, color) in enumerate(zip(window_data, x_positions, window_labels, window_colors)):
+            for i, ((mean_amp, std_amp, n_rec), x_pos, color) in enumerate(zip(window_data, x_positions, window_labels, window_colors, strict=True)):
                 # Get the actual individual amplitudes for this window to plot as scatter
                 amps = self.emg_object.get_lw_reflex_amplitudes(
                     method=method,
@@ -1134,10 +1130,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Normalize individual amplitudes if requested
                 if relative_to_mmax:
-                    if manual_mmax is not None:
-                        m_max = manual_mmax
-                    else:
-                        m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                    m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index) if manual_mmax is None else manual_mmax
                     if m_max != 0:
                         valid_amps = [amp / m_max for amp in valid_amps]
 
@@ -1212,7 +1205,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Add legend if requested
             if plot_legend and window_labels:
                 legend = current_plot.addLegend(offset=(10, 10))
-                for i, (label, color) in enumerate(zip(window_labels, window_colors)):
+                for _i, (label, color) in enumerate(zip(window_labels, window_colors, strict=True)):
                     # Create dummy scatter item for legend
                     dummy_scatter = pg.ScatterPlotItem(
                         x=np.array([0]),
@@ -1237,13 +1230,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_averageReflexCurves(
         self,
-        channel_indices: list[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
-        manual_mmax: float = None,
+        manual_mmax: float | None = None,
         interactive_cursor: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """
         Plot latency window amplitudes binned by stimulus voltage showing trends over time.
@@ -1287,7 +1280,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             raise UnableToPlotError("No active recordings available to plot average reflex curves. All recordings may have been excluded.")
 
         # Create plot layout
-        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
         # Add synchronized crosshairs to all plots (if enabled)
         if interactive_cursor:
@@ -1324,7 +1317,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 # Create bins for amplitudes based on stimulus voltages
                 voltage_bins = {v: [] for v in unique_voltages}
-                for volt, amp in zip(binned_voltages, all_amps):
+                for volt, amp in zip(binned_voltages, all_amps, strict=True):
                     if not np.isnan(amp):
                         voltage_bins[volt].append(amp)
 
@@ -1341,10 +1334,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                         # Normalize if requested
                         if relative_to_mmax:
-                            if manual_mmax is not None:
-                                m_max = manual_mmax
-                            else:
-                                m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index)
+                            m_max = self.emg_object.get_m_max(method=method, channel_index=channel_index) if manual_mmax is None else manual_mmax
                             if m_max != 0:
                                 mean_amp /= m_max
                                 std_amp /= m_max
@@ -1441,12 +1431,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
     def plot_latency_window_distribution(
         self,
-        channel_indices: list[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         bins: int | np.ndarray = 30,
         density: bool = False,
         plot_legend: bool = True,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """Plot distribution (histogram) of latency-window reflex amplitudes for a SESSION.
 
@@ -1469,14 +1459,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if len(self.emg_object.latency_windows) == 0:
             raise ValueError("No latency windows found. Add some to plot distributions.")
 
-        plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+        plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
         # Unlink X-axes so each channel can auto-range independently
         for _pi in plot_items:
             try:
                 _pi.setXLink(None)
             except Exception:
-                pass
+                logger.exception("Failed to unlink X-axis for plot item")
 
         raw_data_dict = {
             "channel_index": [],
@@ -1488,7 +1478,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         }
 
         # Per-channel plotting
-        for plot_item, channel_index in zip(plot_items, channel_indices):
+        for plot_item, channel_index in zip(plot_items, channel_indices, strict=True):
             if channel_index >= self.emg_object.num_channels:
                 continue
 
@@ -1515,10 +1505,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             all_amps = np.array(all_amps)
 
             # Determine bin edges
-            if isinstance(bins, int):
-                bin_edges = np.histogram_bin_edges(all_amps, bins=bins)
-            else:
-                bin_edges = np.asarray(bins)
+            bin_edges = np.histogram_bin_edges(all_amps, bins=bins) if isinstance(bins, int) else np.asarray(bins)
 
             bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
 
@@ -1527,7 +1514,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 try:
                     plot_item.addLegend()
                 except Exception:
-                    pass
+                    logger.exception("Failed to add legend to plot item")
 
             # Plot each window
             for window_label, amps in window_to_amps.items():
@@ -1539,7 +1526,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     else:
                         counts, _ = np.histogram(amps, bins=bin_edges)
 
-                    for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts):
+                    for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts, strict=True):
                         raw_data_dict["channel_index"].append(channel_index)
                         raw_data_dict["window_label"].append(window_label)
                         raw_data_dict["bin_left"].append(float(left))
@@ -1579,7 +1566,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             try:
                 plot_item.enableAutoRange(axis="x", enable=True)
             except Exception:
-                pass
+                logger.exception("Failed to enable auto-range for X-axis on plot item")
 
             self.set_labels(
                 plot_item,

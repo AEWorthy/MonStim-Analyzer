@@ -93,8 +93,8 @@ def test_all_commands_have_required_attributes():
         assert hasattr(cls, "get_description"), f"{name} missing get_description() method"
 
         # Verify methods are callable
-        assert callable(getattr(cls, "execute")), f"{name}.execute is not callable"
-        assert callable(getattr(cls, "undo")), f"{name}.undo is not callable"
+        assert callable(cls.execute), f"{name}.execute is not callable"
+        assert callable(cls.undo), f"{name}.undo is not callable"
 
 
 def test_all_commands_set_command_name():

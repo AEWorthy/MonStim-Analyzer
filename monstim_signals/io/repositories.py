@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
 
 import h5py
 
@@ -92,8 +91,8 @@ class RecordingRepository:
         self.meta_js = new_stem.with_suffix(".meta.json")
         self.annot_js = new_stem.with_suffix(".annot.json")
 
-    def load(self, config=None, *, strict_version: bool = False, lazy_open_h5: bool | None = None, allow_write: bool = True) -> "Recording":
-        # 1) Load meta JSON (immutable, record‐time facts)
+    def load(self, config=None, *, strict_version: bool = False, lazy_open_h5: bool | None = None, allow_write: bool = True) -> Recording:
+        # 1) Load meta JSON (immutable, record-time facts)
         meta_dict = json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
 
@@ -117,7 +116,7 @@ class RecordingRepository:
                             logger.exception(f"Failed to get size of annotation file '{self.annot_js}'")
                         logger.error(f"Failed to decode JSON in annotation file '{self.annot_js}' (size={size}): {e}")
                         # Move corrupt file aside and create a fresh annotation file
-                        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.annot_js.with_name(f"{self.annot_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
@@ -164,7 +163,7 @@ class RecordingRepository:
             h5file = h5py.File(self.raw_h5, "r")
             raw_dataset = h5file["raw"]  # type: ignore
             # Patch in num_samples from the raw array shape
-            meta.num_samples = int(raw_dataset.shape[0])  # (#samples × #channels)
+            meta.num_samples = int(raw_dataset.shape[0])  # (#samples * #channels)
         else:
             # If we choose laziness and the meta contains num_samples, rely on it.
             # Otherwise open the file temporarily to extract num_samples.
@@ -188,7 +187,7 @@ class RecordingRepository:
         This is called when the user edits the recording's annotation.
         """
         try:
-            recording.annot.date_modified = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            recording.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
             logger.debug("Failed to set date_modified on RecordingAnnot", exc_info=True)
         self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
@@ -235,7 +234,7 @@ class RecordingRepository:
                 raise
 
     @staticmethod
-    def discover_in_folder(folder: Path) -> Iterator["RecordingRepository"]:
+    def discover_in_folder(folder: Path) -> Iterator[RecordingRepository]:
         """
         Given a folder Path, yield a RecordingRepository for each *.raw.h5 found.
         E.g. if folder contains:
@@ -258,7 +257,7 @@ class SessionRepository:
 
     def __init__(self, folder: Path):
         """
-        `folder` is a Path to a session‐level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
+        `folder` is a Path to a session-level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
         """
         self.folder = folder
         self.session_id = folder.name  # e.g. "AA00"
@@ -279,9 +278,9 @@ class SessionRepository:
         config=None,
         *,
         strict_version: bool = False,
-        lazy_open_h5: Optional[bool] = None,
+        lazy_open_h5: bool | None = None,
         allow_write: bool = True,
-    ) -> "Session":
+    ) -> Session:
         # Guard: folder must exist
         if not self.folder.exists():
             raise FileNotFoundError(f"Session folder not found: {self.folder}")
@@ -347,7 +346,7 @@ class SessionRepository:
                             logger.exception(f"Failed to get size of session annotation file '{self.session_js}'")
                             pass
                         logger.error(f"Failed to decode JSON in session annotation '{self.session_js}' (size={size}): {e}")
-                        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.session_js.with_name(f"{self.session_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
@@ -374,7 +373,7 @@ class SessionRepository:
                 logger.exception(f"Unexpected error while reading session annotation {self.session_js}")
                 _close_loaded_objects(recordings)
                 raise
-        else:  # If no session.annot.json, initialize a brand‐new one
+        else:  # If no session.annot.json, initialize a brand-new one
             try:
                 if recordings:
                     logger.debug(f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one.")
@@ -404,7 +403,7 @@ class SessionRepository:
 
     def save(self, session: Session) -> None:
         try:
-            session.annot.date_modified = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            session.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
             logger.debug("Failed to set date_modified on SessionAnnot", exc_info=True)
         self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
@@ -443,7 +442,7 @@ class SessionRepository:
                 raise
 
     @staticmethod
-    def discover_in_folder(folder: Path) -> Iterator["SessionRepository"]:
+    def discover_in_folder(folder: Path) -> Iterator[SessionRepository]:
         """
         Given a folder Path, yield a SessionRepository for each session subfolder.
         E.g. if folder contains:
@@ -499,9 +498,9 @@ class DatasetRepository:
         config=None,
         *,
         strict_version: bool = False,
-        lazy_open_h5: Optional[bool] = None,
+        lazy_open_h5: bool | None = None,
         allow_write: bool = True,
-    ) -> "Dataset":
+    ) -> Dataset:
         # 1) Discover valid session folders (those with annot or any *.raw.h5)
         session_repos = list(SessionRepository.discover_in_folder(self.folder))
 
@@ -549,7 +548,7 @@ class DatasetRepository:
                             logger.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
                             pass
                         logger.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
-                        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.dataset_js.with_name(f"{self.dataset_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
@@ -576,7 +575,7 @@ class DatasetRepository:
                 logger.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
                 _close_loaded_objects(sessions)
                 raise
-        else:  # If no session.annot.json, initialize a brand‐new one
+        else:  # If no session.annot.json, initialize a brand-new one
             try:
                 logger.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one (in-memory).")
                 dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
@@ -603,11 +602,11 @@ class DatasetRepository:
     def save(self, dataset: Dataset) -> None:
         """
         Save all sessions in this dataset.
-        (If I want dataset‐level annotations in the future, write them here.)
+        (If I want dataset-level annotations in the future, write them here.)
         This is called when the user edits any session's recordings.
         """
         try:
-            dataset.annot.date_modified = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            dataset.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
             logger.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
@@ -701,7 +700,7 @@ class DatasetRepository:
                                 logger.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
                                 pass
                             logger.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
-                            ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+                            ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                             corrupt_path = self.dataset_js.with_name(f"{self.dataset_js.name}.corrupt-{ts}")
                             try:
                                 self.dataset_js.rename(corrupt_path)
@@ -787,10 +786,10 @@ class ExperimentRepository:
         strict_version: bool = False,
         preflight_scan: bool = False,
         progress_callback=None,
-        lazy_open_h5: Optional[bool] = None,
-        load_workers: Optional[int] = None,
+        lazy_open_h5: bool | None = None,
+        load_workers: int | None = None,
         allow_write: bool = True,
-    ) -> "Experiment":
+    ) -> Experiment:
         """Load the full experiment.
 
         Args:
@@ -859,7 +858,7 @@ class ExperimentRepository:
                             # User canceled - propagate immediately
                             logger.info(f"Dataset loading interrupted at {idx}/{total_datasets} (parallel mode)")
                             # Cancel remaining futures
-                            for fut in future_map.keys():
+                            for fut in future_map:
                                 fut.cancel()
                             concurrent.futures.wait(list(future_map.keys()))
                             _close_completed_futures(future_map.keys())
@@ -876,7 +875,7 @@ class ExperimentRepository:
                     future_map[future] = ds_folder
 
                 # Collect results in original order for deterministic behavior
-                for idx, ds_folder in enumerate(dataset_folders, start=1):
+                for _, ds_folder in enumerate(dataset_folders, start=1):
                     # Wait for the specific future to complete
                     for f in list(future_map.keys()):
                         if future_map[f] == ds_folder:
@@ -969,7 +968,7 @@ class ExperimentRepository:
                             logger.exception(f"Failed to get size of experiment annotation file '{self.expt_js}'")
                             pass
                         logger.error(f"Failed to decode JSON in experiment annotation '{self.expt_js}' (size={size}): {e}")
-                        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.expt_js.with_name(f"{self.expt_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
@@ -1063,11 +1062,11 @@ class ExperimentRepository:
     def save(self, expt: Experiment) -> None:
         """
         Save all datasets in this experiment.
-        If I want experiment‐level annotations in the future, write them here.
+        If I want experiment-level annotations in the future, write them here.
         This is called when the user edits any dataset's sessions.
         """
         try:
-            expt.annot.date_modified = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            expt.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
             logger.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
         self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))

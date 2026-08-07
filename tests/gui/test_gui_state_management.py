@@ -33,9 +33,8 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def temp_settings_file():
     """Create a temporary settings file for testing."""
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".ini")
-    temp_file.close()
-    yield temp_file.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".ini") as temp_file:
+        yield temp_file.name
     # Cleanup
     Path(temp_file.name).unlink(missing_ok=True)
 
@@ -112,7 +111,7 @@ def clean_app_state():
                 del stored_values[key]
             else:
                 # Handle group removal - remove all keys starting with "key/"
-                keys_to_remove = [k for k in stored_values.keys() if k.startswith(f"{key}/")]
+                keys_to_remove = [k for k in stored_values if k.startswith(f"{key}/")]
                 for k in keys_to_remove:
                     del stored_values[k]
 
@@ -366,9 +365,8 @@ class TestSessionStateManagement:
 
         # Test: tracking disabled
         def mock_get_value_disabled(key, default="", type=str):
-            if key == "Preferences/track_session_restoration":
-                if type is bool:
-                    return False
+            if key == "Preferences/track_session_restoration" and type is bool:
+                return False
             return default
 
         mock_settings.value.side_effect = mock_get_value_disabled
@@ -376,9 +374,8 @@ class TestSessionStateManagement:
 
         # Test: tracking enabled but no experiment
         def mock_get_value_no_exp(key, default="", type=str):
-            if key == "Preferences/track_session_restoration":
-                if type is bool:
-                    return True
+            if key == "Preferences/track_session_restoration" and type is bool:
+                return True
             return default  # Empty experiment
 
         mock_settings.value.side_effect = mock_get_value_no_exp
@@ -386,9 +383,8 @@ class TestSessionStateManagement:
 
         # Test: tracking enabled and experiment exists
         def mock_get_value_with_exp(key, default="", type=str):
-            if key == "Preferences/track_session_restoration":
-                if type is bool:
-                    return True
+            if key == "Preferences/track_session_restoration" and type is bool:
+                return True
             if key == "SessionRestore/experiment":
                 return "test_exp"
             return default

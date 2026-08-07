@@ -27,7 +27,7 @@ class PlotControllerError(Exception):
 class PlotController:
     """Handle plotting and returning raw data."""
 
-    def __init__(self, gui: "MonstimGUI"):
+    def __init__(self, gui: MonstimGUI):
         self.gui: MonstimGUI = gui
         self._validated = False
 
@@ -425,7 +425,7 @@ class PlotController:
             title = "Plot Error"
 
         # Show user-friendly message (no stack trace) if not running in a headless/testing context.
-        suppress_dialog = hasattr(self.gui, "headless") and getattr(self.gui, "headless") is True
+        suppress_dialog = hasattr(self.gui, "headless") and self.gui.headless is True
         if not suppress_dialog:
             QMessageBox.warning(self.gui, title, user_msg)
 

@@ -14,6 +14,7 @@ Test Categories:
 6. Configuration and Profile Management Integration
 """
 
+import contextlib
 import textwrap
 import threading
 import time
@@ -412,11 +413,8 @@ class TestCommandSystemIntegration:
         ]
 
         for cmd in commands:
-            try:
+            with contextlib.suppress(Exception):
                 invoker.execute(cmd)
-            except Exception:
-                # Commands may fail with mock objects - focus on invoker behavior
-                pass
 
         # Test undo/redo cycling
         initial_history_length = len(invoker.history)

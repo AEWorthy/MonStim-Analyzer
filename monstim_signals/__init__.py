@@ -17,4 +17,4 @@ __email__ = "aeworth@emory.edu"
 from .domain import Dataset, Experiment, Session
 
 # Define __all__ for module
-__all__ = ["Session", "Dataset", "Experiment"]
+__all__ = ["Dataset", "Experiment", "Session"]

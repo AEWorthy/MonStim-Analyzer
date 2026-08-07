@@ -109,7 +109,7 @@ def csv_to_store(
             h5.attrs["scan_rate"] = meta_dict.get("scan_rate")
             h5.attrs["num_channels"] = meta_dict.get("num_channels")
             h5.attrs["channel_types"] = meta_dict.get("channel_types")
-            h5.attrs["num_samples"] = arr.shape[0]  # (#samples × #channels)
+            h5.attrs["num_samples"] = arr.shape[0]  # (#samples * #channels)
 
     # Write meta JSON
     meta_path = output_fp.with_suffix(".meta.json")
@@ -216,7 +216,7 @@ def import_experiment(
     logger.info("Processing complete.")
 
 
-from PySide6.QtCore import QThread, Signal  # noqa: E402
+from PySide6.QtCore import QThread, Signal
 
 
 class GUIExptImportingThread(QThread):
@@ -327,7 +327,7 @@ class MultiExptImportingThread(QThread):
                     import_experiment(
                         expt_path,
                         output_path,
-                        lambda value: self.report_progress(i, value),
+                        lambda value, i=i: self.report_progress(i, value),
                         self.is_canceled,
                         overwrite=self.overwrite,
                         max_workers=self.max_workers,
@@ -338,7 +338,7 @@ class MultiExptImportingThread(QThread):
                         logger.info(f"Successfully imported experiment: '{expt_name}'")
 
                 except Exception as e:
-                    logger.error(f"Failed to import experiment '{expt_name}': {e}")
+                    logger.exception(f"Failed to import experiment '{expt_name}': {e}")
                     # Continue with other experiments instead of stopping
                     continue
 

@@ -6,7 +6,7 @@ it as JSON for use in a Plotly.js interactive demo.
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -14,8 +14,8 @@ import numpy as np
 # Add parent directory to path so we can import from monstim_gui
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from monstim_signals.transform import butter_bandpass_filter  # noqa: E402
-from monstim_signals.transform.amplitude import _calculate_peak_to_trough_amplitude, _calculate_rms_amplitude  # noqa: E402
+from monstim_signals.transform import butter_bandpass_filter
+from monstim_signals.transform.amplitude import _calculate_peak_to_trough_amplitude, _calculate_rms_amplitude
 
 # ============================================================================
 # Signal Processing Functions (from monstim_signals)
@@ -215,7 +215,7 @@ def generate_demo_data():
             "m_window_ms": [M_WINDOW_START_MS, M_WINDOW_END_MS],
             "h_window_ms": [H_WINDOW_START_MS, H_WINDOW_END_MS],
             "channel_name": "Tibialis Anterior (Synthetic)",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         },
         "recordings": [],
         "recruitment_curve": {
