@@ -173,3 +173,13 @@ class CustomYAMLLoader(yaml.SafeLoader):
 
 
 CustomYAMLLoader.add_constructor("tag:yaml.org,2002:python/tuple", CustomYAMLLoader.construct_python_tuple)
+
+
+class LatencyWindowNotFoundError(Exception):
+    """Exception raised when a specified latency window is not found in an EMG data object."""
+
+    def __init__(self, window_name: str, object_type: str = "[EMG_DATA_OBJECT]", object_id: str = "[ID_UNKNOWN]"):
+        self.window_name = window_name
+        self.object_type = object_type
+        self.object_id = object_id
+        super().__init__(f"Latency window '{window_name}' not found in {object_type} {object_id}.")

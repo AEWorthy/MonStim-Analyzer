@@ -15,12 +15,12 @@ __email__ = "aeworth@emory.edu"
 def __getattr__(name):
     if name == "SplashScreen":
         from .core.splash import SplashScreen
-
         return SplashScreen
+    
     elif name == "MonstimGUI":
         from .gui_main import MonstimGUI
-
         return MonstimGUI
+    
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from monstim_signals.core import LatencyWindow, SessionAnnot, StimCluster, load_config
+from monstim_signals.core import LatencyWindow, LatencyWindowNotFoundError, SessionAnnot, StimCluster, load_config
 from monstim_signals.domain.recording import Recording
 from monstim_signals.plotting import SessionPlotterPyQtGraph
 from monstim_signals.transform import (
@@ -462,6 +462,31 @@ class Session:
         excluded = self.excluded_recordings
         return [item for i, item in enumerate(source_list) if self.all_recordings[i].id not in excluded]
 
+    def has_m_wave_window(self) -> bool:
+        """Check if the session has a defined M-wave latency window."""
+        return any(
+            (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"} for w in self.latency_windows
+        )
+
+    def has_h_reflex_window(self) -> bool:
+        """Check if the session has a defined H-reflex latency window."""
+        return any(
+            (w.name or "").lower()
+            in {
+                "h-wave",
+                "h_wave",
+                "h wave",
+                "hwave",
+                "h-reflex",
+                "h_reflex",
+                "h reflex",
+                "hresponse",
+                "h_response",
+                "h response",
+            }
+            for w in self.latency_windows
+        )
+
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
@@ -632,10 +657,6 @@ class Session:
         This remains for backwards compatibility. If no M-wave or H-reflex
         windows exist, the corresponding attributes will be set to empty lists.
         """
-        self.m_start = [0.0] * self.num_channels
-        self.m_duration = [0.0] * self.num_channels
-        self.h_start = [0.0] * self.num_channels
-        self.h_duration = [0.0] * self.num_channels
         for window in self.latency_windows:
             lname = window.name.lower()
             if lname in {
@@ -663,6 +684,13 @@ class Session:
             }:
                 self.h_start = window.start_times
                 self.h_duration = window.durations
+
+        if not self.has_m_wave_window():
+            self.m_start = [0.0] * self.num_channels
+            self.m_duration = [0.0] * self.num_channels
+        if not self.has_h_reflex_window():
+            self.h_start = [0.0] * self.num_channels
+            self.h_duration = [0.0] * self.num_channels
 
     def reset_cached_reflex_properties(self):
         """
@@ -771,15 +799,16 @@ class Session:
 
     def get_m_wave_amplitudes(self, method, channel_index):
         """Return a list of M-wave amplitudes for each recording."""
+
+        if not self.has_m_wave_window():
+            raise LatencyWindowNotFoundError(window_name="M-wave", object_type="Session", object_id=self.id)
+
         window_start = self.m_start[channel_index] + self.stim_start
         window_end = window_start + self.m_duration[channel_index]
 
         if window_end - window_start <= 0:
-            logger.warning(
-                f"Invalid or missing M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}."
-            )
             raise ValueError(
-                f"Invalid or missing M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}."
+                f"Invalid M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}."
             )
 
         m_wave_amplitudes = [
@@ -796,6 +825,9 @@ class Session:
 
     def get_h_wave_amplitudes(self, method, channel_index):
         """Return a list of H-reflex amplitudes for each recording."""
+        if not self.has_h_reflex_window():
+            raise LatencyWindowNotFoundError(window_name="H-reflex", object_type="Session", object_id=self.id)
+        
         window_start = self.h_start[channel_index] + self.stim_start
         window_end = window_start + self.h_duration[channel_index]
         h_wave_amplitudes = [

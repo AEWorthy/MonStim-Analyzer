@@ -971,7 +971,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 continue
 
             # Plot scatter points with error bars for each window
-            for i, ((mean_amp, std_amp, n_rec), x_pos, color) in enumerate(zip(window_data, x_positions, window_labels, window_colors, strict=True)):
+            for i, ((mean_amp, std_amp, n_rec), x_pos, _labels, color) in enumerate(
+                zip(window_data, x_positions, window_labels, window_colors, strict=True)
+            ):
                 # Get the actual individual amplitudes for this window to plot as scatter
                 amps = self.emg_object.get_lw_reflex_amplitudes(
                     method=method,

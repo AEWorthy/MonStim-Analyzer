@@ -7,6 +7,8 @@ import pyqtgraph as pg
 from pyqtgraph.graphicsItems.PlotItem import PlotItem
 from pyqtgraph.Qt import QtCore
 
+from monstim_signals.core import LatencyWindowNotFoundError
+
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
@@ -154,6 +156,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     except ValueError as ve:
                         # Ambiguous multi-element mmax value
                         raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}") from ve
+                    except LatencyWindowNotFoundError as le:
+                        raise UnableToPlotError(f"M-max could not be calculated for channel {channel_idx}: {le}") from le
 
                     if mmax_val is not None and mmax_val != 0:
                         means = means / mmax_val
@@ -202,6 +206,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         except Exception as e:
             logger.exception(f"Could not plot reflex curves for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting reflex curves for channel {channel_idx}: {e!s}") from e
 
     def plot_maxH(
         self,

@@ -7,7 +7,7 @@ import traceback
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from monstim_gui import MonstimGUI
+    from monstim_gui.gui_main import MonstimGUI
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox

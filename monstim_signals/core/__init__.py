@@ -3,6 +3,7 @@ __all__ = [
     "DatasetAnnot",
     "ExperimentAnnot",
     "LatencyWindow",
+    "LatencyWindowNotFoundError",
     "RecordingAnnot",
     "RecordingMeta",
     "SessionAnnot",
@@ -37,6 +38,7 @@ from .data_models import (  # Factory and utility methods
 )
 from .utils import (
     CustomYAMLLoader,
+    LatencyWindowNotFoundError,
     deep_equal,
     format_report,
     get_base_path,

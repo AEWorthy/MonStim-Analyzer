@@ -428,6 +428,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         except Exception as e:
             logger.exception(f"Could not plot max H data for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting max H-reflex data for channel {channel_idx}: {e!s}") from e
 
     def plot_mmax(
         self,
@@ -570,3 +571,4 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         except Exception as e:
             logger.exception(f"Could not plot M-max data for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting M-max data for channel {channel_idx}: {e!s}") from e

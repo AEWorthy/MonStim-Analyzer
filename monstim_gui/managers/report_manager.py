@@ -2,7 +2,7 @@ import logging
 
 from PySide6.QtWidgets import QMessageBox
 
-from monstim_signals.core import format_report
+from monstim_signals.core import LatencyWindowNotFoundError, format_report
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,10 @@ class ReportManager:
                 dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self.gui)
                 dialog.exec()
             except ValueError as e:
-                logger.error(f"Error generating M-max report: {e!s}")
+                logger.exception(f"Error generating M-max report: {e!s}")
+                QMessageBox.critical(self.gui, "Error", f"Failed to generate M-max report: {e!s}")
+            except LatencyWindowNotFoundError as e:
+                logger.exception(f"Error generating M-max report: {e!s}")
                 QMessageBox.critical(self.gui, "Error", f"Failed to generate M-max report: {e!s}")
         else:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
