@@ -33,7 +33,7 @@ license = {text = "Proprietary"}
 [tool.setuptools.dynamic]
 version = {attr = "monstim_gui.__version__"}
 
-[tool.setuptools.packages]
+[tool.setuptools]
 packages = ["monstim_gui", "monstim_signals"]
 
 # ============================================================
