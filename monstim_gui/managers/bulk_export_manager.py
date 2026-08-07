@@ -17,7 +17,7 @@ import logging
 logger = logging.getLogger(__name__)
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,6 +27,7 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
+    from monstim_signals.domain import Dataset, Experiment, Recording, Session
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -102,7 +103,7 @@ def _sanitize_path_component(name: str) -> str:
     return sanitized or "unnamed"
 
 
-def _safe_channel_name(obj, channel_idx: int) -> str:
+def _safe_channel_name(obj: Recording | Session | Dataset | Experiment, channel_idx: int) -> str:
     try:
         names = obj.channel_names
         if channel_idx < len(names):
@@ -173,7 +174,7 @@ def _n_col_label(config: BulkExportConfig) -> str:
     return "n_datasets" if config.data_level == "experiment" else "n_sessions"
 
 
-def _get_mmax_cache(obj, config: BulkExportConfig) -> dict[tuple[int, str], float | None]:
+def _get_mmax_cache(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> dict[tuple[int, str], float | None]:
     """Pre-compute M-max per (channel_index, method) to avoid repeated calls."""
     cache: dict[tuple[int, str], float | None] = {}
     for ch_idx in config.channel_indices:
@@ -187,7 +188,7 @@ def _get_mmax_cache(obj, config: BulkExportConfig) -> dict[tuple[int, str], floa
     return cache
 
 
-def _iter_object_datasets(obj):
+def _iter_object_datasets(obj: Dataset | Experiment) -> Iterator[Dataset]:
     """Yield dataset-like objects from either a Dataset or Experiment."""
     datasets = getattr(obj, "datasets", None)
     if datasets is not None:
@@ -196,7 +197,7 @@ def _iter_object_datasets(obj):
         yield obj
 
 
-def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
     """Build one row per active recording/channel/window/method amplitude.
 
     This export preserves recording-level values for downstream mixed-effects
@@ -308,7 +309,7 @@ def _compute_longform_reflex_amplitudes(obj, config: BulkExportConfig) -> pd.Dat
     return pd.DataFrame(rows)
 
 
-def _compute_avg_reflex_curves(obj, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_avg_reflex_curves(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
     """Build a DataFrame of averaged reflex:stimulus curve data.
 
     Columns: voltage, channel, window, mean_amplitude_{m}, stdev_amplitude_{m},
@@ -386,7 +387,7 @@ def _compute_avg_reflex_curves(obj, config: BulkExportConfig) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _compute_mmax(obj, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_mmax(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
     """Build a DataFrame with one row per channel showing M-max per method."""
     try:
         n_channels = len(obj.channel_names)
@@ -413,7 +414,7 @@ def _compute_mmax(obj, config: BulkExportConfig) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _compute_max_h(obj, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_max_h(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
     """Build a DataFrame of average H-reflex amplitudes across stimulus voltages."""
     try:
         voltages = obj.stimulus_voltages
@@ -482,7 +483,7 @@ _DATA_TYPE_HANDLERS: dict[str, Callable] = {
 
 
 def _write_object_export(
-    obj,
+    obj: Session | Dataset | Experiment,
     expt_name: str,
     obj_id: str,
     config: BulkExportConfig,

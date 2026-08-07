@@ -12,7 +12,6 @@ from monstim_signals.core import LatencyWindow, SessionAnnot, StimCluster, load_
 from monstim_signals.domain.recording import Recording
 from monstim_signals.plotting import SessionPlotterPyQtGraph
 from monstim_signals.transform import (
-    NoCalculableMmaxError,
     butter_bandpass_filter,
     calculate_emg_amplitude,
     correct_emg_to_baseline,
@@ -612,27 +611,6 @@ class Session:
         """Return a list of rectified filtered data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_rectified_filtered)
 
-    @cached_property
-    def m_max(self) -> list[float]:
-        """
-        Return the maximum M-wave value for each recording in the session.
-        This is computed from the raw data using the M-wave latency windows.
-        """
-        # TODO: Check that this is implemented as intended. (Note by AEW, 2024-08-05)
-        results = []
-        for _rec in self.recordings:
-            for channel_index in range(self.num_channels):
-                try:  # Check if the channel has a valid M-max amplitude.
-                    channel_mmax = self.get_m_max(self.default_method, channel_index, return_mmax_stim_range=False)
-                    results.append(channel_mmax)
-                except NoCalculableMmaxError:
-                    logger.info(f"Channel {channel_index} does not have a valid M-max amplitude.")
-                    results.append(None)
-                except ValueError as e:
-                    logger.error(f"Error in calculating M-max amplitude for channel {channel_index}. Error: {e!s}")
-                    results.append(None)
-        return results
-
     def reset_all_caches(self):
         """
         Reset all cached properties in the session.
@@ -721,7 +699,7 @@ class Session:
         Plots EMG data from a single session using the specified plot_type.
 
         Args:
-            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH', 'mmax',
+            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH',
                 'reflexCurves', 'reflexAverages', and 'mCurvesSmoothened'.
                 Plot types are defined in the EMGSessionPlotter class in Plot_EMG.py.
             - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
@@ -744,6 +722,9 @@ class Session:
                 - 'mmax_report' (bool): Whether to print the details of the M-max calculations (True) or not (False). Default is False.
                 - 'manual_mmax' (float): The manually set M-wave amplitude to use for plotting the reflex curves. Default is None.
 
+            The Session-level plot menu does not include 'mmax' because there can be only one M-max value per session.
+            Use Dataset or Experiment plots for M-max summaries.
+
         Example Usages:
             # Plot filtered EMG data
                 session.plot()
@@ -754,27 +735,27 @@ class Session:
             # Plot all EMG data with the M-wave and H-reflex windows highlighted
             session.plot(plot_type='suspectedH')
 
-            # Plot M-wave amplitudes for each channel
-            session.plot(plot_type='mmax')
-
             # Plot the reflex curves for each channel
             session.plot(plot_type='reflexCurves')
         """
+        if plot_type == "mmax":
+            raise ValueError("Session-level M-max plots are not supported for Session-level analysis.")
+
         # Call the appropriate plotting method from the plotter object
         raw_data = getattr(self.plotter, f"plot_{plot_type if plot_type else 'emg'}")(**kwargs)
         return raw_data
 
     def get_m_max(self, method, channel_index, return_mmax_stim_range=False):
         """
-        Calculates the M-wave amplitude for a specific channel in the session.
+        Calculates the M-max amplitude for a specific channel in the session.
 
         Args:
-            method (str): The method to use for calculating the M-wave amplitude.
+            method (str): The method to use for calculating M-wave amplitudes from EMG data.
                 Options include 'average_rectified', 'rms', 'peak_to_trough', and 'average_unrectified'.
-            channel_index (int): The index of the channel to calculate the M-wave amplitude for.
+            channel_index (int): The index of the channel to calculate the M-max amplitude for.
 
         Returns:
-            float: The M-wave amplitude for the specified channel.
+            float: The M-max amplitude for the specified channel.
         """
         m_wave_amplitudes = self.get_m_wave_amplitudes(method, channel_index)
 

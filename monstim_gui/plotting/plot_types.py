@@ -29,7 +29,6 @@ PLOT_OPTIONS_DICT = {
         "Reflex:Stimulus Curves": SessionReflexCurvesOptions,
         "Average Reflex:Stimulus Curves": AverageSessionReflexOptions,
         "Latency Window Distribution": LatencyWindowDistributionOptions,
-        "M-max": MMaxOptions,
     },
     "dataset": {
         "Average Reflex:Stimulus Curves": AverageReflexCurvesOptions,

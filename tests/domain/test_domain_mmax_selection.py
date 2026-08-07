@@ -79,21 +79,3 @@ def test_get_m_max_with_latency_window():
         pytest.skip("No calculable M-max for synthetic data in this environment")
     finally:
         sess.close()
-
-
-def test_m_max_property_returns_one_value_per_channel(monkeypatch):
-    sess = make_session_with_synth_data(levels=(0.5, 1.0, 2.0), num_channels=2)
-    calls = []
-
-    def fake_get_m_max(method, channel_index, return_mmax_stim_range=False):
-        calls.append((method, channel_index, return_mmax_stim_range))
-        return float(channel_index + 1)
-
-    monkeypatch.setattr(sess, "get_m_max", fake_get_m_max)
-
-    assert sess.m_max == [1.0, 2.0]
-    assert sess.m_max == [1.0, 2.0]
-    assert calls == [
-        (sess.default_method, 0, False),
-        (sess.default_method, 1, False),
-    ]
