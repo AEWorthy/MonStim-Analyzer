@@ -34,8 +34,7 @@ license = {text = "Proprietary"}
 version = {attr = "monstim_gui.__version__"}
 
 [tool.setuptools.packages]
-include = ["monstim_gui*", "monstim_signals*",]
-exclude = ["assets",]
+packages = ["monstim_gui", "monstim_signals"]
 
 # ============================================================
 # pytest
