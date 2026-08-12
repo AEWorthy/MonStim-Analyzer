@@ -519,7 +519,7 @@ class Session:
         indicated in the channel annotations in the session annot.json file.
         """
 
-        close_raw_after_filter = bool(self._config.get("close_raw_after_filter", False))
+        close_raw_after_filter = bool(self._config.get("close_raw_after_filter", True))
 
         def _process_single_recording(rec: Recording) -> np.ndarray:
             """
@@ -827,7 +827,7 @@ class Session:
         """Return a list of H-reflex amplitudes for each recording."""
         if not self.has_h_reflex_window():
             raise LatencyWindowNotFoundError(window_name="H-reflex", object_type="Session", object_id=self.id)
-        
+
         window_start = self.h_start[channel_index] + self.stim_start
         window_end = window_start + self.h_duration[channel_index]
         h_wave_amplitudes = [

@@ -840,7 +840,7 @@ class ExperimentRepository:
         # treat lazy_open_h5/load_workers as config-file keys here; they should
         # be passed explicitly by the caller (e.g. the GUI using QSettings).
         max_workers = int(load_workers) if load_workers is not None else 1
-        parallel_allowed = max_workers > 1 and bool(lazy_open_h5)
+        parallel_allowed = max_workers > 1
 
         if parallel_allowed:
             # Use a ThreadPoolExecutor to load datasets concurrently; limit

@@ -285,6 +285,8 @@ class ExperimentLoadingThread(QThread):
                     config=cfg,
                     progress_callback=_progress_cb,
                     allow_write=is_first_load,
+                    lazy_open_h5=cfg.get("lazy_open_h5"),
+                    load_workers=cfg.get("load_workers", 1),
                 )
             except InterruptedError as e:
                 # Graceful cancellation from progress callback

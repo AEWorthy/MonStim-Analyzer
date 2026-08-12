@@ -5,6 +5,7 @@ Handles UI state and user preferences that should persist across sessions.
 
 import logging
 import os
+from os import cpu_count
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QSettings
@@ -493,8 +494,9 @@ class ApplicationState:
         try:
             # If user explicitly set a value, use it
             val = self.settings.value("ProgramPreferences/parallel_load_workers", None, type=int)
-            if isinstance(val, int) and val > 0:
-                return val
+            # calculate safe theoretical max based on CPU count
+            safe_max = max(1, (cpu_count() or 1) - 1)
+            return val if isinstance(val, int) and val > 0 else safe_max
         except Exception:
             # Failed to read parallel_load_workers from QSettings; falling back to default.
             logger.exception("Error reading ProgramPreferences/parallel_load_workers")
