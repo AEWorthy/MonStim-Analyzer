@@ -3,12 +3,18 @@
 import numpy as np
 
 
-def rectify_emg(emg_array):
-    """Rectify EMG data by taking the absolute value."""
+def rectify_emg(emg_array: np.ndarray):
+    """Rectify EMG data by taking the absolute value.
+
+    Args:
+        emg_array (array): The EMG signal to be rectified.
+    Returns:
+        array: The rectified EMG signal.
+    """
     return np.abs(emg_array)
 
 
-def _calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_average_amplitude_rectified(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate the average amplitude of rectified EMG signal.
 
     Rectifies the EMG signal (absolute value) and returns the mean amplitude.
@@ -31,7 +37,7 @@ def _calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate
     return np.mean(rectified_emg_window)
 
 
-def _calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_peak_to_trough_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate peak-to-trough amplitude of EMG signal.
 
     Returns the difference between maximum and minimum values in the window.
@@ -53,7 +59,7 @@ def _calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
     return np.max(emg_window) - np.min(emg_window)
 
 
-def _calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_rms_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate root mean square (RMS) amplitude of EMG signal.
 
     Computes the square root of the mean of squared signal values.
@@ -77,7 +83,7 @@ def _calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
     return np.sqrt(mean_squared_value)
 
 
-def _calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_average_amplitude_unrectified(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate the average amplitude of unrectified EMG signal.
 
     Returns the mean of the raw signal without rectification.
@@ -99,7 +105,7 @@ def _calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_ra
     return np.mean(emg_window)
 
 
-def _calculate_auc_rectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_auc_rectified(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate area under the curve (AUC) of rectified EMG signal.
 
     Rectifies the signal and computes the area under the curve by summing
@@ -126,8 +132,10 @@ def _calculate_auc_rectified(emg_data, start_ms, end_ms, scan_rate):
     return np.sum(rectified_emg_window) * dt
 
 
-def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
+def calculate_emg_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float, method: str):
     """Calculate the EMG amplitude using the specified method.
+
+    Matches the method string to the corresponding calculation function and returns the result.
 
     Args:
         emg_data: EMG signal array

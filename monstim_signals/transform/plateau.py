@@ -8,8 +8,15 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 
-def savgol_filter_y(y, polyorder=3):
-    """Smooth data using a Savitzky-Golay filter."""
+def savgol_filter_y(y: np.ndarray, polyorder=3):
+    """Smooth data using a Savitzky-Golay filter.
+
+    Args:
+        y (np.ndarray): The input signal array.
+        polyorder (int): The order of the polynomial used to fit the samples. Must be less than window_length.
+    Returns:
+        np.ndarray: The smoothed signal.
+    """
     window_length = int((len(y) / 100) * 25)
     window_length = max(window_length, polyorder + 2)  # Ensure minimum size
     if window_length % 2 == 0:  # Ensure oddness
@@ -26,8 +33,23 @@ def savgol_filter_y(y, polyorder=3):
 #   users can tune smoothing in the GUI or via analysis profiles.
 
 
-def detect_plateau(y, max_window_size, min_window_size, threshold):
-    """Detect a plateau region in a reflex curve."""
+def detect_plateau(y: np.ndarray, max_window_size: int, min_window_size: int, threshold: float):
+    """Detect a plateau region in a reflex curve.
+
+    A plateau is defined as a region where the standard deviation of the signal
+    is below a certain threshold for a specified window size. The function
+    recursively reduces the window size if no plateau is found, down to a minimum
+    window size. If no plateau is detected, it returns None.
+
+    Args:
+        y (np.ndarray): The input signal array.
+        max_window_size (int): The maximum size of the sliding window to check for a plateau.
+        min_window_size (int): The minimum size of the sliding window to check for a plateau.
+        threshold (float): The threshold for standard deviation to consider a region as a plateau.
+
+    Returns:
+        tuple: (start_index, end_index) of the detected plateau region, or (None, None) if no plateau is found.
+    """
     plateau_start_idx = None
     plateau_end_idx = None
     y_filtered = savgol_filter_y(y)
@@ -51,8 +73,8 @@ def detect_plateau(y, max_window_size, min_window_size, threshold):
 
 
 def get_avg_mmax(
-    stimulus_voltages,
-    m_wave_amplitudes,
+    stimulus_voltages: list | np.ndarray,
+    m_wave_amplitudes: list | np.ndarray,
     max_window_size=20,
     min_window_size=3,
     threshold=0.3,
@@ -60,13 +82,30 @@ def get_avg_mmax(
     return_mmax_stim_range=False,
 ):
     """
-    Return the M-max amplitude and optionally its stimulus range.
+    Return the average M-max amplitude of the given M-wave amplitudes and optionally return the stimulus range of the detected M-max plateau.
 
-    Uses an improved algorithm that tries multiple calculation approaches:
+    Uses an algorithm that tries multiple calculation approaches:
     1. Maximum value in the plateau (stable, high-stimulus) region
     2. High-percentile approach in the plateau region
     3. Mean of top 20% values in the plateau region
     4. Traditional plateau detection with averaging
+
+    If no plateau is detected, it falls back to analyzing the high-stimulus region.
+
+    Args:
+        stimulus_voltages (list or np.ndarray): Stimulus voltages corresponding to M-wave amplitudes.
+        m_wave_amplitudes (list or np.ndarray): M-wave amplitudes corresponding to stimulus voltages.
+        max_window_size (int): Maximum window size for plateau detection.
+        min_window_size (int): Minimum window size for plateau detection.
+        threshold (float): Threshold for standard deviation to consider a region as a plateau.
+        validation_tolerance (float): Tolerance factor for validating M-max against plateau mean.
+        return_mmax_stim_range (bool): If True, return the stimulus range corresponding to the detected M-max.
+
+    Returns:
+        float or tuple: M-max amplitude, and optionally the stimulus range (start, end)
+
+    Raises:
+        NoCalculableMmaxError: If no calculable M-max can be determined.
     """
     m_wave_amplitudes = np.array(m_wave_amplitudes)
     stimulus_voltages = np.array(stimulus_voltages)
@@ -226,5 +265,7 @@ def get_avg_mmax(
 
 
 class NoCalculableMmaxError(Exception):
+    """Custom exception raised when no calculable M-max can be determined."""
+
     def __init__(self, message="No calculable M-max. Try adjusting the threshold values."):
         super().__init__(message)
