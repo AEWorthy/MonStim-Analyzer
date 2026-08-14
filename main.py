@@ -16,6 +16,9 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 IS_FROZEN = getattr(sys, "frozen", False)
 CONSOLE_DEBUG_MODE = False  # Only relevant if not frozen
 
+# TODO: Add keyboard shortcuts for things like the recording cycler, inclusion/exlcusion,
+#   marking complete, plot types/levels, and moving around the data at multiple levels.
+
 
 def get_logger() -> logging.Logger:
     return logging.getLogger(__name__)
