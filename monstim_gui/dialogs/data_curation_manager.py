@@ -4,7 +4,7 @@ Allows users to manage experiments and datasets with create/import/delete/rename
 and drag-and-drop dataset organization between experiments.
 """
 
-# TODOs: Data Curation Manager feature roadmap
+# TODO: Data Curation Manager feature roadmap
 # - Thumbnail / quick-preview column: show a small sparkline or thumbnail per-dataset
 #   (representative session trace) to help visually triage datasets before moving/deleting.
 # - Search / filter box: add a text input above the tree to filter experiments/datasets by
@@ -24,6 +24,8 @@ and drag-and-drop dataset organization between experiments.
 #   threads with progress dialogs and per-item error reporting.
 # - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
 # - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
+# - Add a Trim operation to remove 0-indexed recording numbers from all sessions in the selected data.
+#   Make sure it can handle negative indexing to trim from the ends. Useful for trimming known bad recordings like the first/second ones.
 
 import logging
 
