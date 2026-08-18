@@ -22,6 +22,7 @@ m_max_args: # dict for get_avg_mmax() function. default is below.
   min_window_size: 2 # (int) minimum floating window size for M-max detection (in datapoints).
   threshold: 0.3  # (float) standard deviation threshold for M-max detection, default is 0.3.
   validation_tolerance: 1.05  # (float) tolerance factor for plateau validation (e.g., 1.05 = 5% above plateau mean), default is 1.05.
+  savgol_window_ratio: 0.25 # (float) fraction of the signal used for Savitzky-Golay smoothing, default is 0.25.
 
 # Plot Style Parameters.
 title_font_size : 16 # (int) font size of the plot title.

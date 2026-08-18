@@ -8,32 +8,44 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 
-def savgol_filter_y(y: np.ndarray, polyorder=3):
+def savgol_filter_y(
+    y: np.ndarray,
+    polyorder: int = 3,
+    window_length: int | None = None,
+    window_ratio: float = 0.25,
+):
     """Smooth data using a Savitzky-Golay filter.
 
     Args:
         y (np.ndarray): The input signal array.
         polyorder (int): The order of the polynomial used to fit the samples. Must be less than window_length.
+        window_length (int or None): Explicit Savitzky-Golay window length. If omitted,
+            it is calculated from ``window_ratio`` and the signal length.
+        window_ratio (float): Fraction of the signal length used to calculate the
+            window when ``window_length`` is omitted.
     Returns:
         np.ndarray: The smoothed signal.
     """
-    window_length = int((len(y) / 100) * 25)
+    if window_length is None:
+        if window_ratio <= 0:
+            raise ValueError("window_ratio must be greater than zero")
+        window_length = int(len(y) * window_ratio)
+    else:
+        window_length = int(window_length)
     window_length = max(window_length, polyorder + 2)  # Ensure minimum size
     if window_length % 2 == 0:  # Ensure oddness
         window_length += 1
     return savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
 
-# TODO: UX / Visualization
-# - Provide a GUI hook or small helper to visualize the detected plateau region
-#   and the candidate M-max approaches (mean_corrected, 95th percentile,
-#   maximum, top-20%). This will make it much easier to inspect algorithm
-#   decisions interactively and to allow users to pick an approach.
-# - Expose the Savitzky-Golay window length calculation via configuration so
-#   users can tune smoothing in the GUI or via analysis profiles.
-
-
-def detect_plateau(y: np.ndarray, max_window_size: int, min_window_size: int, threshold: float):
+def detect_plateau(
+    y: np.ndarray,
+    max_window_size: int,
+    min_window_size: int,
+    threshold: float,
+    savgol_window_length: int | None = None,
+    savgol_window_ratio: float = 0.25,
+):
     """Detect a plateau region in a reflex curve.
 
     A plateau is defined as a region where the standard deviation of the signal
@@ -52,7 +64,7 @@ def detect_plateau(y: np.ndarray, max_window_size: int, min_window_size: int, th
     """
     plateau_start_idx = None
     plateau_end_idx = None
-    y_filtered = savgol_filter_y(y)
+    y_filtered = savgol_filter_y(y, window_length=savgol_window_length, window_ratio=savgol_window_ratio)
     for i in range(len(y_filtered) - max_window_size):
         window = y_filtered[i : i + max_window_size]
         if np.std(window) < threshold:
@@ -66,7 +78,14 @@ def detect_plateau(y: np.ndarray, max_window_size: int, min_window_size: int, th
         logger.debug(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
         return plateau_start_idx, plateau_end_idx
     elif max_window_size > min_window_size:
-        return detect_plateau(y, max_window_size - 1, min_window_size, threshold)
+        return detect_plateau(
+            y,
+            max_window_size - 1,
+            min_window_size,
+            threshold,
+            savgol_window_length=savgol_window_length,
+            savgol_window_ratio=savgol_window_ratio,
+        )
     else:
         logger.warning("No plateau region detected.")
         return None, None
@@ -79,6 +98,8 @@ def get_avg_mmax(
     min_window_size=3,
     threshold=0.3,
     validation_tolerance=1.05,
+    savgol_window_length=None,
+    savgol_window_ratio=0.25,
     return_mmax_stim_range=False,
 ):
     """
@@ -99,6 +120,9 @@ def get_avg_mmax(
         min_window_size (int): Minimum window size for plateau detection.
         threshold (float): Threshold for standard deviation to consider a region as a plateau.
         validation_tolerance (float): Tolerance factor for validating M-max against plateau mean.
+        savgol_window_length (int or None): Explicit smoothing window length.
+        savgol_window_ratio (float): Fraction of the signal length used for the smoothing window
+            when ``savgol_window_length`` is omitted.
         return_mmax_stim_range (bool): If True, return the stimulus range corresponding to the detected M-max.
 
     Returns:
@@ -111,7 +135,14 @@ def get_avg_mmax(
     stimulus_voltages = np.array(stimulus_voltages)
 
     try:
-        plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
+        plateau_start_idx, plateau_end_idx = detect_plateau(
+            m_wave_amplitudes,
+            max_window_size,
+            min_window_size,
+            threshold,
+            savgol_window_length=savgol_window_length,
+            savgol_window_ratio=savgol_window_ratio,
+        )
 
     except Exception as e:
         logger.exception(f"Exception during plateau detection: {e}")
