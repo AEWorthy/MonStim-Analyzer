@@ -722,13 +722,12 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                         continue
 
                     try:
-                        # Compute counts or probability density (properly normalized)
+                        # Convert counts to density explicitly so both plotters use
+                        # the same normalization: probability per amplitude unit.
+                        counts, _ = np.histogram(amps, bins=bin_edges)
                         if density:
-                            # np.histogram with density=True returns values such that
-                            # integral(density * bin_width) == 1
-                            counts, _ = np.histogram(amps, bins=bin_edges, density=True)
-                        else:
-                            counts, _ = np.histogram(amps, bins=bin_edges)
+                            counts = counts.astype(float, copy=False)
+                            counts /= amps.size * np.diff(bin_edges)
 
                         # record raw data
                         for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts, strict=True):
