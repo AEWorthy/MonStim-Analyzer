@@ -319,7 +319,7 @@ class Dataset:
             all_names = []
             for sess in self.sessions:
                 all_names.extend([(w.name or "") for w in sess.latency_windows])
-            if all_names:
+            if all_names and len(self.sessions) > 1:  # Ignore if there is only one session
                 from collections import Counter
 
                 counts = Counter(all_names)
