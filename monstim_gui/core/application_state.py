@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Application state management using QSettings.
 Handles UI state and user preferences that should persist across sessions.
