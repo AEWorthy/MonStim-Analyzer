@@ -720,16 +720,16 @@ class DataManager:
         """Handle completion of import operations by refreshing the experiments list."""
         if hasattr(self.gui, "data_selection_widget"):
             self.gui.data_selection_widget.refresh()
-        # Refresh index after import to speed up first load
+        # Build the SQLite catalog after import so the first subsequent open is warm.
         try:
             if hasattr(self.gui, "current_experiment") and self.gui.current_experiment is not None:
                 exp_path = self.gui.current_experiment.repo.folder if self.gui.current_experiment.repo else None
-                if exp_path and app_state.should_build_index_on_load():
-                    from monstim_signals.io.experiment_index import ensure_fresh_index
+                if exp_path:
+                    from monstim_signals.io.experiment_catalog import build_catalog
 
-                    ensure_fresh_index(self.gui.current_experiment.id, exp_path)
+                    build_catalog(exp_path)
         except Exception:
-            logger.debug("Non-fatal: index refresh after import failed.", exc_info=True)
+            logger.debug("Non-fatal: catalog build after import failed.", exc_info=True)
 
     # ------------------------------------------------------------------
     def show_preferences_window(self):
@@ -978,16 +978,6 @@ class DataManager:
             self.gui.status_bar.showMessage(status_msg, 5000)
             logger.info(status_msg)
 
-            # Ensure index is fresh after load
-            try:
-                if hasattr(self.gui, "current_experiment") and self.gui.current_experiment is not None:
-                    exp_path = self.gui.current_experiment.repo.folder if self.gui.current_experiment.repo else None
-                    if exp_path and app_state.should_build_index_on_load():
-                        from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                        ensure_fresh_index(self.gui.current_experiment.id, exp_path)
-            except Exception:
-                logger.debug("Non-fatal: index refresh after load failed.", exc_info=True)
         except Exception as e:
             logger.error(f"Error setting loaded experiment: {e}")
             QMessageBox.critical(self.gui, "Error", f"Error setting loaded experiment: {e}")

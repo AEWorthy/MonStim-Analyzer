@@ -28,7 +28,16 @@ from monstim_signals.io.data_migrations import (
     migrate_annotation_dict,
     scan_annotation_versions,
 )
-from monstim_signals.io.experiment_index import find_session_index
+from monstim_signals.io.experiment_catalog import (
+    CatalogRecording,
+    ExperimentCatalog,
+    ensure_catalog,
+    recording_stem,
+    refresh_dataset_annotation,
+    refresh_recording_annotation,
+    refresh_session_annotation,
+    relocate_catalog_paths,
+)
 
 
 def _close_loaded_objects(objects) -> None:
@@ -91,15 +100,26 @@ class RecordingRepository:
         self.meta_js = new_stem.with_suffix(".meta.json")
         self.annot_js = new_stem.with_suffix(".annot.json")
 
-    def load(self, config=None, *, strict_version: bool = False, lazy_open_h5: bool | None = None, allow_write: bool = True) -> Recording:
+    def load(
+        self,
+        config=None,
+        *,
+        strict_version: bool = False,
+        lazy_open_h5: bool | None = None,
+        allow_write: bool = True,
+        catalog_record: CatalogRecording | None = None,
+    ) -> Recording:
         # 1) Load meta JSON (immutable, record-time facts)
-        meta_dict = json.loads(self.meta_js.read_text())
+        meta_dict = json.loads(catalog_record.meta_json) if catalog_record is not None else json.loads(self.meta_js.read_text())
         meta = RecordingMeta.from_dict(meta_dict)
 
         # 2) Load or create annot JSON (user edits)
         if self.annot_js.exists():
             try:
-                text = self.annot_js.read_text()
+                text = catalog_record.annot_json if catalog_record is not None else self.annot_js.read_text()
+                # A catalog created while the annotation was absent represents that
+                # condition as None; retain the existing repair/create behavior.
+                text = text if text is not None else ""
                 if not text.strip():
                     logger.warning(f"Annotation file '{self.annot_js}' is empty. Recreating empty annotation.")
                     annot_dict = asdict(RecordingAnnot.create_empty())
@@ -191,6 +211,7 @@ class RecordingRepository:
         except Exception:
             logger.debug("Failed to set date_modified on RecordingAnnot", exc_info=True)
         self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
+        refresh_recording_annotation(self.stem)
 
     def rename(self, new_stem: Path, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename recording files to a new stem atomically with retries on Windows locks.
@@ -205,6 +226,7 @@ class RecordingRepository:
         if new_stem.exists():
             raise FileExistsError(f"Target recording stem already exists: {new_stem}")
 
+        old_stem = self.stem
         for attempt in range(attempts):
             try:
                 # Rename file-by-file if they exist
@@ -216,14 +238,12 @@ class RecordingRepository:
                     self.annot_js.rename(new_stem.with_suffix(".annot.json"))
                 # Update in-memory paths
                 self.update_path(new_stem)
-                # Refresh experiment index after recording rename
+                # Update only the renamed recording's catalog paths.
                 try:
                     exp_root = new_stem.parent.parent.parent  # experiment/dataset/session/recording-stem
-                    from .experiment_index import ensure_fresh_index
-
-                    ensure_fresh_index(exp_root.name, exp_root)
+                    relocate_catalog_paths(exp_root, old_stem, new_stem)
                 except Exception:
-                    logger.debug("Index refresh after recording rename failed (non-fatal).", exc_info=True)
+                    logger.debug("Catalog refresh after recording rename failed (non-fatal).", exc_info=True)
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
@@ -245,7 +265,7 @@ class RecordingRepository:
             RecordingRepository(Path("folder/AA00_0001"))
         """
         for raw_h5 in sorted(folder.glob("*.raw.h5"), key=_path_name_sort_key):
-            stem = raw_h5.with_suffix("")  # drop ".raw.h5" → Path("folder/AA00_0000")
+            stem = recording_stem(raw_h5)
             yield RecordingRepository(stem=stem)
 
 
@@ -255,13 +275,14 @@ class SessionRepository:
     A session folder must contain multiple <stem>.raw.h5/.meta.json/.annot.json.
     """
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, catalog: ExperimentCatalog | None = None):
         """
         `folder` is a Path to a session-level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
         """
         self.folder = folder
         self.session_id = folder.name  # e.g. "AA00"
         self.session_js = folder / "session.annot.json"
+        self.catalog = catalog
 
     def update_path(self, new_folder: Path) -> None:
         """
@@ -285,32 +306,13 @@ class SessionRepository:
         if not self.folder.exists():
             raise FileNotFoundError(f"Session folder not found: {self.folder}")
 
-        # 1) Discover all recordings in this folder
-        # Prefer index-based discovery to avoid heavy directory scans
-        recording_repos: list[RecordingRepository] = []
-        recording_sort_keys = {}  # Map repo stem to primary_stim_v for pre-sorting
-        try:
-            exp_root = self.folder.parent.parent  # Experiment/dataset/session
-            sess_idx = find_session_index(exp_root, self.folder)
-            if sess_idx is not None and sess_idx.recordings:
-                for r in sess_idx.recordings:
-                    p = Path(r.path)
-                    stem = p.with_suffix("") if p.is_file() else p  # tolerate file or folder style
-                    repo = RecordingRepository(stem=stem)
-                    recording_repos.append(repo)
-                    # Store primary_stim_v from index for efficient pre-sorting
-                    if r.primary_stim_v is not None:
-                        recording_sort_keys[str(stem)] = r.primary_stim_v
-            else:
-                recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-        except Exception:
-            logger.debug("Index-based discovery failed; falling back to folder scan.", exc_info=True)
+        # 1) Discover recordings from the catalog. Direct repository usage without
+        # an experiment catalog remains supported for isolated recording/session work.
+        catalog_records = self.catalog.recordings(self.folder) if self.catalog is not None else []
+        if catalog_records:
+            recording_repos = [RecordingRepository(record.stem) for record in catalog_records]
+        else:
             recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-
-        # Pre-sort recording repos using index metadata if available for all recordings
-        # This ordering optimization reduces post-load sorting overhead
-        if recording_repos and len(recording_sort_keys) == len(recording_repos):
-            recording_repos.sort(key=lambda repo: recording_sort_keys.get(str(repo.stem), float("inf")))
 
         # 2) Load all recordings
         # Pass through lazy_open_h5 from config if present; prefer explicit key in config
@@ -321,7 +323,15 @@ class SessionRepository:
         except Exception:
             lazy_from_cfg = lazy_open_h5
 
-        recordings = [repo.load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write) for repo in recording_repos]
+        recordings = [
+            repo.load(
+                config=config,
+                lazy_open_h5=lazy_from_cfg,
+                allow_write=allow_write,
+                catalog_record=catalog_records[index] if catalog_records else None,
+            )
+            for index, repo in enumerate(recording_repos)
+        ]
         # Sort by primary StimCluster's stim_v for correctness
         # (Index-based pre-sorting is an optimization but we verify correct ordering)
         recordings.sort(key=lambda r: r.meta.primary_stim.stim_v if r.meta.primary_stim else float("inf"))
@@ -407,6 +417,7 @@ class SessionRepository:
         except Exception:
             logger.debug("Failed to set date_modified on SessionAnnot", exc_info=True)
         self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
+        refresh_session_annotation(self.folder)
         # Save ALL recordings including excluded ones to persist their state
         for rec in session._all_recordings:
             rec.repo.save(rec)
@@ -420,18 +431,17 @@ class SessionRepository:
         if new_folder.exists():
             raise FileExistsError(f"Target session folder already exists: {new_folder}")
 
+        old_folder = self.folder
         for attempt in range(attempts):
             try:
                 self.folder.rename(new_folder)
                 self.update_path(new_folder)
-                # Refresh experiment index after session rename
+                # Update only the renamed session's catalog paths.
                 try:
                     exp_root = new_folder.parent.parent
-                    from .experiment_index import ensure_fresh_index
-
-                    ensure_fresh_index(exp_root.name, exp_root)
+                    relocate_catalog_paths(exp_root, old_folder, new_folder)
                 except Exception:
-                    logger.debug("Index refresh after session rename failed (non-fatal).", exc_info=True)
+                    logger.debug("Catalog refresh after session rename failed (non-fatal).", exc_info=True)
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
@@ -477,13 +487,14 @@ class DatasetRepository:
     A dataset folder contains multiple subfolders, each a session.
     """
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, catalog: ExperimentCatalog | None = None):
         """
         `folder` might be Path("/data/ExperimentRoot/Dataset_01").
         """
         self.folder = folder
         self.dataset_id = folder.name  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
         self.dataset_js = folder / "dataset.annot.json"
+        self.catalog = catalog
 
     def update_path(self, new_folder: Path) -> None:
         """
@@ -502,7 +513,11 @@ class DatasetRepository:
         allow_write: bool = True,
     ) -> Dataset:
         # 1) Discover valid session folders (those with annot or any *.raw.h5)
-        session_repos = list(SessionRepository.discover_in_folder(self.folder))
+        session_repos = (
+            [SessionRepository(path, catalog=self.catalog) for path in self.catalog.session_paths(self.folder)]
+            if self.catalog is not None
+            else list(SessionRepository.discover_in_folder(self.folder))
+        )
 
         # 2) Load each Session from discovered repos
         sessions = []
@@ -610,6 +625,7 @@ class DatasetRepository:
         except Exception:
             logger.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
+        refresh_dataset_annotation(self.folder)
         # Save ALL sessions including excluded ones to persist their state
         for session in dataset._all_sessions:
             session.repo.save(session)
@@ -627,6 +643,7 @@ class DatasetRepository:
         if new_folder.exists():
             raise FileExistsError(f"Target dataset folder already exists: {new_folder}")
 
+        old_folder = self.folder
         for attempt in range(attempts):
             try:
                 self.folder.rename(new_folder)
@@ -657,14 +674,12 @@ class DatasetRepository:
                         # If in-memory updates fail, log but do not prevent the rename (filesystem succeeded)
                         logger.exception("Failed to update in-memory child repo objects after dataset rename.")
 
-                # Refresh experiment index after dataset rename
+                # Update only the renamed dataset's catalog paths.
                 try:
                     exp_root = new_folder.parent
-                    from .experiment_index import ensure_fresh_index
-
-                    ensure_fresh_index(exp_root.name, exp_root)
+                    relocate_catalog_paths(exp_root, old_folder, new_folder)
                 except Exception:
-                    logger.debug("Index refresh after dataset rename failed (non-fatal).", exc_info=True)
+                    logger.debug("Catalog refresh after dataset rename failed (non-fatal).", exc_info=True)
 
                 return
             except OSError as e:
@@ -802,19 +817,10 @@ class ExperimentRepository:
                 The callback is invoked BEFORE the dataset is actually loaded so the UI can
                 display a responsive progress bar even for very large datasets.
         """
-        # Prefer index-based discovery to avoid repeated filesystem scans
-        try:
-            # Only read an existing index; do not trigger rebuilds here.
-            from .experiment_index import is_index_stale, load_experiment_index
-
-            lazy_idx = load_experiment_index(self.folder)
-            if lazy_idx is not None and not is_index_stale(lazy_idx):
-                dataset_folders = [Path(ds.path) for ds in lazy_idx.datasets]
-            else:
-                raise RuntimeError("Index missing or stale")
-        except Exception:
-            logger.debug("Falling back to filesystem discovery for datasets.", exc_info=True)
-            dataset_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
+        # The SQLite catalog is the only large-experiment discovery path. It is
+        # rebuilt atomically on first open and contains exact recording stems.
+        catalog = ensure_catalog(self.folder, progress_callback=progress_callback)
+        dataset_folders = catalog.dataset_paths()
         if preflight_scan:
             try:
                 scan_results = scan_annotation_versions(
@@ -836,11 +842,15 @@ class ExperimentRepository:
         datasets = []
         total_datasets = len(dataset_folders)
 
-        # Read concurrency settings from explicit function args. We do not
-        # treat lazy_open_h5/load_workers as config-file keys here; they should
-        # be passed explicitly by the caller (e.g. the GUI using QSettings).
-        max_workers = int(load_workers) if load_workers is not None else 1
-        parallel_allowed = max_workers > 1
+        # Explicit arguments take precedence, while direct API callers can use
+        # the same config keys as the GUI. Parallel loading is valid only when
+        # raw HDF5 payloads stay lazy.
+        effective_lazy_open = lazy_open_h5
+        if effective_lazy_open is None and config is not None:
+            effective_lazy_open = config.get("lazy_open_h5")
+        configured_workers = config.get("load_workers", 1) if config is not None else 1
+        max_workers = int(load_workers) if load_workers is not None else int(configured_workers)
+        parallel_allowed = max_workers > 1 and bool(effective_lazy_open)
 
         if parallel_allowed:
             # Use a ThreadPoolExecutor to load datasets concurrently; limit
@@ -866,10 +876,10 @@ class ExperimentRepository:
                         except Exception:  # pragma: no cover - defensive
                             logger.debug("Progress callback errored (ignored)", exc_info=True)
                     future = ex.submit(
-                        DatasetRepository(ds_folder).load,
+                        DatasetRepository(ds_folder, catalog=catalog).load,
                         config=config,
                         strict_version=strict_version,
-                        lazy_open_h5=lazy_open_h5,
+                        lazy_open_h5=effective_lazy_open,
                         allow_write=allow_write,
                     )
                     future_map[future] = ds_folder
@@ -911,10 +921,10 @@ class ExperimentRepository:
                     except Exception:  # pragma: no cover - defensive
                         logger.debug("Progress callback errored (ignored)", exc_info=True)
                 try:
-                    ds_obj = DatasetRepository(ds_folder).load(
+                    ds_obj = DatasetRepository(ds_folder, catalog=catalog).load(
                         config=config,
                         strict_version=strict_version,
-                        lazy_open_h5=lazy_open_h5,
+                        lazy_open_h5=effective_lazy_open,
                         allow_write=allow_write,
                     )
                     datasets.append(ds_obj)

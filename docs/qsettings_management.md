@@ -38,7 +38,6 @@ ProgramPreferences/
   ├─ use_opengl_acceleration            # OpenGL rendering preference
   ├─ use_lazy_open_h5                   # Lazy HDF5 loading preference
   ├─ enable_parallel_loading            # Parallel dataset loading
-  └─ build_index_on_load                # Rebuild indexes on load
 RecentFiles/
   └─ experiments                        # List of recent experiment paths
 RecentProfiles/

@@ -5,9 +5,9 @@ import sys
 from pathlib import Path
 
 """
-Revert annotations under a folder to data_version '2.0.0' and remove index files.
+Revert annotations under a folder to data_version '2.0.0' and remove catalog files.
 
-- Deletes files named '.index.json' or ending with '.index.json'
+- Deletes SQLite catalog sidecars named '.monstim-cache.sqlite'
 - Sets/overwrites 'data_version' to '2.0.0' in any '*.annot.json' (experiment/dataset/session/recording)
 
 Usage (PowerShell):
@@ -23,9 +23,8 @@ def configure_logging(verbose: bool):
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
 
-def is_index_file(p: Path) -> bool:
-    name = p.name.lower()
-    return name == ".index.json" or name.endswith(".index.json")
+def is_catalog_file(p: Path) -> bool:
+    return p.name == ".monstim-cache.sqlite"
 
 
 def is_annotation_file(p: Path) -> bool:
@@ -70,7 +69,7 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
     return True
 
 
-def remove_index_file(path: Path, dry_run: bool) -> bool:
+def remove_catalog_file(path: Path, dry_run: bool) -> bool:
     if dry_run:
         return True
     try:
@@ -84,19 +83,20 @@ def remove_index_file(path: Path, dry_run: bool) -> bool:
 def process_root(root: Path, dry_run: bool) -> tuple[int, int, int, int]:
     ann_total = ann_ok = idx_total = idx_ok = 0
     for p in root.rglob("*.json"):
-        if is_index_file(p):
-            idx_total += 1
-            if remove_index_file(p, dry_run):
-                idx_ok += 1
-        elif is_annotation_file(p):
+        if is_annotation_file(p):
             ann_total += 1
             if rewrite_annotation_version(p, dry_run):
                 ann_ok += 1
+    for p in root.rglob(".monstim-cache.sqlite"):
+        if is_catalog_file(p):
+            idx_total += 1
+            if remove_catalog_file(p, dry_run):
+                idx_ok += 1
     return ann_total, ann_ok, idx_total, idx_ok
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Revert annotations to data_version 2.0.0 and remove index files")
+    parser = argparse.ArgumentParser(description="Revert annotations to data_version 2.0.0 and remove catalog files")
     parser.add_argument(
         "--root",
         type=Path,
@@ -120,7 +120,7 @@ def main(argv=None) -> int:
 
     ann_total, ann_ok, idx_total, idx_ok = process_root(root, args.dry_run)
 
-    logger.info(f"Annotations processed: {ann_ok}/{ann_total}; Index files removed: {idx_ok}/{idx_total}")
+    logger.info(f"Annotations processed: {ann_ok}/{ann_total}; Catalog files removed: {idx_ok}/{idx_total}")
     if args.dry_run and (ann_total or idx_total):
         logger.info("Run again without --dry-run to apply changes.")
     return 0

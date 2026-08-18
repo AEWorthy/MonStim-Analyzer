@@ -760,15 +760,15 @@ class CreateExperimentCommand(Command):
         """Create the experiment immediately."""
         try:
             self.gui.data_manager.create_experiment(self.exp_name)
-            # Refresh index for the newly created experiment
+            # Prepare the SQLite catalog for the newly created experiment.
             try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+                from monstim_signals.io.experiment_catalog import build_catalog
 
                 exp_path = Path(self.gui.expts_dict.get(self.exp_name, ""))
                 if exp_path and exp_path.exists():
-                    ensure_fresh_index(self.exp_name, exp_path)
+                    build_catalog(exp_path)
             except Exception:
-                logger.debug("Non-fatal: index refresh after experiment create failed.", exc_info=True)
+                logger.debug("Non-fatal: catalog build after experiment create failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
@@ -924,15 +924,15 @@ class CopyDatasetCommand(Command):
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
-            # Refresh index for destination experiment
+            # Refresh the destination catalog after the copy.
             try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+                from monstim_signals.io.experiment_catalog import build_catalog
 
                 to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
                 if to_exp_path and to_exp_path.exists():
-                    ensure_fresh_index(self.to_exp, to_exp_path)
+                    build_catalog(to_exp_path)
             except Exception:
-                logger.debug("Non-fatal: index refresh after dataset copy failed.", exc_info=True)
+                logger.debug("Non-fatal: catalog refresh after dataset copy failed.", exc_info=True)
         except Exception as e:
             logger.exception(f"Failed to copy dataset: {e!s}")
             raise Exception(f"Failed to copy dataset: {e!s}") from e
@@ -945,15 +945,15 @@ class CopyDatasetCommand(Command):
                 # Refresh the data curation manager if it's open
                 if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                     self.gui._data_curation_manager.load_data()
-                # Refresh index for destination experiment after deletion
+                # Refresh the destination catalog after deletion.
                 try:
-                    from monstim_signals.io.experiment_index import ensure_fresh_index
+                    from monstim_signals.io.experiment_catalog import build_catalog
 
                     to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
                     if to_exp_path and to_exp_path.exists():
-                        ensure_fresh_index(self.to_exp, to_exp_path)
+                        build_catalog(to_exp_path)
                 except Exception:
-                    logger.debug("Non-fatal: index refresh after undo dataset copy failed.", exc_info=True)
+                    logger.debug("Non-fatal: catalog refresh after undo dataset copy failed.", exc_info=True)
         except Exception as e:
             logger.exception(f"Failed to undo dataset copy: {e!s}")
             raise Exception(f"Failed to undo dataset copy: {e!s}") from e
@@ -1015,15 +1015,16 @@ class RenameExperimentCommand(Command):
         """Rename the experiment immediately."""
         # Let exceptions from data_manager propagate with their original messages
         self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
-        # Refresh index for the renamed experiment (new path) and clean up old if present
+        # The sidecar moves with the experiment folder; update its stored paths
+        # transactionally instead of rescanning every recording.
         try:
-            from monstim_signals.io.experiment_index import ensure_fresh_index
+            from monstim_signals.io.experiment_catalog import relocate_catalog_paths
 
             new_path = Path(self.gui.expts_dict.get(self.new_name, ""))
             if new_path and new_path.exists():
-                ensure_fresh_index(self.new_name, new_path)
+                relocate_catalog_paths(new_path, new_path.parent / self.old_name, new_path)
         except Exception:
-            logger.debug("Non-fatal: index refresh after experiment rename failed.", exc_info=True)
+            logger.debug("Non-fatal: catalog refresh after experiment rename failed.", exc_info=True)
         # Refresh the data curation manager if it's open
         if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
             try:
@@ -1039,15 +1040,15 @@ class RenameExperimentCommand(Command):
         """Rename back to original name."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
-            # Refresh index for the restored original experiment
+            # Update sidecar paths after restoring the experiment folder name.
             try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+                from monstim_signals.io.experiment_catalog import relocate_catalog_paths
 
                 old_path = Path(self.gui.expts_dict.get(self.old_name, ""))
                 if old_path and old_path.exists():
-                    ensure_fresh_index(self.old_name, old_path)
+                    relocate_catalog_paths(old_path, old_path.parent / self.new_name, old_path)
             except Exception:
-                logger.debug("Non-fatal: index refresh after experiment rename undo failed.", exc_info=True)
+                logger.debug("Non-fatal: catalog refresh after experiment rename undo failed.", exc_info=True)
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 try:
@@ -1082,15 +1083,15 @@ class DeleteDatasetCommand(Command):
             # Refresh the data curation manager if it's open
             if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
                 self.gui._data_curation_manager.load_data()
-            # Refresh index for the experiment after dataset deletion
+            # Refresh the experiment catalog after dataset deletion.
             try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+                from monstim_signals.io.experiment_catalog import build_catalog
 
                 exp_path = Path(self.gui.expts_dict.get(self.exp_id, ""))
                 if exp_path and exp_path.exists():
-                    ensure_fresh_index(self.exp_id, exp_path)
+                    build_catalog(exp_path)
             except Exception:
-                logger.debug("Non-fatal: index refresh after dataset deletion failed.", exc_info=True)
+                logger.debug("Non-fatal: catalog refresh after dataset deletion failed.", exc_info=True)
         except Exception as e:
             logger.exception(f"Failed to delete dataset: {e!s}")
             raise Exception(f"Failed to delete dataset: {e!s}") from e
