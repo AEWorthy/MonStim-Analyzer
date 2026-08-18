@@ -41,7 +41,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # Brightness adjustment for colormap (0.0 = no adjustment, 0.5 = much brighter)
         # For viridis_r: higher values make colors brighter by avoiding dark end of colormap
         self.brightness_shift = 0
-        # TODO: Make the colorbar brightness change with the brightness_shift so it reflects the adjusted colormap
 
     def get_time_axis(self):
         """Get time axis for plotting."""
@@ -259,8 +258,20 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         plot_items: list[PlotItem],
         value_range: tuple[float, float],
     ):
+        brightness_limit = np.clip(1.0 - self.brightness_shift, 0.0, 1.0)
+        if brightness_limit < 1.0:
+            # Keep the colormap's input domain aligned with the curve normalization.
+            positions = np.linspace(0.0, brightness_limit, 256)
+            colors = self.stim_colormap.map(positions, mode="byte")
+            colorbar_colormap = pg.ColorMap(
+                np.append(positions, 1.0),
+                np.vstack((colors, colors[-1])),
+            )
+        else:
+            colorbar_colormap = self.stim_colormap
+
         colorbar = pg.ColorBarItem(
-            colorMap=self.stim_colormap,
+            colorMap=colorbar_colormap,
             values=value_range,
             label="Stimulus Voltage (V)",
             orientation="vertical",
@@ -635,7 +646,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Add an info bubble showing the primary stimulus amplitude (formatted like dataset/experiment inlays)
         # This inlay mirrors the pg.TextItem usage in dataset/experiment plotters
-        # TODO: Make bubble move/scale with zoom/pan
         try:
             info_text = f"Stimulus: {stimulus_v:.2f} V"
             # Use same styling as other plotters' inlay TextItem
@@ -648,17 +658,27 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             )
             # Position the text in the top-right of the first plot item
             first_plot = plot_items[0]
-            # Determine a reasonable position: x near right edge, y near top of visible range
             vb = first_plot.vb
-            view_range = vb.viewRange()
-            # viewRange returns [[xMin,xMax],[yMin,yMax]]
-            x_min, x_max = view_range[0]
-            y_min, y_max = view_range[1]
-            # Place text slightly inset from top-right corner
-            x_pos = x_max - 0.02 * (x_max - x_min)
-            y_pos = y_max - 0.02 * (y_max - y_min)
-            text_item.setPos(x_pos, y_pos)
-            first_plot.addItem(text_item)
+
+            def update_info_bubble(*_args):
+                """Keep the bubble anchored to the visible top-right corner."""
+                x_range, y_range = vb.viewRange()
+                x_min, x_max = x_range
+                y_min, y_max = y_range
+                x_span = x_max - x_min
+                y_span = y_max - y_min
+                if x_span <= 0 or y_span <= 0:
+                    return
+                text_item.setPos(x_max - 0.02 * x_span, y_max - 0.02 * y_span)
+
+            # This view-relative annotation must not contribute its moving anchor
+            # to the plot's initial data bounds (which would cause auto-ranging to
+            # expand continuously as the anchor follows the top-right corner).
+            first_plot.addItem(text_item, ignoreBounds=True)
+            # TextItem keeps its screen size as the ViewBox transforms; update its
+            # data-coordinate anchor whenever the user zooms or pans.
+            vb.sigRangeChanged.connect(update_info_bubble)
+            update_info_bubble()
         except Exception:
             # Fail silently for non-critical UI addition
             logger.error("Failed to add stimulus info inlay to single EMG plot", exc_info=True)
@@ -1300,7 +1320,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         Returns a pandas.DataFrame indexed by (channel_index, window_label, bin_center) with
         column 'value'.
         """
-        # TODO: Ensure the probability density calculation is correct for this and the dataset-level plot
         if canvas is None:
             raise UnableToPlotError("Canvas must be provided for PyQtGraph plotting")
 
@@ -1375,10 +1394,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if amps.size == 0:
                     continue
                 try:
+                    counts, _ = np.histogram(amps, bins=bin_edges)
                     if density:
-                        counts, _ = np.histogram(amps, bins=bin_edges, density=True)
-                    else:
-                        counts, _ = np.histogram(amps, bins=bin_edges)
+                        # Convert bin counts to a probability density.  Normalize by
+                        # the number of observations and each bin's width so that
+                        # sum(value * bin_width) == 1 for bins covering the data.
+                        counts = counts.astype(float, copy=False)
+                        counts /= amps.size * np.diff(bin_edges)
 
                     for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts, strict=True):
                         raw_data_dict["channel_index"].append(channel_index)
