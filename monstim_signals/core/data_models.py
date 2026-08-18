@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # monstim_signals/core/data_models.py
 import datetime
 import logging
