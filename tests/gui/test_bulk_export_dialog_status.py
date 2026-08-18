@@ -115,3 +115,33 @@ def test_bulk_export_dialog_does_not_expose_worker_count(qt_app):
     assert "Plot Options" not in group_titles
     assert not hasattr(dialog, "_sb_workers")
     assert dialog.findChildren(QSpinBox) == []
+
+
+def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled(qt_app):
+    from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+
+    class DummyRecording:
+        def __init__(self):
+            self.id = "rec-1"
+            self.stim_amplitude = 7.5
+
+    class DummySession:
+        def __init__(self):
+            self.id = "sess-1"
+            self.excluded_recordings = set()
+
+        def get_all_recordings(self, include_excluded=True):
+            return [DummyRecording()]
+
+    parent_widget = QWidget()
+    parent_widget.current_session = DummySession()
+    parent_widget.current_dataset = None
+    parent_widget.current_experiment = None
+    parent_widget.status_bar = None
+
+    dialog = RecordingExclusionEditor(parent_widget)
+    recording = DummyRecording()
+
+    dialog.stimulus_group.setChecked(False)
+
+    assert dialog.should_exclude_recording(recording) is False

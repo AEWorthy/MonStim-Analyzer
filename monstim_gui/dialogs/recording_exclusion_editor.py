@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from monstim_signals.domain.recording import Recording
+
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
     from monstim_signals.domain import Session
@@ -287,6 +289,7 @@ class RecordingExclusionEditor(QDialog):
 
     def create_preview_widget(self) -> QWidget:
         """Create the recording preview table widget."""
+        # TODO trim the preview traces to whatever is used in the currently active analysis profile
         preview_widget = QWidget()
         layout = QVBoxLayout(preview_widget)
 
@@ -354,27 +357,29 @@ class RecordingExclusionEditor(QDialog):
         else:
             return []
 
-    def should_exclude_recording(self, recording) -> bool:
+    def should_exclude_recording(self, recording: Recording) -> bool:
         """
         Check if a recording should be excluded based on current criteria.
         This method is designed to be extensible for future criteria types.
         """
-        # Check stimulus amplitude criteria
+        # Stimulus amplitude exclusion is optional; when the group is disabled,
+        # nothing should be excluded by it and the method should not reference a
+        # threshold value that was never assigned.
         if self.stimulus_group.isChecked():
             stimulus_value = recording.stim_amplitude
             threshold_type = self.threshold_type_combo.currentData()
             threshold1 = self.threshold_spinbox.value()
             threshold2 = self.threshold2_spinbox.value()
 
-        match threshold_type:
-            case "above":
-                return stimulus_value > threshold1
-            case "below":
-                return stimulus_value < threshold1
-            case "outside":
-                return stimulus_value < threshold1 or stimulus_value > threshold2
-            case "inside":
-                return threshold1 <= stimulus_value <= threshold2
+            match threshold_type:
+                case "above":
+                    return stimulus_value > threshold1
+                case "below":
+                    return stimulus_value < threshold1
+                case "outside":
+                    return stimulus_value < threshold1 or stimulus_value > threshold2
+                case "inside":
+                    return threshold1 <= stimulus_value <= threshold2
 
         # Future criteria can be added here
         # e.g., recording quality, signal-to-noise ratio, etc.
