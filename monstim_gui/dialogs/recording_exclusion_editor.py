@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -163,7 +163,7 @@ class RecordingExclusionEditor(QDialog):
         quality_tab = self.create_quality_tab()
         self.criteria_tabs.addTab(quality_tab, "Quality")
 
-        # Future tabs can be added here:
+        # TODO: Future tabs can be added here:
         # - Recording quality metrics
         # - Channel-specific criteria
         # - Time-based criteria
@@ -289,7 +289,6 @@ class RecordingExclusionEditor(QDialog):
 
     def create_preview_widget(self) -> QWidget:
         """Create the recording preview table widget."""
-        # TODO trim the preview traces to whatever is used in the currently active analysis profile
         preview_widget = QWidget()
         layout = QVBoxLayout(preview_widget)
 
@@ -314,6 +313,8 @@ class RecordingExclusionEditor(QDialog):
 
         self.recordings_table.setAlternatingRowColors(True)
         self.recordings_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.recordings_table.setIconSize(QSize(120, 30))
+        self.recordings_table.verticalHeader().setDefaultSectionSize(36)
 
         layout.addWidget(self.recordings_table)
 
@@ -357,6 +358,83 @@ class RecordingExclusionEditor(QDialog):
         else:
             return []
 
+    def _get_active_profile_data(self) -> dict[str, Any]:
+        """Return the active analysis profile payload, if available."""
+        active_profile_data = getattr(self.gui, "active_profile_data", None)
+        if isinstance(active_profile_data, dict):
+            return active_profile_data
+
+        current_session = getattr(self, "current_session", None)
+        config = getattr(current_session, "_config", None) if current_session is not None else None
+        if isinstance(config, dict):
+            return config
+
+        return {}
+
+    def _get_preview_channel_indices(self, recording: Recording) -> list[int]:
+        """Return EMG-like channel indices for preview traces."""
+        try:
+            selected_channels = getattr(getattr(self.gui, "plot_widget", None), "persistent_channel_selection", [])
+            selected_channels = [int(channel_idx) for channel_idx in selected_channels if 0 <= int(channel_idx) < recording.num_channels]
+            if selected_channels:
+                return selected_channels
+        except Exception:
+            pass
+
+        channel_indices = [idx for idx, channel_type in enumerate(recording.channel_types) if str(channel_type).strip().lower().startswith("emg")]
+        return channel_indices or [0]
+
+    def _get_recording_trace(self, recording: Recording, session, ch_idx: int) -> np.ndarray | None:
+        """Return the filtered session trace for this recording when available."""
+        try:
+            all_recordings = session.get_all_recordings(include_excluded=True)
+            recording_index = next(idx for idx, rec in enumerate(all_recordings) if rec.id == recording.id)
+            filtered_recordings = getattr(session, "all_recordings_filtered", None)
+            if filtered_recordings is not None and recording_index < len(filtered_recordings):
+                return np.asarray(filtered_recordings[recording_index][:, ch_idx]).squeeze()
+        except Exception:
+            pass
+
+        try:
+            return np.asarray(recording.raw_view(ch=ch_idx, t=slice(None))).squeeze()
+        except Exception:
+            return None
+
+    def _get_preview_time_window(self, recording: Recording, session=None) -> tuple[int, int] | None:
+        """Return the sample window used by the active EMG analysis profile.
+
+        This mirrors SessionPlotterPyQtGraph.get_time_axis():
+        start = stim_start - pre_stim_time
+        end = stim_start + time_window
+        """
+        profile_data = self._get_active_profile_data()
+        analysis_params = profile_data.get("analysis_parameters", {}) if isinstance(profile_data, dict) else {}
+        if not isinstance(analysis_params, dict):
+            analysis_params = {}
+
+        try:
+            source_session = session if session is not None else self.current_session
+            pre_stim_time_ms = float(analysis_params.get("pre_stim_time", getattr(source_session, "pre_stim_time_ms", 0.0)))
+            time_window_ms = float(analysis_params.get("time_window", getattr(source_session, "time_window_ms", 0.0)))
+            stim_start_ms = float(getattr(source_session, "stim_start", 0.0))
+            scan_rate = float(getattr(recording, "scan_rate", 0.0))
+        except Exception:
+            return None
+
+        if scan_rate <= 0:
+            return None
+
+        start_sample = int((stim_start_ms - pre_stim_time_ms) * scan_rate / 1000.0)
+        end_sample = int((stim_start_ms + time_window_ms) * scan_rate / 1000.0)
+
+        start_sample = max(0, start_sample)
+        end_sample = min(recording.num_samples, end_sample)
+
+        if end_sample <= start_sample:
+            return None
+
+        return start_sample, end_sample
+
     def should_exclude_recording(self, recording: Recording) -> bool:
         """
         Check if a recording should be excluded based on current criteria.
@@ -392,22 +470,19 @@ class RecordingExclusionEditor(QDialog):
         Returns a dict with keys: snr, baseline_drift, flatline, line_noise. Values
         are numeric or None if computation unavailable.
         """
-        # Prefer using domain Recording API: request a suitable channel via raw_view()
+        # Prefer using domain Recording API and trim to the active profile's time window.
         arr = None
         try:
-            # choose an EMG-like channel if present, otherwise channel 0
-            ch_idx = 0
-            try:
-                types = recording.channel_types
-                for i, t in enumerate(types):
-                    if isinstance(t, str) and t.lower().startswith("emg"):
-                        ch_idx = i
-                        break
-            except Exception:
-                ch_idx = 0
+            channel_indices = self._get_preview_channel_indices(recording)
+            ch_idx = channel_indices[0] if channel_indices else 0
 
             try:
-                sig = recording.raw_view(ch=ch_idx, t=slice(None))
+                window = self._get_preview_time_window(recording)
+                if window is None:
+                    sig = recording.raw_view(ch=ch_idx, t=slice(None))
+                else:
+                    start_sample, end_sample = window
+                    sig = recording.raw_view(ch=ch_idx, t=slice(start_sample, end_sample))
 
                 arr = np.asarray(sig).squeeze()
             except Exception:
@@ -464,29 +539,28 @@ class RecordingExclusionEditor(QDialog):
 
         return metrics
 
-    def generate_sparkline_icon(self, recording, width=80, height=24) -> QIcon:
+    def generate_sparkline_icon(self, recording, session=None, width=120, height=30) -> QIcon:
         """Generate a small sparkline icon for a recording if waveform is available.
 
         Returns a QIcon. Falls back to a simple placeholder pixmap.
         """
-        # Prefer domain API: request a good channel via raw_view()
+        # Use the same kind of EMG trace shown in the normal session EMG plot.
         arr = None
         try:
-            ch_idx = 0
-            try:
-                types = recording.channel_types
-                for i, t in enumerate(types):
-                    if isinstance(t, str) and t.lower().startswith("emg"):
-                        ch_idx = i
-                        break
-            except Exception:
-                ch_idx = 0
+            channel_indices = self._get_preview_channel_indices(recording)
+            ch_idx = channel_indices[0] if channel_indices else 0
 
             try:
-                sig = recording.raw_view(ch=ch_idx, t=slice(None))
-                import numpy as np
+                sig = self._get_recording_trace(recording, session, ch_idx) if session is not None else None
+                if sig is None:
+                    sig = recording.raw_view(ch=ch_idx, t=slice(None))
 
-                arr = np.asarray(sig).squeeze()
+                window = self._get_preview_time_window(recording, session)
+                if window is None:
+                    arr = np.asarray(sig).squeeze()
+                else:
+                    start_sample, end_sample = window
+                    arr = np.asarray(sig[start_sample:end_sample]).squeeze()
             except Exception:
                 arr = None
         except Exception:
@@ -495,8 +569,9 @@ class RecordingExclusionEditor(QDialog):
         pix = QPixmap(width, height)
         pix.fill(QColor("transparent"))
         painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         pen = QPen(QColor("#2b85d8"))
-        pen.setWidth(1)
+        pen.setWidth(2)
         painter.setPen(pen)
 
         if arr is None or arr.size == 0:
@@ -507,22 +582,27 @@ class RecordingExclusionEditor(QDialog):
 
         # downsample to width points
         try:
-            n = arr.size
+            ys_source = np.asarray(arr, dtype=float).reshape(-1)
+            ys_source = ys_source[np.isfinite(ys_source)]
+            if ys_source.size == 0:
+                painter.drawLine(2, height // 2, width - 2, height // 2)
+                painter.end()
+                return QIcon(pix)
+
+            n = ys_source.size
             if n <= width:
-                ys = arr
+                ys = ys_source
             else:
-                import numpy as np
-
                 idx = np.linspace(0, n - 1, width).astype(int)
-                ys = arr[idx]
+                ys = ys_source[idx]
 
-            # normalize to [2, height-2]
-            ymin, ymax = float(ys.min()), float(ys.max())
+            # Normalize each preview trace to the available cell height.
+            ymin, ymax = float(np.min(ys)), float(np.max(ys))
             rng = ymax - ymin if ymax != ymin else 1.0
             points = []
             for i, v in enumerate(ys):
-                x = int(i * (width - 4) / max(1, len(ys) - 1)) + 2
-                y = int((1.0 - (float(v) - ymin) / rng) * (height - 4)) + 2
+                x = int(i * (width - 6) / max(1, len(ys) - 1)) + 3
+                y = int((1.0 - (float(v) - ymin) / rng) * (height - 6)) + 3
                 points.append((x, y))
 
             for i in range(len(points) - 1):
@@ -585,7 +665,7 @@ class RecordingExclusionEditor(QDialog):
 
         for row, data in enumerate(recordings_data):
             # Preview icon
-            icon = self.generate_sparkline_icon(data["recording"]) if data["recording"] is not None else QIcon()
+            icon = self.generate_sparkline_icon(data["recording"], data["session"]) if data["recording"] is not None else QIcon()
             item = QTableWidgetItem()
             item.setIcon(icon)
             if data["will_exclude"] or (data["recording"].id in self.manual_preview_flags):
