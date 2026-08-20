@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
+from pyqtgraph.graphicsItems.LegendItem import ItemSample
 from pyqtgraph.graphicsItems.PlotItem import PlotItem
 
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
@@ -13,6 +14,25 @@ if TYPE_CHECKING:
     from monstim_signals.domain.session import Session
 
 logger = logging.getLogger(__name__)
+
+
+class _LatencyWindowLegendSample(ItemSample):
+    """Legend sample that toggles every flag line for one latency window."""
+
+    def __init__(self, item: pg.PlotDataItem, flag_items: list[pg.InfiniteLine]):
+        super().__init__(item)
+        self.flag_items = flag_items
+
+    def mouseClickEvent(self, event):
+        if event.button() == pg.QtCore.Qt.MouseButton.LeftButton:
+            # Treat a partially visible group as visible so one click hides it.
+            show = not any(item.isVisible() for item in self.flag_items)
+            for item in self.flag_items:
+                item.setVisible(show)
+            self.item.setVisible(show)
+            self.update()
+
+        event.accept()
 
 
 class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
@@ -38,6 +58,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         self.plotted_curves: list[pg.PlotDataItem] = []
         self.curve_stimulus_voltages: list[float] = []
         self.colorbar_item: pg.ColorBarItem = None
+        # Start/end InfiniteLine items grouped by latency-window index.  A
+        # legend entry uses this mapping so it controls the actual flags,
+        # rather than only its dummy legend sample.
+        self.latency_window_flag_items: dict[int, list[pg.InfiniteLine]] = {}
         # Brightness adjustment for colormap (0.0 = no adjustment, 0.5 = much brighter)
         # For viridis_r: higher values make colors brighter by avoiding dark end of colormap
         self.brightness_shift = 0
@@ -164,7 +188,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         Parameters match the original matplotlib plotter interface.
         """
         if all_flags:
-            for window in self.emg_object.latency_windows:
+            for window_index, window in enumerate(self.emg_object.latency_windows):
                 # Convert matplotlib color to PyQtGraph-compatible color
                 color = self._convert_matplotlib_color(window.color)
 
@@ -190,6 +214,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                 plot_item.addItem(start_line)
                 plot_item.addItem(end_line)
+                self.latency_window_flag_items.setdefault(window_index, []).extend((start_line, end_line))
 
     def add_latency_window_legend(self, plot_item: PlotItem):
         """
@@ -197,14 +222,15 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         """
         legend = plot_item.addLegend(offset=(10, 10))
         # Use a short horizontal line as a dummy item for each latency window
-        for window in self.emg_object.latency_windows:
+        for window_index, window in enumerate(self.emg_object.latency_windows):
             color = self._convert_matplotlib_color(window.color)
             pen = pg.mkPen(color=color, style=self._get_line_style(window.linestyle), width=2)
             # Create a dummy PlotDataItem (short horizontal line)
             x = np.array([0, 1])
             y = np.array([0, 0])
             dummy_item = pg.PlotDataItem(x, y, pen=pen)
-            legend.addItem(dummy_item, window.label if hasattr(window, "label") else str(window))
+            sample = _LatencyWindowLegendSample(dummy_item, self.latency_window_flag_items.get(window_index, []))
+            legend.addItem(sample, window.label if hasattr(window, "label") else str(window))
         return legend
 
     def _get_line_style(self, matplotlib_style):
@@ -349,6 +375,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             self.add_synchronized_crosshairs(plot_items)
 
         # Plot latency windows once per channel (not per recording)
+        self.latency_window_flag_items.clear()
         for plot_idx, channel_index in enumerate(channel_indices):
             current_plot = plot_items[plot_idx]
             self.plot_latency_windows(current_plot, all_flags, channel_index)
@@ -518,6 +545,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             self.add_synchronized_crosshairs(plot_items)
 
         # Plot latency windows once per channel
+        self.latency_window_flag_items.clear()
         for plot_idx, channel_index in enumerate(channel_indices):
             current_plot = plot_items[plot_idx]
             self.plot_latency_windows(current_plot, all_flags, channel_index)
