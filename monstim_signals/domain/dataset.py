@@ -373,7 +373,10 @@ class Dataset:
             logger.warning(f"No sessions available to add latency window '{name}' in dataset {self.id}.")
             return
         for session in self.sessions:
-            session.add_latency_window(name, start_times, durations, color=color, linestyle=linestyle)
+            session.add_latency_window(name, start_times, durations, color=color, linestyle=linestyle, persist=False)
+        from monstim_signals.io.repositories import SessionRepository
+
+        SessionRepository.save_many(self.sessions)
         self.update_latency_window_parameters()
 
     def remove_latency_window(self, name: str) -> None:
@@ -381,7 +384,10 @@ class Dataset:
             logger.warning(f"No sessions available to remove latency window '{name}' in dataset {self.id}.")
             return
         for session in self.sessions:
-            session.remove_latency_window(name)
+            session.remove_latency_window(name, persist=False)
+        from monstim_signals.io.repositories import SessionRepository
+
+        SessionRepository.save_many(self.sessions)
         self.update_latency_window_parameters()
 
     def apply_latency_window_preset(self, preset_name: str) -> None:
@@ -390,7 +396,10 @@ class Dataset:
             logger.warning(f"No sessions available to apply preset '{preset_name}' in dataset {self.id}.")
             return
         for session in self.sessions:
-            session.apply_latency_window_preset(preset_name)
+            session.apply_latency_window_preset(preset_name, persist=False)
+        from monstim_signals.io.repositories import SessionRepository
+
+        SessionRepository.save_many(self.sessions)
         self.update_latency_window_parameters()
 
     # ──────────────────────────────────────────────────────────────────

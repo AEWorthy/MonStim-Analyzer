@@ -9,8 +9,8 @@ from monstim_signals.io.experiment_catalog import (
     recording_stem,
     relocate_catalog_paths,
 )
-from monstim_signals.io.repositories import ExperimentRepository, RecordingRepository
-from tests.helpers import create_minimal_dataset_folder
+from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository, RecordingRepository, SessionRepository
+from tests.helpers import create_minimal_dataset_folder, create_minimal_session_folder
 
 
 def test_catalog_records_exact_raw_h5_stems_and_removes_legacy_index(tmp_path: Path):
@@ -76,3 +76,63 @@ def test_catalog_relocates_a_renamed_dataset_without_rebuild(tmp_path: Path):
     assert catalog.dataset_paths() == [new_dataset]
     assert catalog.session_paths(new_dataset) == [new_dataset / "RX02"]
     assert catalog.recordings(new_dataset / "RX02")[0].stem.parent == new_dataset / "RX02"
+
+
+def test_session_save_does_not_rewrite_recording_annotations(tmp_path: Path, monkeypatch):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    session_path = create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=2) / "RX02"
+    ensure_catalog(experiment)
+    session = SessionRepository(session_path).load(lazy_open_h5=True)
+    calls = []
+
+    def record_save_should_not_run(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(RecordingRepository, "save", record_save_should_not_run)
+    session.annot.excluded_recordings.append(session.all_recordings[0].id)
+    session.repo.save(session)
+
+    assert calls == []
+    persisted = json.loads((session_path / "session.annot.json").read_text())
+    assert persisted["excluded_recordings"] == [session.all_recordings[0].id]
+
+
+def test_batch_session_save_persists_each_session_and_refreshes_the_catalog(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    dataset = create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=1)
+    second_session = create_minimal_session_folder(dataset, session_name="RX03", num_recordings=1)
+    catalog = ensure_catalog(experiment)
+    sessions = [
+        SessionRepository(dataset / "RX02").load(lazy_open_h5=True),
+        SessionRepository(second_session).load(lazy_open_h5=True),
+    ]
+    for session in sessions:
+        session.annot.excluded_recordings.append(session.all_recordings[0].id)
+
+    SessionRepository.save_many(sessions)
+
+    for session in sessions:
+        persisted = json.loads((session.repo.session_js).read_text())
+        with catalog.connect() as connection:
+            cached = json.loads(
+                connection.execute("SELECT annot_json FROM sessions WHERE path = ?", (str(session.repo.folder.resolve()),)).fetchone()["annot_json"]
+            )
+        assert persisted["excluded_recordings"] == [session.all_recordings[0].id]
+        assert cached["excluded_recordings"] == [session.all_recordings[0].id]
+
+
+def test_dataset_latency_window_change_persists_every_child_session(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    dataset_path = create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=1)
+    create_minimal_session_folder(dataset_path, session_name="RX03", num_recordings=1)
+    ensure_catalog(experiment)
+    dataset = DatasetRepository(dataset_path).load(lazy_open_h5=True)
+
+    dataset.add_latency_window("Dataset window", [5.0, 5.0], [2.0, 2.0])
+
+    for session_path in (dataset_path / "RX02", dataset_path / "RX03"):
+        persisted = json.loads((session_path / "session.annot.json").read_text())
+        assert [window["name"] for window in persisted["latency_windows"]] == ["Dataset window"]

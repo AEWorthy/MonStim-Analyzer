@@ -35,7 +35,7 @@ from monstim_signals.io.experiment_catalog import (
     recording_stem,
     refresh_dataset_annotation,
     refresh_recording_annotation,
-    refresh_session_annotation,
+    refresh_session_annotations,
     relocate_catalog_paths,
 )
 
@@ -412,15 +412,35 @@ class SessionRepository:
         return session
 
     def save(self, session: Session) -> None:
-        try:
-            session.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
-        except Exception:
-            logger.debug("Failed to set date_modified on SessionAnnot", exc_info=True)
-        self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
-        refresh_session_annotation(self.folder)
-        # Save ALL recordings including excluded ones to persist their state
-        for rec in session._all_recordings:
-            rec.repo.save(rec)
+        """Persist only session-level state.
+
+        Recording annotations are independently persisted by
+        :meth:`RecordingRepository.save`. Rewriting all of them here made a
+        latency-window edit perform one write and catalog transaction per
+        recording even though the edit only changes ``session.annot.json``.
+        """
+        self.save_many([session])
+
+    @staticmethod
+    def save_many(sessions: list[Session]) -> None:
+        """Persist several changed sessions and batch their catalog update.
+
+        Dataset/experiment latency-window commands intentionally change every
+        child session. The JSON files must each be written, but their SQLite
+        cache rows can be updated together in one transaction.
+        """
+        saved_paths: list[Path] = []
+        for session in sessions:
+            repository = session.repo
+            if repository is None:
+                continue
+            try:
+                session.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+            except Exception:
+                logger.exception("Failed to set date_modified on SessionAnnot", exc_info=True)
+            repository.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
+            saved_paths.append(repository.folder)
+        refresh_session_annotations(saved_paths)
 
     def rename(self, new_folder: Path, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename the session folder, retrying on transient Windows locks."""
@@ -615,10 +635,10 @@ class DatasetRepository:
         return dataset
 
     def save(self, dataset: Dataset) -> None:
-        """
-        Save all sessions in this dataset.
-        (If I want dataset-level annotations in the future, write them here.)
-        This is called when the user edits any session's recordings.
+        """Persist only dataset-level state.
+
+        Session and recording mutations save their own annotation files. This
+        avoids turning a dataset-only change into a full recursive write.
         """
         try:
             dataset.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
@@ -626,9 +646,6 @@ class DatasetRepository:
             logger.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
         refresh_dataset_annotation(self.folder)
-        # Save ALL sessions including excluded ones to persist their state
-        for session in dataset._all_sessions:
-            session.repo.save(session)
 
     def rename(self, new_folder: Path, dataset=None, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename the dataset folder, retrying on transient Windows locks.
@@ -1070,16 +1087,13 @@ class ExperimentRepository:
             }
 
     def save(self, expt: Experiment) -> None:
-        """
-        Save all datasets in this experiment.
-        If I want experiment-level annotations in the future, write them here.
-        This is called when the user edits any dataset's sessions.
+        """Persist only experiment-level state.
+
+        Child objects persist themselves when changed, so experiment exclusion
+        and metadata edits must not rewrite the complete experiment tree.
         """
         try:
             expt.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
             logger.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
         self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))
-        # Save ALL datasets including excluded ones to persist their state
-        for ds in expt._all_datasets:
-            ds.repo.save(ds)

@@ -242,8 +242,21 @@ class Session:
         durations: list[float],
         color: str | None = None,
         linestyle: str | None = None,
+        *,
+        persist: bool = True,
     ) -> None:
-        """Add a new :class:`LatencyWindow` to the session."""
+        """Add a new :class:`LatencyWindow` to the session.
+
+        Args:
+            name (str): The name of the latency window.
+            start_times (list[float]): A list of start times for the latency window.
+            durations (list[float]): A list of durations for the latency window.
+            color (str | None): The color of the latency window. If None, uses the default color.
+            linestyle (str | None): The line style of the latency window. If None, uses the default line style.
+            persist (bool): If True, save the session annotation file after adding the latency window.
+                You may want to delay persistence if adding multiple latency windows at once.
+                Use from SessionRepository.save_many() to persist all sessions at once for efficiency.
+        """
         window = LatencyWindow(
             name=name,
             start_times=start_times,
@@ -253,11 +266,18 @@ class Session:
         )
         self.annot.latency_windows.append(window)
         self.update_latency_window_parameters()
-        if self.repo is not None:
+        if persist and self.repo is not None:
             self.repo.save(self)
 
-    def apply_latency_window_preset(self, preset_name: str) -> None:
-        """Replace latency windows using a preset defined in the config file."""
+    def apply_latency_window_preset(self, preset_name: str, *, persist: bool = True) -> None:
+        """Replace latency windows using a preset defined in the config file.
+
+        Optional Args:
+            preset_name (str): The name of the preset to apply.
+            persist (bool): If True, save the session annotation file after applying the preset.
+                You may want to delay persistence if applying the preset to multiple sessions at once.
+                Use from SessionRepository.save_many() to persist all sessions at once for efficiency.
+        """
         from monstim_signals.core import load_config
 
         presets = load_config().get("latency_window_presets", {})
@@ -278,14 +298,14 @@ class Session:
             self.annot.latency_windows.append(window)
 
         self.update_latency_window_parameters()
-        if self.repo is not None:
+        if persist and self.repo is not None:
             self.repo.save(self)
 
-    def remove_latency_window(self, name: str) -> None:
+    def remove_latency_window(self, name: str, *, persist: bool = True) -> None:
         """Remove a latency window by name."""
         self.annot.latency_windows = [w for w in self.annot.latency_windows if w.name != name]
         self.update_latency_window_parameters()
-        if self.repo is not None:
+        if persist and self.repo is not None:
             self.repo.save(self)
 
     def get_latency_window(self, name: str) -> LatencyWindow | None:

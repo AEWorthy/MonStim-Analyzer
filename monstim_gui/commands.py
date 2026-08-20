@@ -539,11 +539,12 @@ class SetLatencyWindowsCommand(Command):
     def _apply(self, windows):
         import copy
 
+        from monstim_signals.io.repositories import SessionRepository
+
         for s in self.sessions:
             s.annot.latency_windows = [copy.deepcopy(w) for w in windows]
             s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
+        SessionRepository.save_many(self.sessions)
         if hasattr(self.level, "update_latency_window_parameters"):
             if isinstance(self.level, list):
                 for obj in self.level:
@@ -555,12 +556,13 @@ class SetLatencyWindowsCommand(Command):
         self._apply(self.new_windows)
 
     def undo(self):
+        from monstim_signals.io.repositories import SessionRepository
+
         for s in self.sessions:
             windows = self.old_windows[s.id]
             s.annot.latency_windows = windows
             s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
+        SessionRepository.save_many(self.sessions)
         if hasattr(self.level, "update_latency_window_parameters"):
             if isinstance(self.level, list):
                 for obj in self.level:
@@ -624,12 +626,12 @@ class InsertSingleLatencyWindowCommand(Command):
         return result
 
     def execute(self):
+        from monstim_signals.io.repositories import SessionRepository
 
         for s in self.sessions:
             s.annot.latency_windows = self._merge_window(s.annot.latency_windows, self.new_window)
             s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
+        SessionRepository.save_many(self.sessions)
 
         if hasattr(self.level, "update_latency_window_parameters"):
             if isinstance(self.level, list):
@@ -639,12 +641,13 @@ class InsertSingleLatencyWindowCommand(Command):
                 self.level.update_latency_window_parameters()
 
     def undo(self):
+        from monstim_signals.io.repositories import SessionRepository
+
         for s in self.sessions:
             windows = self.old_windows[s.id]
             s.annot.latency_windows = windows
             s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
+        SessionRepository.save_many(self.sessions)
 
         if hasattr(self.level, "update_latency_window_parameters"):
             if isinstance(self.level, list):

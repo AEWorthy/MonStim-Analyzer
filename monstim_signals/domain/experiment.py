@@ -252,8 +252,12 @@ class Experiment:
 
     def apply_latency_window_preset(self, preset_name: str) -> None:
         """Apply a latency window preset to every dataset and session."""
-        for ds in self._all_datasets:
-            ds.apply_latency_window_preset(preset_name)
+        sessions = [session for dataset in self._all_datasets for session in dataset.get_all_sessions(include_excluded=True)]
+        for session in sessions:
+            session.apply_latency_window_preset(preset_name, persist=False)
+        from monstim_signals.io.repositories import SessionRepository
+
+        SessionRepository.save_many(sessions)
         self.update_latency_window_parameters()
 
     def exclude_dataset(self, dataset_id: str) -> None:

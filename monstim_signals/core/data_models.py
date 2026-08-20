@@ -278,9 +278,10 @@ class SessionAnnot:
 class DatasetAnnot:
     """
     Holds all user edits for a Dataset:
-      - Custom latency windows (persisting user tweaks)
-      - Optional cached m_max values (small arrays)
-      - Custom channel_names (if user renamed channels)
+      - Dataset identity metadata and exclusion state.
+
+    Latency windows and channel overrides are session-scoped and persist in
+    :class:`SessionAnnot` so sessions can differ within one dataset.
     """
 
     date: str | None = None  # Date of dataset collection: e.g., "240829" for 29 Aug 2024
