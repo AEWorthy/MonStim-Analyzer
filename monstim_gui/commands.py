@@ -1287,6 +1287,10 @@ class ToggleCompletionStatusCommand(Command):
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
+                    from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
+
+                    refresh_dataset_annotation(dataset_path)
+
                     # Update in-memory dataset object if present
                     try:
                         if (
@@ -1327,6 +1331,10 @@ class ToggleCompletionStatusCommand(Command):
 
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                    from monstim_signals.io.experiment_catalog import refresh_session_annotation
+
+                    refresh_session_annotation(session_path)
 
                     # Update in-memory session object if present
                     try:

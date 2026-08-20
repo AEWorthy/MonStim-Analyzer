@@ -261,6 +261,33 @@ def ensure_catalog(experiment_path: Path, progress_callback=None) -> ExperimentC
     return catalog if catalog.is_usable() else build_catalog(catalog.experiment_path, progress_callback)
 
 
+def invalidate_catalog(experiment_path: Path) -> None:
+    """Remove the cached catalog so the next open rebuilds it from disk.
+
+    The catalog is only a cache.  Removing it after a structural filesystem
+    change is safer than trying to maintain every relationship in SQLite,
+    especially for bulk operations and partial failures.
+    """
+    path = catalog_path(Path(experiment_path).resolve())
+    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm"), path.with_suffix(path.suffix + ".building")):
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            logger.warning("Could not invalidate catalog sidecar %s", candidate, exc_info=True)
+
+
+def invalidate_catalogs(*experiment_paths: Path) -> None:
+    """Invalidate each distinct experiment catalog involved in a mutation."""
+    seen: set[Path] = set()
+    for experiment_path in experiment_paths:
+        resolved = Path(experiment_path).resolve()
+        if resolved not in seen:
+            invalidate_catalog(resolved)
+            seen.add(resolved)
+
+
 def refresh_recording_annotation(stem: Path) -> None:
     """Synchronize one saved recording annotation without rescanning its experiment."""
     stem = stem.resolve()

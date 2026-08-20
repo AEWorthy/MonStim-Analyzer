@@ -518,6 +518,11 @@ class DataCurationManager(QDialog):
         self.import_new_experiment_button.setMaximumHeight(self.create_blank_experiment_button.maximumHeight())
         batch_layout.addWidget(self.import_new_experiment_button)
 
+        self.rebuild_catalogs_button = QPushButton("Force Rebuild Data Catalog")
+        self.rebuild_catalogs_button.setToolTip("Re-scan all files in the currently selected experiment to recover data missing from the catalog")
+        self.rebuild_catalogs_button.clicked.connect(self.force_rebuild_catalogs)
+        batch_layout.addWidget(self.rebuild_catalogs_button)
+
         # TODO: Batch operations - add buttons for additional curation tools
         # - Batch Rename
         # - Validate Selected
@@ -674,6 +679,10 @@ class DataCurationManager(QDialog):
         # to let users save common filter criteria or tag-based views for fast access.
 
         return tab_widget
+
+    def force_rebuild_catalogs(self):
+        """Rebuild the active experiment catalog with visible progress."""
+        self.gui.data_manager.rebuild_current_catalog()
 
     def on_dataset_drag_start(self):
         """Called before a batch of dataset moves begins."""

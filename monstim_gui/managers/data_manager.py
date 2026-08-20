@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from monstim_gui.core.application_state import app_state
-from monstim_gui.io.experiment_loader import ExperimentLoadingThread
+from monstim_gui.io.experiment_loader import AllCatalogsRebuildThread, CatalogRebuildThread, ExperimentLoadingThread
 from monstim_signals.core import get_config_path, get_data_path, get_log_dir
 from monstim_signals.io.csv_importer import (
     GUIExptImportingThread,
@@ -43,6 +43,134 @@ class DataManager:
     def __init__(self, gui):
         self.gui: MonstimGUI = gui
         self.loading_completed_successfully = False
+
+    @staticmethod
+    def _invalidate_catalogs(*experiment_paths: Path) -> None:
+        """Invalidate catalogs after changing experiment directory contents."""
+        from monstim_signals.io.experiment_catalog import invalidate_catalogs
+
+        invalidate_catalogs(*experiment_paths)
+
+    def _create_progress_dialog(self, message: str, title: str) -> QProgressDialog:
+        """Create the standard modal progress dialog used by long operations."""
+        progress_dialog = QProgressDialog(message, "Cancel", 0, 100, self.gui)
+        progress_dialog.setWindowTitle(title)
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.setAutoClose(False)
+        progress_dialog.setAutoReset(False)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setMinimumWidth(450)
+        progress_dialog.resize(450, 120)
+        progress_dialog.show()
+        QApplication.processEvents()
+        return progress_dialog
+
+    def rebuild_current_catalog(self) -> bool:
+        """Force-rebuild only the currently active experiment catalog."""
+        current_experiment = getattr(self.gui, "current_experiment", None)
+        experiment_id = getattr(current_experiment, "id", None)
+        if not experiment_id or experiment_id not in self.gui.expts_dict:
+            QMessageBox.warning(self.gui, "No Active Experiment", "Select an experiment before rebuilding its catalog.")
+            return False
+
+        experiment_path = Path(self.gui.expts_dict[experiment_id])
+        self.close_all_data()
+
+        progress_dialog = self._create_progress_dialog("Rebuilding catalog...", f"Rebuilding: {experiment_path.name}")
+
+        thread = CatalogRebuildThread(str(experiment_path))
+        thread.progress.connect(progress_dialog.setValue)
+        thread.status_update.connect(progress_dialog.setLabelText)
+
+        def finish(message: str):
+            progress_dialog.close()
+            self.unpack_existing_experiments()
+            self.gui.data_selection_widget.refresh()
+            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
+                self.gui._data_curation_manager.load_data()
+            self.gui.status_bar.showMessage(message, 5000)
+            thread.deleteLater()
+
+        thread.completed.connect(lambda _catalog: finish(f"Rebuilt catalog for '{experiment_path.name}'."))
+        thread.canceled.connect(lambda: finish("Catalog rebuild canceled."))
+
+        def failed(error: str):
+            progress_dialog.close()
+            thread.deleteLater()
+            QMessageBox.critical(self.gui, "Catalog Rebuild Failed", f"Could not rebuild the catalog:\n{error}")
+
+        thread.error.connect(failed)
+        progress_dialog.canceled.connect(thread.request_cancel)
+        self.catalog_rebuild_thread = thread
+        self.current_progress_dialog = progress_dialog
+        thread.start()
+        return True
+
+    def rebuild_all_catalogs(self) -> bool:
+        """Force-rebuild all experiment catalogs with detailed progress."""
+        experiment_paths = [Path(self.gui.expts_dict[exp_id]) for exp_id in self.gui.expts_dict_keys]
+        if not experiment_paths:
+            QMessageBox.warning(self.gui, "No Experiments Available", "There are no experiments to rebuild.")
+            return False
+
+        confirmation = QMessageBox.question(
+            self.gui,
+            "Confirm Full Catalog Rebuild",
+            "This will rebuild the catalogs for every experiment from the files on disk.\n\n"
+            "For large datasets and 10–20 experiments, this may take 30 minutes or more. "  # noqa: RUF001
+            "The operation can be canceled after it starts, but experiments already completed "
+            "will remain rebuilt.\n\n"
+            "Do you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return False
+
+        self.close_all_data()
+        from monstim_gui.dialogs.bulk_export_dialog import BulkExportProgressWindow
+
+        progress_window = BulkExportProgressWindow(sum(sum(1 for child in path.iterdir() if child.is_dir()) for path in experiment_paths), self.gui)
+        progress_window.setWindowTitle("Force Rebuild All Data Catalogs")
+        progress_window.setWindowModality(Qt.WindowModality.ApplicationModal)
+        progress_window.show()
+
+        thread = AllCatalogsRebuildThread(experiment_paths)
+        progress_window.canceled.connect(thread.request_cancel)
+
+        def on_progress(current: int, total: int, message: str):
+            progress_window.update_progress(current, total, message)
+
+        def on_completed(count: int):
+            progress_window.mark_done()
+            self.unpack_existing_experiments()
+            self.gui.data_selection_widget.refresh()
+            self.gui.status_bar.showMessage(f"Rebuilt {count} data catalog(s).", 5000)
+            thread.deleteLater()
+
+        def on_canceled():
+            progress_window.mark_done()
+            self.unpack_existing_experiments()
+            self.gui.data_selection_widget.refresh()
+            self.gui.status_bar.showMessage("All-catalog rebuild canceled.", 5000)
+            thread.deleteLater()
+
+        def on_error(error: str):
+            progress_window.mark_done()
+            thread.deleteLater()
+            QMessageBox.critical(
+                progress_window,
+                "Catalog Rebuild Failed",
+                f"Could not rebuild all data catalogs:\n{error}",
+            )
+
+        thread.progress.connect(on_progress)
+        thread.completed.connect(on_completed)
+        thread.canceled.connect(on_canceled)
+        thread.error.connect(on_error)
+        self.all_catalogs_rebuild_thread = thread
+        thread.start()
+        return True
 
     # ------------------------------------------------------------------
     # experiment discovery
@@ -869,19 +997,8 @@ class DataManager:
         gc.collect()
         QApplication.processEvents()  # Process any pending GUI cleanup
 
-        # Create and show progress dialog
-        progress_dialog = QProgressDialog("Loading experiment...", "Cancel", 0, 100, self.gui)
-        progress_dialog.setWindowTitle(f"Loading: {experiment_name}")
-        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        progress_dialog.setAutoClose(False)
-        progress_dialog.setAutoReset(False)
-        progress_dialog.setMinimumDuration(0)  # Show immediately
-        progress_dialog.setMinimumWidth(450)  # Make it wider for better text visibility
-        progress_dialog.resize(450, 120)
-
-        # Show dialog - don't set fixed size to allow dynamic resizing
-        progress_dialog.show()
-        QApplication.processEvents()
+        # Create and show the standard long-operation progress dialog.
+        progress_dialog = self._create_progress_dialog("Loading experiment...", f"Loading: {experiment_name}")
 
         # Simple initial message - let the loader provide specific time estimates
         initial_text = f"Initializing {experiment_name}..."
@@ -1661,6 +1778,7 @@ class DataManager:
             # Add to GUI's experiment dictionary
             self.gui.expts_dict[exp_name] = str(exp_path)
             self.gui.expts_dict_keys = sorted(self.gui.expts_dict.keys())
+            self._invalidate_catalogs(exp_path)
 
             logger.info(f"Created empty experiment: {exp_name}")
 
@@ -1708,6 +1826,8 @@ class DataManager:
             if exp_id in self.gui.expts_dict:
                 del self.gui.expts_dict[exp_id]
                 self.gui.expts_dict_keys = sorted(self.gui.expts_dict.keys())
+
+            self._invalidate_catalogs(Path(exp_path))
 
             logger.info(f"Deleted experiment: {exp_id}")
 
@@ -1758,6 +1878,10 @@ class DataManager:
 
             # Rename the directory
             shutil.move(str(old_exp_path), str(new_exp_path))
+
+            # The sidecar moves with the directory, but its cached paths no
+            # longer describe the renamed experiment.  Force a clean rebuild.
+            self._invalidate_catalogs(new_exp_path)
 
             # Update GUI experiment dictionary
             del self.gui.expts_dict[old_name]
@@ -1832,6 +1956,7 @@ class DataManager:
 
             # Move the dataset folder
             shutil.move(str(source_path), str(dest_path))
+            self._invalidate_catalogs(from_exp_path, to_exp_path)
 
             logger.info(f"Moved dataset {dataset_name} from {from_exp} to {to_exp}")
 
@@ -1874,6 +1999,7 @@ class DataManager:
 
             # Copy the dataset folder
             shutil.copytree(str(source_path), str(dest_path))
+            self._invalidate_catalogs(to_exp_path)
 
             logger.info(f"Copied dataset {dataset_name} from {from_exp} to {to_exp} as {dest_path.name}")
 
@@ -1900,6 +2026,7 @@ class DataManager:
             if dataset_path.exists():
                 # Delete the dataset folder
                 shutil.rmtree(dataset_path)
+                self._invalidate_catalogs(exp_path)
                 logger.info(f"Deleted dataset folder: {dataset_path}")
             else:
                 logger.warning(f"Dataset folder not found for deletion: {dataset_path}")

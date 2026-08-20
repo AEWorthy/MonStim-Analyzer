@@ -6,6 +6,7 @@ from monstim_signals.io.experiment_catalog import (
     CATALOG_FILENAME,
     build_catalog,
     ensure_catalog,
+    invalidate_catalogs,
     recording_stem,
     relocate_catalog_paths,
 )
@@ -76,6 +77,19 @@ def test_catalog_relocates_a_renamed_dataset_without_rebuild(tmp_path: Path):
     assert catalog.dataset_paths() == [new_dataset]
     assert catalog.session_paths(new_dataset) == [new_dataset / "RX02"]
     assert catalog.recordings(new_dataset / "RX02")[0].stem.parent == new_dataset / "RX02"
+
+
+def test_catalog_invalidation_removes_cache_and_forces_rebuild(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=1)
+    build_catalog(experiment)
+
+    invalidate_catalogs(experiment)
+
+    assert not (experiment / CATALOG_FILENAME).exists()
+    rebuilt = ensure_catalog(experiment)
+    assert rebuilt.dataset_paths() == [experiment / "Dataset"]
 
 
 def test_session_save_does_not_rewrite_recording_annotations(tmp_path: Path, monkeypatch):

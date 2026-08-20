@@ -34,6 +34,119 @@ class DatasetSkipLogHandler(logging.Handler):
                 self.skipped_datasets.append((dataset_name, error_detail))
 
 
+class CatalogRebuildThread(QThread):
+    """Rebuild one experiment catalog without blocking the GUI."""
+
+    completed = Signal(object)
+    error = Signal(str)
+    progress = Signal(int)
+    status_update = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, experiment_path: str):
+        super().__init__()
+        self.experiment_path = Path(experiment_path)
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            from monstim_signals.io.experiment_catalog import build_catalog
+
+            self.status_update.emit(f"Rebuilding catalog: '{self.experiment_path.name}'")
+
+            def progress_callback(level: str, index: int, total: int, name: str):
+                if self._cancel_requested:
+                    raise InterruptedError("Catalog rebuild canceled by user")
+                if total > 0:
+                    self.progress.emit(int(100 * index / total))
+                    self.status_update.emit(f"Scanning dataset {index}/{total}:\n'{name}'")
+
+            catalog = build_catalog(self.experiment_path, progress_callback=progress_callback)
+            if self._cancel_requested:
+                self.canceled.emit()
+            else:
+                self.progress.emit(100)
+                self.completed.emit(catalog)
+        except InterruptedError:
+            self.status_update.emit("Catalog rebuild canceled by user...")
+            self.canceled.emit()
+        except Exception as exc:
+            logger.exception("Catalog rebuild failed for %s", self.experiment_path)
+            self.error.emit(str(exc))
+
+
+class AllCatalogsRebuildThread(QThread):
+    """Rebuild every experiment catalog while reporting aggregate progress."""
+
+    progress = Signal(int, int, str)
+    completed = Signal(int)
+    error = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, experiment_paths: list[Path]):
+        super().__init__()
+        self.experiment_paths = experiment_paths
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            from monstim_signals.io.experiment_catalog import build_catalog
+
+            dataset_totals = [sum(1 for path in experiment.iterdir() if path.is_dir()) for experiment in self.experiment_paths]
+            total_datasets = max(sum(dataset_totals), 1)
+            completed_datasets = 0
+            rebuilt_experiments = 0
+
+            for experiment_index, (experiment_path, dataset_total) in enumerate(zip(self.experiment_paths, dataset_totals, strict=True), start=1):
+                if self._cancel_requested:
+                    self.canceled.emit()
+                    return
+
+                def progress_callback(
+                    level: str,
+                    index: int,
+                    total: int,
+                    name: str,
+                    completed_before_experiment: int = completed_datasets,
+                    current_experiment: int = experiment_index,
+                ):
+                    if self._cancel_requested:
+                        raise InterruptedError("All-catalog rebuild canceled by user")
+                    current = completed_before_experiment + index
+                    self.progress.emit(
+                        current,
+                        total_datasets,
+                        f"Experiment {current_experiment}/{len(self.experiment_paths)}: dataset {index}/{total}: '{name}'",
+                    )
+
+                self.progress.emit(
+                    completed_datasets,
+                    total_datasets,
+                    f"Starting experiment {experiment_index}/{len(self.experiment_paths)}: '{experiment_path.name}'",
+                )
+                build_catalog(experiment_path, progress_callback=progress_callback)
+                completed_datasets += dataset_total
+                rebuilt_experiments += 1
+                self.progress.emit(
+                    completed_datasets,
+                    total_datasets,
+                    f"Finished experiment {experiment_index}/{len(self.experiment_paths)}: '{experiment_path.name}'",
+                )
+
+            self.completed.emit(rebuilt_experiments)
+        except InterruptedError:
+            self.canceled.emit()
+        except Exception as exc:
+            logger.exception("All-catalog rebuild failed")
+            self.error.emit(str(exc))
+
+
 class ExperimentLoadingThread(QThread):
     """Thread for loading experiments asynchronously."""
 
