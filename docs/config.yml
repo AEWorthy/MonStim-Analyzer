@@ -112,3 +112,94 @@ latency_window_presets:
       linestyle: ':'
       name: "H7"
       start: 645.0
+  vibration_quintiles:
+  - color: tab:pink
+    duration: 250.0
+    linestyle: ':'
+    name: baseline_bulk
+    start: -300.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: baseline_q1
+    start: -300.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: baseline_q2
+    start: -250.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: baseline_q3
+    start: -200.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: baseline_q4
+    start: -150.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: baseline_q5
+    start: -100.0
+  - color: tab:pink
+    duration: 250.0
+    linestyle: ':'
+    name: vibration_bulk
+    start: 0.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: vibration_q1
+    start: 0.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: vibration_q2
+    start: 50.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: vibration_q3
+    start: 100.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: vibration_q4
+    start: 150.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: vibration_q5
+    start: 200.0
+  - color: tab:pink
+    duration: 250.0
+    linestyle: ':'
+    name: post_bulk
+    start: 250.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: post_q1
+    start: 250.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: post_q2
+    start: 300.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: post_q3
+    start: 350.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: post_q4
+    start: 400.0
+  - color: tab:olive
+    duration: 50.0
+    linestyle: ':'
+    name: post_q5
+    start: 450.0
