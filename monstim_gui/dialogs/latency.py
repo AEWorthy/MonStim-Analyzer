@@ -1,4 +1,3 @@
-import copy
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,7 +11,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -29,6 +27,7 @@ from PySide6.QtWidgets import (
 from monstim_gui.commands import InsertSingleLatencyWindowCommand, SetLatencyWindowsCommand
 from monstim_gui.core.clipboard import LatencyWindowClipboard
 from monstim_gui.io.config_repository import ConfigRepository
+from monstim_gui.widgets.latency_window_editor import LatencyWindowEditor
 from monstim_signals.core import LatencyWindow, get_config_path
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
@@ -69,6 +68,7 @@ class LatencyWindowsDialog(QDialog):
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)  # Make it a standalone window that stays on top
         self.setWindowTitle("Manage Latency Windows")
         self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, list[QDoubleSpinBox]]]
+        self._move_buttons: dict[QGroupBox, tuple[QPushButton, QPushButton]] = {}
         self.config_repo = config_repo or ConfigRepository(get_config_path())
         self.init_ui()
         self._reposition_to_left_middle_of_parent()
@@ -97,9 +97,9 @@ class LatencyWindowsDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout(self)
 
-        # Set minimum size but allow user to resize larger
-        self.setMinimumSize(450, 200)  # Minimum size to ensure usability
-        self.resize(550, 450)  # Default size that's comfortable but can be adjusted
+        # Keep the editor small enough that users can inspect the plots behind it.
+        self.setMinimumSize(650, 400)
+        self.resize(820, 520)
 
         cfg = self.config_repo.read_config()
         self.presets = cfg.get("latency_window_presets", {})
@@ -122,54 +122,9 @@ class LatencyWindowsDialog(QDialog):
             preset_row.addWidget(apply_btn)
             layout.addLayout(preset_row)
 
-        self.scroll: QScrollArea = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        self.scroll_widget = QWidget()
-        self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        self.scroll_layout = QGridLayout(self.scroll_widget)
-        self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        # Set equal column stretch so both columns expand equally
-        self.scroll_layout.setColumnStretch(0, 1)
-        self.scroll_layout.setColumnStretch(1, 1)
-        # Add spacing between columns and rows
-        self.scroll_layout.setHorizontalSpacing(15)
-        self.scroll_layout.setVerticalSpacing(10)
-        # Ensure the layout has a minimum column width
-        self.scroll_layout.setColumnMinimumWidth(0, COL_MIN_WIDTH)
-        self.scroll_layout.setColumnMinimumWidth(1, COL_MIN_WIDTH)
-
-        self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll, 1)  # Give the scroll area stretch factor of 1 to take up available space
-
-        for window in self.data.latency_windows:
-            self._add_window_group(window)
-
-        # --- Action Row (Add / Copy / Paste) ---
-        action_row = QHBoxLayout()
-        add_button = QPushButton("Add Window")
-        add_button.setToolTip("Create a new latency window with default settings")
-        add_button.clicked.connect(lambda: self._add_window_group())
-        action_row.addWidget(add_button)
-
-        copy_button = QPushButton("Copy All")
-        copy_button.setToolTip("Copy the current latency windows to a transient clipboard (not saved to disk)")
-        copy_button.clicked.connect(self._copy_windows_to_clipboard)
-        action_row.addWidget(copy_button)
-
-        paste_button = QPushButton("Paste")
-        paste_button.setToolTip("Paste from clipboard (handles both single and multiple windows)")
-        paste_button.clicked.connect(self._paste_windows_from_clipboard)
-        paste_button.setEnabled(LatencyWindowClipboard.has_any())
-        self._paste_button = paste_button  # store for state updates
-        action_row.addWidget(paste_button)
-
-        action_row.addStretch()
-        layout.addLayout(action_row)
+        self.editor = LatencyWindowEditor(self.data.channel_names, self)
+        self.editor.set_windows(self.data.latency_windows)
+        layout.addWidget(self.editor, 1)
 
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Apply,
@@ -334,12 +289,27 @@ class LatencyWindowsDialog(QDialog):
         copy_btn.setToolTip("Copy this latency window to clipboard for inserting elsewhere")
         copy_btn.clicked.connect(lambda: self._copy_single_window(group))
         button_layout.addWidget(copy_btn)
+
+        move_up_btn = QPushButton("↑")
+        move_up_btn.setAccessibleName("Move window up")
+        move_up_btn.setToolTip("Move this latency window earlier in the list")
+        move_up_btn.clicked.connect(lambda: self._move_window_group(group, -1))
+        button_layout.addWidget(move_up_btn)
+
+        move_down_btn = QPushButton("↓")
+        move_down_btn.setAccessibleName("Move window down")
+        move_down_btn.setToolTip("Move this latency window later in the list")
+        move_down_btn.clicked.connect(lambda: self._move_window_group(group, 1))
+        button_layout.addWidget(move_down_btn)
+
         remove_btn = QPushButton("Remove")
         remove_btn.setToolTip("Delete this latency window permanently")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
         button_layout.addWidget(remove_btn)
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+        self._move_buttons[group] = (move_up_btn, move_down_btn)
 
         # Connect signals for mode switching
         def on_mode_changed():
@@ -424,12 +394,15 @@ class LatencyWindowsDialog(QDialog):
                 per_channel_spins,
             )
         )
+        self._reorganize_grid_layout()
 
     def _remove_window_group(self, group: QGroupBox):
         for i, (grp, *_) in enumerate(self.window_entries):
             if grp is group:
                 self.window_entries.pop(i)
                 break
+
+        self._move_buttons.pop(group, None)
 
         # Remove from layout and delete
         self.scroll_layout.removeWidget(group)
@@ -452,30 +425,45 @@ class LatencyWindowsDialog(QDialog):
             col = i % 2
             self.scroll_layout.addWidget(group, row, col)
 
+            move_buttons = self._move_buttons.get(group)
+            if move_buttons:
+                move_buttons[0].setEnabled(i > 0)
+                move_buttons[1].setEnabled(i < len(self.window_entries) - 1)
+
+    def _move_window_group(self, group: QGroupBox, direction: int):
+        """Move a window one position earlier or later in the editor."""
+        current_index = next((i for i, (grp, *_) in enumerate(self.window_entries) if grp is group), None)
+        if current_index is None:
+            return
+
+        new_index = current_index + direction
+        if not 0 <= new_index < len(self.window_entries):
+            return
+
+        self.window_entries[current_index], self.window_entries[new_index] = (
+            self.window_entries[new_index],
+            self.window_entries[current_index],
+        )
+        self._reorganize_grid_layout()
+
     def _apply_preset(self):
         name = self.preset_combo.currentText()
         if name not in self.presets:
             return
 
-        # Clear existing entries
-        for group, *_ in self.window_entries:
-            group.setParent(None)
-            group.deleteLater()
-        self.window_entries.clear()
-
         num_channels = len(self.data.channel_names)
+        windows = []
         for win in self.presets[name]:
-            window = LatencyWindow(
-                name=win.get("name", "Window"),
-                start_times=[float(win.get("start", 0.0))] * num_channels,
-                durations=[float(win.get("duration", 1.0))] * num_channels,
-                color=win.get("color", "black"),
-                linestyle=win.get("linestyle", ":"),
+            windows.append(
+                LatencyWindow(
+                    name=win.get("name", "Window"),
+                    start_times=[float(win.get("start", 0.0))] * num_channels,
+                    durations=[float(win.get("duration", 1.0))] * num_channels,
+                    color=win.get("color", "black"),
+                    linestyle=win.get("linestyle", ":"),
+                )
             )
-            self._add_window_group(window)
-        # After applying preset, any future paste is still valid
-        self._update_paste_enabled()
-        self._reorganize_grid_layout()
+        self.editor.set_windows(windows)
 
     # ---------------- Clipboard Support -----------------
     def _copy_windows_to_clipboard(self):
@@ -545,6 +533,7 @@ class LatencyWindowsDialog(QDialog):
             group.setParent(None)
             group.deleteLater()
         self.window_entries.clear()
+        self._move_buttons.clear()
 
         # Add new ones (ensure channel counts are reconciled automatically by _add_window_group)
         for w in windows:
@@ -636,33 +625,7 @@ class LatencyWindowsDialog(QDialog):
                 return
 
     def save_windows(self):
-        new_windows = []
-        num_channels = len(self.data.channel_names)
-        for (
-            _group,
-            window,
-            name_edit,
-            global_start_spin,
-            dur_spin,
-            color_combo,
-            global_radio,
-            per_channel_spins,
-        ) in self.window_entries:
-            window.name = name_edit.text().strip() or "Window"
-
-            # Handle start times based on radio button selection
-            if global_radio.isChecked():
-                # Apply start time globally to all channels
-                window.start_times = [global_start_spin.value()] * num_channels
-            else:
-                # Use per-channel start times from individual spin boxes
-                window.start_times = [spin.value() for spin in per_channel_spins]
-
-            # Duration is ALWAYS applied globally - this is a requirement
-            window.durations = [dur_spin.value()] * num_channels
-
-            window.color = color_combo.currentData()
-            new_windows.append(copy.deepcopy(window))
+        new_windows = self.editor.windows()
 
         if isinstance(self.data, Experiment):
             level = "experiment"
@@ -701,34 +664,7 @@ class LatencyWindowsDialog(QDialog):
 
     def apply_changes(self):
         """Apply current window settings and replot, but keep dialog open."""
-        num_channels = len(self.data.channel_names)
-        new_windows = []
-
-        for (
-            _group,
-            window,
-            name_edit,
-            global_start_spin,
-            dur_spin,
-            color_combo,
-            global_radio,
-            per_channel_spins,
-        ) in self.window_entries:
-            window.name = name_edit.text().strip() or "Window"
-
-            # Handle start times based on radio button selection
-            if global_radio.isChecked():
-                # Apply start time globally to all channels
-                window.start_times = [global_start_spin.value()] * num_channels
-            else:
-                # Use per-channel start times from individual spin boxes
-                window.start_times = [spin.value() for spin in per_channel_spins]
-
-            # Duration is ALWAYS applied globally - this is a requirement
-            window.durations = [dur_spin.value()] * num_channels
-
-            window.color = color_combo.currentData()
-            new_windows.append(copy.deepcopy(window))
+        new_windows = self.editor.windows()
 
         if isinstance(self.data, Experiment):
             level = "experiment"

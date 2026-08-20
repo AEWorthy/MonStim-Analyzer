@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from monstim_gui.dialogs.base import COLOR_OPTIONS, TAB_COLOR_NAMES
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.managers.profile_manager import ProfileManager
+from monstim_gui.widgets.latency_window_editor import LatencyWindowEditor
 from monstim_signals.core import LatencyWindow
 
 STIMULUS_OPTIONS = ["Force", "Length", "Electrical", "Optical"]
@@ -73,16 +74,6 @@ class LatencyWindowPresetEditor(QWidget):
         # the widget updates its index, so we cannot rely on the combo box to
         # provide the previous index.
         self._current_index: int | None = None
-        self.window_entries: list[
-            tuple[
-                QGroupBox,
-                LatencyWindow,
-                QLineEdit,
-                QDoubleSpinBox,
-                QDoubleSpinBox,
-                QComboBox,
-            ]
-        ] = []
         self._init_data(presets or {})
         self._init_ui()
 
@@ -105,9 +96,6 @@ class LatencyWindowPresetEditor(QWidget):
         if self.preset_combo.count() == 0:
             self.preset_combo.addItem("default")
             self.presets.append([])
-
-        if self.window_entries:
-            self._save_current_preset()
 
     # ------------------------------------------------------------------
     def _init_ui(self) -> None:
@@ -133,24 +121,10 @@ class LatencyWindowPresetEditor(QWidget):
         add_btn.clicked.connect(self.add_preset)
         remove_btn.clicked.connect(self.remove_preset)
 
-        self.scroll: QScrollArea = QScrollArea()  # type: ignore
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        self.scroll_widget = QWidget()
-        self.scroll_widget.setMinimumSize(0, 0)
-        self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.scroll_layout = QVBoxLayout(self.scroll_widget)
-        self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll, 1)
-
-        add_window_btn = QPushButton("Add Window")
-        # QAbstractButton.clicked passes a boolean that we don't use. Wrap the
-        # call in a lambda so ``add_window_group`` receives no arguments.
-        add_window_btn.clicked.connect(lambda: self.add_window_group())
-        layout.addWidget(add_window_btn)
+        # The normal horizontal editor is easier to use for long preset lists;
+        # the preferences dialog is deliberately wide enough to host it.
+        self.editor = LatencyWindowEditor(["Default"], self)
+        layout.addWidget(self.editor, 1)
 
         if self.preset_combo.count() > 0:
             self.load_preset(0, save=False)
@@ -187,9 +161,7 @@ class LatencyWindowPresetEditor(QWidget):
             self._save_current_preset()
         if index < 0 or index >= len(self.presets):
             return
-        self._clear_windows()
-        for win in self.presets[index]:
-            self.add_window_group(copy.deepcopy(win))
+        self.editor.set_windows(self.presets[index])
         self._current_index = index
 
     def _save_current_preset(self) -> None:
@@ -197,21 +169,7 @@ class LatencyWindowPresetEditor(QWidget):
         index = self._current_index if self._current_index is not None else -1
         if index < 0 or index >= len(self.presets):
             return
-        windows: list[LatencyWindow] = []
-        for (
-            _,
-            window,
-            name_edit,
-            start_spin,
-            dur_spin,
-            color_combo,
-        ) in self.window_entries:
-            window.name = name_edit.text().strip() or "Window"
-            window.start_times = [start_spin.value()]
-            window.durations = [dur_spin.value()]
-            window.color = color_combo.currentData()
-            windows.append(copy.deepcopy(window))
-        self.presets[index] = windows
+        self.presets[index] = self.editor.windows()
 
     def _unique_name(self, base: str) -> str:
         existing = {self.preset_combo.itemText(i) for i in range(self.preset_combo.count())}
@@ -232,58 +190,22 @@ class LatencyWindowPresetEditor(QWidget):
     # Window operations
     # ------------------------------------------------------------------
     def _clear_windows(self) -> None:
-        for grp, *_ in self.window_entries:
-            grp.setParent(None)
-            grp.deleteLater()
-        self.window_entries.clear()
+        self.editor.set_windows([])
 
     def add_window_group(self, window: LatencyWindow | None = None, *, checked: bool | None = None) -> None:
         if window is None:
             window = LatencyWindow(
-                name=f"Window {len(self.window_entries) + 1}",
+                name=f"Window {self.editor.model.rowCount() + 1}",
                 start_times=[0.0],
                 durations=[1.0],
                 color="black",
                 linestyle=":",
             )
-        group = QGroupBox(window.name)
-        group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        form = QFormLayout()
-        name_edit = QLineEdit(window.name)
-        start_spin = QDoubleSpinBox()
-        start_spin.setDecimals(2)
-        start_spin.setRange(-1000.0, 1000.0)
-        start_spin.setSingleStep(0.05)
-        start_spin.setValue(window.start_times[0])
-        dur_spin = QDoubleSpinBox()
-        dur_spin.setDecimals(2)
-        dur_spin.setRange(0.0, 1000.0)
-        dur_spin.setSingleStep(0.05)
-        dur_spin.setValue(window.durations[0])
-        color_combo = QComboBox()
-        for color in COLOR_OPTIONS:
-            display = color.replace("tab:", "")
-            color_combo.addItem(display, userData=color)
-        if window.color in COLOR_OPTIONS:
-            color_combo.setCurrentIndex(COLOR_OPTIONS.index(window.color))
-        remove_btn = QPushButton("Remove")
-        remove_btn.clicked.connect(lambda: self._remove_window_group(group))
-        form.addRow("Name", name_edit)
-        form.addRow("Start", start_spin)
-        form.addRow("Duration", dur_spin)
-        form.addRow("Color", color_combo)
-        form.addRow(remove_btn)
-        group.setLayout(form)
-        self.scroll_layout.addWidget(group)
-        self.window_entries.append((group, window, name_edit, start_spin, dur_spin, color_combo))
+        self.editor.model.append_window(window)
 
     def _remove_window_group(self, group: QGroupBox) -> None:
-        for i, (grp, *_) in enumerate(self.window_entries):
-            if grp is group:
-                self.window_entries.pop(i)
-                break
-        group.setParent(None)
-        group.deleteLater()
+        # Retained for compatibility with callers of the old editor API.
+        self.editor.delete_selected()
 
     # ------------------------------------------------------------------
     # Public API
@@ -413,7 +335,7 @@ class PreferencesDialog(QDialog):
 
         self.setLayout(layout)
         self.setWindowTitle("Preferences")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(1000)
         self.setMinimumHeight(600)
         self.rebuild_form_for_profile(0)
 

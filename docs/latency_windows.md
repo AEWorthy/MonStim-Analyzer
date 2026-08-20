@@ -12,6 +12,14 @@ For the diagnostic notice system (icons, warning/info codes, glossary) see `diag
 
 The Latency Windows dialog includes lightweight Copy / Paste functionality so you can transfer window configurations between Sessions, Datasets, or an entire Experiment without creating a preset.
 
+## Reordering Windows
+
+The editor uses a compact, reorderable list. Select multiple rows with Ctrl/Cmd or Shift, then drag them with the **⠿** handle to move the selected windows together while retaining their relative order. The list also provides quick start-time and duration steppers, while the persistent detail pane exposes names, colours, and per-channel start times.
+
+For windows with per-channel starts, the start-time quick stepper shifts every channel by the same amount; it never replaces differing channel values with one global value.
+
+The new order is included when you press **Apply** or **OK**, and follows the existing command/undo workflow.
+
 ## Why This Exists
 Frequently, the same latency windows are appropriate across multiple sessions in a dataset (e.g. homogeneous stimulation paradigms). Previously you either had to: (1) recreate them manually each time, or (2) promote them to a global preset (which adds long‑term clutter). The transient clipboard solves this by keeping a deep copy of the windows only for the current application run.
 
