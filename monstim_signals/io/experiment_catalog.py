@@ -17,8 +17,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 CATALOG_FILENAME = ".monstim-cache.sqlite"
-CATALOG_SCHEMA_VERSION = 1
+CATALOG_SCHEMA_VERSION = 2
 RAW_SUFFIX = ".raw.h5"
+DIRECTORY_SIGNATURE_KEY = "directory_signature"
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,17 @@ def _file_fingerprint(path: Path) -> tuple[int | None, float | None]:
         return stat.st_size, stat.st_mtime
     except FileNotFoundError:
         return None, None
+
+
+def _directory_signature(experiment_path: Path) -> str:
+    """Return a stable signature for the dataset/session directory hierarchy."""
+    directories = []
+    for dataset_path in experiment_path.iterdir():
+        if not dataset_path.is_dir():
+            continue
+        directories.append(dataset_path.relative_to(experiment_path).as_posix())
+        directories.extend(session_path.relative_to(experiment_path).as_posix() for session_path in dataset_path.iterdir() if session_path.is_dir())
+    return json.dumps(sorted(directories), separators=(",", ":"))
 
 
 def _read_text_if_exists(path: Path) -> str | None:
@@ -101,6 +113,21 @@ class ExperimentCatalog:
         except sqlite3.Error:
             logger.warning("Catalog %s is unreadable and will be rebuilt", self.path, exc_info=True)
             return False
+
+    def is_stale(self) -> bool:
+        """Return whether source directories changed since this catalog was built."""
+        if not self.is_usable():
+            return True
+        try:
+            with self.connect() as connection:
+                row = connection.execute(
+                    "SELECT value FROM catalog_meta WHERE key = ?",
+                    (DIRECTORY_SIGNATURE_KEY,),
+                ).fetchone()
+            return row is None or row["value"] != _directory_signature(self.experiment_path)
+        except OSError, sqlite3.Error:
+            logger.warning("Could not validate source directories for %s; rebuilding", self.path, exc_info=True)
+            return True
 
     def dataset_paths(self) -> list[Path]:
         with self.connect() as connection:
@@ -160,7 +187,11 @@ def _initialize(connection: sqlite3.Connection, experiment_path: Path) -> None:
     )
     connection.executemany(
         "INSERT INTO catalog_meta(key, value) VALUES (?, ?)",
-        (("schema_version", str(CATALOG_SCHEMA_VERSION)), ("experiment_path", str(experiment_path))),
+        (
+            ("schema_version", str(CATALOG_SCHEMA_VERSION)),
+            ("experiment_path", str(experiment_path)),
+            (DIRECTORY_SIGNATURE_KEY, _directory_signature(experiment_path)),
+        ),
     )
 
 
@@ -256,9 +287,13 @@ def build_catalog(experiment_path: Path, progress_callback=None) -> ExperimentCa
 
 
 def ensure_catalog(experiment_path: Path, progress_callback=None) -> ExperimentCatalog:
-    """Return a usable catalog, rebuilding only when it is absent or invalid."""
+    """Return a current catalog, rebuilding when source directories changed."""
     catalog = ExperimentCatalog(experiment_path.resolve())
-    return catalog if catalog.is_usable() else build_catalog(catalog.experiment_path, progress_callback)
+    if catalog.is_usable() and not catalog.is_stale():
+        return catalog
+    if catalog.is_usable():
+        logger.info("Source directory structure changed for %s; rebuilding catalog", catalog.experiment_path)
+    return build_catalog(catalog.experiment_path, progress_callback)
 
 
 def invalidate_catalog(experiment_path: Path) -> None:
@@ -369,5 +404,9 @@ def relocate_catalog_paths(experiment_path: Path, old_prefix: Path, new_prefix: 
                     f"UPDATE {table} SET {column} = REPLACE({column}, ?, ?) WHERE {column} LIKE ?",
                     (old_text, new_text, prefix_like),
                 )
+        connection.execute(
+            "INSERT INTO catalog_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (DIRECTORY_SIGNATURE_KEY, _directory_signature(catalog.experiment_path)),
+        )
         connection.execute("UPDATE catalog_meta SET value = ? WHERE key = 'experiment_path'", (str(catalog.experiment_path),))
     return True

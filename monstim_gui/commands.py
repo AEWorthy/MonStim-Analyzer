@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import copy
 import json
@@ -12,6 +14,17 @@ if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
 
 logger = logging.getLogger(__name__)
+
+
+def _refresh_data_views(gui, *experiment_ids):
+    """Refresh real GUI views while remaining compatible with command unit mocks."""
+    data_manager = getattr(gui, "data_manager", None)
+    refresh = getattr(data_manager, "refresh_data_views", None)
+    experiments = getattr(gui, "expts_dict", None)
+    if not callable(refresh) or not isinstance(experiments, dict):
+        return
+    paths = [Path(experiments[experiment_id]) for experiment_id in experiment_ids if experiment_id in experiments]
+    refresh(*paths)
 
 
 class Command(abc.ABC):
@@ -763,18 +776,7 @@ class CreateExperimentCommand(Command):
         """Create the experiment immediately."""
         try:
             self.gui.data_manager.create_experiment(self.exp_name)
-            # Prepare the SQLite catalog for the newly created experiment.
-            try:
-                from monstim_signals.io.experiment_catalog import build_catalog
-
-                exp_path = Path(self.gui.expts_dict.get(self.exp_name, ""))
-                if exp_path and exp_path.exists():
-                    build_catalog(exp_path)
-            except Exception:
-                logger.debug("Non-fatal: catalog build after experiment create failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui, self.exp_name)
         except Exception as e:
             logger.exception(f"Failed to create experiment: {e!s}")
             raise Exception(f"Failed to create experiment: {e!s}") from e
@@ -783,10 +785,7 @@ class CreateExperimentCommand(Command):
         """Delete the created experiment."""
         try:
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
-            # No index refresh needed; experiment was removed
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui)
         except Exception as e:
             logger.exception(f"Failed to undo experiment creation: {e!s}")
             raise Exception(f"Failed to undo experiment creation: {e!s}") from e
@@ -808,6 +807,7 @@ class MoveDatasetCommand(Command):
         """Move the dataset immediately."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
         except Exception as e:
             logger.exception(f"Failed to move dataset: {e!s}")
             raise Exception(f"Failed to move dataset: {e!s}") from e
@@ -816,6 +816,7 @@ class MoveDatasetCommand(Command):
         """Move the dataset back to original location."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
         except Exception as e:
             logger.exception(f"Failed to undo dataset move: {e!s}")
             raise Exception(f"Failed to undo dataset move: {e!s}") from e
@@ -861,6 +862,9 @@ class MoveDatasetsCommand(Command):
 
                 logger.debug(f"Processed {len(self._succeeded)} dataset moves.")
 
+            affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
+            _refresh_data_views(self.gui, *affected)
+
         except Exception as e:
             logger.exception(f"Failed to execute batched dataset moves: {e!s}")
             raise Exception(f"Failed to execute batched dataset moves: {e!s}") from e
@@ -885,6 +889,9 @@ class MoveDatasetsCommand(Command):
 
                 if len(self._succeeded) % 10 == 0:
                     QApplication.processEvents()
+
+            affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
+            _refresh_data_views(self.gui, *affected)
 
         except Exception as e:
             logger.exception(f"Failed to undo batched dataset moves: {e!s}")
@@ -916,47 +923,32 @@ class CopyDatasetCommand(Command):
 
             self.gui.data_manager.copy_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp, self.new_name)
 
-            # Find the new dataset folder name (might have _copy suffix)
-            new_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
-            added_datasets = new_datasets - original_datasets
-            if added_datasets:
-                self.copied_folder_name = next(iter(added_datasets))  # Get the first added dataset folder
-            else:
-                self.copied_folder_name = self.dataset_id  # fallback
-
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
-            # Refresh the destination catalog after the copy.
-            try:
-                from monstim_signals.io.experiment_catalog import build_catalog
-
-                to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
-                if to_exp_path and to_exp_path.exists():
-                    build_catalog(to_exp_path)
-            except Exception:
-                logger.debug("Non-fatal: catalog refresh after dataset copy failed.", exc_info=True)
+            self.finalize_copy(original_datasets)
         except Exception as e:
             logger.exception(f"Failed to copy dataset: {e!s}")
             raise Exception(f"Failed to copy dataset: {e!s}") from e
+
+    def finalize_copy(self, original_datasets=None):
+        """Finish command bookkeeping and refresh UI after an async copy."""
+        from pathlib import Path
+
+        to_exp_path = Path(self.gui.expts_dict[self.to_exp])
+        if original_datasets is None:
+            original_datasets = set()
+
+        # Find the new dataset folder name (might have _copy suffix)
+        new_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
+        added_datasets = new_datasets - original_datasets
+        self.copied_folder_name = next(iter(added_datasets), self.new_name or self.dataset_id)
+
+        _refresh_data_views(self.gui, self.to_exp)
 
     def undo(self):
         """Delete the copied dataset."""
         try:
             if self.copied_folder_name:
                 self.gui.data_manager.delete_dataset(self.copied_folder_name, self.copied_folder_name, self.to_exp)
-                # Refresh the data curation manager if it's open
-                if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                    self.gui._data_curation_manager.load_data()
-                # Refresh the destination catalog after deletion.
-                try:
-                    from monstim_signals.io.experiment_catalog import build_catalog
-
-                    to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
-                    if to_exp_path and to_exp_path.exists():
-                        build_catalog(to_exp_path)
-                except Exception:
-                    logger.debug("Non-fatal: catalog refresh after undo dataset copy failed.", exc_info=True)
+                _refresh_data_views(self.gui, self.to_exp)
         except Exception as e:
             logger.exception(f"Failed to undo dataset copy: {e!s}")
             raise Exception(f"Failed to undo dataset copy: {e!s}") from e
@@ -986,10 +978,7 @@ class DeleteExperimentCommand(Command):
             # For now, we'll use the existing delete method from data manager
             # Note: This is irreversible, so undo will show a warning
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
-            # No index refresh needed; experiment removed
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui)
         except Exception as e:
             logger.exception(f"Failed to delete experiment: {e!s}")
             raise Exception(f"Failed to delete experiment: {e!s}") from e
@@ -1018,50 +1007,13 @@ class RenameExperimentCommand(Command):
         """Rename the experiment immediately."""
         # Let exceptions from data_manager propagate with their original messages
         self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
-        # The sidecar moves with the experiment folder; update its stored paths
-        # transactionally instead of rescanning every recording.
-        try:
-            from monstim_signals.io.experiment_catalog import relocate_catalog_paths
-
-            new_path = Path(self.gui.expts_dict.get(self.new_name, ""))
-            if new_path and new_path.exists():
-                relocate_catalog_paths(new_path, new_path.parent / self.old_name, new_path)
-        except Exception:
-            logger.debug("Non-fatal: catalog refresh after experiment rename failed.", exc_info=True)
-        # Refresh the data curation manager if it's open
-        if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-            try:
-                logger.debug(f"Refreshing data curation manager after rename from '{self.old_name}' to '{self.new_name}'")
-                self.gui._data_curation_manager.load_data()
-                logger.debug("Data curation manager refresh completed successfully")
-            except Exception as e:
-                logger.error(f"Failed to refresh data curation manager after rename: {e}", exc_info=True)
-                # Re-raise to prevent silent failures
-                raise
+        _refresh_data_views(self.gui, self.new_name)
 
     def undo(self):
         """Rename back to original name."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
-            # Update sidecar paths after restoring the experiment folder name.
-            try:
-                from monstim_signals.io.experiment_catalog import relocate_catalog_paths
-
-                old_path = Path(self.gui.expts_dict.get(self.old_name, ""))
-                if old_path and old_path.exists():
-                    relocate_catalog_paths(old_path, old_path.parent / self.new_name, old_path)
-            except Exception:
-                logger.debug("Non-fatal: catalog refresh after experiment rename undo failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                try:
-                    logger.debug(f"Refreshing data curation manager after undo rename from '{self.new_name}' back to '{self.old_name}'")
-                    self.gui._data_curation_manager.load_data()
-                    logger.debug("Data curation manager refresh after undo completed successfully")
-                except Exception as e:
-                    logger.error(f"Failed to refresh data curation manager after rename undo: {e}", exc_info=True)
-                    # Re-raise to prevent silent failures
-                    raise
+            _refresh_data_views(self.gui, self.old_name)
         except Exception as e:
             logger.exception(f"Failed to undo experiment rename: {e!s}")
             raise Exception(f"Failed to undo experiment rename: {e!s}") from e
@@ -1083,18 +1035,7 @@ class DeleteDatasetCommand(Command):
     def execute(self):
         try:
             self.gui.data_manager.delete_dataset(self.dataset_id, self.dataset_name, self.exp_id)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
-            # Refresh the experiment catalog after dataset deletion.
-            try:
-                from monstim_signals.io.experiment_catalog import build_catalog
-
-                exp_path = Path(self.gui.expts_dict.get(self.exp_id, ""))
-                if exp_path and exp_path.exists():
-                    build_catalog(exp_path)
-            except Exception:
-                logger.debug("Non-fatal: catalog refresh after dataset deletion failed.", exc_info=True)
+            _refresh_data_views(self.gui, self.exp_id)
         except Exception as e:
             logger.exception(f"Failed to delete dataset: {e!s}")
             raise Exception(f"Failed to delete dataset: {e!s}") from e
@@ -1159,9 +1100,7 @@ class ToggleDatasetInclusionCommand(Command):
             logger.exception(f"Failed to update dataset inclusion: {e!s}")
             raise Exception(f"Failed to update dataset inclusion: {e!s}") from e
 
-        # Refresh open dialog/UI if present
-        if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-            self.gui._data_curation_manager.load_data()
+        _refresh_data_views(self.gui, self.exp_id)
 
     def execute(self):
         self._apply(self.exclude)
@@ -1484,9 +1423,9 @@ class EditDatasetMetadataCommand(Command):
         try:
             self._apply_metadata(self.new_date, self.new_animal_id, self.new_condition, self.new_folder_name)
 
-            # Refresh UI to show updated display name
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
+            _refresh_data_views(self.gui)
 
         except Exception as e:
             logger.exception(f"Failed to apply dataset metadata changes: {e}", exc_info=True)
@@ -1497,9 +1436,9 @@ class EditDatasetMetadataCommand(Command):
         try:
             self._apply_metadata(self.old_date, self.old_animal_id, self.old_condition, self.old_folder_name)
 
-            # Refresh UI to show reverted display name
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
+            _refresh_data_views(self.gui)
 
         except Exception as e:
             logger.exception(f"Failed to undo dataset metadata changes: {e!s}", exc_info=True)

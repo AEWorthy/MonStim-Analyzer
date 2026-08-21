@@ -2157,43 +2157,50 @@ class DataCurationManager(QDialog):
                 QMessageBox.critical(self, "Copy Failed", f"Failed to copy dataset:\n{e!s}")
                 raise  # Let decorator handle the refresh
 
-    @auto_refresh
     def context_duplicate_dataset(self, dataset_data):
-        """Duplicate a dataset within the same experiment immediately."""
-        from PySide6.QtWidgets import QInputDialog
-
+        """Duplicate a dataset within the same experiment asynchronously."""
         from monstim_gui.commands import CopyDatasetCommand
 
         ds_metadata = dataset_data["metadata"]
         original_name = ds_metadata["formatted_name"]
 
-        new_name, ok = QInputDialog.getText(
-            self, "Duplicate Dataset", f"Enter name for duplicate of '{original_name}':", text=f"{original_name}_copy"
+        experiment_id = dataset_data["experiment_id"]
+        command = CopyDatasetCommand(
+            self.gui,
+            ds_metadata["id"],
+            ds_metadata["formatted_name"],
+            experiment_id,
+            experiment_id,
         )
 
-        if ok and new_name.strip():
-            experiment_id = dataset_data["experiment_id"]
-            command = CopyDatasetCommand(
-                self.gui,
-                ds_metadata["id"],
-                ds_metadata["formatted_name"],
-                experiment_id,
-                experiment_id,
-                new_name=new_name.strip(),
-            )
+        experiment_path = Path(self.gui.expts_dict[experiment_id])
+        original_datasets = {item.name for item in experiment_path.iterdir() if item.is_dir()}
 
+        def completed():
             try:
-                command.execute()
+                command.finalize_copy(original_datasets)
                 self.session_commands.append(command)
-                self._changes_made = True  # Mark that changes were made
+                self._changes_made = True
                 QMessageBox.information(
                     self,
                     "Dataset Duplicated",
-                    f"Dataset has been duplicated as '{new_name.strip()}'.",
+                    f"Dataset '{original_name}' was duplicated as '{command.copied_folder_name}'.",
                 )
-            except Exception as e:
-                QMessageBox.critical(self, "Duplication Failed", f"Failed to duplicate dataset:\n{e!s}")
-                raise  # Let decorator handle the refresh
+            except Exception as exc:
+                QMessageBox.critical(self, "Duplication Failed", f"Failed to finalize dataset duplication:\n{exc!s}")
+
+        def failed(message):
+            QMessageBox.critical(self, "Duplication Failed", f"Failed to duplicate dataset:\n{message}")
+
+        self.gui.data_manager.copy_dataset_async(
+            ds_metadata["id"],
+            ds_metadata["formatted_name"],
+            experiment_id,
+            experiment_id,
+            None,
+            completed,
+            failed,
+        )
 
     @auto_refresh
     def context_toggle_dataset_inclusion(self, dataset_data, include):

@@ -1,4 +1,5 @@
 import glob
+import json
 import logging
 import multiprocessing
 import os
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,6 +38,52 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class DatasetCopyThread(QThread):
+    """Copy one dataset without blocking the GUI thread."""
+
+    progress = Signal(int)
+    status_update = Signal(str)
+    completed = Signal()
+    error = Signal(str)
+
+    def __init__(self, data_manager, dataset_id, dataset_name, from_exp, to_exp, new_name):
+        super().__init__()
+        self.data_manager = data_manager
+        self.dataset_id = dataset_id
+        self.dataset_name = dataset_name
+        self.from_exp = from_exp
+        self.to_exp = to_exp
+        self.new_name = new_name
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            self.data_manager.copy_dataset(
+                self.dataset_id,
+                self.dataset_name,
+                self.from_exp,
+                self.to_exp,
+                self.new_name,
+                close_data=False,
+                progress_callback=self._report_progress,
+            )
+            self.completed.emit()
+        except InterruptedError:
+            self.error.emit("Dataset duplication canceled by user.")
+        except Exception as exc:
+            logger.exception("Dataset copy worker failed")
+            self.error.emit(str(exc))
+
+    def _report_progress(self, current, total, name):
+        if self._cancel_requested:
+            raise InterruptedError("Dataset duplication canceled by user")
+        self.progress.emit(int(100 * current / total) if total else 100)
+        self.status_update.emit(f"Copying '{name}'")
+
+
 class DataManager:
     """Handle loading and saving of experiment data."""
 
@@ -50,6 +97,26 @@ class DataManager:
         from monstim_signals.io.experiment_catalog import invalidate_catalogs
 
         invalidate_catalogs(*experiment_paths)
+
+    def refresh_data_views(self, *experiment_paths: Path) -> None:
+        """Rebuild affected catalogs and refresh both application data views."""
+        from monstim_signals.io.experiment_catalog import build_catalog
+
+        paths = [Path(path) for path in experiment_paths if path]
+        if not paths:
+            paths = [Path(self.gui.expts_dict[exp_id]) for exp_id in self.gui.expts_dict_keys]
+
+        for path in paths:
+            if path.exists():
+                build_catalog(path)
+
+        self.unpack_existing_experiments()
+        data_selection_widget = getattr(self.gui, "data_selection_widget", None)
+        if data_selection_widget is not None:
+            data_selection_widget.refresh(levels=("experiment", "dataset", "session"))
+        data_curation_manager = getattr(self.gui, "_data_curation_manager", None)
+        if data_curation_manager is not None:
+            data_curation_manager.load_data()
 
     def _create_progress_dialog(self, message: str, title: str) -> QProgressDialog:
         """Create the standard modal progress dialog used by long operations."""
@@ -1964,14 +2031,26 @@ class DataManager:
             logger.exception(f"Failed to move dataset {dataset_name}: {e}")
             raise Exception(f"Failed to move dataset '{dataset_name}': {e!s}") from e
 
-    def copy_dataset(self, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str | None = None):
+    def copy_dataset(
+        self,
+        dataset_id: str,
+        dataset_name: str,
+        from_exp: str,
+        to_exp: str,
+        new_name: str | None = None,
+        *,
+        close_data: bool = True,
+        progress_callback=None,
+    ):
         """Copy a dataset from one experiment to another, optionally with a new name."""
         from pathlib import Path
 
+        dest_path = None
         try:
             # Close all open data to prevent file handle conflicts
-            logger.info(f"Closing all open data before copying dataset '{dataset_name}'")
-            self.close_all_data()
+            if close_data:
+                logger.info(f"Closing all open data before copying dataset '{dataset_name}'")
+                self.close_all_data()
 
             # Get source and destination paths
             from_exp_path = Path(self.gui.expts_dict[from_exp])
@@ -1981,8 +2060,17 @@ class DataManager:
             dataset_folder_name = self._find_dataset_folder(from_exp_path, dataset_id, dataset_name)
             source_path = from_exp_path / dataset_folder_name
 
-            # Use new_name if provided, otherwise use original folder name
-            dest_folder_name = new_name or dataset_folder_name
+            # Duplicates use deterministic names so the folder and display metadata
+            # remain distinct. Cross-experiment copies retain the source name.
+            if from_exp == to_exp:
+                base_name = f"{dataset_folder_name}_copy"
+                dest_folder_name = base_name
+                counter = 1
+                while (to_exp_path / dest_folder_name).exists():
+                    dest_folder_name = f"{base_name}({counter})"
+                    counter += 1
+            else:
+                dest_folder_name = new_name or dataset_folder_name
 
             dest_path = to_exp_path / dest_folder_name
 
@@ -1997,15 +2085,91 @@ class DataManager:
                     dest_path = to_exp_path / f"{base_name}_copy{counter}"
                     counter += 1
 
-            # Copy the dataset folder
-            shutil.copytree(str(source_path), str(dest_path))
+            # Copy files individually so background callers can report progress.
+            files = [path for path in source_path.rglob("*") if path.is_file()]
+            total_bytes = sum(path.stat().st_size for path in files)
+            copied_bytes = 0
+
+            dest_path.mkdir(parents=True)
+            for source_dir in sorted(path for path in source_path.rglob("*") if path.is_dir()):
+                (dest_path / source_dir.relative_to(source_path)).mkdir(parents=True, exist_ok=True)
+            for source_file in files:
+                destination_file = dest_path / source_file.relative_to(source_path)
+                destination_file.parent.mkdir(parents=True, exist_ok=True)
+                with source_file.open("rb") as source_handle, destination_file.open("wb") as destination_handle:
+                    while True:
+                        chunk = source_handle.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        destination_handle.write(chunk)
+                        copied_bytes += len(chunk)
+                        if progress_callback is not None:
+                            progress_callback(copied_bytes, total_bytes, source_file.name)
+                shutil.copystat(str(source_file), str(destination_file))
+                if progress_callback is not None:
+                    progress_callback(copied_bytes, total_bytes, source_file.name)
+            if progress_callback is not None and not total_bytes:
+                progress_callback(1, 1, "dataset directory")
+
+            # The copied annotation still describes the source dataset. Update
+            # its identity fields from the destination folder so catalog readers
+            # display the duplicate's actual name.
+            annotation_path = dest_path / "dataset.annot.json"
+            if annotation_path.exists():
+                from monstim_signals.core import DatasetAnnot
+
+                annotation = json.loads(annotation_path.read_text())
+                if from_exp == to_exp:
+                    destination_metadata = DatasetAnnot.from_ds_name(dest_path.name)
+                    if all(getattr(destination_metadata, field) is not None for field in ("date", "animal_id", "condition")):
+                        for field in ("date", "animal_id", "condition"):
+                            annotation[field] = getattr(destination_metadata, field)
+                    elif all(annotation.get(field) is not None for field in ("date", "animal_id", "condition")):
+                        # Preserve valid metadata for non-standard source IDs,
+                        # while making the duplicate's display name distinct.
+                        suffix = dest_path.name[len(dataset_folder_name) :]
+                        annotation["condition"] = f"{annotation['condition']}{suffix}"
+                    annotation_path.write_text(json.dumps(annotation, indent=2))
             self._invalidate_catalogs(to_exp_path)
 
             logger.info(f"Copied dataset {dataset_name} from {from_exp} to {to_exp} as {dest_path.name}")
 
+        except InterruptedError:
+            if dest_path is not None and dest_path.exists():
+                shutil.rmtree(dest_path, ignore_errors=True)
+            logger.info("Dataset copy canceled for '%s'", dataset_name)
+            raise
         except Exception as e:
+            if dest_path is not None and dest_path.exists():
+                shutil.rmtree(dest_path, ignore_errors=True)
             logger.exception(f"Failed to copy dataset {dataset_name}: {e}")
             raise Exception(f"Failed to copy dataset '{dataset_name}': {e!s}") from e
+
+    def copy_dataset_async(self, dataset_id, dataset_name, from_exp, to_exp, new_name, on_completed, on_error):
+        """Start a dataset copy and report progress through the standard dialog."""
+        self.close_all_data()
+        progress_dialog = self._create_progress_dialog("Preparing dataset copy...", "Duplicating Dataset")
+        thread = DatasetCopyThread(self, dataset_id, dataset_name, from_exp, to_exp, new_name)
+        thread.progress.connect(progress_dialog.setValue)
+        thread.status_update.connect(progress_dialog.setLabelText)
+
+        def completed():
+            progress_dialog.close()
+            on_completed()
+            thread.deleteLater()
+
+        def failed(message):
+            progress_dialog.close()
+            on_error(message)
+            thread.deleteLater()
+
+        thread.completed.connect(completed)
+        thread.error.connect(failed)
+        progress_dialog.canceled.connect(thread.request_cancel)
+        self.dataset_copy_thread = thread
+        self.current_progress_dialog = progress_dialog
+        thread.start()
+        return thread
 
     def delete_dataset(self, dataset_id: str, dataset_name: str, exp_id: str):
         """Delete a dataset from an experiment."""

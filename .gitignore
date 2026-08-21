@@ -11,6 +11,7 @@ TEST_MIGR
 .monstim-cache.sqlite-*
 .monstim-cache.sqlite-wal
 .monstim-cache.sqlite-shm
+AGENTS.md
 
 /old_environment.yml
 docs/config-user.yml

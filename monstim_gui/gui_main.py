@@ -17,7 +17,7 @@ if TYPE_CHECKING:
         ReportsWidget,
     )
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -121,12 +121,13 @@ class MonstimGUI(QMainWindow):
         # Re-center window after UI is fully initialized to account for final size
         self._recenter_window()
 
-        # Restore last session state (profile, experiment, dataset, session)
-        self._restore_last_session()
-
         self.command_invoker = CommandInvoker(self)
         # Initialize undo/redo menu state
         self.menu_bar.update_undo_redo_labels()
+
+    def schedule_initial_load(self, delay_ms: int = 100) -> None:
+        """Restore the last session after the main window has had time to render."""
+        QTimer.singleShot(delay_ms, self._restore_last_session)
 
     def init_ui(self):
         widgets = setup_main_layout(self)
@@ -870,4 +871,5 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = MonstimGUI()
     gui.show()
+    gui.schedule_initial_load()
     sys.exit(app.exec())

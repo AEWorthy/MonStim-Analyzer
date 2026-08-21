@@ -92,6 +92,33 @@ def test_catalog_invalidation_removes_cache_and_forces_rebuild(tmp_path: Path):
     assert rebuilt.dataset_paths() == [experiment / "Dataset"]
 
 
+def test_catalog_rebuilds_when_dataset_or_session_directories_change(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    dataset = create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=1)
+    build_catalog(experiment)
+
+    (dataset / "RX02").rename(dataset / "RX03")
+    rebuilt = ensure_catalog(experiment)
+
+    assert rebuilt.session_paths(dataset) == [dataset / "RX03"]
+
+
+def test_catalog_rebuilds_when_a_dataset_is_removed_externally(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    create_minimal_dataset_folder(experiment, dataset_name="First", num_recordings=1)
+    second = create_minimal_dataset_folder(experiment, dataset_name="Second", num_recordings=1)
+    build_catalog(experiment)
+
+    import shutil
+
+    shutil.rmtree(second)
+    rebuilt = ensure_catalog(experiment)
+
+    assert rebuilt.dataset_paths() == [experiment / "First"]
+
+
 def test_session_save_does_not_rewrite_recording_annotations(tmp_path: Path, monkeypatch):
     experiment = tmp_path / "Experiment"
     experiment.mkdir()

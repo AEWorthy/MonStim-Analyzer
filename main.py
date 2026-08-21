@@ -162,6 +162,7 @@ def main(is_frozen: bool) -> int:
             QTimer.singleShot(3000, splash.close)
         gui = MonstimGUI()
         gui.show()
+        gui.schedule_initial_load()
         get_logger().debug("Application launched successfully.")
         return app.exec()
 
