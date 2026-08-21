@@ -91,14 +91,14 @@ class TestUnableToPlotErrorHandling:
 
         # Test different error scenarios
         test_cases = [
-            ("No channels to plot", "No Channels Selected"),
-            ("Canvas must be provided", "Plot Error"),
-            ("Invalid data format", "Plot Error"),
-            ("Insufficient data points", "Plot Error"),
+            ("No channels to plot", "no_channels", "No Channels Selected"),
+            ("Canvas must be provided", None, "Plot Error"),
+            ("Invalid data format", None, "Plot Error"),
+            ("Insufficient data points", None, "Plot Error"),
         ]
 
-        for error_msg, _ in test_cases:
-            error = UnableToPlotError(error_msg)
+        for error_msg, reason, expected_title in test_cases:
+            error = UnableToPlotError(error_msg, reason=reason)
 
             # Mock QMessageBox to capture the message
             with patch("monstim_gui.managers.plot_controller.QMessageBox") as mock_msg:
@@ -113,13 +113,10 @@ class TestUnableToPlotErrorHandling:
                 user_message = call_args[0][2]  # message argument
 
                 # Verify title is set correctly
-                if "No channels to plot" in error_msg:
-                    assert actual_title == "No Channels Selected"
-                else:
-                    assert actual_title == "Plot Error"
+                assert actual_title == expected_title
 
                 # Verify user-friendly message content
-                if "No channels to plot" in error_msg:
+                if reason == "no_channels":
                     assert "select at least one channel" in user_message.lower()
                 else:
                     assert "unable to create plot" in user_message.lower()

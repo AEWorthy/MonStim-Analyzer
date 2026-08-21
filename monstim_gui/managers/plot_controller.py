@@ -412,8 +412,8 @@ class PlotController:
         """Handle UnableToPlotError with user-friendly messages."""
         error_msg = str(e) if e else "Unknown error"
 
-        # Provide user-friendly guidance based on the error message
-        if "No channels to plot" in error_msg:
+        # Provide user-friendly guidance based on the structured error reason.
+        if e.reason == "no_channels":
             user_msg = (
                 "No channels are currently selected for plotting.\n\n"
                 "Please select at least one channel in the channel selection area "
@@ -436,11 +436,15 @@ class PlotController:
             f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}"
         )
 
-    # TODO: Structured plotting errors
-    # - Replace ad-hoc string matching (e.g., "No channels to plot") with
-    #   structured exception types or error codes (e.g., UnableToPlotError(reason='no_channels')).
-    # - This makes it trivial to present contextual help dialogs and to
-    #   programmatically handle recoverable conditions in hooks.
+        self._notify_error_hooks(e, plot_type, plot_options)
+
+    def _notify_error_hooks(self, error, plot_type, plot_options):
+        """Notify error hooks of either recoverable or unexpected plot failures."""
+        for hook in self._error_hooks:
+            try:
+                hook(error, plot_type, plot_options)
+            except Exception as hook_error:
+                logger.warning(f"Error in error hook: {hook_error}")
 
     def handle_plot_error(self, e, plot_type, plot_options):
         """Centralized error handling for plot operations."""
@@ -452,28 +456,58 @@ class PlotController:
         logger.error(f"Current session: {self.gui.current_session}, current dataset: {self.gui.current_dataset}")
         logger.error(traceback.format_exc())
 
-        # Call error hooks
-        for hook in self._error_hooks:
-            try:
-                hook(e, plot_type, plot_options)
-            except Exception as hook_error:
-                logger.warning(f"Error in error hook: {hook_error}")
-
-    # TODO: Hook examples and recipes
-    # - Document example pre/post plot hooks in the codebase (or a small docs file)
-    #   demonstrating how to automatically overlay latency windows, highlight
-    #   plateau regions, or compute summary metrics after each successful plot.
+        self._notify_error_hooks(e, plot_type, plot_options)
 
     def add_pre_plot_hook(self, hook_func):
-        """Add a function to be called before plotting."""
+        """Add a function to be called before plotting.
+
+        The hook receives a mutable ``context`` dictionary containing
+        ``level``, ``level_object``, ``plot_type``, ``plot_type_raw``, and
+        ``plot_options``.  This makes pre-hooks useful for applying plot
+        recipes without changing the controls.  For example, a recipe that
+        always displays latency windows can be registered as follows::
+
+            def show_latency_windows(context):
+                if context["plot_type_raw"] == "EMG":
+                    context["plot_options"]["all_flags"] = True
+
+            controller.add_pre_plot_hook(show_latency_windows)
+
+        Pre-hooks run in registration order.  Exceptions raised by a hook are
+        logged and do not prevent the plot from being rendered.
+        """
         self._pre_plot_hooks.append(hook_func)
 
     def add_post_plot_hook(self, hook_func):
-        """Add a function to be called after successful plotting."""
+        """Add a function to be called after successful plotting.
+
+        The hook receives a ``result`` dictionary with ``level``,
+        ``plot_type``, ``raw_data``, and ``return_raw_data``.  Use the raw
+        data for analysis recipes, such as recording a plateau metric after a
+        plot, or capture ``gui.plot_pane`` in a closure to draw an annotation
+        after rendering::
+
+            def record_summary(result):
+                data = result["raw_data"]
+                if data is not None:
+                    summary_store[result["plot_type"]] = summarize(data)
+
+            controller.add_post_plot_hook(record_summary)
+
+        A post-hook can also highlight a detected plateau or overlay latency
+        markers through the plot-pane API.  Since post-hooks run after the
+        plot succeeds, failures are logged without invalidating the plot.
+        """
         self._post_plot_hooks.append(hook_func)
 
     def add_error_hook(self, hook_func):
-        """Add a function to be called when plotting errors occur."""
+        """Add a function to be called when plotting errors occur.
+
+        Error hooks receive ``(exception, plot_type, plot_options)`` and are
+        intended for telemetry or user-facing diagnostics.  Keep them small
+        and defensive; an error in an error hook is logged and ignored so it
+        cannot mask the original plotting failure.
+        """
         self._error_hooks.append(hook_func)
 
     def remove_hook(self, hook_func):

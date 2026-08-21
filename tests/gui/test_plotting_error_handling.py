@@ -23,6 +23,11 @@ class TestPlottingErrorHandling:
         error = UnableToPlotError(error_msg)
         assert str(error) == error_msg
         assert error.message == error_msg
+        assert error.reason is None
+
+    def test_unable_to_plot_error_reason(self):
+        error = UnableToPlotError("No channels to plot", reason="no_channels")
+        assert error.reason == "no_channels"
 
     def test_plot_controller_handles_unable_to_plot_error(self, fake_gui):
         """Test that PlotController properly handles UnableToPlotError."""

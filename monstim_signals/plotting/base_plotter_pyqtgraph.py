@@ -97,7 +97,10 @@ class BasePlotterPyQtGraph:
             plot_item.setDownsampling(auto=True)
             plot_items.append(plot_item)
         elif num_channels == 0:
-            raise UnableToPlotError("No channels to plot. Select at least one channel.")
+            raise UnableToPlotError(
+                "No channels to plot. Select at least one channel.",
+                reason="no_channels",
+            )
         else:
             # Multiple plots in a row
             for i, _channel_index in enumerate(channel_indices):
@@ -691,6 +694,7 @@ class BasePlotterPyQtGraph:
 class UnableToPlotError(Exception):
     """Exception raised when plotting is not possible."""
 
-    def __init__(self, message):
+    def __init__(self, message: str, *, reason: str | None = None):
         self.message = message
+        self.reason = reason
         super().__init__(self.message)
