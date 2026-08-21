@@ -48,8 +48,6 @@ Developer Checklist for Each Migration:
 * Tested
 """
 
-# TODO: Implement migrations for meta JSONs as well. Add a schema validation step.
-
 from __future__ import annotations
 
 import datetime
@@ -286,6 +284,103 @@ def validate_annotation_schema(data: dict) -> None:
         raise RuntimeError("Annotation missing valid 'data_version' after migration.")
 
 
+def validate_meta_schema(data: dict) -> None:
+    """Validate the persisted recording metadata shape.
+
+    Metadata is consumed by :class:`RecordingMeta`, whose required constructor
+    fields form the on-disk schema.  Extra keys remain allowed for forward
+    compatibility, but required fields and nested stimulus clusters must have
+    the expected JSON-compatible types.
+    """
+    required = {
+        "recording_id": str,
+        "num_channels": int,
+        "scan_rate": (int, float),
+        "pre_stim_acquired": (int, float),
+        "post_stim_acquired": (int, float),
+        "recording_interval": (int, float),
+        "channel_types": list,
+        "emg_amp_gains": (list, type(None)),
+        "stim_clusters": list,
+    }
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise RuntimeError(f"Metadata missing required fields: {', '.join(missing)}")
+    invalid = [key for key, expected in required.items() if not isinstance(data[key], expected)]
+    if invalid:
+        raise RuntimeError(f"Metadata has invalid field types: {', '.join(invalid)}")
+    if not all(isinstance(cluster, dict) for cluster in data["stim_clusters"]):
+        raise RuntimeError("Metadata 'stim_clusters' must contain objects.")
+    if "data_version" not in data or not isinstance(data["data_version"], str) or not data["data_version"]:
+        raise RuntimeError("Metadata missing valid 'data_version' after migration.")
+
+
+def migrate_meta_dict(
+    raw: dict,
+    *,
+    dry_run: bool = False,
+    in_place: bool = False,
+    validate: bool = True,
+    strict_version: bool = False,
+) -> MigrationReport:
+    """Migrate a recording ``.meta.json`` dictionary to the current schema."""
+    if not isinstance(raw, dict):
+        raise TypeError("Metadata must be a JSON object.")
+
+    original = raw.get("data_version") or "0.0.0"
+    m, n, p = parse_version_tuple(original)
+    original = f"{m}.{n}.{p}"
+    current_tuple = parse_version_tuple(CURRENT_DATA_VERSION)
+    if (m, n, p) > current_tuple:
+        message = f"Stored metadata data_version {original} is newer than supported {CURRENT_DATA_VERSION}."
+        if strict_version:
+            raise FutureVersionError(message)
+        logger.warning("%s Proceeding without migration.", message)
+        return MigrationReport(original, original, [], changed=False, dry_run=dry_run)
+
+    if (m, n, p) >= current_tuple:
+        if validate:
+            validate_meta_schema(raw)
+        return MigrationReport(original, original, [], changed=False, dry_run=dry_run)
+
+    steps = [f"{original}->{CURRENT_DATA_VERSION}"]
+    if dry_run:
+        return MigrationReport(original, CURRENT_DATA_VERSION, steps, changed=True, dry_run=True)
+
+    before_snapshot = dict(raw)
+    working = raw if in_place else dict(raw)
+    # Older metadata used the same fields but did not carry a version.  Fill
+    # only constructor defaults so all recorded facts and forward-compatible
+    # keys are retained.
+    defaults = {
+        "recording_id": "",
+        "num_channels": 0,
+        "scan_rate": 0,
+        "pre_stim_acquired": 0,
+        "post_stim_acquired": 0,
+        "recording_interval": 0.0,
+        "channel_types": [],
+        "emg_amp_gains": None,
+        "stim_clusters": [],
+        "primary_stim": None,
+        "num_samples": None,
+    }
+    for key, value in defaults.items():
+        working.setdefault(key, value)
+    working["data_version"] = CURRENT_DATA_VERSION
+    if validate:
+        validate_meta_schema(working)
+    if not in_place:
+        raw.update(working)
+    return MigrationReport(
+        original,
+        CURRENT_DATA_VERSION,
+        steps,
+        changed=True,
+        field_changes=_compute_field_changes(before_snapshot, working),
+    )
+
+
 def _compute_field_changes(before: dict, after: dict) -> dict[str, tuple[Any, Any]]:
     changes: dict[str, tuple[Any, Any]] = {}
     for k in set(before.keys()).union(after.keys()):
@@ -428,8 +523,10 @@ __all__ = [
     "MigrationStep",
     "UnknownVersionError",
     "migrate_annotation_dict",
+    "migrate_meta_dict",
     "needs_migration",
     "validate_annotation_schema",
+    "validate_meta_schema",
 ]
 
 

@@ -26,6 +26,7 @@ from monstim_signals.io.data_migrations import (
     FutureVersionError,
     UnknownVersionError,
     migrate_annotation_dict,
+    migrate_meta_dict,
     scan_annotation_versions,
 )
 from monstim_signals.io.experiment_catalog import (
@@ -111,6 +112,12 @@ class RecordingRepository:
     ) -> Recording:
         # 1) Load meta JSON (immutable, record-time facts)
         meta_dict = json.loads(catalog_record.meta_json) if catalog_record is not None else json.loads(self.meta_js.read_text())
+        try:
+            report = migrate_meta_dict(meta_dict, strict_version=strict_version)
+            if report.changed and allow_write and catalog_record is None:
+                self.meta_js.write_text(json.dumps(meta_dict, indent=2))
+        except FutureVersionError:
+            raise
         meta = RecordingMeta.from_dict(meta_dict)
 
         # 2) Load or create annot JSON (user edits)
