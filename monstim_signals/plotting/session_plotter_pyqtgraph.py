@@ -1,4 +1,5 @@
 import logging
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -6,6 +7,7 @@ import pandas as pd
 import pyqtgraph as pg
 from pyqtgraph.graphicsItems.LegendItem import ItemSample
 from pyqtgraph.graphicsItems.PlotItem import PlotItem
+from pyqtgraph.Qt import QtGui
 
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
@@ -14,6 +16,17 @@ if TYPE_CHECKING:
     from monstim_signals.domain.session import Session
 
 logger = logging.getLogger(__name__)
+
+_MAX_MIXED_EXTREMA_WINDOWS = 4
+
+
+def _pie_wedge_symbol(start_angle: float, span_angle: float) -> QtGui.QPainterPath:
+    """Return a unit-circle sector for a multi-window extrema marker."""
+    path = QtGui.QPainterPath()
+    path.moveTo(0, 0)
+    path.arcTo(-0.5, -0.5, 1, 1, start_angle, span_angle)
+    path.closeSubpath()
+    return path
 
 
 class _LatencyWindowLegendSample(ItemSample):
@@ -62,6 +75,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         # legend entry uses this mapping so it controls the actual flags,
         # rather than only its dummy legend sample.
         self.latency_window_flag_items: dict[int, list[pg.InfiniteLine]] = {}
+        self.extrema_items: list[object] = []
         # Brightness adjustment for colormap (0.0 = no adjustment, 0.5 = much brighter)
         # For viridis_r: higher values make colors brighter by avoiding dark end of colormap
         self.brightness_shift = 0
@@ -98,6 +112,81 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         time_axis = time_values_ms[window_start_sample:window_end_sample] - self.emg_object.stim_start
 
         return time_axis, window_start_sample, window_end_sample
+
+    def _clear_extrema_items(self):
+        for item in self.extrema_items:
+            with suppress(AttributeError, RuntimeError):
+                item.scene().removeItem(item)
+        self.extrema_items.clear()
+
+    def _plot_extrema_annotations(self, plot: PlotItem, channel_index: int, recording_id: str, method: str, *, labels: bool):
+        """Draw domain-calculated filtered-trace extrema without recalculation here."""
+        try:
+            results = self.emg_object.get_recording_lw_amplitude_results(method, channel_index, recording_id)
+        except Exception as exc:
+            logger.warning("Could not calculate extrema annotations: %s", exc)
+            return
+        windows = self.emg_object.latency_windows
+        grouped: dict[tuple[int, str], list[tuple[object, object]]] = {}
+        for result in results:
+            if result.selected_max is not None and result.selected_min is not None:
+                for extremum, kind in ((result.selected_max, "max"), (result.selected_min, "min")):
+                    grouped.setdefault((extremum.sample_index, kind), []).append((result, extremum))
+        for (sample_index, kind), selections in grouped.items():
+            result, extremum = selections[0]
+            time_ms = sample_index * 1000 / self.emg_object.scan_rate - self.emg_object.stim_start
+            details = "; ".join(
+                f"{chosen.window_name} {kind}: PTT={chosen.amplitude:.4g}, priority={chosen.priority_rank}" for chosen, _item in selections
+            )
+            tooltip = f"{time_ms:.3f} ms, {extremum.value:.4g}; {details}"
+            marker_items: list[pg.ScatterPlotItem]
+            if method == "extrema_ptt" and len(selections) > 1:
+                if len(selections) <= _MAX_MIXED_EXTREMA_WINDOWS:
+                    span_angle = 360 / len(selections)
+                    marker_items = [
+                        pg.ScatterPlotItem(
+                            [time_ms],
+                            [extremum.value],
+                            symbol=_pie_wedge_symbol(index * span_angle, span_angle),
+                            size=10,
+                            brush=pg.mkBrush(self._convert_matplotlib_color(windows[chosen.window_index].color)),
+                            pen=pg.mkPen(None),
+                        )
+                        for index, (chosen, _item) in enumerate(selections)
+                    ]
+                    marker_items.append(
+                        pg.ScatterPlotItem([time_ms], [extremum.value], symbol="o", size=10, brush=None, pen=pg.mkPen("w", width=1.2))
+                    )
+                else:
+                    marker_items = [
+                        pg.ScatterPlotItem(
+                            [time_ms], [extremum.value], symbol="o", size=10, brush=pg.mkBrush("#808080"), pen=pg.mkPen("w", width=1.2)
+                        )
+                    ]
+            else:
+                marker_items = [
+                    pg.ScatterPlotItem(
+                        [time_ms],
+                        [extremum.value],
+                        symbol="t" if kind == "max" else "t1",
+                        size=10,
+                        brush=pg.mkBrush(self._convert_matplotlib_color(windows[result.window_index].color)),
+                        pen=pg.mkPen("w", width=1.2),
+                    )
+                ]
+            for marker in marker_items:
+                marker.setToolTip(tooltip)
+                plot.addItem(marker)
+                self.extrema_items.append(marker)
+            if labels:
+                label = pg.TextItem(
+                    f"{', '.join(chosen.window_name for chosen, _item in selections)} {kind}\n{time_ms:.2f} ms",
+                    color="w",
+                    anchor=(0.5, 1.2),
+                )
+                label.setPos(time_ms, extremum.value)
+                plot.addItem(label, ignoreBounds=True)
+                self.extrema_items.append(label)
 
     def get_emg_recordings(self, data_type, use_all=False) -> list[np.ndarray]:
         """
@@ -322,6 +411,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         data_type: str = "filtered",
         stimuli_to_plot: list[str] | None = None,
         interactive_cursor: bool = True,
+        show_extrema_labels: bool = False,
+        extrema_label_method: str = "exclusive_extrema_ptt",
         canvas: PlotPane = None,
     ):
         """
@@ -358,6 +449,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         # Clear previous curve references for new plot
         self.clear_curve_references()
+        self._clear_extrema_items()
 
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
 
@@ -423,6 +515,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     channel_index,
                     norm=norm,
                 )
+                if show_extrema_labels and data_type == "filtered":
+                    self._plot_extrema_annotations(
+                        current_plot, channel_index, self.emg_object.recordings[recording_idx].id, extrema_label_method, labels=False
+                    )
 
                 # Collect raw data with hierarchical index structure (matching matplotlib)
                 # Note: We store the original (non-downsampled) data for export
@@ -497,6 +593,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         plot_colormap: bool = False,
         data_type: str = "filtered",
         interactive_cursor: bool = True,
+        show_extrema_labels: bool = False,
+        extrema_label_method: str = "exclusive_extrema_ptt",
         canvas: PlotPane = None,
     ):
         """
@@ -533,6 +631,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
 
         if channel_indices is None:
             channel_indices = list(range(self.emg_object.num_channels))
+        self._clear_extrema_items()
 
         # num_channels = len(channel_indices)
         time_axis, window_start_sample, window_end_sample = self.get_time_axis()
@@ -639,6 +738,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             else:
                 color = self.default_colors[channel_index % len(self.default_colors)]
             self.plot_time_series(current_plot, time_axis, data_segment, color=color, line_width=1.5)
+            if show_extrema_labels and data_type == "filtered":
+                self._plot_extrema_annotations(
+                    current_plot, channel_index, self.emg_object.all_recordings[recording_index].id, extrema_label_method, labels=True
+                )
 
             # Set fixed y-axis if requested
             if fixed_y_axis and y_min is not None and y_max is not None:

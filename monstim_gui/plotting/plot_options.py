@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 
     from .plotting_widget import PlotWidget
 
-CALCULATION_METHODS = ["peak_to_trough", "rms", "average_rectified", "average_unrectified", "auc"]
+CALCULATION_METHODS = ["peak_to_trough", "extrema_ptt", "exclusive_extrema_ptt", "rms", "average_rectified", "average_unrectified", "auc"]
+EXTREMA_METHODS = ["extrema_ptt", "exclusive_extrema_ptt"]
 DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
 
 
@@ -150,6 +151,7 @@ class EMGOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         self.interactive_cursor_checkbox.setChecked(False)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self._add_extrema_controls(form)
 
         # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
@@ -168,6 +170,24 @@ class EMGOptions(BasePlotOptions):
         self.latency_legend_checkbox.setChecked(enabled)
         self.latency_legend_checkbox.setEnabled(enabled)
 
+    def _add_extrema_controls(self, form):
+        self.show_extrema_labels_checkbox = QCheckBox()
+        self.show_extrema_labels_checkbox.setToolTip("Selected extrema are available only on filtered, unrectified EMG traces.")
+        self.extrema_method_combo = ResponsiveComboBox()
+        self.extrema_method_combo.addItems(EXTREMA_METHODS)
+        form.addRow("Show PTT Extrema:", self.show_extrema_labels_checkbox)
+        form.addRow("Extrema Method:", self.extrema_method_combo)
+        self.show_extrema_labels_checkbox.toggled.connect(self._update_extrema_controls)
+        self.data_type_combo.currentTextChanged.connect(self._update_extrema_controls)
+        self._update_extrema_controls()
+
+    def _update_extrema_controls(self):
+        supported = self.data_type_combo.currentText() == "filtered"
+        self.show_extrema_labels_checkbox.setEnabled(supported)
+        if not supported:
+            self.show_extrema_labels_checkbox.setChecked(False)
+        self.extrema_method_combo.setEnabled(supported and self.show_extrema_labels_checkbox.isChecked())
+
     def get_options(self):
         return {
             "channel_indices": self.channel_selector.get_selected_channels(),
@@ -176,6 +196,8 @@ class EMGOptions(BasePlotOptions):
             "plot_legend": self.latency_legend_checkbox.isChecked(),
             "plot_colormap": self.plot_colormap_checkbox.isChecked(),
             "interactive_cursor": self.interactive_cursor_checkbox.isChecked(),
+            "show_extrema_labels": self.show_extrema_labels_checkbox.isChecked(),
+            "extrema_label_method": self.extrema_method_combo.currentText(),
         }
 
     def set_options(self, options):
@@ -193,6 +215,13 @@ class EMGOptions(BasePlotOptions):
             self.plot_colormap_checkbox.setChecked(options["plot_colormap"])
         if "interactive_cursor" in options:
             self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
+        if "show_extrema_labels" in options:
+            self.show_extrema_labels_checkbox.setChecked(options["show_extrema_labels"])
+        if "extrema_label_method" in options:
+            index = self.extrema_method_combo.findText(options["extrema_label_method"])
+            if index >= 0:
+                self.extrema_method_combo.setCurrentIndex(index)
+        self._update_extrema_controls()
 
 
 class SingleEMGRecordingOptions(BasePlotOptions):
@@ -233,6 +262,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
 
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self.interactive_cursor_checkbox.setChecked(False)
+        self._add_extrema_controls(form)
 
         # Create the recording cycler widget and add it to the form
         self.recording_cycler = RecordingCyclerWidget(self)
@@ -255,6 +285,9 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.latency_legend_checkbox.setChecked(enabled)
         self.latency_legend_checkbox.setEnabled(enabled)
 
+    _add_extrema_controls = EMGOptions._add_extrema_controls
+    _update_extrema_controls = EMGOptions._update_extrema_controls
+
     def get_options(self):
         return {
             "channel_indices": self.channel_selector.get_selected_channels(),
@@ -265,6 +298,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             "fixed_y_axis": self.fixed_y_axis_checkbox.isChecked(),
             "plot_colormap": self.plot_colormap_checkbox.isChecked(),
             "interactive_cursor": self.interactive_cursor_checkbox.isChecked(),
+            "show_extrema_labels": self.show_extrema_labels_checkbox.isChecked(),
+            "extrema_label_method": self.extrema_method_combo.currentText(),
         }
 
     def set_options(self, options):
@@ -286,6 +321,13 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             self.plot_colormap_checkbox.setChecked(options["plot_colormap"])
         if "interactive_cursor" in options:
             self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
+        if "show_extrema_labels" in options:
+            self.show_extrema_labels_checkbox.setChecked(options["show_extrema_labels"])
+        if "extrema_label_method" in options:
+            index = self.extrema_method_combo.findText(options["extrema_label_method"])
+            if index >= 0:
+                self.extrema_method_combo.setCurrentIndex(index)
+        self._update_extrema_controls()
 
 
 class SessionReflexCurvesOptions(BasePlotOptions):

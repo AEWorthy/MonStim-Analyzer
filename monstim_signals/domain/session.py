@@ -2,6 +2,7 @@
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from functools import cached_property
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -13,7 +14,8 @@ from monstim_signals.domain.recording import Recording
 from monstim_signals.plotting import SessionPlotterPyQtGraph
 from monstim_signals.transform import (
     butter_bandpass_filter,
-    calculate_emg_amplitude,
+    calculate_emg_amplitude,  # noqa: F401 - re-exported for compatibility with callers/tests
+    calculate_window_amplitude_results,
     correct_emg_to_baseline,
     get_avg_mmax,
 )
@@ -24,6 +26,22 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_M_WAVE_WINDOW_NAMES = frozenset({"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"})
+_H_REFLEX_WINDOW_NAMES = frozenset(
+    {"h-wave", "h_wave", "h wave", "hwave", "h-reflex", "h_reflex", "h reflex", "hresponse", "h_response", "h response"}
+)
+
+
+@dataclass(frozen=True)
+class WindowAmplitudeSeries:
+    """Results for one configured latency window, aligned to recording_ids."""
+
+    window_index: int
+    window: LatencyWindow
+    priority_rank: int | None
+    recording_ids: tuple[str, ...]
+    results: tuple[object, ...]
 
 
 class Session:
@@ -408,10 +426,7 @@ class Session:
                             }
                         )
             # Missing canonical M-wave window
-            if not any(
-                (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"}
-                for w in self.latency_windows
-            ):
+            if not self.has_m_wave_window():
                 notices.append(
                     {
                         "level": "info",
@@ -484,28 +499,15 @@ class Session:
 
     def has_m_wave_window(self) -> bool:
         """Check if the session has a defined M-wave latency window."""
-        return any(
-            (w.name or "").lower() in {"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"} for w in self.latency_windows
-        )
+        return self._find_reflex_latency_window(_M_WAVE_WINDOW_NAMES) is not None
 
     def has_h_reflex_window(self) -> bool:
         """Check if the session has a defined H-reflex latency window."""
-        return any(
-            (w.name or "").lower()
-            in {
-                "h-wave",
-                "h_wave",
-                "h wave",
-                "hwave",
-                "h-reflex",
-                "h_reflex",
-                "h reflex",
-                "hresponse",
-                "h_response",
-                "h response",
-            }
-            for w in self.latency_windows
-        )
+        return self._find_reflex_latency_window(_H_REFLEX_WINDOW_NAMES) is not None
+
+    def _find_reflex_latency_window(self, names: frozenset[str]) -> LatencyWindow | None:
+        """Return the configured window matching one of a reflex's canonical aliases."""
+        return next((window for window in self.latency_windows if (window.name or "").casefold() in names), None)
 
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
@@ -678,30 +680,11 @@ class Session:
         windows exist, the corresponding attributes will be set to empty lists.
         """
         for window in self.latency_windows:
-            lname = window.name.lower()
-            if lname in {
-                "m-wave",
-                "m_wave",
-                "m wave",
-                "mwave",
-                "m-response",
-                "m_response",
-                "m response",
-            }:
+            lname = (window.name or "").casefold()
+            if lname in _M_WAVE_WINDOW_NAMES:
                 self.m_start = window.start_times
                 self.m_duration = window.durations
-            elif lname in {
-                "h-wave",
-                "h_wave",
-                "h wave",
-                "hwave",
-                "h-reflex",
-                "h_reflex",
-                "h reflex",
-                "hresponse",
-                "h_response",
-                "h response",
-            }:
+            elif lname in _H_REFLEX_WINDOW_NAMES:
                 self.h_start = window.start_times
                 self.h_duration = window.durations
 
@@ -820,47 +803,74 @@ class Session:
     def get_m_wave_amplitudes(self, method, channel_index):
         """Return a list of M-wave amplitudes for each recording."""
 
-        if not self.has_m_wave_window():
+        m_window = self._find_reflex_latency_window(_M_WAVE_WINDOW_NAMES)
+        if m_window is None:
             raise LatencyWindowNotFoundError(window_name="M-wave", object_type="Session", object_id=self.id)
 
-        window_start = self.m_start[channel_index] + self.stim_start
-        window_end = window_start + self.m_duration[channel_index]
-
-        if window_end - window_start <= 0:
-            raise ValueError(
-                f"Invalid M-wave reflex window for channel {channel_index} in session {self.id}. Start: {window_start}, End: {window_end}."
-            )
-
-        m_wave_amplitudes = [
-            calculate_emg_amplitude(
-                recording[:, channel_index],
-                window_start,
-                window_end,
-                self.scan_rate,
-                method=method,
-            )
-            for recording in self.recordings_filtered
-        ]
-        return m_wave_amplitudes
+        return self.get_lw_reflex_amplitudes(method, channel_index, m_window)
 
     def get_h_wave_amplitudes(self, method, channel_index):
         """Return a list of H-reflex amplitudes for each recording."""
-        if not self.has_h_reflex_window():
+        h_window = self._find_reflex_latency_window(_H_REFLEX_WINDOW_NAMES)
+        if h_window is None:
             raise LatencyWindowNotFoundError(window_name="H-reflex", object_type="Session", object_id=self.id)
 
-        window_start = self.h_start[channel_index] + self.stim_start
-        window_end = window_start + self.h_duration[channel_index]
-        h_wave_amplitudes = [
-            calculate_emg_amplitude(
-                recording[:, channel_index],
-                window_start,
-                window_end,
-                self.scan_rate,
-                method=method,
-            )
-            for recording in self.recordings_filtered
-        ]
-        return h_wave_amplitudes
+        return self.get_lw_reflex_amplitudes(method, channel_index, h_window)
+
+    def _window_spans(self, channel_index: int):
+        """Build channel-specific absolute spans in configured window order."""
+        if not 0 <= channel_index < self.num_channels:
+            raise ValueError(f"Invalid channel index {channel_index} for session {self.id}")
+        from monstim_signals.transform.extrema import WindowSpan, make_window_span
+
+        raw = []
+        for index, window in enumerate(self.latency_windows):
+            try:
+                start = float(window.start_times[channel_index]) + self.stim_start
+                end = float(window.end_times[channel_index]) + self.stim_start
+            except IndexError, TypeError, ValueError:
+                start = end = float("nan")
+            raw.append((index, window, start, end))
+        ordered = sorted(
+            (item for item in raw if np.isfinite(item[2]) and np.isfinite(item[3])), key=lambda item: (int(item[2] * self.scan_rate / 1000), item[0])
+        )
+        ranks = {index: rank for rank, (index, _window, _start, _end) in enumerate(ordered)}
+        return tuple(
+            make_window_span(index, window.name, start, end, self.scan_rate, ranks.get(index))
+            if np.isfinite(start) and np.isfinite(end)
+            else WindowSpan(index, window.name, None, start, end, -1, -1)
+            for index, window, start, end in raw
+        )
+
+    def get_all_lw_reflex_amplitude_results(
+        self, method: str, channel_index: int, *, include_excluded: bool = False
+    ) -> tuple[WindowAmplitudeSeries, ...]:
+        """Return every latency-window result, retaining recording/window identity."""
+        spans = self._window_spans(channel_index)
+        recordings = self.get_all_recordings(include_excluded=include_excluded)
+        filtered = self.all_recordings_filtered if include_excluded else self.recordings_filtered
+        if len(recordings) != len(filtered):
+            raise RuntimeError("Recording/result alignment mismatch while calculating latency-window amplitudes")
+        per_window: list[list[object]] = [[] for _ in spans]
+        for recording in filtered:
+            results = calculate_window_amplitude_results(recording[:, channel_index], spans, self.scan_rate, method)
+            if len(results) != len(spans):
+                raise RuntimeError("Latency-window result batch length mismatch")
+            for index, result in enumerate(results):
+                per_window[index].append(result)
+        ids = tuple(recording.id for recording in recordings)
+        return tuple(
+            WindowAmplitudeSeries(span.window_index, self.latency_windows[span.window_index], span.priority_rank, ids, tuple(per_window[index]))
+            for index, span in enumerate(spans)
+        )
+
+    def get_recording_lw_amplitude_results(self, method: str, channel_index: int, recording_id: str) -> tuple[object, ...]:
+        """Return all window results for one recording, including excluded recordings."""
+        spans = self._window_spans(channel_index)
+        for recording, filtered in zip(self.all_recordings, self.all_recordings_filtered, strict=True):
+            if recording.id == recording_id:
+                return tuple(calculate_window_amplitude_results(filtered[:, channel_index], spans, self.scan_rate, method))
+        raise KeyError(f"Recording '{recording_id}' not found in session {self.id}")
 
     def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
         """
@@ -868,30 +878,18 @@ class Session:
 
         The array in the same order as the stimulus voltage of each recording.
         """
-        # Convert window to LatencyWindow if it's a string
-        if not isinstance(window, LatencyWindow):
-            window = self.get_latency_window(window)
-
-        if window is not None:
-            # Needs to correct window times to the stimulus start time
-            window_start = window.start_times[channel_index] + self.stim_start
-            window_end = window.end_times[channel_index] + self.stim_start
+        if isinstance(window, LatencyWindow):
+            try:
+                window_index = next(index for index, item in enumerate(self.latency_windows) if item is window)
+            except StopIteration as exc:
+                raise LatencyWindowNotFoundError(window_name=window.name, object_type="Session", object_id=self.id) from exc
         else:
+            window_index = next((index for index, item in enumerate(self.latency_windows) if item.name == window), None)
+        if window_index is None:
             logger.warning(f"Latency window '{window}' not found.")
-            return []
-
-        # Calculate the reflex amplitudes for the specified window
-        reflex_amplitudes = [
-            calculate_emg_amplitude(
-                recording[:, channel_index],
-                window_start,
-                window_end,
-                self.scan_rate,
-                method=method,
-            )
-            for recording in self.recordings_filtered
-        ]
-        return np.array(reflex_amplitudes)
+            return np.array([])
+        series = self.get_all_lw_reflex_amplitude_results(method, channel_index)[window_index]
+        return np.asarray([result.amplitude for result in series.results], dtype=float)
 
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files

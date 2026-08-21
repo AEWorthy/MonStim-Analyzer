@@ -155,6 +155,12 @@ def calculate_emg_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float
     Raises:
         ValueError: If method is not recognized
     """
+    if method == "exclusive_extrema_ptt":
+        raise ValueError("exclusive_extrema_ptt requires the all-window/session API")
+    if method == "extrema_ptt":
+        from .extrema import calculate_extrema_ptt_result, make_window_span
+
+        return calculate_extrema_ptt_result(emg_data, make_window_span(0, "window", start_ms, end_ms, scan_rate), scan_rate).amplitude
     methods = {
         "average_rectified": _calculate_average_amplitude_rectified,
         "peak_to_trough": _calculate_peak_to_trough_amplitude,

@@ -1,6 +1,6 @@
-__all__ = ["Dataset", "Experiment", "Recording", "Session"]
+__all__ = ["Dataset", "Experiment", "Recording", "Session", "WindowAmplitudeSeries"]
 
 from .dataset import Dataset
 from .experiment import Experiment
 from .recording import Recording
-from .session import Session
+from .session import Session, WindowAmplitudeSeries

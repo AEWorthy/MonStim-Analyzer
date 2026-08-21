@@ -173,7 +173,7 @@ All processing parameters can be customized through the application's configurat
 - **validation_tolerance**: Tolerance factor for plateau validation (default: 1.05 = 5% above plateau mean)
 
 ### Analysis Parameters
-- **default_method**: Default amplitude calculation method (default: 'rms')
+- **default_method**: Default amplitude calculation method (default: 'rms'). Supported methods include `extrema_ptt` and `exclusive_extrema_ptt`; see [Extrema peak-to-trough methods](extrema_ptt.md).
 - **time_window**: EMG analysis time window (default: 8.0 ms)
 - **pre_stim_time**: Pre-stimulus baseline period (default: 2.0 ms)
 

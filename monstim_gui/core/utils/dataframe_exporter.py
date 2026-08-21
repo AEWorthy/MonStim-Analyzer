@@ -20,6 +20,8 @@ from monstim_signals.core import get_base_path
 # Normalize a few known method names to short suffixes
 METHOD_SUFFIX_MAP = {
     "peak_to_trough": "ptt",
+    "extrema_ptt": "extrema_ptt",
+    "exclusive_extrema_ptt": "exclusive_extrema_ptt",
     "rms": "rms",
     "average_rectified": "avgrect",
     "average_unrectified": "avgunrect",

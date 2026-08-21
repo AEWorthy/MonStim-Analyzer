@@ -12,6 +12,7 @@ Responsibilities
 
 from __future__ import annotations
 
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,8 @@ METHOD_LABELS: dict[str, str] = {
     "peak_to_trough": "Peak-to-Trough",
     "average_unrectified": "Avg Unrectified",
     "auc": "AUC",
+    "extrema_ptt": "Extrema Peak-to-Trough",
+    "exclusive_extrema_ptt": "Exclusive Extrema Peak-to-Trough",
 }
 
 BULK_EXPORT_OPEN_FILE_BUDGET = 128
@@ -237,46 +240,48 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
                     continue
                 ch_name = _safe_channel_name(session, ch_idx)
 
-                for window_name in window_names:
+                for method in config.methods:
                     try:
-                        latency_window = dataset.get_session_latency_window(session, window_name)
-                    except Exception:
-                        try:
+                        batches = session.get_all_lw_reflex_amplitude_results(method, ch_idx)
+                    except AttributeError:  # compatibility for lightweight external Session-like objects
+                        batches = []
+                        for window_index, window_name in enumerate(window_names):
                             latency_window = session.get_latency_window(window_name)
-                        except Exception:
-                            latency_window = None
-                    if latency_window is None:
+                            values = session.get_lw_reflex_amplitudes(method, ch_idx, window_name)
+                            batches.append(
+                                type(
+                                    "Batch",
+                                    (),
+                                    {
+                                        "window_index": window_index,
+                                        "window": latency_window,
+                                        "priority_rank": window_index,
+                                        "recording_ids": tuple(getattr(record, "id", "") for record in active_recordings),
+                                        "results": tuple(type("Result", (), {"amplitude": value}) for value in values),
+                                    },
+                                )()
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            "longform_reflex_amplitudes error dataset=%s session=%s ch=%s method=%s: %s", dataset_id, session_id, ch_name, method, exc
+                        )
                         continue
-
-                    try:
-                        window_start_ms = latency_window.start_times[ch_idx]
-                        window_end_ms = latency_window.end_times[ch_idx]
-                        window_duration_ms = latency_window.durations[ch_idx]
-                    except Exception:
-                        window_start_ms = np.nan
-                        window_end_ms = np.nan
-                        window_duration_ms = np.nan
-
-                    for method in config.methods:
+                    mmax = mmax_cache.get((ch_idx, method)) if config.normalize_to_mmax else None
+                    window_names_by_index = {batch.window_index: batch.window.name for batch in batches}
+                    for batch in batches:
+                        latency_window = batch.window
                         try:
-                            amplitudes = np.asarray(
-                                session.get_lw_reflex_amplitudes(method, ch_idx, window_name),
-                                dtype=float,
-                            )
-                        except Exception as exc:
-                            logger.warning(
-                                "longform_reflex_amplitudes error dataset=%s session=%s ch=%s window=%s method=%s: %s",
-                                dataset_id,
-                                session_id,
-                                ch_name,
-                                window_name,
-                                method,
-                                exc,
-                            )
-                            continue
-
-                        mmax = mmax_cache.get((ch_idx, method)) if config.normalize_to_mmax else None
-                        for rec_idx, amplitude in enumerate(amplitudes):
+                            window_start_ms = latency_window.start_times[ch_idx]
+                            window_end_ms = latency_window.end_times[ch_idx]
+                            window_duration_ms = latency_window.durations[ch_idx]
+                        except Exception:
+                            window_start_ms = window_end_ms = window_duration_ms = np.nan
+                        if len(batch.results) != len(active_recordings) or tuple(getattr(record, "id", "") for record in active_recordings) != tuple(
+                            batch.recording_ids
+                        ):
+                            raise RuntimeError(f"Longform export recording/result alignment mismatch in session {session_id}")
+                        for rec_idx, result in enumerate(batch.results):
+                            amplitude = float(result.amplitude)
                             recording = active_recordings[rec_idx] if rec_idx < len(active_recordings) else None
                             stimulus_value = stimulus_values[rec_idx] if rec_idx < len(stimulus_values) else np.nan
                             binned_value = binned_values[rec_idx] if rec_idx < len(binned_values) else np.nan
@@ -294,12 +299,45 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
                                 "channel_index": ch_idx,
                                 "channel": ch_name,
                                 "emg_amp_gain": emg_amp_gain,
-                                "window": window_name,
+                                "window": latency_window.name,
+                                "window_index": batch.window_index,
+                                "window_priority_rank": batch.priority_rank,
                                 "window_start_ms": window_start_ms,
                                 "window_end_ms": window_end_ms,
                                 "window_duration_ms": window_duration_ms,
                                 "method": method,
                                 "amplitude": amplitude,
+                                "extrema_total_count": getattr(result, "total_extrema_in_window", np.nan),
+                                "extrema_available_count": getattr(result, "available_extrema_in_window", np.nan),
+                                "extrema_excluded_by_earlier_count": getattr(result, "excluded_owned_extrema_count", np.nan),
+                                "excluded_extrema_owners_json": json.dumps(
+                                    [
+                                        {"window_index": owner, "window_name": window_names_by_index.get(owner, "")}
+                                        for owner in getattr(result, "excluded_owner_window_indices", ())
+                                    ]
+                                ),
+                                "selected_max_sample_index": getattr(getattr(result, "selected_max", None), "sample_index", np.nan),
+                                "selected_max_time_ms": (
+                                    getattr(getattr(result, "selected_max", None), "sample_index", np.nan) * 1000 / session.scan_rate
+                                    - session.stim_start
+                                )
+                                if getattr(result, "selected_max", None) is not None
+                                else np.nan,
+                                "selected_max_value": getattr(getattr(result, "selected_max", None), "value", np.nan),
+                                "selected_min_sample_index": getattr(getattr(result, "selected_min", None), "sample_index", np.nan),
+                                "selected_min_time_ms": (
+                                    getattr(getattr(result, "selected_min", None), "sample_index", np.nan) * 1000 / session.scan_rate
+                                    - session.stim_start
+                                )
+                                if getattr(result, "selected_min", None) is not None
+                                else np.nan,
+                                "selected_min_value": getattr(getattr(result, "selected_min", None), "value", np.nan),
+                                "selected_ptt_span_ms": abs(
+                                    (result.selected_max.sample_index - result.selected_min.sample_index) * 1000 / session.scan_rate
+                                )
+                                if getattr(result, "selected_max", None) is not None and getattr(result, "selected_min", None) is not None
+                                else np.nan,
+                                "extrema_zero_reason": getattr(result, "zero_reason", "") or "",
                             }
                             if config.normalize_to_mmax:
                                 row["mmax_for_normalization"] = mmax

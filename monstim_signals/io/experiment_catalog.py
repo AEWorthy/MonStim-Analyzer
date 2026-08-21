@@ -11,6 +11,8 @@ import json
 import logging
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -95,10 +97,16 @@ class ExperimentCatalog:
         self.experiment_path = experiment_path.resolve()
         self.path = catalog_path(self.experiment_path)
 
-    def connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a catalog connection and release its file handle on exit."""
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def is_usable(self) -> bool:
         if not self.path.is_file():
