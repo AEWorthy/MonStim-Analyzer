@@ -37,14 +37,7 @@ class Experiment:
         self.plotter = ExperimentPlotterPyQtGraph(self)
 
         self.__check_dataset_consistency()
-        if self.datasets:
-            self.scan_rate = self.datasets[0].scan_rate
-            self.stim_start = self.datasets[0].stim_start
-        else:
-            # Set default values for empty experiments
-            # TODO: Update these values when datasets added/removed
-            self.scan_rate = None
-            self.stim_start = None
+        self._update_dataset_parameters()
         self.update_latency_window_parameters()
 
     @property
@@ -74,6 +67,15 @@ class Experiment:
                 warnings.append(f"Inconsistent stim_start for '{ds.id}': {ds.stim_start} != {ref_stim}.")
         for w in warnings:
             logger.warning(w)
+
+    def _update_dataset_parameters(self) -> None:
+        """Refresh parameters represented by the first active dataset."""
+        if self.datasets:
+            self.scan_rate = self.datasets[0].scan_rate
+            self.stim_start = self.datasets[0].stim_start
+        else:
+            self.scan_rate = None
+            self.stim_start = None
 
     def _load_config_settings(self) -> None:
         _config = self._config if self._config is not None else load_config()
@@ -244,10 +246,13 @@ class Experiment:
     def add_dataset(self, dataset: Dataset) -> None:
         if dataset.id not in [ds.id for ds in self._all_datasets]:
             self._all_datasets.append(dataset)
+            dataset.parent_experiment = self
+            self._update_dataset_parameters()
             self.reset_all_caches()
 
     def remove_dataset(self, dataset_id: str) -> None:
         self._all_datasets = [ds for ds in self._all_datasets if ds.id != dataset_id]
+        self._update_dataset_parameters()
         self.reset_all_caches()
 
     def apply_latency_window_preset(self, preset_name: str) -> None:
