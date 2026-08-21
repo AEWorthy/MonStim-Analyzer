@@ -124,6 +124,8 @@ def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled
         def __init__(self):
             self.id = "rec-1"
             self.stim_amplitude = 7.5
+            self.num_channels = 1
+            self.channel_types = ["emg"]
 
     class DummySession:
         def __init__(self):
@@ -144,4 +146,5 @@ def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled
 
     dialog.stimulus_group.setChecked(False)
 
-    assert dialog.should_exclude_recording(recording) is False
+    evaluation = dialog._evaluation_for_recording(recording, parent_widget.current_session, {}, set())
+    assert evaluation["flagged"] is False

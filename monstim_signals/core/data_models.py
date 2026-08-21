@@ -209,6 +209,7 @@ class SessionAnnot:
     """
 
     excluded_recordings: list[str] = field(default_factory=list)  # list of recording IDs to exclude
+    recording_curation: dict[str, dict[str, Any]] = field(default_factory=dict)
     latency_windows: list[LatencyWindow] = field(default_factory=list)
     channels: list[SignalChannel] = field(default_factory=list)
     m_max_values: list[float] = field(default_factory=list)

@@ -720,49 +720,110 @@ class BulkRecordingExclusionCommand(Command):
         self.command_name = "Bulk Recording Exclusion"
         self.gui: MonstimGUI = gui
         self.changes = changes
+        self._previous_curation: dict[tuple[int, str], dict | None] = {}
 
     def execute(self):
-        """Apply all recording exclusions/inclusions."""
+        """Apply all changes and persist each affected session only once."""
         try:
+            if not self._supports_batched_persistence():
+                self._execute_legacy()
+                return
+            changed_sessions = []
             for session_change in self.changes:
                 session = session_change["session"]
+                excluded = set(session.annot.excluded_recordings)
                 for change in session_change["changes"]:
                     recording_id = change["recording_id"]
                     should_exclude = change["exclude"]
-
                     if should_exclude:
-                        session.exclude_recording(recording_id)
+                        excluded.add(recording_id)
                     else:
-                        session.restore_recording(recording_id)
+                        excluded.discard(recording_id)
+                    curation = change.get("curation")
+                    if curation is not None:
+                        key = (id(session), recording_id)
+                        if key not in self._previous_curation:
+                            previous = session.annot.recording_curation.get(recording_id)
+                            self._previous_curation[key] = dict(previous) if previous is not None else None
+                        session.annot.recording_curation[recording_id] = curation
+                session.annot.excluded_recordings = sorted(excluded)
+                session.reset_all_caches()
+                changed_sessions.append(session)
 
-            # Update UI to reflect changes
+            self._save_sessions(changed_sessions)
             self.gui.data_selection_widget.sync_combo_selections()
 
         except Exception as e:
             QMessageBox.critical(self.gui, "Error", f"Failed to apply bulk exclusions: {e!s}")
 
+    def _supports_batched_persistence(self) -> bool:
+        return all(isinstance(change["session"].annot.excluded_recordings, list) for change in self.changes)
+
+    def _execute_legacy(self) -> None:
+        """Keep this command usable for lightweight domain doubles and old sessions."""
+        for session_change in self.changes:
+            session = session_change["session"]
+            for change in session_change["changes"]:
+                if change["exclude"]:
+                    session.exclude_recording(change["recording_id"])
+                else:
+                    session.restore_recording(change["recording_id"])
+        self.gui.data_selection_widget.sync_combo_selections()
+
+    @staticmethod
+    def _save_sessions(sessions):
+        """Batch JSON writes and their matching catalog updates."""
+        if not sessions:
+            return
+        from monstim_signals.io.repositories import SessionRepository
+
+        SessionRepository.save_many(sessions)
+
     def undo(self):
-        """Reverse all recording exclusions/inclusions."""
+        """Reverse all changes with the same batched persistence path."""
         try:
-            # Apply changes in reverse
+            if not self._supports_batched_persistence():
+                self._undo_legacy()
+                return
+            changed_sessions = []
             for session_change in reversed(self.changes):
                 session = session_change["session"]
+                excluded = set(session.annot.excluded_recordings)
                 for change in reversed(session_change["changes"]):
                     recording_id = change["recording_id"]
                     should_exclude = change["exclude"]
-
-                    # Do the opposite of what was done
                     if should_exclude:
-                        session.restore_recording(recording_id)
+                        excluded.discard(recording_id)
                     else:
-                        session.exclude_recording(recording_id)
+                        excluded.add(recording_id)
+                    if change.get("curation") is not None:
+                        previous = self._previous_curation.get((id(session), recording_id))
+                        if previous is None:
+                            session.annot.recording_curation.pop(recording_id, None)
+                        else:
+                            session.annot.recording_curation[recording_id] = previous
+                session.annot.excluded_recordings = sorted(excluded)
+                session.reset_all_caches()
+                changed_sessions.append(session)
 
-            # Update UI to reflect changes
+            self.gui.data_selection_widget.sync_combo_selections()
+            self._save_sessions(changed_sessions)
+            self.gui.data_selection_widget.sync_combo_selections()
             self.gui.data_selection_widget.sync_combo_selections()
 
         except Exception as e:
             logger.error(f"Failed to undo bulk exclusions: {e!s}")
             QMessageBox.critical(self.gui, "Error", f"Failed to undo bulk exclusions: {e!s}")
+
+    def _undo_legacy(self) -> None:
+        for session_change in reversed(self.changes):
+            session = session_change["session"]
+            for change in reversed(session_change["changes"]):
+                if change["exclude"]:
+                    session.restore_recording(change["recording_id"])
+                else:
+                    session.exclude_recording(change["recording_id"])
+        self.gui.data_selection_widget.sync_combo_selections()
 
 
 # Data Curation Commands
