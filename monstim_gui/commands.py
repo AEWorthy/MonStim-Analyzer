@@ -43,6 +43,34 @@ class Command(abc.ABC):
         return getattr(self, "command_name", type(self).__name__)
 
 
+class BatchCommand:
+    """Group already-compatible commands into one atomic undo-history entry."""
+
+    def __init__(self, command_name: str, commands: list[Command]):
+        self.command_name = command_name
+        self.commands = list(commands)
+        self._executed: list[Command] = []
+
+    def execute(self):
+        self._executed.clear()
+        try:
+            for command in self.commands:
+                command.execute()
+                self._executed.append(command)
+        except Exception:
+            for command in reversed(self._executed):
+                command.undo()
+            self._executed.clear()
+            raise
+
+    def undo(self):
+        for command in reversed(self._executed or self.commands):
+            command.undo()
+
+    def get_description(self) -> str:
+        return self.command_name
+
+
 class CommandInvoker:
     def __init__(self, parent: MonstimGUI):
         self.parent: MonstimGUI = parent  # type: MonstimGUI
@@ -1187,7 +1215,7 @@ class ToggleCompletionStatusCommand(Command):
     persistence to ensure undo/redo works reliably across selection changes.
     """
 
-    def __init__(self, gui, level: str, target_object):
+    def __init__(self, gui, level: str, target_object, *, experiment_id: str | None = None, new_status: bool | None = None, dataset_path=None):
         """
         Args:
             gui: The main GUI instance
@@ -1198,7 +1226,8 @@ class ToggleCompletionStatusCommand(Command):
         self.level = level
         self.target_id = target_object.id
         self.old_status = getattr(target_object, "is_completed", False)
-        self.new_status = not self.old_status
+        self.new_status = not self.old_status if new_status is None else new_status
+        self.dataset_path = Path(dataset_path) if dataset_path is not None else None
 
         # Store hierarchy IDs for reliable lookup from disk
         if level == "experiment":
@@ -1206,7 +1235,7 @@ class ToggleCompletionStatusCommand(Command):
             self.dataset_id = None
         elif level == "dataset":
             # Get parent experiment ID from current context
-            self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+            self.experiment_id = experiment_id or (self.gui.current_experiment.id if self.gui.current_experiment else None)
             self.dataset_id = target_object.id
             if not self.experiment_id:
                 raise ValueError("Cannot toggle dataset completion status: no parent experiment in context")
@@ -1272,7 +1301,7 @@ class ToggleCompletionStatusCommand(Command):
                         logger.error("Dataset ID is missing")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
-                    dataset_path = exp_path / self.dataset_id
+                    dataset_path = self.dataset_path or exp_path / self.dataset_id
                     if not dataset_path.exists():
                         logger.error(f"Dataset path '{dataset_path}' not found")
                         return

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 import re
 from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Signal
@@ -523,11 +524,35 @@ class DataCurationManager(QDialog):
         self.rebuild_catalogs_button.clicked.connect(self.force_rebuild_catalogs)
         batch_layout.addWidget(self.rebuild_catalogs_button)
 
-        # TODO: Batch operations - add buttons for additional curation tools
-        # - Batch Rename
-        # - Validate Selected
-        # - Move to Trash / Restore (Trash view)
-        # These should be inserted here aligned with the existing batch controls.
+        self.validate_selected_button = QPushButton("Validate Selected")
+        self.validate_selected_button.setToolTip("Check checked datasets for readable metadata and session folders")
+        self.validate_selected_button.clicked.connect(self.validate_selected_datasets)
+        self.validate_selected_button.setEnabled(False)
+        batch_layout.addWidget(self.validate_selected_button)
+
+        self.exclude_selected_button = QPushButton("Exclude Selected")
+        self.exclude_selected_button.setToolTip("Hide checked datasets from analysis without deleting their files")
+        self.exclude_selected_button.clicked.connect(lambda: self.set_selected_datasets_included(False))
+        self.exclude_selected_button.setEnabled(False)
+        batch_layout.addWidget(self.exclude_selected_button)
+
+        self.restore_selected_button = QPushButton("Restore Selected")
+        self.restore_selected_button.setToolTip("Return checked excluded datasets to analysis")
+        self.restore_selected_button.clicked.connect(lambda: self.set_selected_datasets_included(True))
+        self.restore_selected_button.setEnabled(False)
+        batch_layout.addWidget(self.restore_selected_button)
+
+        self.mark_complete_button = QPushButton("Mark Complete")
+        self.mark_complete_button.setToolTip("Mark checked datasets complete without changing any sessions")
+        self.mark_complete_button.clicked.connect(lambda: self.set_selected_datasets_completion(True))
+        self.mark_complete_button.setEnabled(False)
+        batch_layout.addWidget(self.mark_complete_button)
+
+        self.mark_incomplete_button = QPushButton("Mark Incomplete")
+        self.mark_incomplete_button.setToolTip("Mark checked datasets incomplete without changing any sessions")
+        self.mark_incomplete_button.clicked.connect(lambda: self.set_selected_datasets_completion(False))
+        self.mark_incomplete_button.setEnabled(False)
+        batch_layout.addWidget(self.mark_incomplete_button)
 
         batch_layout.addStretch()
 
@@ -1660,6 +1685,11 @@ class DataCurationManager(QDialog):
         self.move_selected_button.setEnabled(has_selection)
         self.copy_selected_button.setEnabled(has_selection)
         self.delete_selected_button.setEnabled(has_selection)
+        self.validate_selected_button.setEnabled(has_selection)
+        self.exclude_selected_button.setEnabled(has_selection)
+        self.restore_selected_button.setEnabled(has_selection)
+        self.mark_complete_button.setEnabled(has_selection)
+        self.mark_incomplete_button.setEnabled(has_selection)
 
         # Update summary
         if has_selection:
@@ -1789,6 +1819,11 @@ class DataCurationManager(QDialog):
             for btn_name in (
                 "create_blank_experiment_button",
                 "import_new_experiment_button",
+                "validate_selected_button",
+                "exclude_selected_button",
+                "restore_selected_button",
+                "mark_complete_button",
+                "mark_incomplete_button",
                 "select_all_button",
                 "clear_selection_button",
                 "move_selected_button",
@@ -1884,12 +1919,107 @@ class DataCurationManager(QDialog):
                 ds_item = exp_item.child(j)
                 ds_item.setCheckState(0, Qt.CheckState.Unchecked)
 
+    def _selected_dataset_data(self):
+        """Return metadata for checked dataset rows."""
+        selected = []
+        for i in range(self.dataset_tree.topLevelItemCount()):
+            exp_item = self.dataset_tree.topLevelItem(i)
+            for j in range(exp_item.childCount()):
+                ds_item = exp_item.child(j)
+                if ds_item.checkState(0) == Qt.CheckState.Checked:
+                    data = ds_item.data(0, Qt.ItemDataRole.UserRole)
+                    if data and data.get("type") == "dataset":
+                        selected.append(data)
+        return selected
+
+    def validate_selected_datasets(self):
+        """Check selected datasets without loading their recordings into the GUI."""
+        selected = self._selected_dataset_data()
+        if not selected:
+            return
+
+        from monstim_signals.io.repositories import DatasetRepository
+
+        failures = []
+        for data in selected:
+            metadata = data["metadata"]
+            path = Path(metadata["path"])
+            try:
+                if not path.is_dir():
+                    raise FileNotFoundError("dataset folder is missing")
+                DatasetRepository(path).get_metadata()
+                if not any(child.is_dir() for child in path.iterdir()):
+                    raise ValueError("no session folders found")
+            except Exception as exc:
+                failures.append(f"{metadata.get('formatted_name', path.name)}: {exc!s}")
+
+        if failures:
+            QMessageBox.warning(
+                self,
+                "Validation Found Issues",
+                f"{len(failures)} of {len(selected)} dataset(s) need attention:\n\n" + "\n".join(failures),
+            )
+        else:
+            QMessageBox.information(self, "Validation Complete", f"All {len(selected)} selected dataset(s) passed validation.")
+
+    @auto_refresh
+    def set_selected_datasets_included(self, include):
+        """Batch include or exclude checked datasets using undoable commands."""
+        from monstim_gui.commands import BatchCommand, ToggleDatasetInclusionCommand
+
+        selected = self._selected_dataset_data()
+        commands = []
+        for data in selected:
+            metadata = data["metadata"]
+            commands.append(
+                ToggleDatasetInclusionCommand(
+                    self.gui,
+                    data["experiment_id"],
+                    metadata["id"],
+                    exclude=not include,
+                )
+            )
+        if commands:
+            action = "Restore" if include else "Exclude"
+            command = BatchCommand(f"{action} {len(commands)} dataset(s)", commands)
+            command.execute()
+            self.session_commands.append(command)
+            self._changes_made = True
+
+    @auto_refresh
+    def set_selected_datasets_completion(self, completed):
+        """Set completion on checked datasets without changing child-session annotations."""
+        from monstim_gui.commands import BatchCommand, ToggleCompletionStatusCommand
+
+        commands = []
+        for data in self._selected_dataset_data():
+            metadata = data["metadata"]
+            if bool(metadata.get("is_completed")) == completed:
+                continue
+            target = SimpleNamespace(id=metadata["id"], is_completed=metadata.get("is_completed", False))
+            command = ToggleCompletionStatusCommand(
+                self.gui,
+                "dataset",
+                target,
+                experiment_id=data["experiment_id"],
+                new_status=completed,
+                dataset_path=Path(metadata["path"]),
+            )
+            commands.append(command)
+
+        if commands:
+            action = "Mark Complete" if completed else "Mark Incomplete"
+            command = BatchCommand(f"{action} for {len(commands)} dataset(s)", commands)
+            command.execute()
+            self.session_commands.append(command)
+            self._changes_made = True
+
     @auto_refresh
     def move_selected_datasets(self):
         """Move selected datasets to another experiment immediately."""
         from PySide6.QtWidgets import QInputDialog
 
-        from monstim_gui.commands import MoveDatasetCommand
+        from monstim_gui.commands import MoveDatasetsCommand
 
         # Get selected datasets
         selected_datasets = []
@@ -1910,19 +2040,16 @@ class DataCurationManager(QDialog):
         target_exp, ok = QInputDialog.getItem(self, "Move Datasets", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
-            # Execute move commands immediately
-            successful_moves = 0
-            for ds_data in selected_datasets:
-                ds_metadata = ds_data["metadata"]
-                command = MoveDatasetCommand(self.gui, ds_metadata["id"], ds_metadata["formatted_name"], ds_data["experiment_id"], target_exp)
-                try:
-                    command.execute()
-                    self.session_commands.append(command)
-                    successful_moves += 1
-                except Exception as e:
-                    QMessageBox.warning(self, "Move Failed", f"Failed to move '{ds_metadata['formatted_name']}':\n{e!s}")
-
-            if successful_moves > 0:
+            moves = [(data["metadata"]["id"], data["metadata"]["formatted_name"], data["experiment_id"], target_exp) for data in selected_datasets]
+            command = MoveDatasetsCommand(self.gui, moves)
+            try:
+                command.execute()
+                successful_moves = len(command._succeeded)
+            except Exception as exc:
+                QMessageBox.critical(self, "Move Failed", f"Failed to move selected datasets:\n{exc!s}")
+                raise
+            if successful_moves:
+                self.session_commands.append(command)
                 self._changes_made = True  # Mark that changes were made
                 QMessageBox.information(
                     self,
@@ -1935,7 +2062,7 @@ class DataCurationManager(QDialog):
         """Copy selected datasets to another experiment immediately."""
         from PySide6.QtWidgets import QInputDialog
 
-        from monstim_gui.commands import CopyDatasetCommand
+        from monstim_gui.commands import BatchCommand, CopyDatasetCommand
 
         # Get selected datasets
         selected_datasets = []
@@ -1956,24 +2083,29 @@ class DataCurationManager(QDialog):
         target_exp, ok = QInputDialog.getItem(self, "Copy Datasets", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
-            # Execute copy commands immediately
-            successful_copies = 0
-            for ds_data in selected_datasets:
-                ds_metadata = ds_data["metadata"]
-                command = CopyDatasetCommand(self.gui, ds_metadata["id"], ds_metadata["formatted_name"], ds_data["experiment_id"], target_exp)
-                try:
-                    command.execute()
-                    self.session_commands.append(command)
-                    successful_copies += 1
-                except Exception as e:
-                    QMessageBox.warning(self, "Copy Failed", f"Failed to copy '{ds_metadata['formatted_name']}':\n{e!s}")
-
-            if successful_copies > 0:
+            commands = [
+                CopyDatasetCommand(
+                    self.gui,
+                    data["metadata"]["id"],
+                    data["metadata"]["formatted_name"],
+                    data["experiment_id"],
+                    target_exp,
+                )
+                for data in selected_datasets
+            ]
+            command = BatchCommand(f"Copy {len(commands)} dataset(s) to '{target_exp}'", commands)
+            try:
+                command.execute()
+            except Exception as exc:
+                QMessageBox.critical(self, "Copy Failed", f"Failed to copy selected datasets:\n{exc!s}")
+                raise
+            if commands:
+                self.session_commands.append(command)
                 self._changes_made = True  # Mark that changes were made
                 QMessageBox.information(
                     self,
                     "Datasets Copied",
-                    f"{successful_copies} dataset(s) copied to '{target_exp}' successfully.",
+                    f"{len(commands)} dataset(s) copied to '{target_exp}' successfully.",
                 )
 
     @auto_refresh
@@ -2063,6 +2195,10 @@ class DataCurationManager(QDialog):
                 copy_action.triggered.connect(lambda: self.context_copy_dataset(data))
 
                 menu.addSeparator()
+
+                edit_metadata_action = menu.addAction("Edit Dataset Metadata...")
+                edit_metadata_action.setStatusTip("Edit this dataset's date, animal ID, and condition")
+                edit_metadata_action.triggered.connect(lambda: self.context_edit_dataset_metadata(data))
 
                 duplicate_action = menu.addAction("Duplicate in Same Experiment")
                 duplicate_action.triggered.connect(lambda: self.context_duplicate_dataset(data))
@@ -2156,6 +2292,40 @@ class DataCurationManager(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Copy Failed", f"Failed to copy dataset:\n{e!s}")
                 raise  # Let decorator handle the refresh
+
+    @auto_refresh
+    def context_edit_dataset_metadata(self, dataset_data):
+        """Edit one dataset's identity metadata through the standard undoable editor."""
+        from monstim_gui.commands import EditDatasetMetadataCommand
+        from monstim_gui.dialogs.dataset_metadata_editor import DatasetMetadataEditor
+        from monstim_signals.io.repositories import DatasetRepository
+
+        metadata = dataset_data["metadata"]
+        try:
+            dataset = DatasetRepository(Path(metadata["path"])).load(lazy_open_h5=True)
+            dialog = DatasetMetadataEditor(dataset, parent=self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            command = EditDatasetMetadataCommand(
+                gui=self.gui,
+                dataset=dataset,
+                old_date=dialog.old_date,
+                new_date=dialog.new_date,
+                old_animal_id=dialog.old_animal_id,
+                new_animal_id=dialog.new_animal_id,
+                old_condition=dialog.old_condition,
+                new_condition=dialog.new_condition,
+                old_folder_name=dialog.old_folder_name,
+                new_folder_name=dialog.new_folder_name,
+            )
+            command.execute()
+            self.session_commands.append(command)
+            self._changes_made = True
+        except Exception as exc:
+            logger.exception("Failed to edit metadata for dataset '%s'", metadata.get("id"))
+            QMessageBox.critical(self, "Metadata Update Failed", f"Failed to edit dataset metadata:\n{exc!s}")
+            raise
 
     def context_duplicate_dataset(self, dataset_data):
         """Duplicate a dataset within the same experiment asynchronously."""
