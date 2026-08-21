@@ -667,11 +667,15 @@ class Session:
         self.reset_cached_reflex_properties()
         self.update_latency_window_parameters()
 
-    # TODO: Caching / consistency
-    # - Ensure cached_property names and keys cleared by reset_recordings_cache() match
-    #   exactly. Consider automating this via a decorator or metaclass.
-    #   — add tests to validate cache invalidation for all cached properties including
-    #   `m_max`, `recordings_rectified_filtered`, etc.
+    @classmethod
+    def _cached_property_names(cls) -> tuple[str, ...]:
+        """Return the names whose values are stored by ``cached_property``."""
+        return tuple(name for base in cls.__mro__ for name, value in vars(base).items() if isinstance(value, cached_property))
+
+    def _clear_cached_values(self, *names: str) -> None:
+        """Remove cached values without requiring callers to maintain cache-key lists."""
+        for name in names:
+            self.__dict__.pop(name, None)
 
     def update_latency_window_parameters(self):
         """
@@ -700,27 +704,14 @@ class Session:
         Reset the cached M-wave max values.
         This is used after changing the latency windows or excluding/including recordings from the session set.
         """
-        if "m_max" in self.__dict__:
-            del self.__dict__["m_max"]
+        self._clear_cached_values("m_max")
 
     def reset_recordings_cache(self):
         """
         Reset the cached processed recordings.
         This is used after changing the filter parameters or excluding/including recordings from the session set.
         """
-        # Clear all_recordings_* caches (primary data)
-        for key in [
-            "all_recordings_raw",
-            "all_recordings_filtered",
-            "all_recordings_rectified_raw",
-            "all_recordings_rectified_filtered",
-        ]:
-            if key in self.__dict__:
-                del self.__dict__[key]
-
-        # Clear m_max which is still cached and depends on active recordings
-        if "m_max" in self.__dict__:
-            del self.__dict__["m_max"]
+        self._clear_cached_values(*self._cached_property_names(), "m_max")
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Properties for GUI & analysis code
