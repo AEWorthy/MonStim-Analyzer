@@ -9,6 +9,8 @@ from monstim_signals.core import StimCluster
 
 logger = logging.getLogger(__name__)
 
+MOTOR_LENGTH_STIM_NOISE_THRESHOLD = 0.002
+
 
 def detect_format(path: Path) -> str:
     """
@@ -198,10 +200,9 @@ def parse_v3h(path: Path):
         stim_type = raw_meta[f"Stim type cluster array {i}.Stimulus Output"]
         stim_v = float(raw_meta[f"Stim. {i + 1}"])
 
-        # TODO: Remove this correction, or use only when recordings are from the old V3H version
         # If stim_type is Motor Length and stim_v is 0, extract from length channel
+        # This is a correction for some older v3h files where the stim value was not recorded correctly.
         if stim_type.lower() == "motor length" and stim_v == 0:
-            # Find the index of the length channel
             try:
                 length_idx = meta["channel_types"].index("length")
                 length_signal = data[:, length_idx]
@@ -229,8 +230,7 @@ def parse_v3h(path: Path):
                             (np.median(trough_deflections) if len(trough_deflections) > 0 else 0),
                         )
                     )
-                    # TODO: Fix this magic number
-                    if stim_v < 0.002:  # if still too low, set to 0
+                    if stim_v < MOTOR_LENGTH_STIM_NOISE_THRESHOLD:
                         stim_v = 0.0
                         logger.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
                     else:
