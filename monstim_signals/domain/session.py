@@ -563,7 +563,7 @@ class Session:
                     if channel_type in ("force", "length"):
                         # Apply specific processing for force and length channels
                         # TODO: Implement specific filtering for force and length channels if needed
-                        # Notes/TODOs:
+                        # TODO:
                         # - Force/length channels may need low-pass smoothing or detrending
                         #   rather than the EMG bandpass. Add configuration options and a
                         #   clear API entry point for channel-specific processing.
