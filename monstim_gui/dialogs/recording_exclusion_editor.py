@@ -143,6 +143,8 @@ class RecordingExclusionEditor(QDialog):
 
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(self.apply_exclusions)
+        self._command_invoker_available = callable(getattr(getattr(self.gui, "command_invoker", None), "execute", None))
+        self.apply_button.setEnabled(self._command_invoker_available)
         button_layout.addWidget(self.apply_button)
 
         self.cancel_button = QPushButton("Cancel")
@@ -1670,17 +1672,19 @@ class RecordingExclusionEditor(QDialog):
 
         # Apply exclusions using command pattern for undo support
         try:
-            # Prefer using the command/undo system so exclusions are reversible.
-            # TODO: Ensure the command_invoker is always available in the GUI and
-            # avoid falling back to non-undoable changes. If the invoker is missing,
-            # grey out the Apply button instead of silently applying without undo.
+            command_invoker = getattr(self.gui, "command_invoker", None)
+            if not callable(getattr(command_invoker, "execute", None)):
+                self._command_invoker_available = False
+                self.apply_button.setEnabled(False)
+                raise RuntimeError("The undo/redo command system is not available.")
+
             from monstim_gui.commands import BulkRecordingExclusionCommand
 
             changes = [{"session": session, "changes": session_changes} for session, session_changes in changes_by_session.items()]
 
             if changes:
                 command = BulkRecordingExclusionCommand(self.gui, changes)
-                self.gui.command_invoker.execute(command)
+                command_invoker.execute(command)
 
                 self.exclusions_applied.emit()
                 self.accept()
