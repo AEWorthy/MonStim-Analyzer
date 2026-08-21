@@ -130,12 +130,16 @@ class LatencyWindowsDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Apply,
             self,
         )
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setToolTip("Save all changes and close the dialog")
+        ok_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+        apply_button = button_box.button(QDialogButtonBox.StandardButton.Apply)
+        ok_button.setToolTip("Save all changes and close the dialog")
         button_box.button(QDialogButtonBox.StandardButton.Cancel).setToolTip("Discard all changes and close the dialog")
-        button_box.button(QDialogButtonBox.StandardButton.Apply).setToolTip("Save changes and update plots, but keep dialog open")
+        apply_button.setToolTip("Save changes and update plots, but keep dialog open")
+        ok_button.setDefault(False)
+        apply_button.setDefault(True)
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
+        apply_button.clicked.connect(self.apply_changes)
         layout.addWidget(button_box, 0)  # No stretch for the button box
 
     def _add_window_group(self, window: LatencyWindow | None = None):
