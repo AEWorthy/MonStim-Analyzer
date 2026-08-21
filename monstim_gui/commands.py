@@ -1439,6 +1439,7 @@ class EditDatasetMetadataCommand(Command):
 
         # Rename folder if needed (before mutating metadata)
         # This ensures atomicity - if rename fails, metadata hasn't changed yet
+        old_dataset_id = self.dataset.id
         if folder_name and self.dataset.repo:
             current_folder = self.dataset.repo.folder  # Already a Path object
             if current_folder.name != folder_name:
@@ -1464,6 +1465,15 @@ class EditDatasetMetadataCommand(Command):
                     # Use repository rename with retry logic
                     self.dataset.repo.rename(new_folder_path, dataset=self.dataset)
                     logger.info(f"Renamed dataset folder: {current_folder.name} → {folder_name}")
+                    from monstim_gui.core.application_state import app_state
+
+                    experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+                    app_state.migrate_renamed_selection(
+                        "dataset",
+                        old_dataset_id,
+                        self.dataset.id,
+                        experiment_id=experiment_id,
+                    )
                 except OSError as e:
                     if getattr(e, "errno", None) == errno.EACCES:
                         raise OSError(f"Cannot rename folder - it is in use. Please close any programs accessing: {current_folder}") from e

@@ -520,6 +520,22 @@ class TestSessionRestoration:
         assert clean_app_state._pending_dataset_id is None
         assert clean_app_state._pending_session_id is None
 
+    def test_migrate_renamed_selection_scopes_nested_ids(self, clean_app_state):
+        """Renames update persisted selections without touching unrelated parents."""
+        clean_app_state.settings.setValue("SessionRestore/experiment", "exp")
+        clean_app_state.settings.setValue("SessionRestore/dataset", "old_ds")
+        clean_app_state.settings.setValue("SessionRestore/session", "sess")
+        clean_app_state.settings.setValue("LastSelection/experiment", "other_exp")
+        clean_app_state.settings.setValue("LastSelection/dataset", "old_ds")
+
+        clean_app_state.migrate_renamed_selection("dataset", "old_ds", "new_ds", experiment_id="exp")
+
+        assert clean_app_state.get_last_session_state()["dataset"] == "new_ds"
+        assert clean_app_state.get_last_selection()["dataset"] == "old_ds"
+
+        clean_app_state.migrate_renamed_selection("experiment", "exp", "new_exp")
+        assert clean_app_state.get_last_session_state()["experiment"] == "new_exp"
+
 
 class TestPreferencesManagement:
     """Test preferences and settings management."""

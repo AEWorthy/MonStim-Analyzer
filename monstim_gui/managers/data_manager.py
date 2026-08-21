@@ -1009,10 +1009,10 @@ class DataManager:
         # Reset loading completion flag
         self.loading_completed_successfully = False
 
-        # Get the actual experiment ID from the combo box UserRole data
-        # The combo box index needs to be adjusted for the placeholder at index 0
-        combo_index = index + 1  # Add 1 to account for placeholder
-        stored_experiment_id = self.gui.data_selection_widget.experiment_combo.itemData(combo_index, Qt.ItemDataRole.UserRole)
+        # Read the stable ID from the selected combo item. This remains correct
+        # if the experiment order changes or the placeholder changes position.
+        combo = self.gui.data_selection_widget.experiment_combo
+        stored_experiment_id = combo.itemData(combo.currentIndex(), Qt.ItemDataRole.UserRole)
 
         experiment_name = stored_experiment_id or self.gui.expts_dict_keys[index]
 
@@ -1966,6 +1966,8 @@ class DataManager:
                     for sess in ds.get_all_sessions(include_excluded=True):
                         if sess.repo is not None:
                             sess.repo.update_path(new_exp_path / ds.id / sess.id)
+
+            app_state.migrate_renamed_selection("experiment", old_name, new_name)
 
             # Refresh UI to reflect the changes
             self.unpack_existing_experiments()

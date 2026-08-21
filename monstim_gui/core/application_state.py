@@ -10,7 +10,7 @@ import os
 from os import cpu_count
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
@@ -254,6 +254,49 @@ class ApplicationState:
             "session": self.settings.value("LastSelection/session", "", type=str),
         }
 
+    def migrate_renamed_selection(
+        self,
+        entity: str,
+        old_id: str,
+        new_id: str,
+        *,
+        experiment_id: str | None = None,
+        dataset_id: str | None = None,
+    ) -> None:
+        """Update persisted selections after an experiment hierarchy rename."""
+        if entity not in {"experiment", "dataset", "session"}:
+            raise ValueError(f"Unsupported renamed entity: {entity}")
+        if not old_id or not new_id or old_id == new_id:
+            return
+
+        for prefix in ("SessionRestore", "LastSelection"):
+            state = {
+                "experiment": self.settings.value(f"{prefix}/experiment", "", type=str),
+                "dataset": self.settings.value(f"{prefix}/dataset", "", type=str),
+                "session": self.settings.value(f"{prefix}/session", "", type=str),
+            }
+            if state[entity] != old_id:
+                continue
+            if experiment_id is not None and state["experiment"] != experiment_id:
+                continue
+            if entity == "session" and dataset_id is not None and state["dataset"] != dataset_id:
+                continue
+            self.settings.setValue(f"{prefix}/{entity}", new_id)
+
+        if entity == "experiment" and self._pending_experiment_id == old_id:
+            self._pending_experiment_id = new_id
+        elif entity == "dataset" and self._pending_experiment_id == experiment_id and self._pending_dataset_id == old_id:
+            self._pending_dataset_id = new_id
+        elif (
+            entity == "session"
+            and self._pending_experiment_id == experiment_id
+            and self._pending_dataset_id == dataset_id
+            and self._pending_session_id == old_id
+        ):
+            self._pending_session_id = new_id
+
+        self.settings.sync()
+
     # === ANALYSIS PROFILES ===
     def save_recent_profile(self, profile_name: str):
         """Save recently used analysis profile."""
@@ -328,17 +371,20 @@ class ApplicationState:
             self._pending_session_id = session_id
             self._pending_profile_name = profile_name
 
-            # TODO: Robust restoration
-            # - Prefer restoring by explicit IDs stored in combo UserRole instead of
-            #   by index arithmetic (+1 placeholder). Where possible, always write
-            #   and restore user-facing state by stable IDs to avoid fragile index
-            #   based restoring when UI ordering or placeholders change.
-
             logger.info(f"Session restoration in progress: Experiment={experiment_id}, Dataset={dataset_id}, Session={session_id}.")
 
             # Restore experiment - this automatically triggers load_experiment() via signal
             # The restoration of dataset/session will happen in the experiment loaded callback
-            exp_index = gui.expts_dict_keys.index(experiment_id) + 1  # +1 for placeholder
+            exp_index = gui.data_selection_widget.experiment_combo.findData(experiment_id, Qt.ItemDataRole.UserRole)
+            # Keep compatibility with lightweight test doubles and legacy widgets
+            # that do not implement findData; real QComboBox instances always use
+            # the ID lookup above.
+            if not isinstance(exp_index, int):
+                exp_index = gui.expts_dict_keys.index(experiment_id) + 1
+            if exp_index < 0:
+                logger.warning(f"Session restoration: experiment '{experiment_id}' is not present in the combo box")
+                self._clear_restoration_state()
+                return False
             gui.data_selection_widget.experiment_combo.setCurrentIndex(exp_index)
             return True
 

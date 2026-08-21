@@ -287,10 +287,9 @@ class DataSelectionWidget(QGroupBox):
                         self.experiment_combo.setItemData(idx, exp_completed, Qt.ItemDataRole.UserRole + 1)
 
                 # Selection
-                if preserve_selection and target_exp_id and parent.expts_dict_keys:
-                    try:
-                        exp_index = parent.expts_dict_keys.index(target_exp_id) + 1  # +1 for placeholder
-                    except ValueError:
+                if preserve_selection and target_exp_id:
+                    exp_index = self.experiment_combo.findData(target_exp_id, Qt.ItemDataRole.UserRole)
+                    if exp_index < 0:
                         exp_index = 0
                 else:
                     exp_index = 0
@@ -317,7 +316,8 @@ class DataSelectionWidget(QGroupBox):
                             self.dataset_combo.addItem(ds.formatted_name)
                             idx = max(0, self.dataset_combo.count() - 1)
                             self.dataset_combo.setItemData(idx, ds.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
-                            self.dataset_combo.setItemData(idx, getattr(ds, "is_completed", False), Qt.ItemDataRole.UserRole)
+                            self.dataset_combo.setItemData(idx, ds.id, Qt.ItemDataRole.UserRole)
+                            self.dataset_combo.setItemData(idx, getattr(ds, "is_completed", False), Qt.ItemDataRole.UserRole + 1)
                         self.dataset_combo.setEnabled(True)
                     else:
                         self.dataset_combo.addItem("-- Empty Experiment (No Datasets) --")
@@ -335,9 +335,8 @@ class DataSelectionWidget(QGroupBox):
                 # Selection - preserve existing selection or fall back to first available
                 ds_idx = 0  # Default to first item (which might be placeholder)
                 if preserve_selection and parent.current_experiment and target_dataset:
-                    try:
-                        ds_idx = parent.current_experiment.datasets.index(target_dataset)
-                    except ValueError:
+                    ds_idx = self.dataset_combo.findData(target_dataset.id, Qt.ItemDataRole.UserRole)
+                    if ds_idx < 0:
                         # Target dataset not found, fall back to first available dataset
                         ds_idx = 0
                 elif parent.current_experiment and parent.current_experiment.datasets:
@@ -354,7 +353,8 @@ class DataSelectionWidget(QGroupBox):
                         self.session_combo.addItem(s.formatted_name)
                         idx = max(0, self.session_combo.count() - 1)
                         self.session_combo.setItemData(idx, s.formatted_name, role=Qt.ItemDataRole.ToolTipRole)
-                        self.session_combo.setItemData(idx, getattr(s, "is_completed", False), Qt.ItemDataRole.UserRole)
+                        self.session_combo.setItemData(idx, s.id, Qt.ItemDataRole.UserRole)
+                        self.session_combo.setItemData(idx, getattr(s, "is_completed", False), Qt.ItemDataRole.UserRole + 1)
                     self.session_combo.setEnabled(True)
                 else:
                     if parent.current_experiment and len(parent.current_experiment) == 0:
@@ -368,9 +368,8 @@ class DataSelectionWidget(QGroupBox):
                 # Selection - preserve existing selection or fall back to first available
                 s_idx = 0  # Default to first item (which might be placeholder)
                 if preserve_selection and parent.current_dataset and target_session:
-                    try:
-                        s_idx = parent.current_dataset.sessions.index(target_session)
-                    except ValueError:
+                    s_idx = self.session_combo.findData(target_session.id, Qt.ItemDataRole.UserRole)
+                    if s_idx < 0:
                         # Target session not found, fall back to first available session
                         s_idx = 0
                 elif parent.current_dataset and parent.current_dataset.sessions:
@@ -572,9 +571,10 @@ class DataSelectionWidget(QGroupBox):
             if self.parent.current_experiment and getattr(self.parent.current_experiment, "datasets", None) and self.dataset_combo.isEnabled():
                 datasets = self.parent.current_experiment.datasets
                 # The dataset combo, when enabled, contains only dataset items (no placeholder)
-                for i, ds in enumerate(datasets):
-                    if i < self.dataset_combo.count():
-                        self.dataset_combo.setItemData(i, getattr(ds, "is_completed", False), Qt.ItemDataRole.UserRole)
+                for ds in datasets:
+                    i = self.dataset_combo.findData(ds.id, Qt.ItemDataRole.UserRole)
+                    if i >= 0:
+                        self.dataset_combo.setItemData(i, getattr(ds, "is_completed", False), Qt.ItemDataRole.UserRole + 1)
                 self.dataset_combo.update()
         except Exception:
             pass
@@ -583,9 +583,10 @@ class DataSelectionWidget(QGroupBox):
         try:
             if self.parent.current_dataset and getattr(self.parent.current_dataset, "sessions", None) and self.session_combo.isEnabled():
                 sessions = self.parent.current_dataset.sessions
-                for i, s in enumerate(sessions):
-                    if i < self.session_combo.count():
-                        self.session_combo.setItemData(i, getattr(s, "is_completed", False), Qt.ItemDataRole.UserRole)
+                for s in sessions:
+                    i = self.session_combo.findData(s.id, Qt.ItemDataRole.UserRole)
+                    if i >= 0:
+                        self.session_combo.setItemData(i, getattr(s, "is_completed", False), Qt.ItemDataRole.UserRole + 1)
                 self.session_combo.update()
         except Exception:
             pass
@@ -779,7 +780,9 @@ class DataSelectionWidget(QGroupBox):
         # Sync experiment combo
         if self.parent.current_experiment and self.parent.expts_dict_keys:
             try:
-                exp_index = self.parent.expts_dict_keys.index(self.parent.current_experiment.id) + 1  # +1 for placeholder
+                exp_index = self.experiment_combo.findData(self.parent.current_experiment.id, Qt.ItemDataRole.UserRole)
+                if exp_index < 0:
+                    raise ValueError(self.parent.current_experiment.id)
                 if self.experiment_combo.currentIndex() != exp_index:
                     self.experiment_combo.blockSignals(True)
                     self.experiment_combo.setCurrentIndex(exp_index)
@@ -795,7 +798,9 @@ class DataSelectionWidget(QGroupBox):
         # Sync dataset combo (should rarely be needed for recording operations)
         if self.parent.current_dataset and self.parent.current_experiment:
             try:
-                dataset_index = self.parent.current_experiment.datasets.index(self.parent.current_dataset)
+                dataset_index = self.dataset_combo.findData(self.parent.current_dataset.id, Qt.ItemDataRole.UserRole)
+                if dataset_index < 0:
+                    raise ValueError(self.parent.current_dataset.id)
                 if self.dataset_combo.currentIndex() != dataset_index:
                     self.dataset_combo.blockSignals(True)
                     self.dataset_combo.setCurrentIndex(dataset_index)
@@ -822,7 +827,9 @@ class DataSelectionWidget(QGroupBox):
         # Sync session combo (should rarely be needed for recording operations)
         if self.parent.current_session and self.parent.current_dataset:
             try:
-                session_index = self.parent.current_dataset.sessions.index(self.parent.current_session)
+                session_index = self.session_combo.findData(self.parent.current_session.id, Qt.ItemDataRole.UserRole)
+                if session_index < 0:
+                    raise ValueError(self.parent.current_session.id)
                 if self.session_combo.currentIndex() != session_index:
                     self.session_combo.blockSignals(True)
                     self.session_combo.setCurrentIndex(session_index)
