@@ -1,0 +1,60 @@
+"""Focused coverage for the non-modal latency-window editor context."""
+
+from __future__ import annotations
+
+from PySide6.QtWidgets import QApplication, QWidget
+
+from monstim_gui.dialogs.latency import LatencyWindowsDialog
+from monstim_signals.core import LatencyWindow, SessionAnnot
+from monstim_signals.domain.session import Session
+
+
+class _ConfigRepo:
+    def read_config(self):
+        return {}
+
+
+class _GUI(QWidget):
+    def __init__(self, session):
+        super().__init__()
+        self.current_experiment = None
+        self.current_dataset = None
+        self.current_session = session
+
+
+def _session(session_id: str, start: float) -> Session:
+    session = Session.__new__(Session)
+    session.id = session_id
+    session.channel_names = ["Ch 1"]
+    annotation = SessionAnnot.create_empty()
+    annotation.latency_windows = [LatencyWindow(name="M-wave", color="blue", start_times=[start], durations=[2.0])]
+    session.annot = annotation
+    return session
+
+
+def test_live_dialog_refreshes_session_draft_and_context():
+    QApplication.instance() or QApplication([])
+    first = _session("S1", 1.0)
+    gui = _GUI(first)
+    dialog = LatencyWindowsDialog(first, gui, config_repo=_ConfigRepo())
+
+    assert dialog.apply_level_combo.currentData() == "session"
+    assert "Session annotation" in dialog.value_source_label.text()
+    assert "S1" in dialog.value_source_label.text()
+    assert dialog.editor.windows()[0].start_times == [1.0]
+    dialog.editor.table.selectRow(0)
+    QApplication.processEvents()
+    assert dialog.editor.global_radio.isChecked()
+    assert dialog.editor.start_details.currentIndex() == 0
+    dialog.editor.per_channel_radio.setChecked(True)
+    assert dialog.editor.start_details.currentIndex() == 1
+    assert dialog.editor.model.rows[0].per_channel
+
+    gui.current_session = _session("S2", 7.5)
+    dialog.refresh_from_current_selection()
+
+    assert "Session" in dialog.active_context_label.text()
+    assert "S2" in dialog.active_context_label.text()
+    assert "Session annotation" in dialog.value_source_label.text()
+    assert dialog.editor.windows()[0].start_times == [7.5]
+    dialog.close()

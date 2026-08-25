@@ -589,11 +589,12 @@ class MonstimGUI(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Invalid level for managing latency windows.")
                 return
 
-        # Check if a latency windows dialog is already open and close it
+        # Keep the editor available for a multi-monitor workflow.  Reopening it
+        # simply changes its scope and reloads values from the active selection.
         if hasattr(self, "_latency_dialog") and self._latency_dialog:
-            self._latency_dialog.close()
-
-        self._latency_dialog = LatencyWindowsDialog(emg_data, self)
+            self._latency_dialog.set_apply_level(level)
+        else:
+            self._latency_dialog = LatencyWindowsDialog(emg_data, self)
         self._latency_dialog.show()  # Use show() instead of exec() to allow interaction with main window
         self._latency_dialog.raise_()  # Bring to front
         self._latency_dialog.activateWindow()  # Give focus
@@ -753,28 +754,40 @@ class MonstimGUI(QMainWindow):
         """Set the current experiment and ensure config is injected."""
         if experiment is None:
             self.current_experiment = None
+            self._schedule_latency_dialog_refresh()
             return
         config = self._get_effective_config()
         experiment.set_config(config)
         self.current_experiment = experiment
+        self._schedule_latency_dialog_refresh()
 
     def set_current_dataset(self, dataset: Dataset | None):
         """Set the current dataset and ensure config is injected."""
         if dataset is None:
             self.current_dataset = None
+            self._schedule_latency_dialog_refresh()
             return
         config = self._get_effective_config()
         dataset.set_config(config)
         self.current_dataset = dataset
+        self._schedule_latency_dialog_refresh()
 
     def set_current_session(self, session: Session | None):
         """Set the current session and ensure config is injected."""
         if session is None:
             self.current_session = None
+            self._schedule_latency_dialog_refresh()
             return
         config = self._get_effective_config()
         session.set_config(config)
         self.current_session = session
+        self._schedule_latency_dialog_refresh()
+
+    def _schedule_latency_dialog_refresh(self) -> None:
+        """Debounce updates until a selection change has finished updating its hierarchy."""
+        dialog = getattr(self, "_latency_dialog", None)
+        if dialog is not None and dialog.isVisible():
+            QTimer.singleShot(0, dialog.refresh_from_current_selection)
 
     def _cleanup_on_close(self):
         """Cleanup resources before closing.

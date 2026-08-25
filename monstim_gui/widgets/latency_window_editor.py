@@ -11,6 +11,7 @@ from PySide6.QtCore import QAbstractTableModel, QByteArray, QItemSelectionModel,
 from PySide6.QtGui import QColor, QKeySequence, QShortcut, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -19,14 +20,17 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QSplitter,
     QStackedWidget,
     QStyledItemDelegate,
     QTableView,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -100,11 +104,12 @@ class LatencyWindowTableModel(QAbstractTableModel):
             if col == 2:
                 return window.name
             if col == 3:
-                if not row.per_channel:
-                    return window.start_times[0]
-                return f"Per-channel {min(window.start_times):.2f}–{max(window.start_times):.2f}"  # noqa: RUF001
+                if row.per_channel:
+                    # This compact indicator fits the table column; full values remain in the detail pane.
+                    return "Per-channel"
+                return f"{window.start_times[0]:.2f}" if role == Qt.ItemDataRole.DisplayRole else window.start_times[0]
             if col == 4:
-                return window.durations[0]
+                return f"{window.durations[0]:.2f}" if role == Qt.ItemDataRole.DisplayRole else window.durations[0]
             if col == 5:
                 return window.color.replace("tab:", "")
         if role == Qt.ItemDataRole.ForegroundRole and col == 5:
@@ -257,10 +262,12 @@ class LatencyWindowEditor(QWidget):
 
     changed = Signal()
 
-    def __init__(self, channel_names: list[str], parent=None, *, compact: bool = False):
+    def __init__(self, channel_names: list[str], parent=None, *, compact: bool = False, minimal_toolbar: bool = False, toolbar_extra=None):
         super().__init__(parent)
         self.channel_names = channel_names or ["Default"]
         self.compact = compact
+        self.minimal_toolbar = minimal_toolbar
+        self.toolbar_extra = toolbar_extra
         self.model = LatencyWindowTableModel(len(self.channel_names), self)
         self.undo_stack = QUndoStack(self)
         self._history_replaying = False
@@ -271,18 +278,30 @@ class LatencyWindowEditor(QWidget):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         toolbar = QGridLayout() if self.compact else QHBoxLayout()
+        toolbar.setSpacing(6)
         toolbar_buttons = []
-        for label, slot in (
-            ("Undo", self.undo_stack.undo),
-            ("Redo", self.undo_stack.redo),
-            ("Add", self.add_window),
-            ("Duplicate", self.duplicate_selected),
-            ("Delete", self.delete_selected),
-            ("Copy", self.copy_selected),
-            ("Copy All", self.copy_all),
-            ("Paste", self.paste),
-        ):
-            button = QPushButton(label)
+        actions = (
+            ("Undo", self.undo_stack.undo, "↶", "Undo the last latency-window edit (Ctrl+Z)"),
+            ("Redo", self.undo_stack.redo, "↷", "Redo the last undone latency-window edit (Ctrl+Y)"),
+            ("Add", self.add_window, "+", "Add a latency window"),
+            ("Duplicate", self.duplicate_selected, "Duplicate", "Duplicate the selected latency window(s) (Ctrl+Shift+D)"),
+            ("Delete", self.delete_selected, "-", "Delete the selected latency window(s) (Delete)"),
+            ("Copy", self.copy_selected, "Copy", "Copy selected latency window(s) (Ctrl+C)"),
+            ("Copy All", self.copy_all, "Copy All", "Copy all latency windows (Ctrl+Shift+C)"),
+            ("Paste", self.paste, "Paste", "Paste latency window(s) (Ctrl+V)"),
+        )
+        for label, slot, icon_text, tooltip in actions:
+            if self.minimal_toolbar and label not in {"Undo", "Redo", "Add", "Delete"}:
+                continue
+            button = QToolButton() if self.minimal_toolbar else QPushButton(label)
+            button.setText(icon_text if self.minimal_toolbar else label)
+            button.setToolTip(tooltip)
+            button.setAccessibleName(label)
+            if self.minimal_toolbar:
+                button.setFixedSize(28, 28)
+                font = button.font()
+                font.setPointSize(max(14, font.pointSize()))
+                button.setFont(font)
             button.clicked.connect(slot)
             if label == "Undo":
                 self.undo_button = button
@@ -292,6 +311,8 @@ class LatencyWindowEditor(QWidget):
                 toolbar_buttons.append(button)
             else:
                 toolbar.addWidget(button)
+        if self.toolbar_extra is not None and not self.compact:
+            toolbar.addWidget(self.toolbar_extra)
         if self.compact:
             # Four compact controls per row keep the preferences editor within its narrow tab.
             for position, button in enumerate(toolbar_buttons):
@@ -311,6 +332,8 @@ class LatencyWindowEditor(QWidget):
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.table.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
         self.table.setItemDelegateForColumn(3, _TimingDelegate(self.table))
         self.table.setItemDelegateForColumn(4, _TimingDelegate(self.table))
         header = self.table.horizontalHeader()
@@ -321,12 +344,12 @@ class LatencyWindowEditor(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(2, 150)
-        self.table.setColumnWidth(3, 60)
+        self.table.setColumnWidth(3, 92)
         self.table.setColumnWidth(4, 60)
         self.table.setColumnWidth(5, 76)
         if self.compact:
             self.table.setColumnWidth(2, 100)
-            self.table.setColumnWidth(3, 55)
+            self.table.setColumnWidth(3, 92)
             self.table.setColumnWidth(4, 55)
             self.table.setColumnWidth(5, 70)
         self.table.setItemDelegateForColumn(5, _ColorDelegate(self.table))
@@ -337,13 +360,15 @@ class LatencyWindowEditor(QWidget):
         self.inspector.addWidget(QLabel("Select a latency window to edit its details."))
         self.inspector.addWidget(self._single_inspector())
         self.inspector.addWidget(self._multi_inspector())
-        self.inspector.setMinimumWidth(0 if self.compact else 260)
+        self.inspector.setMinimumWidth(0 if self.compact else 250)
         splitter.addWidget(self.inspector)
         if self.compact:
             splitter.setOrientation(Qt.Orientation.Vertical)
             splitter.setSizes([220, 300])
         else:
-            splitter.setSizes([450, 400])
+            splitter.setStretchFactor(0, 5)
+            splitter.setStretchFactor(1, 2)
+            splitter.setSizes([540, 260])
         layout.addWidget(splitter, 1)
 
         self.table.selectionModel().selectionChanged.connect(self._update_inspector)
@@ -356,10 +381,27 @@ class LatencyWindowEditor(QWidget):
         self.redo_button.setEnabled(False)
         QShortcut(QKeySequence.StandardKey.Undo, self, activated=self.undo_stack.undo)
         QShortcut(QKeySequence.StandardKey.Redo, self, activated=self.undo_stack.redo)
+        QShortcut(QKeySequence("Ctrl+Shift+D"), self, activated=self.duplicate_selected)
+        QShortcut(QKeySequence.StandardKey.Copy, self, activated=self.copy_selected)
+        QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self.copy_all)
+        QShortcut(QKeySequence.StandardKey.Paste, self, activated=self.paste)
+        QShortcut(QKeySequence(Qt.Key.Key_Delete), self, activated=self.delete_selected)
+
+    def _show_context_menu(self, position) -> None:
+        menu = QMenu(self)
+        menu.addAction("Add window", self.add_window)
+        menu.addAction("Duplicate selected\tCtrl+Shift+D", self.duplicate_selected)
+        menu.addAction("Delete selected\tDelete", self.delete_selected)
+        menu.addSeparator()
+        menu.addAction("Copy selected\tCtrl+C", self.copy_selected)
+        menu.addAction("Copy all\tCtrl+Shift+C", self.copy_all)
+        menu.addAction("Paste\tCtrl+V", self.paste)
+        menu.exec(self.table.viewport().mapToGlobal(position))
 
     def _single_inspector(self):
         panel = QWidget()
-        form = QFormLayout(panel)
+        layout = QVBoxLayout(panel)
+        form = QFormLayout()
         self.name_edit = QLineEdit()
         self.color_combo = QComboBox()
         for color in COLOR_OPTIONS:
@@ -369,29 +411,60 @@ class LatencyWindowEditor(QWidget):
         self.duration_spin.setDecimals(2)
         self.duration_spin.setSingleStep(0.1)
         self.duration_spin.setSuffix(" ms")
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["Global", "Per-channel"])
+        mode_widget = QWidget()
+        mode_layout = QHBoxLayout(mode_widget)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.global_radio = QRadioButton("Global")
+        self.per_channel_radio = QRadioButton("Per-channel")
+        self.start_mode_group = QButtonGroup(panel)
+        self.start_mode_group.addButton(self.global_radio)
+        self.start_mode_group.addButton(self.per_channel_radio)
+        mode_layout.addWidget(self.global_radio)
+        mode_layout.addWidget(self.per_channel_radio)
+        mode_layout.addStretch()
         self.global_start_spin = QDoubleSpinBox()
         self.global_start_spin.setRange(-1000.0, 1000.0)
         self.global_start_spin.setDecimals(2)
         self.global_start_spin.setSingleStep(0.1)
         self.global_start_spin.setSuffix(" ms")
+        global_start_panel = QWidget()
+        global_start_layout = QHBoxLayout(global_start_panel)
+        global_start_layout.setContentsMargins(0, 0, 0, 0)
+        global_start_layout.addWidget(QLabel("Start:"))
+        global_start_layout.addWidget(self.global_start_spin)
+        global_start_layout.addStretch()
         self.channel_table = QTableWidget(0, 2)
         self.channel_table.setHorizontalHeaderLabels(["Channel", "Start time (ms)"])
         self.channel_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.channel_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.channel_table.setMinimumHeight(140)
+        self.channel_start_label = QLabel()
+        per_channel_panel = QWidget()
+        per_channel_layout = QVBoxLayout(per_channel_panel)
+        per_channel_layout.setContentsMargins(0, 0, 0, 0)
+        per_channel_layout.addWidget(self.channel_start_label)
+        per_channel_layout.addWidget(self.channel_table, 1)
+
+        global_panel = QWidget()
+        global_layout = QVBoxLayout(global_panel)
+        global_layout.setContentsMargins(0, 0, 0, 0)
+        global_layout.addWidget(global_start_panel)
+        global_layout.addStretch()
+        self.start_details = QStackedWidget()
+        self.start_details.addWidget(global_panel)
+        self.start_details.addWidget(per_channel_panel)
         form.addRow("Name", self.name_edit)
         form.addRow("Color", self.color_combo)
         form.addRow("Duration", self.duration_spin)
-        form.addRow("Start mode", self.mode_combo)
-        form.addRow("Global start", self.global_start_spin)
-        form.addRow("Per-channel starts", self.channel_table)
-        self.global_start_label = form.labelForField(self.global_start_spin)
-        self.channel_table_label = form.labelForField(self.channel_table)
+        form.addRow("Start mode", mode_widget)
+        layout.addLayout(form)
+        layout.addWidget(self.start_details, 1)
         self.name_edit.editingFinished.connect(self._apply_single_details)
         self.color_combo.currentIndexChanged.connect(self._apply_single_details)
         self.duration_spin.valueChanged.connect(self._apply_single_details)
         self.global_start_spin.valueChanged.connect(self._apply_single_details)
-        self.mode_combo.currentIndexChanged.connect(self._change_mode)
+        self.global_radio.toggled.connect(lambda checked: checked and self._set_start_mode(True))
+        self.per_channel_radio.toggled.connect(lambda checked: checked and self._set_start_mode(False))
         return panel
 
     def _multi_inspector(self):
@@ -429,6 +502,11 @@ class LatencyWindowEditor(QWidget):
         self._last_snapshot = self.windows()
         self.undo_stack.clear()
         self._update_inspector()
+
+    def set_channel_names(self, channel_names: list[str]) -> None:
+        """Update the editing shape before loading windows from another data context."""
+        self.channel_names = channel_names or ["Default"]
+        self.model.channel_count = len(self.channel_names)
 
     def windows(self) -> list[LatencyWindow]:
         return self.model.windows()
@@ -523,15 +601,16 @@ class LatencyWindowEditor(QWidget):
             return
         self._detail_row = rows[0]
         window = self.model.rows[self._detail_row].window
-        for widget in (self.name_edit, self.color_combo, self.duration_spin, self.mode_combo, self.global_start_spin):
+        for widget in (self.name_edit, self.color_combo, self.duration_spin, self.global_radio, self.per_channel_radio, self.global_start_spin):
             widget.blockSignals(True)
         self.name_edit.setText(window.name)
         self.color_combo.setCurrentIndex(max(0, self.color_combo.findData(window.color)))
         self.duration_spin.setValue(window.durations[0])
         global_mode = not self.model.rows[self._detail_row].per_channel
-        self.mode_combo.setCurrentIndex(0 if global_mode else 1)
+        self.global_radio.setChecked(global_mode)
+        self.per_channel_radio.setChecked(not global_mode)
         self.global_start_spin.setValue(window.start_times[0])
-        for widget in (self.name_edit, self.color_combo, self.duration_spin, self.mode_combo, self.global_start_spin):
+        for widget in (self.name_edit, self.color_combo, self.duration_spin, self.global_radio, self.per_channel_radio, self.global_start_spin):
             widget.blockSignals(False)
         self.channel_table.blockSignals(True)
         self.channel_table.setRowCount(len(self.channel_names))
@@ -544,10 +623,8 @@ class LatencyWindowEditor(QWidget):
             spin.setValue(start)
             spin.valueChanged.connect(self._apply_channel_details)
             self.channel_table.setCellWidget(i, 1, spin)
-        self.channel_table.setVisible(not global_mode)
-        self.global_start_spin.setVisible(global_mode)
-        self.global_start_label.setVisible(global_mode)
-        self.channel_table_label.setVisible(not global_mode)
+        self.start_details.setCurrentIndex(0 if global_mode else 1)
+        self.channel_start_label.setText(f"Start / {len(self.channel_names)} channels:")
         self.channel_table.blockSignals(False)
         self.inspector.setCurrentIndex(1)
 
@@ -558,26 +635,26 @@ class LatencyWindowEditor(QWidget):
         window.name = self.name_edit.text().strip() or "Window"
         window.color = self.color_combo.currentData()
         window.durations = [self.duration_spin.value()] * self.model.channel_count
-        if self.mode_combo.currentIndex() == 0:
+        if self.global_radio.isChecked():
             window.start_times = [self.global_start_spin.value()] * self.model.channel_count
         self.model.dataChanged.emit(self.model.index(self._detail_row, 2), self.model.index(self._detail_row, 5))
         self.changed.emit()
 
     def _apply_channel_details(self, *_):
-        if not hasattr(self, "_detail_row") or self.mode_combo.currentIndex() == 0:
+        if not hasattr(self, "_detail_row") or self.global_radio.isChecked():
             return
         window = self.model.rows[self._detail_row].window
         window.start_times = [self.channel_table.cellWidget(i, 1).value() for i in range(self.channel_table.rowCount())]
         self.model.dataChanged.emit(self.model.index(self._detail_row, 3), self.model.index(self._detail_row, 3))
         self.changed.emit()
 
-    def _change_mode(self, index):
+    def _set_start_mode(self, global_mode: bool):
         if not hasattr(self, "_detail_row"):
             return
         window = self.model.rows[self._detail_row].window
-        if index == 0:
+        if global_mode:
             window.start_times = [self.global_start_spin.value()] * self.model.channel_count
-        self.model.rows[self._detail_row].per_channel = index == 1
+        self.model.rows[self._detail_row].per_channel = not global_mode
         self.model.dataChanged.emit(self.model.index(self._detail_row, 3), self.model.index(self._detail_row, 3))
         self._update_inspector()
 
