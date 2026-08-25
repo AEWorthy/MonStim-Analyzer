@@ -7,7 +7,7 @@ import json
 import uuid
 from dataclasses import dataclass
 
-from PySide6.QtCore import QAbstractTableModel, QByteArray, QItemSelectionModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QByteArray, QItemSelectionModel, QModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QKeySequence, QShortcut, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -63,6 +63,22 @@ class _WindowSnapshotCommand(QUndoCommand):
             self._first_redo = False
             return
         self.editor._restore_history_snapshot(self.after)
+
+
+class _SelectAllLineEdit(QLineEdit):
+    """Select the previous value after a field receives focus for quick replacement."""
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        QTimer.singleShot(0, self.selectAll)
+
+
+class _SelectAllDoubleSpinBox(QDoubleSpinBox):
+    """A numeric editor whose editable text is selected whenever it gains focus."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setLineEdit(_SelectAllLineEdit(self))
 
 
 class LatencyWindowTableModel(QAbstractTableModel):
@@ -222,7 +238,7 @@ class LatencyWindowTableModel(QAbstractTableModel):
 
 class _TimingDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
-        spin = QDoubleSpinBox(parent)
+        spin = _SelectAllDoubleSpinBox(parent)
         spin.setDecimals(2)
         spin.setSingleStep(0.05)
         spin.setRange(-1000.0 if index.column() == 3 else 0.0, 1000.0)
@@ -240,6 +256,11 @@ class _TimingDelegate(QStyledItemDelegate):
 
     def setModelData(self, editor, model, index):
         model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
+
+
+class _TextDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        return _SelectAllLineEdit(parent)
 
 
 class _ColorDelegate(QStyledItemDelegate):
@@ -336,6 +357,7 @@ class LatencyWindowEditor(QWidget):
         self.table.customContextMenuRequested.connect(self._show_context_menu)
         self.table.setItemDelegateForColumn(3, _TimingDelegate(self.table))
         self.table.setItemDelegateForColumn(4, _TimingDelegate(self.table))
+        self.table.setItemDelegateForColumn(2, _TextDelegate(self.table))
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -402,11 +424,11 @@ class LatencyWindowEditor(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         form = QFormLayout()
-        self.name_edit = QLineEdit()
+        self.name_edit = _SelectAllLineEdit()
         self.color_combo = QComboBox()
         for color in COLOR_OPTIONS:
             self.color_combo.addItem(color.replace("tab:", ""), color)
-        self.duration_spin = QDoubleSpinBox()
+        self.duration_spin = _SelectAllDoubleSpinBox()
         self.duration_spin.setRange(0.0, 1000.0)
         self.duration_spin.setDecimals(2)
         self.duration_spin.setSingleStep(0.1)
@@ -422,7 +444,7 @@ class LatencyWindowEditor(QWidget):
         mode_layout.addWidget(self.global_radio)
         mode_layout.addWidget(self.per_channel_radio)
         mode_layout.addStretch()
-        self.global_start_spin = QDoubleSpinBox()
+        self.global_start_spin = _SelectAllDoubleSpinBox()
         self.global_start_spin.setRange(-1000.0, 1000.0)
         self.global_start_spin.setDecimals(2)
         self.global_start_spin.setSingleStep(0.1)
@@ -471,7 +493,7 @@ class LatencyWindowEditor(QWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.addWidget(QLabel("Multiple windows selected. Nudge their timing without losing per-channel differences."))
-        self.nudge_amount = QDoubleSpinBox()
+        self.nudge_amount = _SelectAllDoubleSpinBox()
         self.nudge_amount.setRange(0.01, 1000.0)
         self.nudge_amount.setValue(0.1)
         self.nudge_amount.setDecimals(2)
@@ -616,7 +638,7 @@ class LatencyWindowEditor(QWidget):
         self.channel_table.setRowCount(len(self.channel_names))
         for i, (channel, start) in enumerate(zip(self.channel_names, window.start_times, strict=True)):
             self.channel_table.setItem(i, 0, QTableWidgetItem(channel))
-            spin = QDoubleSpinBox()
+            spin = _SelectAllDoubleSpinBox()
             spin.setRange(-1000, 1000)
             spin.setDecimals(2)
             spin.setSingleStep(0.1)

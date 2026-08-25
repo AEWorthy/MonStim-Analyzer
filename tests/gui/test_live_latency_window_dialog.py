@@ -61,3 +61,30 @@ def test_live_dialog_refreshes_session_draft_and_context():
     assert "Session annotation" in dialog.value_source_label.text()
     assert dialog.editor.windows()[0].start_times == [7.5]
     dialog.close()
+
+
+def test_latency_window_text_fields_select_existing_value_on_focus():
+    QApplication.instance() or QApplication([])
+    session = _session("S1", 1.0)
+    gui = _GUI(session)
+    dialog = LatencyWindowsDialog(session, gui, config_repo=_ConfigRepo())
+    dialog.show()
+    dialog.editor.table.selectRow(0)
+    QApplication.processEvents()
+
+    fields = [
+        dialog.editor.name_edit,
+        dialog.editor.duration_spin.lineEdit(),
+        dialog.editor.global_start_spin.lineEdit(),
+        dialog.editor.nudge_amount.lineEdit(),
+    ]
+    dialog.editor.per_channel_radio.setChecked(True)
+    QApplication.processEvents()
+    fields.append(dialog.editor.channel_table.cellWidget(0, 1).lineEdit())
+
+    for field in fields:
+        field.setFocus()
+        QApplication.processEvents()
+        assert field.selectedText() == field.text()
+
+    dialog.close()
