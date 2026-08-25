@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -75,7 +75,9 @@ class RecordingExclusionEditor(QDialog):
         self._quality_cache: dict[tuple[str, str, tuple[int, int] | None, int], dict[str, float | None]] = {}
         self._sparkline_cache: dict[tuple[str, str, tuple[int, int] | None, int], QIcon] = {}
         self._preview_trace_cache: dict[tuple[str, str, tuple[int, int] | None, int], np.ndarray | None] = {}
+        self._recording_index_cache: dict[int, dict[str, int]] = {}
         self._preview_y_range: tuple[float, float] | None = None
+        self._preview_is_stale = False
         self.preview_channel_index: int | None = None
         self._detail_preview_dialog: QDialog | None = None
         self._sort_column = 1
@@ -153,8 +155,9 @@ class RecordingExclusionEditor(QDialog):
 
         main_layout.addLayout(button_layout)
 
-        # Connect level change to update preview
-        self.level_combo.currentTextChanged.connect(self.update_preview)
+        # Criteria changes are staged.  Requiring an explicit Preview keeps
+        # large-scope curation responsive while values are being edited.
+        self.level_combo.currentTextChanged.connect(self._mark_preview_stale)
         self._configure_tooltips()
 
     @staticmethod
@@ -181,9 +184,12 @@ class RecordingExclusionEditor(QDialog):
         )
         self._set_tooltip(self.preview_button, "Recalculate the preview using the current criteria without changing any recordings.")
         self._set_tooltip(self.save_profile_button, "Save criteria and range settings for reuse with another experiment.")
-        self._set_tooltip(self.load_profile_button, "Load saved criteria and range settings; this only updates the preview until Apply.")
+        self._set_tooltip(self.load_profile_button, "Load saved criteria and range settings; click Preview to evaluate them before Apply.")
         self._set_tooltip(self.reset_button, "Restore default criteria and discard staged manual and automatic flags.")
-        self._set_tooltip(self.apply_button, "Commit the reviewed decisions through the undoable bulk exclusion command.")
+        self._set_tooltip(
+            self.apply_button,
+            "Commit the reviewed preview through the undoable bulk exclusion command. Re-run Preview after changing criteria.",
+        )
         self._set_tooltip(self.cancel_button, "Close without committing staged decisions.")
 
         self._set_tooltip(self.stimulus_group, "Enable stimulus-amplitude based exclusion.")
@@ -293,13 +299,33 @@ class RecordingExclusionEditor(QDialog):
         if isinstance(watched, QComboBox) and event.type() == QEvent.Type.Wheel:
             return True
         table = getattr(self, "recordings_table", None)
-        is_mouse_press = event.type() == QEvent.Type.MouseButtonPress
-        is_empty_table_click = table is not None and watched is table.viewport() and is_mouse_press and not table.indexAt(event.pos()).isValid()
+        is_mouse_event = event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease)
+        is_empty_table_click = table is not None and watched is table.viewport() and is_mouse_event and not table.indexAt(event.pos()).isValid()
         if is_empty_table_click:
-            table.clearSelection()
-            self._close_detail_preview()
-            return True
+            # QAbstractItemView finishes its own mouse handling after event
+            # filters run.  Clearing on the next event-loop turn prevents it
+            # from restoring the previously current row.
+            QTimer.singleShot(0, self._clear_table_selection)
+            return False
+        if table is not None and event.type() == QEvent.Type.MouseButtonPress and watched is not table.viewport():
+            # Keep the detail sidecar tied to an active recording selection.
+            # Interacting with criteria, actions, or any other dialog area
+            # clears it; a click on a valid table row updates it instead.
+            QTimer.singleShot(0, self._clear_table_selection)
         return super().eventFilter(watched, event)
+
+    def _clear_table_selection(self) -> None:
+        """Clear both the selected rows and current index after an empty click."""
+        selection_model = self.recordings_table.selectionModel()
+        if selection_model is not None:
+            selection_model.clear()
+        self.recordings_table.setCurrentItem(None)
+        self._close_detail_preview()
+
+    def mousePressEvent(self, event) -> None:
+        """Clear detail selection when the dialog's unused background is clicked."""
+        QTimer.singleShot(0, self._clear_table_selection)
+        super().mousePressEvent(event)
 
     def create_criteria_widget(self) -> QWidget:
         """Create the criteria selection widget with tabs for extensibility."""
@@ -351,6 +377,7 @@ class RecordingExclusionEditor(QDialog):
         self.threshold_spinbox.setSingleStep(0.1)
         self.threshold_spinbox.setSuffix(" V")
         self.threshold_spinbox.setDecimals(2)
+        self.threshold_spinbox.setKeyboardTracking(False)
         self.threshold_spinbox.setValue(1.0)
         group_layout.addRow("Threshold:", self.threshold_spinbox)
 
@@ -360,14 +387,18 @@ class RecordingExclusionEditor(QDialog):
         self.threshold2_spinbox.setSingleStep(0.1)
         self.threshold2_spinbox.setSuffix(" V")
         self.threshold2_spinbox.setDecimals(2)
+        self.threshold2_spinbox.setKeyboardTracking(False)
         self.threshold2_spinbox.setValue(5.0)
         self.threshold2_spinbox.setVisible(False)
         group_layout.addRow("Upper threshold:", self.threshold2_spinbox)
+        self.threshold2_label = group_layout.labelForField(self.threshold2_spinbox)
+        self.threshold2_label.setVisible(False)
 
         # Show/hide secondary threshold based on type
         def update_threshold_visibility():
             is_range = self.threshold_type_combo.currentData() in ["outside", "inside"]
             self.threshold2_spinbox.setVisible(is_range)
+            self.threshold2_label.setVisible(is_range)
             if is_range:
                 group_layout.labelForField(self.threshold_spinbox).setText("Lower threshold:")
             else:
@@ -375,11 +406,12 @@ class RecordingExclusionEditor(QDialog):
 
         self.threshold_type_combo.currentTextChanged.connect(update_threshold_visibility)
 
-        # Connect changes to auto-preview
-        self.stimulus_group.toggled.connect(self.update_preview)
-        self.threshold_type_combo.currentTextChanged.connect(self.update_preview)
-        self.threshold_spinbox.valueChanged.connect(self.update_preview)
-        self.threshold2_spinbox.valueChanged.connect(self.update_preview)
+        # Editing a numeric threshold must never repeatedly rebuild the whole
+        # review table.  The Preview button executes staged criteria.
+        self.stimulus_group.toggled.connect(self._mark_preview_stale)
+        self.threshold_type_combo.currentTextChanged.connect(self._mark_preview_stale)
+        self.threshold_spinbox.editingFinished.connect(self.update_preview)
+        self.threshold2_spinbox.editingFinished.connect(self.update_preview)
 
         layout.addWidget(self.stimulus_group)
         layout.addStretch()
@@ -468,7 +500,7 @@ class RecordingExclusionEditor(QDialog):
             self.range_start_label.setVisible(is_custom)
             self.range_end_label.setVisible(is_custom)
             self._clear_preview_caches()
-            self.update_preview()
+            self._mark_preview_stale()
 
         self.range_combo.currentIndexChanged.connect(update_range_controls)
 
@@ -485,15 +517,14 @@ class RecordingExclusionEditor(QDialog):
         layout.addLayout(h)
 
         # Connect to preview updates
-        self.quality_group.toggled.connect(self.update_preview)
-        self.snr_spin.valueChanged.connect(self.update_preview)
-        self.drift_spin.valueChanged.connect(self.update_preview)
-        self.flatline_spin.valueChanged.connect(self.update_preview)
-        self.line_noise_spin.valueChanged.connect(self.update_preview)
-        self.burst_duration_spin.valueChanged.connect(self.update_preview)
-        self.outlier_z_spin.valueChanged.connect(self.update_preview)
-        self.range_start_spin.valueChanged.connect(self._range_value_changed)
-        self.range_end_spin.valueChanged.connect(self._range_value_changed)
+        self.quality_group.toggled.connect(self._mark_preview_stale)
+        for spinbox in (self.snr_spin, self.drift_spin, self.flatline_spin, self.line_noise_spin, self.burst_duration_spin, self.outlier_z_spin):
+            spinbox.setKeyboardTracking(False)
+            spinbox.editingFinished.connect(self.update_preview)
+        self.range_start_spin.setKeyboardTracking(False)
+        self.range_end_spin.setKeyboardTracking(False)
+        self.range_start_spin.editingFinished.connect(self._range_value_changed)
+        self.range_end_spin.editingFinished.connect(self._range_value_changed)
 
         return tab
 
@@ -555,11 +586,13 @@ class RecordingExclusionEditor(QDialog):
             self.preview_start_label.setVisible(is_custom)
             self.preview_end_label.setVisible(is_custom)
             self._clear_preview_caches()
-            self.update_preview()
+            self._mark_preview_stale()
 
         self.preview_range_combo.currentIndexChanged.connect(update_preview_controls)
-        self.preview_start_spin.valueChanged.connect(self._preview_setting_changed)
-        self.preview_end_spin.valueChanged.connect(self._preview_setting_changed)
+        self.preview_start_spin.setKeyboardTracking(False)
+        self.preview_end_spin.setKeyboardTracking(False)
+        self.preview_start_spin.editingFinished.connect(self._preview_setting_changed)
+        self.preview_end_spin.editingFinished.connect(self._preview_setting_changed)
         self.preview_y_scale_combo.currentIndexChanged.connect(self._preview_setting_changed)
 
         # Table for recordings (add Preview column)
@@ -668,11 +701,25 @@ class RecordingExclusionEditor(QDialog):
         self._quality_cache.clear()
         self._sparkline_cache.clear()
         self._preview_trace_cache.clear()
+        self._recording_index_cache.clear()
 
     def _preview_setting_changed(self):
         self._sparkline_cache.clear()
         self._preview_trace_cache.clear()
         self.update_preview()
+
+    def _mark_preview_stale(self, *_args) -> None:
+        """Require an explicit preview after a criteria or rendering change."""
+        self._preview_is_stale = True
+        self.preview_button.setText("Preview (changes pending)")
+        self.apply_button.setEnabled(False)
+        self.summary_label.setText("Criteria changed. Click Preview to update the review.")
+
+    def _mark_preview_current(self) -> None:
+        """Record that the visible review corresponds to the current settings."""
+        self._preview_is_stale = False
+        self.preview_button.setText("Preview")
+        self.apply_button.setEnabled(self._command_invoker_available)
 
     def load_data(self):
         """Load initial data and populate preview."""
@@ -785,8 +832,12 @@ class RecordingExclusionEditor(QDialog):
     def _get_recording_trace(self, recording: Recording, session, ch_idx: int) -> np.ndarray | None:
         """Return the filtered session trace for this recording when available."""
         try:
-            all_recordings = session.get_all_recordings(include_excluded=True)
-            recording_index = next(idx for idx, rec in enumerate(all_recordings) if rec.id == recording.id)
+            session_key = id(session)
+            indices = self._recording_index_cache.get(session_key)
+            if indices is None:
+                indices = {rec.id: idx for idx, rec in enumerate(session.get_all_recordings(include_excluded=True))}
+                self._recording_index_cache[session_key] = indices
+            recording_index = indices[recording.id]
             filtered_recordings = getattr(session, "all_recordings_filtered", None)
             if filtered_recordings is not None and recording_index < len(filtered_recordings):
                 return np.asarray(filtered_recordings[recording_index][:, ch_idx]).squeeze()
@@ -1116,14 +1167,22 @@ class RecordingExclusionEditor(QDialog):
             self.recordings_table.setRowCount(0)
             self.summary_label.setText("No sessions available.")
             self._update_preview_channel_label(None)
+            self._mark_preview_current()
             return
 
         self.preview_excluded_recordings.clear()
         recordings_data = []
+        quality_evaluation_enabled = self.quality_group.isChecked()
         for session in sessions:
             session_records = session.get_all_recordings(include_excluded=True)
-            metrics_by_recording = {recording.id: self.compute_quality_metrics(recording, session) for recording in session_records}
-            outliers = self._session_outliers(metrics_by_recording)
+            # Stimulus criteria need only metadata.  Do not load/filter traces,
+            # calculate FFTs, or derive outliers unless quality evaluation is on.
+            if quality_evaluation_enabled:
+                metrics_by_recording = {recording.id: self.compute_quality_metrics(recording, session) for recording in session_records}
+                outliers = self._session_outliers(metrics_by_recording)
+            else:
+                metrics_by_recording = {recording.id: {} for recording in session_records}
+                outliers = {}
             for recording in session_records:
                 key = self._recording_key(recording, session)
                 evaluation = self._evaluation_for_recording(recording, session, metrics_by_recording[recording.id], outliers.get(recording.id, set()))
@@ -1233,6 +1292,7 @@ class RecordingExclusionEditor(QDialog):
 
         self.summary_label.setText(summary_text)
         self._apply_preview_filter()
+        self._mark_preview_current()
 
     def _compute_preview_y_range(self, recordings_data: list[dict[str, Any]]) -> tuple[float, float] | None:
         """Return a shared preview scale, loading each selected snippet at most once."""
@@ -1583,7 +1643,7 @@ class RecordingExclusionEditor(QDialog):
             channel_index = preview_profile.get("channel_index")
             self.preview_channel_index = int(channel_index) if isinstance(channel_index, int) else None
 
-            self.update_preview()
+            self._mark_preview_stale()
             self.gui.status_bar.showMessage(f"Loaded exclusion profile: {path}", 5000)
         except Exception as e:
             logger.error(f"Failed to load profile: {e}")
@@ -1615,10 +1675,13 @@ class RecordingExclusionEditor(QDialog):
         self.auto_flagged_recordings.clear()
         self._clear_preview_caches()
 
-        self.update_preview()
+        self._mark_preview_stale()
 
     def apply_exclusions(self):
         """Commit the reviewed automatic and manual decisions as one undoable action."""
+        if self._preview_is_stale:
+            QMessageBox.information(self, "Preview Required", "Criteria have changed. Click Preview and review the updated results before applying.")
+            return
         if not getattr(self, "_last_recordings_data", None):
             QMessageBox.warning(self, "No Sessions", "No sessions available to apply exclusions to.")
             return
