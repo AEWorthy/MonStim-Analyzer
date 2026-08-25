@@ -667,6 +667,15 @@ class Session:
         self.reset_cached_reflex_properties()
         self.update_latency_window_parameters()
 
+    def _clear_latency_window_amplitude_cache(self) -> None:
+        """Discard compact, derived latency-window amplitudes.
+
+        Unlike the filtered-trace cache, this cache contains only numeric
+        amplitudes.  It exists to prevent aggregate plots from repeating the
+        same extrema search once for every requested latency window.
+        """
+        self.__dict__.pop("_latency_window_amplitude_cache", None)
+
     @classmethod
     def _cached_property_names(cls) -> tuple[str, ...]:
         """Return the names whose values are stored by ``cached_property``."""
@@ -705,6 +714,7 @@ class Session:
         This is used after changing the latency windows or excluding/including recordings from the session set.
         """
         self._clear_cached_values("m_max")
+        self._clear_latency_window_amplitude_cache()
 
     def reset_recordings_cache(self):
         """
@@ -879,8 +889,27 @@ class Session:
         if window_index is None:
             logger.warning(f"Latency window '{window}' not found.")
             return np.array([])
-        series = self.get_all_lw_reflex_amplitude_results(method, channel_index)[window_index]
-        return np.asarray([result.amplitude for result in series.results], dtype=float)
+        # Aggregate Dataset/Experiment plots request one window at a time.  The
+        # extrema methods, however, deliberately evaluate all windows together
+        # so their overlap/priority semantics remain correct.  Keep just the
+        # resulting numeric arrays, rather than the detailed extrema objects,
+        # so subsequent window requests reuse that single calculation without
+        # a large long-lived memory cost.
+        cache_key = (
+            method,
+            channel_index,
+            tuple((item.name, tuple(item.start_times), tuple(item.end_times)) for item in self.latency_windows),
+            tuple(self.excluded_recordings),
+        )
+        cache = self.__dict__.setdefault("_latency_window_amplitude_cache", {})
+        amplitudes = cache.get(cache_key)
+        if amplitudes is None:
+            series = self.get_all_lw_reflex_amplitude_results(method, channel_index)
+            amplitudes = tuple(np.asarray([result.amplitude for result in item.results], dtype=float) for item in series)
+            cache[cache_key] = amplitudes
+        # Preserve the previous API's independent array result: callers may
+        # safely modify it without corrupting the derived-data cache.
+        return amplitudes[window_index].copy()
 
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files

@@ -214,6 +214,11 @@ class PlotController:
             final_plot_options = plot_context.get("plot_options", plot_options_for_hooks)
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             logger.debug(f"Starting plot rendering for {plot_type} at {level} level...")
+            # Session EMG plotters used to build a full pandas table on every
+            # redraw, then discard it.  Preserve the table when it is explicitly
+            # requested or a post-plot hook may consume it.
+            if is_session_emg_plot:
+                final_plot_options["collect_raw_data"] = return_raw_data or bool(self._post_plot_hooks)
             raw_data = level_object.plot(
                 plot_type=plot_type,
                 **final_plot_options,

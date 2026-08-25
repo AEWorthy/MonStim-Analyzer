@@ -413,6 +413,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         interactive_cursor: bool = True,
         show_extrema_labels: bool = False,
         extrema_label_method: str = "exclusive_extrema_ptt",
+        collect_raw_data: bool = True,
         canvas: PlotPane = None,
     ):
         """
@@ -434,6 +435,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             list of stimuli to plot
         interactive_cursor : bool, optional
             Whether to enable interactive crosshair cursor (default: True)
+        collect_raw_data : bool, optional
+            Whether to build and return the tabular plot-data export.  The GUI
+            disables this for ordinary rendering because the table is not used.
         canvas : PlotPane, optional
             Canvas to plot on
 
@@ -483,13 +487,17 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         norm = self.get_brightness_adjusted_norm()
 
         # Initialize raw data collection (matching matplotlib version exactly)
-        raw_data_dict = {
-            "recording_index": [],
-            "channel_index": [],
-            "stimulus_V": [],
-            "time_point": [],
-            "amplitude_mV": [],
-        }
+        raw_data_dict = (
+            {
+                "recording_index": [],
+                "channel_index": [],
+                "stimulus_V": [],
+                "time_point": [],
+                "amplitude_mV": [],
+            }
+            if collect_raw_data
+            else None
+        )
 
         # Plot each recording (matching matplotlib version logic)
         for recording_idx, recording in enumerate(emg_recordings):
@@ -520,15 +528,16 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                         current_plot, channel_index, self.emg_object.recordings[recording_idx].id, extrema_label_method, labels=False
                     )
 
-                # Collect raw data with hierarchical index structure (matching matplotlib)
-                # Note: We store the original (non-downsampled) data for export
-                num_points = len(time_axis)
-                raw_data_dict["recording_index"].extend([recording_idx] * num_points)
-                raw_data_dict["channel_index"].extend([channel_index] * num_points)
-                raw_data_dict["stimulus_V"].extend([stimulus_v] * num_points)
-                raw_data_dict["time_point"].extend(time_axis)
                 data_segment = channel_data[window_start_sample:window_end_sample]
-                raw_data_dict["amplitude_mV"].extend(data_segment)
+                if raw_data_dict is not None:
+                    # Store the original (non-downsampled) data only for an
+                    # explicit data-export request.
+                    num_points = len(time_axis)
+                    raw_data_dict["recording_index"].extend([recording_idx] * num_points)
+                    raw_data_dict["channel_index"].extend([channel_index] * num_points)
+                    raw_data_dict["stimulus_V"].extend([stimulus_v] * num_points)
+                    raw_data_dict["time_point"].extend(time_axis)
+                    raw_data_dict["amplitude_mV"].extend(data_segment)
 
                 # Track min/max for Y-axis scaling across ALL channels
                 valid_data = data_segment[~(np.isnan(data_segment) | np.isinf(data_segment))]
@@ -575,6 +584,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Fallback to auto-range if no valid data found
             plot_items[0].enableAutoRange(axis="y", enable=True)
 
+        if raw_data_dict is None:
+            return None
+
         # Create DataFrame with multi-level index (matching matplotlib version exactly)
         raw_data_df = pd.DataFrame(raw_data_dict)
         raw_data_df.set_index(
@@ -595,6 +607,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         interactive_cursor: bool = True,
         show_extrema_labels: bool = False,
         extrema_label_method: str = "exclusive_extrema_ptt",
+        collect_raw_data: bool = True,
         canvas: PlotPane = None,
     ):
         """
@@ -618,6 +631,8 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             Type of data to plot (default: 'filtered')
         interactive_cursor : bool, optional
             Whether to enable interactive crosshair cursor (default: True)
+        collect_raw_data : bool, optional
+            Whether to build and return the tabular plot-data export.
         canvas : PlotPane, optional
             Canvas to plot on
 
@@ -707,12 +722,16 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             norm = self.get_brightness_adjusted_norm()
 
         # Raw data collection
-        raw_data_dict = {
-            "channel_index": [],
-            "stimulus_V": [],
-            "time_point": [],
-            "amplitude_mV": [],
-        }
+        raw_data_dict = (
+            {
+                "channel_index": [],
+                "stimulus_V": [],
+                "time_point": [],
+                "amplitude_mV": [],
+            }
+            if collect_raw_data
+            else None
+        )
 
         # Plot each channel (only the ones specified in channel_indices)
         for channel_index, channel_data in enumerate(recording.T):
@@ -747,12 +766,13 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             if fixed_y_axis and y_min is not None and y_max is not None:
                 current_plot.setYRange(y_min, y_max)
 
-            # Collect raw data
-            num_points = len(time_axis)
-            raw_data_dict["channel_index"].extend([channel_index] * num_points)
-            raw_data_dict["stimulus_V"].extend([stimulus_v] * num_points)
-            raw_data_dict["time_point"].extend(time_axis)
-            raw_data_dict["amplitude_mV"].extend(data_segment)
+            if raw_data_dict is not None:
+                # Store the original (non-downsampled) data only for export.
+                num_points = len(time_axis)
+                raw_data_dict["channel_index"].extend([channel_index] * num_points)
+                raw_data_dict["stimulus_V"].extend([stimulus_v] * num_points)
+                raw_data_dict["time_point"].extend(time_axis)
+                raw_data_dict["amplitude_mV"].extend(data_segment)
 
             # Set labels
             channel_name = self.emg_object.channel_names[channel_index]
@@ -817,6 +837,9 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         if not fixed_y_axis:
             # Auto-range Y-axis for all linked plots
             self.auto_range_y_axis_linked_plots(plot_items)
+
+        if raw_data_dict is None:
+            return None
 
         # Create DataFrame with multi-level index
         raw_data_df = pd.DataFrame(raw_data_dict)
