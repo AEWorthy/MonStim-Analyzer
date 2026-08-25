@@ -559,6 +559,44 @@ class ApplicationState:
             logger.exception("Error determining CPU count for parallel load workers; defaulting to 1")
             return 1
 
+    def get_warm_up_policy(self, level: str):
+        """Return the immutable warm-up policy for one hierarchy level."""
+        from monstim_gui.core.load_policy import WarmUpLevelPolicy
+
+        prefix = f"ProgramPreferences/cache_warmup/{level}"
+        methods = self.settings.value(f"{prefix}/methods", [])
+        if isinstance(methods, str):
+            methods = [methods] if methods else []
+        return WarmUpLevelPolicy(
+            enabled=self.settings.value(f"{prefix}/enabled", False, type=bool),
+            filtered_signals=self.settings.value(f"{prefix}/filtered_signals", True, type=bool),
+            methods=tuple(str(method) for method in methods),
+            prepare_mmax=self.settings.value(f"{prefix}/prepare_mmax", False, type=bool),
+            aggregates=self.settings.value(f"{prefix}/aggregates", False, type=bool),
+        )
+
+    def set_warm_up_policy(self, level: str, policy) -> None:
+        prefix = f"ProgramPreferences/cache_warmup/{level}"
+        self.settings.setValue(f"{prefix}/enabled", policy.enabled)
+        self.settings.setValue(f"{prefix}/filtered_signals", policy.filtered_signals)
+        self.settings.setValue(f"{prefix}/methods", list(policy.methods))
+        self.settings.setValue(f"{prefix}/prepare_mmax", policy.prepare_mmax)
+        self.settings.setValue(f"{prefix}/aggregates", policy.aggregates)
+        self.settings.sync()
+
+    def get_load_policy(self):
+        """Resolve QSettings-only loading preferences separately from analysis config."""
+        from monstim_gui.core.load_policy import LoadPolicy
+
+        return LoadPolicy(
+            lazy_open_h5=self.should_use_lazy_open_h5(),
+            parallel_loading=self.should_use_parallel_loading(),
+            load_workers=self.get_parallel_load_workers() if self.should_use_parallel_loading() else 1,
+            session=self.get_warm_up_policy("session"),
+            dataset=self.get_warm_up_policy("dataset"),
+            experiment=self.get_warm_up_policy("experiment"),
+        )
+
     def clear_all_tracked_data(self):
         """Clear all tracked user data (preserves preferences)."""
         # Clear session restoration data

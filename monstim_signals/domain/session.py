@@ -1,18 +1,21 @@
 # monstim_signals/domain/session.py
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass
-from functools import cached_property
 from itertools import pairwise
+from threading import RLock
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from monstim_signals.core import LatencyWindow, LatencyWindowNotFoundError, SessionAnnot, StimCluster, load_config
+from monstim_signals.core import ConfigChange, LatencyWindow, LatencyWindowNotFoundError, ResolvedConfig, SessionAnnot, StimCluster, load_config
+from monstim_signals.core.configuration import deep_merge
 from monstim_signals.domain.recording import Recording
 from monstim_signals.plotting import SessionPlotterPyQtGraph
 from monstim_signals.transform import (
+    NoCalculableMmaxError,
     butter_bandpass_filter,
     calculate_emg_amplitude,  # noqa: F401 - re-exported for compatibility with callers/tests
     calculate_window_amplitude_results,
@@ -56,14 +59,31 @@ class Session:
         recordings: list[Recording],
         annot: SessionAnnot,
         repo: SessionRepository | None = None,
-        config: dict | None = None,
+        config: ResolvedConfig | dict | None = None,
     ):
         self.id: str = session_id
         self._all_recordings: list[Recording] = recordings
         self.annot: SessionAnnot = annot
         self.repo: SessionRepository = repo
         self.parent_dataset: Dataset | None = None
-        self._config = config
+        self._config = config if isinstance(config, ResolvedConfig) else ResolvedConfig(deep_merge(load_config(), config or {}))
+        self._cache_lock = RLock()
+        self._signal_revision = 0
+        self._window_revision = 0
+        self._selection_revision = 0
+        self._analysis_revision = 0
+        self._signal_caches: dict[str, dict[str, np.ndarray]] = {
+            "raw": {},
+            "filtered": {},
+            "rectified_raw": {},
+            "rectified_filtered": {},
+        }
+        self._signal_list_cache: dict[str, tuple[np.ndarray, ...]] = {}
+        self._signal_inflight: dict[tuple[int, str, str], Future[np.ndarray]] = {}
+        self._window_result_cache: dict[tuple[str, int], tuple[object, tuple[WindowAmplitudeSeries, ...]]] = {}
+        self._latency_window_amplitude_cache: dict[tuple[str, int], tuple[object, tuple[np.ndarray, ...]]] = {}
+        self._mmax_cache: dict[tuple[str, int], tuple[object, tuple[Any, Any, Any]]] = {}
+        self._distribution_cache: dict[object, tuple[object, object]] = {}
         self._load_config_settings()
 
         # Load session parameters from recordings
@@ -85,8 +105,7 @@ class Session:
             self.repo.save(self)
 
     def _load_config_settings(self):
-        _config = self._config if self._config is not None else load_config()
-        self._config = _config
+        _config = self._config
         self.time_window_ms: float = _config["time_window"]
         self.pre_stim_time_ms: float = _config["pre_stim_time"]
         self.bin_size: float = _config["bin_size"]
@@ -170,7 +189,7 @@ class Session:
     #   integrated into the main GUI latency editor so editing is consistent
     #   across environments.
 
-    def apply_config(self, reset_caches: bool = True) -> None:
+    def apply_config(self, changes: ConfigChange = ConfigChange.PLOT) -> None:
         """
         Apply the loaded configuration settings to the session.
         This is called after loading the session or when preferences are changed.
@@ -180,14 +199,17 @@ class Session:
         """
         self._load_config_settings()  # Reload config settings to ensure they are up-to-date
 
-        self.plotter = SessionPlotterPyQtGraph(self)
+        # Plotters read ordinary style values from the session at call time.  Keep
+        # the existing plotter so reselecting an equal profile is a true no-op.
         for window in self.latency_windows:
             window.linestyle = self.latency_window_style
             window.color = self.m_color if window.name == "M-wave" else window.color
             window.color = self.h_color if window.name == "H-reflex" else window.color
 
-        if reset_caches:
-            self.reset_all_caches()
+        if changes & ConfigChange.SIGNAL:
+            self.invalidate_signal_data()
+        elif changes & ConfigChange.ANALYSIS:
+            self.invalidate_analysis_results()
 
     @property
     def num_recordings(self) -> int:
@@ -283,7 +305,7 @@ class Session:
             linestyle=linestyle or self.latency_window_style,
         )
         self.annot.latency_windows.append(window)
-        self.update_latency_window_parameters()
+        self.invalidate_window_results()
         if persist and self.repo is not None:
             self.repo.save(self)
 
@@ -296,9 +318,7 @@ class Session:
                 You may want to delay persistence if applying the preset to multiple sessions at once.
                 Use from SessionRepository.save_many() to persist all sessions at once for efficiency.
         """
-        from monstim_signals.core import load_config
-
-        presets = load_config().get("latency_window_presets", {})
+        presets = self._config.presets.latency_window_presets
         if preset_name not in presets:
             logger.warning(f"Preset '{preset_name}' not found in config.")
             return
@@ -315,14 +335,14 @@ class Session:
             )
             self.annot.latency_windows.append(window)
 
-        self.update_latency_window_parameters()
+        self.invalidate_window_results()
         if persist and self.repo is not None:
             self.repo.save(self)
 
     def remove_latency_window(self, name: str, *, persist: bool = True) -> None:
         """Remove a latency window by name."""
         self.annot.latency_windows = [w for w in self.annot.latency_windows if w.name != name]
-        self.update_latency_window_parameters()
+        self.invalidate_window_results()
         if persist and self.repo is not None:
             self.repo.save(self)
 
@@ -510,29 +530,138 @@ class Session:
         return next((window for window in self.latency_windows if (window.name or "").casefold() in names), None)
 
     # ──────────────────────────────────────────────────────────────────
-    # 0) Cached properties and cache reset methods
+    # 0) Dependency-aware signal and result caches
     # ──────────────────────────────────────────────────────────────────
-    @cached_property
+    @staticmethod
+    def _readonly(array: np.ndarray) -> np.ndarray:
+        value = np.asarray(array)
+        value.setflags(write=False)
+        return value
+
+    def _ensure_cache_state(self) -> None:
+        """Initialize cache state for lightweight test/domain objects made via ``__new__``."""
+        if hasattr(self, "_cache_lock"):
+            return
+        self._cache_lock = RLock()
+        self._signal_revision = self._window_revision = self._selection_revision = self._analysis_revision = 0
+        self._signal_caches = {"raw": {}, "filtered": {}, "rectified_raw": {}, "rectified_filtered": {}}
+        self._signal_list_cache = {}
+        self._signal_inflight = {}
+        self._window_result_cache = {}
+        self._latency_window_amplitude_cache = {}
+        self._mmax_cache = {}
+        self._distribution_cache = {}
+
+    @property
+    def cache_token(self) -> tuple[int, int, int, int]:
+        """Revision token used by parent aggregate caches."""
+        self._ensure_cache_state()
+        return (self._signal_revision, self._window_revision, self._selection_revision, self._analysis_revision)
+
+    def _compute_signal_recording(self, rec: Recording, kind: str) -> np.ndarray:
+        if kind in {"rectified_raw", "rectified_filtered"}:
+            base_kind = "raw" if kind == "rectified_raw" else "filtered"
+            return self._readonly(np.abs(self._get_signal_recording(rec, base_kind)))
+
+        if kind == "raw":
+            try:
+                raw_data = np.asarray(rec.raw_view())
+                result = np.array(raw_data, copy=True)
+                for channel in range(rec.meta.num_channels):
+                    if self.annot.channels[channel].invert:
+                        result[:, channel] *= -1.0
+                return self._readonly(result)
+            finally:
+                rec.close()
+
+        if kind != "filtered":
+            raise ValueError(f"Unknown signal cache kind: {kind}")
+        # Filtering depends on the cached, polarity-corrected raw copy. This
+        # guarantees that a later raw plot never reopens a recording already
+        # read for filtering, and raw/filtered concurrent requests share I/O.
+        raw_data = self._get_signal_recording(rec, "raw")
+        filtered_channels = []
+        for channel in range(rec.meta.num_channels):
+            channel_data = raw_data[:, channel]
+            channel_type = self.channel_types[channel].lower()
+            if channel_type in ("force", "length"):
+                filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
+            elif channel_type == "emg":
+                filtered = butter_bandpass_filter(
+                    channel_data,
+                    fs=self.scan_rate,
+                    lowcut=self.butter_filter_args["lowcut"],
+                    highcut=self.butter_filter_args["highcut"],
+                    order=self.butter_filter_args["order"],
+                )
+            else:
+                logger.warning(f"No specific processing for channel type: {channel_type}")
+                filtered = np.array(channel_data, copy=True)
+            filtered_channels.append(filtered)
+        return self._readonly(np.column_stack(filtered_channels))
+
+    def _get_signal_recording(self, rec: Recording, kind: str) -> np.ndarray:
+        """Return one cached recording, sharing concurrent calculations."""
+        self._ensure_cache_state()
+        with self._cache_lock:
+            cached = self._signal_caches[kind].get(rec.id)
+            if cached is not None:
+                return cached
+            revision = self._signal_revision
+            inflight_key = (revision, kind, rec.id)
+            future = self._signal_inflight.get(inflight_key)
+            owner = future is None
+            if owner:
+                future = Future()
+                self._signal_inflight[inflight_key] = future
+
+        if not owner:
+            return future.result()
+
+        try:
+            value = self._compute_signal_recording(rec, kind)
+            with self._cache_lock:
+                if revision == self._signal_revision:
+                    self._signal_caches[kind][rec.id] = value
+                future.set_result(value)
+            return value
+        except BaseException as exc:
+            with self._cache_lock:
+                future.set_exception(exc)
+            raise
+        finally:
+            with self._cache_lock:
+                self._signal_inflight.pop(inflight_key, None)
+
+    def _all_signal_recordings(self, kind: str) -> list[np.ndarray]:
+        self._ensure_cache_state()
+        with self._cache_lock:
+            cached = self._signal_list_cache.get(kind)
+            if cached is not None:
+                return list(cached)
+        configured_workers = self._config.get("signal_processing_workers")
+        max_workers = max(1, int(configured_workers)) if configured_workers is not None else max(1, (os.cpu_count() or 2) - 1)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            values = list(executor.map(lambda recording: self._get_signal_recording(recording, kind), self.all_recordings))
+        with self._cache_lock:
+            if all(recording.id in self._signal_caches[kind] for recording in self.all_recordings):
+                self._signal_list_cache[kind] = tuple(values)
+        return list(values)
+
+    @property
     def all_recordings_raw(self) -> list[np.ndarray]:
         """
         Return a list of raw data arrays for all recordings (including excluded).
         Each array is of shape (num_samples, num_channels).
         """
-        recordings = []
-        for rec in self.all_recordings:
-            raw_data = rec.raw_view()
-            for ch in range(rec.meta.num_channels):
-                if self.annot.channels[ch].invert:
-                    raw_data[:, ch] *= -1.0
-            recordings.append(raw_data)
-        return recordings
+        return self._all_signal_recordings("raw")
 
     @property
     def recordings_raw(self) -> list[np.ndarray]:
         """Return a list of raw data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_raw)
 
-    @cached_property
+    @property
     def all_recordings_filtered(self) -> list[np.ndarray]:
         """
         Return a list of processed data arrays for all recordings (including excluded).
@@ -541,150 +670,107 @@ class Session:
         indicated in the channel annotations in the session annot.json file.
         """
 
-        close_raw_after_filter = bool(self._config.get("close_raw_after_filter", True))
-
-        def _process_single_recording(rec: Recording) -> np.ndarray:
-            """
-            Process a single recording's raw data with the butter bandpass filter.
-            """
-            try:
-                raw_data = rec.raw_view()
-                bf_args = getattr(
-                    self,
-                    "butter_filter_args",
-                    {"lowcut": None, "highcut": None, "order": None},
-                )
-
-                filtered_channels = []
-                for ch in range(rec.meta.num_channels):
-                    channel_data = raw_data[:, ch]
-                    channel_type = self.channel_types[ch].lower()
-
-                    if channel_type in ("force", "length"):
-                        # Apply specific processing for force and length channels
-                        # TODO: Implement specific filtering for force and length channels if needed
-                        # TODO:
-                        # - Force/length channels may need low-pass smoothing or detrending
-                        #   rather than the EMG bandpass. Add configuration options and a
-                        #   clear API entry point for channel-specific processing.
-                        # - Consider adding unit tests that validate the processing for
-                        #   force/length channels and ensure these channels are not
-                        #   inadvertently rectified/treated as EMG.
-                        filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
-                    elif channel_type in ("emg",):
-                        # Apply specific processing for EMG channels
-                        filtered = butter_bandpass_filter(
-                            channel_data,
-                            fs=self.scan_rate,
-                            lowcut=bf_args["lowcut"],
-                            highcut=bf_args["highcut"],
-                            order=bf_args["order"],
-                        )
-                    else:
-                        logger.warning(f"No specific processing for channel type: {channel_type}")
-                        filtered = channel_data
-
-                    if self.annot.channels[ch].invert:
-                        filtered = -filtered
-
-                    filtered_channels.append(filtered)
-
-                return np.column_stack(filtered_channels)
-            finally:
-                if close_raw_after_filter:
-                    rec.close()
-
-        configured_workers = None
-        try:
-            configured_workers = self._config.get("signal_processing_workers")
-        except Exception:
-            configured_workers = None
-        if configured_workers is not None:
-            max_workers = max(1, int(configured_workers))
-        else:
-            cpu_count = os.cpu_count()
-            max_workers = (cpu_count - 1) if cpu_count and cpu_count > 1 else 1
-
-        filtered_recordings: list[np.ndarray] = []
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit futures and maintain order by storing them in a list
-            ordered_futures = []
-            for rec in self.all_recordings:
-                future = executor.submit(_process_single_recording, rec)
-                ordered_futures.append(future)
-
-            # Get results in the same order as the original recordings
-            for future in ordered_futures:
-                filtered_array = future.result()  # this blocks until that recording is done
-                filtered_recordings.append(filtered_array)
-
-        return filtered_recordings
+        return self._all_signal_recordings("filtered")
 
     @property
     def recordings_filtered(self) -> list[np.ndarray]:
         """Return a list of processed data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_filtered)
 
-    @cached_property
+    @property
     def all_recordings_rectified_raw(self) -> list[np.ndarray]:
         """
         Return a list of rectified raw data arrays for all recordings.
         """
-        recordings = []
-        for rec in self.all_recordings:
-            raw_data = rec.raw_view()
-            rectified = np.abs(raw_data)
-            recordings.append(rectified)
-        return recordings
+        return self._all_signal_recordings("rectified_raw")
 
     @property
     def recordings_rectified_raw(self) -> list[np.ndarray]:
         """Return a list of rectified raw data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_rectified_raw)
 
-    @cached_property
+    @property
     def all_recordings_rectified_filtered(self) -> list[np.ndarray]:
         """
         Return a list of rectified filtered data arrays for all recordings.
         """
-        recordings = []
-        for rec in self.all_recordings_filtered:
-            rectified = np.abs(rec)
-            recordings.append(rectified)
-        return recordings
+        return self._all_signal_recordings("rectified_filtered")
 
     @property
     def recordings_rectified_filtered(self) -> list[np.ndarray]:
         """Return a list of rectified filtered data arrays for active recordings only."""
         return self._filter_active(self.all_recordings_rectified_filtered)
 
-    def reset_all_caches(self):
-        """
-        Reset all cached properties in the session.
-        This is used after changing any session parameters or excluding/including recordings.
-        """
-        self.reset_recordings_cache()
-        self.reset_cached_reflex_properties()
+    def _clear_derived_results(self, *, windows: bool) -> None:
+        with self._cache_lock:
+            if windows:
+                self._window_result_cache.clear()
+                self._latency_window_amplitude_cache.clear()
+                self._distribution_cache.clear()
+            self._mmax_cache.clear()
+
+    def invalidate_signal_data(self) -> None:
+        """Invalidate source-dependent arrays and every derived result."""
+        self._ensure_cache_state()
+        with self._cache_lock:
+            self._signal_revision += 1
+            for cache in self._signal_caches.values():
+                cache.clear()
+            self._signal_list_cache.clear()
+        self._clear_derived_results(windows=True)
+
+    def invalidate_window_results(self) -> None:
+        """Retain signal arrays while invalidating latency-window calculations."""
+        self._ensure_cache_state()
+        with self._cache_lock:
+            self._window_revision += 1
+        self._clear_derived_results(windows=True)
         self.update_latency_window_parameters()
 
-    def _clear_latency_window_amplitude_cache(self) -> None:
-        """Discard compact, derived latency-window amplitudes.
+    def invalidate_selection_results(self) -> None:
+        """Retain all-recording work while invalidating active-selection results."""
+        self._ensure_cache_state()
+        with self._cache_lock:
+            self._selection_revision += 1
+            self._latency_window_amplitude_cache.clear()
+            self._mmax_cache.clear()
+            self._distribution_cache.clear()
 
-        Unlike the filtered-trace cache, this cache contains only numeric
-        amplitudes.  It exists to prevent aggregate plots from repeating the
-        same extrema search once for every requested latency window.
-        """
-        self.__dict__.pop("_latency_window_amplitude_cache", None)
+    def invalidate_analysis_results(self) -> None:
+        """Retain signals/window batches while invalidating analysis aggregates."""
+        self._ensure_cache_state()
+        with self._cache_lock:
+            self._analysis_revision += 1
+            self._mmax_cache.clear()
+            self._distribution_cache.clear()
 
-    @classmethod
-    def _cached_property_names(cls) -> tuple[str, ...]:
-        """Return the names whose values are stored by ``cached_property``."""
-        return tuple(name for base in cls.__mro__ for name, value in vars(base).items() if isinstance(value, cached_property))
+    def release_cached_data(self) -> None:
+        """Release all in-memory cache entries during close/reload/unload."""
+        self._ensure_cache_state()
+        self.wait_for_cache_work()
+        with self._cache_lock:
+            self._signal_revision += 1
+            self._window_revision += 1
+            self._selection_revision += 1
+            self._analysis_revision += 1
+            for cache in self._signal_caches.values():
+                cache.clear()
+            self._signal_list_cache.clear()
+            self._window_result_cache.clear()
+            self._latency_window_amplitude_cache.clear()
+            self._mmax_cache.clear()
+            self._distribution_cache.clear()
 
-    def _clear_cached_values(self, *names: str) -> None:
-        """Remove cached values without requiring callers to maintain cache-key lists."""
-        for name in names:
-            self.__dict__.pop(name, None)
+    def wait_for_cache_work(self) -> None:
+        """Join currently published per-recording calculations."""
+        self._ensure_cache_state()
+        with self._cache_lock:
+            pending = tuple(self._signal_inflight.values())
+        for future in pending:
+            # The original requester receives the calculation error. Release
+            # still proceeds so close/reload cannot retain resources.
+            with suppress(Exception):
+                future.result()
 
     def update_latency_window_parameters(self):
         """
@@ -707,21 +793,6 @@ class Session:
         if not self.has_h_reflex_window():
             self.h_start = [0.0] * self.num_channels
             self.h_duration = [0.0] * self.num_channels
-
-    def reset_cached_reflex_properties(self):
-        """
-        Reset the cached M-wave max values.
-        This is used after changing the latency windows or excluding/including recordings from the session set.
-        """
-        self._clear_cached_values("m_max")
-        self._clear_latency_window_amplitude_cache()
-
-    def reset_recordings_cache(self):
-        """
-        Reset the cached processed recordings.
-        This is used after changing the filter parameters or excluding/including recordings from the session set.
-        """
-        self._clear_cached_values(*self._cached_property_names(), "m_max")
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Properties for GUI & analysis code
@@ -789,17 +860,28 @@ class Session:
         Returns:
             float: The M-max amplitude for the specified channel.
         """
-        m_wave_amplitudes = self.get_m_wave_amplitudes(method, channel_index)
-
-        if return_mmax_stim_range:
-            return get_avg_mmax(
+        self._ensure_cache_state()
+        key = (method, channel_index)
+        token = (
+            self.cache_token,
+            tuple(recording.id for recording in self.recordings),
+            tuple(sorted(self.m_max_args.items())),
+        )
+        with self._cache_lock:
+            entry = self._mmax_cache.get(key)
+        if entry is None or entry[0] != token:
+            values = get_avg_mmax(
                 self.stimulus_voltages,
-                m_wave_amplitudes,
+                self.get_m_wave_amplitudes(method, channel_index),
                 **self.m_max_args,
                 return_mmax_stim_range=True,
             )
+            cached_values = values if isinstance(values, tuple) else (values, None, None)
+            with self._cache_lock:
+                self._mmax_cache[key] = (token, cached_values)
         else:
-            return get_avg_mmax(self.stimulus_voltages, m_wave_amplitudes, **self.m_max_args)
+            cached_values = entry[1]
+        return cached_values if return_mmax_stim_range else cached_values[0]
 
     def get_m_wave_amplitudes(self, method, channel_index):
         """Return a list of M-wave amplitudes for each recording."""
@@ -847,31 +929,77 @@ class Session:
         self, method: str, channel_index: int, *, include_excluded: bool = False
     ) -> tuple[WindowAmplitudeSeries, ...]:
         """Return every latency-window result, retaining recording/window identity."""
-        spans = self._window_spans(channel_index)
-        recordings = self.get_all_recordings(include_excluded=include_excluded)
-        filtered = self.all_recordings_filtered if include_excluded else self.recordings_filtered
-        if len(recordings) != len(filtered):
-            raise RuntimeError("Recording/result alignment mismatch while calculating latency-window amplitudes")
-        per_window: list[list[object]] = [[] for _ in spans]
-        for recording in filtered:
-            results = calculate_window_amplitude_results(recording[:, channel_index], spans, self.scan_rate, method)
-            if len(results) != len(spans):
-                raise RuntimeError("Latency-window result batch length mismatch")
-            for index, result in enumerate(results):
-                per_window[index].append(result)
-        ids = tuple(recording.id for recording in recordings)
+        self._ensure_cache_state()
+        key = (method, channel_index)
+        window_fingerprint = tuple((window.name, tuple(window.start_times), tuple(window.durations)) for window in self.latency_windows)
+        all_ids = tuple(recording.id for recording in self.all_recordings)
+        token = (self._signal_revision, self._window_revision, method, channel_index, all_ids, window_fingerprint)
+        with self._cache_lock:
+            entry = self._window_result_cache.get(key)
+        if entry is None or entry[0] != token:
+            spans = self._window_spans(channel_index)
+            per_window: list[list[object]] = [[] for _ in spans]
+            for filtered in self.all_recordings_filtered:
+                results = calculate_window_amplitude_results(filtered[:, channel_index], spans, self.scan_rate, method)
+                if len(results) != len(spans):
+                    raise RuntimeError("Latency-window result batch length mismatch")
+                for index, result in enumerate(results):
+                    per_window[index].append(result)
+            series = tuple(
+                WindowAmplitudeSeries(
+                    span.window_index,
+                    self.latency_windows[span.window_index],
+                    span.priority_rank,
+                    all_ids,
+                    tuple(per_window[index]),
+                )
+                for index, span in enumerate(spans)
+            )
+            with self._cache_lock:
+                self._window_result_cache[key] = (token, series)
+        else:
+            series = entry[1]
+
+        # Presentation-only window replacements keep the calculated results but
+        # expose the current window objects and styles.
+        series = tuple(
+            WindowAmplitudeSeries(
+                item.window_index,
+                self.latency_windows[item.window_index],
+                item.priority_rank,
+                item.recording_ids,
+                item.results,
+            )
+            for item in series
+        )
+
+        if include_excluded:
+            return series
+        active_ids = tuple(recording.id for recording in self.recordings)
+        active = set(active_ids)
         return tuple(
-            WindowAmplitudeSeries(span.window_index, self.latency_windows[span.window_index], span.priority_rank, ids, tuple(per_window[index]))
-            for index, span in enumerate(spans)
+            WindowAmplitudeSeries(
+                item.window_index,
+                item.window,
+                item.priority_rank,
+                active_ids,
+                tuple(result for recording_id, result in zip(item.recording_ids, item.results, strict=True) if recording_id in active),
+            )
+            for item in series
         )
 
     def get_recording_lw_amplitude_results(self, method: str, channel_index: int, recording_id: str) -> tuple[object, ...]:
         """Return all window results for one recording, including excluded recordings."""
-        spans = self._window_spans(channel_index)
-        for recording, filtered in zip(self.all_recordings, self.all_recordings_filtered, strict=True):
-            if recording.id == recording_id:
-                return tuple(calculate_window_amplitude_results(filtered[:, channel_index], spans, self.scan_rate, method))
-        raise KeyError(f"Recording '{recording_id}' not found in session {self.id}")
+        series = self.get_all_lw_reflex_amplitude_results(method, channel_index, include_excluded=True)
+        if not series:
+            if recording_id in {recording.id for recording in self.all_recordings}:
+                return ()
+            raise KeyError(f"Recording '{recording_id}' not found in session {self.id}")
+        try:
+            index = series[0].recording_ids.index(recording_id)
+        except ValueError as exc:
+            raise KeyError(f"Recording '{recording_id}' not found in session {self.id}") from exc
+        return tuple(item.results[index] for item in series)
 
     def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> np.ndarray:
         """
@@ -879,6 +1007,7 @@ class Session:
 
         The array in the same order as the stimulus voltage of each recording.
         """
+        self._ensure_cache_state()
         if isinstance(window, LatencyWindow):
             try:
                 window_index = next(index for index, item in enumerate(self.latency_windows) if item is window)
@@ -895,21 +1024,77 @@ class Session:
         # resulting numeric arrays, rather than the detailed extrema objects,
         # so subsequent window requests reuse that single calculation without
         # a large long-lived memory cost.
-        cache_key = (
-            method,
-            channel_index,
-            tuple((item.name, tuple(item.start_times), tuple(item.end_times)) for item in self.latency_windows),
-            tuple(self.excluded_recordings),
+        cache_key = (method, channel_index)
+        token = (
+            self._signal_revision,
+            self._window_revision,
+            self._selection_revision,
+            tuple(recording.id for recording in getattr(self, "_all_recordings", ()) if recording.id not in self.excluded_recordings),
+            tuple((item.name, tuple(item.start_times), tuple(item.durations)) for item in self.latency_windows),
         )
-        cache = self.__dict__.setdefault("_latency_window_amplitude_cache", {})
-        amplitudes = cache.get(cache_key)
-        if amplitudes is None:
+        with self._cache_lock:
+            entry = self._latency_window_amplitude_cache.get(cache_key)
+        if entry is None or entry[0] != token:
             series = self.get_all_lw_reflex_amplitude_results(method, channel_index)
-            amplitudes = tuple(np.asarray([result.amplitude for result in item.results], dtype=float) for item in series)
-            cache[cache_key] = amplitudes
+            amplitudes = tuple(self._readonly(np.asarray([result.amplitude for result in item.results], dtype=float)) for item in series)
+            with self._cache_lock:
+                self._latency_window_amplitude_cache[cache_key] = (token, amplitudes)
+        else:
+            amplitudes = entry[1]
         # Preserve the previous API's independent array result: callers may
         # safely modify it without corrupting the derived-data cache.
         return amplitudes[window_index].copy()
+
+    def get_lw_distribution(self, method: str, channel_index: int, bins=30, density: bool = False) -> dict[str, object]:
+        """Return cached common-bin histogram inputs/results for all windows."""
+        self._ensure_cache_state()
+        bins_key = int(bins) if isinstance(bins, int) else tuple(np.asarray(bins, dtype=float))
+        key = (method, channel_index, bins_key, bool(density))
+        token = (
+            self.cache_token,
+            tuple(recording.id for recording in getattr(self, "_all_recordings", ()) if recording.id not in self.excluded_recordings),
+            tuple((window.name, tuple(window.start_times), tuple(window.durations)) for window in self.latency_windows),
+        )
+        with self._cache_lock:
+            entry = self._distribution_cache.get(key)
+        if entry is not None and entry[0] == token:
+            return {
+                "bin_edges": entry[1]["bin_edges"].copy(),
+                "bin_centers": entry[1]["bin_centers"].copy(),
+                "values": {label: values.copy() for label, values in entry[1]["values"].items()},
+            }
+
+        amplitudes: dict[str, np.ndarray] = {}
+        for window in self.latency_windows:
+            values = self.get_lw_reflex_amplitudes(method, channel_index, window)
+            amplitudes[getattr(window, "label", window.name)] = values[np.isfinite(values)]
+        nonempty = [values for values in amplitudes.values() if values.size]
+        if nonempty:
+            all_values = np.concatenate(nonempty)
+            edges = np.histogram_bin_edges(all_values, bins=bins) if isinstance(bins, int) else np.asarray(bins, dtype=float)
+            centers = (edges[:-1] + edges[1:]) / 2.0
+            histograms = {}
+            for label, values in amplitudes.items():
+                counts, _ = np.histogram(values, bins=edges)
+                if density and values.size:
+                    counts = counts.astype(float, copy=False) / (values.size * np.diff(edges))
+                histograms[label] = self._readonly(counts)
+        else:
+            edges = np.array([], dtype=float)
+            centers = np.array([], dtype=float)
+            histograms = {label: np.array([], dtype=float) for label in amplitudes}
+        stored = {
+            "bin_edges": self._readonly(edges),
+            "bin_centers": self._readonly(centers),
+            "values": {label: self._readonly(values) for label, values in histograms.items()},
+        }
+        with self._cache_lock:
+            self._distribution_cache[key] = (token, stored)
+        return {
+            "bin_edges": stored["bin_edges"].copy(),
+            "bin_centers": stored["bin_centers"].copy(),
+            "values": {label: values.copy() for label, values in stored["values"].items()},
+        }
 
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
@@ -952,8 +1137,7 @@ class Session:
         self.annot.channels[channel].invert = not self.annot.channels[channel].invert
         if self.repo is not None:
             self.repo.save(self)
-        self.reset_recordings_cache()
-        self.reset_cached_reflex_properties()
+        self.invalidate_signal_data()
 
     def change_reflex_latency_windows(self, m_start, m_duration, h_start, h_duration):
         m_window = self.get_latency_window("M-wave")
@@ -964,7 +1148,7 @@ class Session:
         if h_window:
             h_window.start_times = h_start
             h_window.durations = h_duration
-        self.update_latency_window_parameters()
+        self.invalidate_window_results()
         if self.repo is not None:
             self.repo.save(self)
 
@@ -981,7 +1165,7 @@ class Session:
             else:
                 logger.warning(f"Recording {recording_id} not found in session {self.id}.")
                 return
-            self.reset_all_caches()
+            self.invalidate_selection_results()
             if self.repo is not None:
                 self.repo.save(self)
         else:
@@ -1006,7 +1190,7 @@ class Session:
                 logger.warning(f"Recording {recording_id} not found in session {self.id}.")
                 return
 
-            self.reset_all_caches()
+            self.invalidate_selection_results()
             if self.repo is not None:
                 self.repo.save(self)
         else:
@@ -1023,7 +1207,7 @@ class Session:
         This is a user action that modifies the session's exclude flags.
         """
         self.annot.excluded_recordings = []
-        self.reset_all_caches()
+        self.invalidate_selection_results()
         if self.repo is not None:
             self.repo.save(self)
 
@@ -1037,7 +1221,7 @@ class Session:
         parent_dataset.exclude_session() here to avoid circular logic.
         """
         self.annot.excluded_recordings = [rec.id for rec in self.get_all_recordings(include_excluded=True)]
-        self.reset_all_caches()
+        self.invalidate_selection_results()
         if self.repo is not None:
             self.repo.save(self)
 
@@ -1057,6 +1241,56 @@ class Session:
     # ──────────────────────────────────────────────────────────────────
     # 4) Clean-up
     # ──────────────────────────────────────────────────────────────────
+    def prepare_cache(self, products, methods=(), progress=None, cancelled=None) -> int:
+        """Prepare selected products without importing Qt."""
+        requested = set(products)
+        selected_methods = tuple(dict.fromkeys(methods))
+        need_windows = bool(requested & {"window_results", "amplitudes", "extrema_details", "mmax"})
+        if need_windows and not selected_methods:
+            selected_methods = (self.default_method,)
+        total = (len(self.all_recordings) if "filtered_signals" in requested or need_windows else 0) + (
+            len(selected_methods) * self.num_channels if need_windows else 0
+        )
+        completed = 0
+
+        def stopped() -> bool:
+            return bool(cancelled and cancelled())
+
+        def report(detail: str) -> None:
+            if progress is not None:
+                progress(completed, total, detail)
+
+        if "filtered_signals" in requested or need_windows:
+            for recording in self.all_recordings:
+                if stopped():
+                    return completed
+                self._get_signal_recording(recording, "filtered")
+                completed += 1
+                report(f"{self.id} / {recording.id}")
+
+        if need_windows:
+            for method in selected_methods:
+                for channel in range(self.num_channels):
+                    if stopped():
+                        return completed
+                    handled = False
+                    if "mmax" in requested:
+                        try:
+                            self.get_m_max(method, channel)
+                        except (LatencyWindowNotFoundError, NoCalculableMmaxError, ValueError) as exc:
+                            logger.debug("Skipping M-max warm-up for %s channel %s: %s", self.id, channel, exc)
+                        handled = True
+                    if "amplitudes" in requested:
+                        for window in self.latency_windows:
+                            self.get_lw_reflex_amplitudes(method, channel, window)
+                        self.get_lw_distribution(method, channel)
+                        handled = True
+                    if not handled:
+                        self.get_all_lw_reflex_amplitude_results(method, channel, include_excluded=True)
+                    completed += 1
+                    report(f"{self.id} / channel {channel + 1} / {method}")
+        return completed
+
     def close(self, force_gc: bool = True):
         """Close all recording HDF5 file handles.
 
@@ -1064,6 +1298,7 @@ class Session:
             force_gc: If True, force garbage collection after closing.
                      Set to False when closing as part of dataset/experiment.
         """
+        self.release_cached_data()
         for rec in self.get_all_recordings(include_excluded=True):
             try:
                 rec.close()
@@ -1150,13 +1385,20 @@ class Session:
         """
         return True
 
-    def set_config(self, config: dict) -> None:
+    def set_config(self, config: ResolvedConfig | dict) -> None:
         """
         Update the configuration for this session.
         """
-        self._config = config
+        resolved = config if isinstance(config, ResolvedConfig) else ResolvedConfig(deep_merge(self._config, config))
+        changes = resolved.diff(self._config)
+        if changes == ConfigChange.NONE:
+            return
+        recreate_plotter = resolved.plot.construction_fingerprint != self._config.plot.construction_fingerprint
+        self._config = resolved
         for rec in self.get_all_recordings(include_excluded=True):
             if hasattr(rec, "set_config"):
-                rec.set_config(config)
+                rec.set_config(resolved)
 
-        self.apply_config(reset_caches=True)
+        self.apply_config(changes)
+        if recreate_plotter:
+            self.plotter = SessionPlotterPyQtGraph(self)

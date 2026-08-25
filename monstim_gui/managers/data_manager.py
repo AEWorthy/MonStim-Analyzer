@@ -98,13 +98,27 @@ class DataManager:
 
         invalidate_catalogs(*experiment_paths)
 
+    def _cancel_cache_warmup(self) -> None:
+        coordinator = getattr(self.gui, "cache_warmup", None)
+        if coordinator is not None:
+            coordinator.cancel_and_wait()
+
     def refresh_data_views(self, *experiment_paths: Path) -> None:
         """Rebuild affected catalogs and refresh both application data views."""
+        self._cancel_cache_warmup()
         from monstim_signals.io.experiment_catalog import build_catalog
 
         paths = [Path(path) for path in experiment_paths if path]
         if not paths:
             paths = [Path(self.gui.expts_dict[exp_id]) for exp_id in self.gui.expts_dict_keys]
+
+        current = getattr(self.gui, "current_experiment", None)
+        current_repo = getattr(current, "repo", None)
+        current_path = getattr(current_repo, "folder", None)
+        if current_path is not None and any(Path(path).resolve() == Path(current_path).resolve() for path in paths):
+            close = getattr(current, "close", None)
+            if callable(close):
+                close(force_gc=False)
 
         for path in paths:
             if path.exists():
@@ -779,6 +793,7 @@ class DataManager:
 
     # ------------------------------------------------------------------
     def reload_current_session(self):
+        self._cancel_cache_warmup()
         logger.info("Reloading current session.")
         if self.gui.current_dataset and self.gui.current_session:
             if self.gui.current_session.repo is not None:
@@ -793,7 +808,10 @@ class DataManager:
                             f"Could not remove session cache file. Reload may not work as expected: {e}",
                         )
                 old_sess = self.gui.current_session
-                new_sess = old_sess.repo.load(config=self.gui.config_repo.read_config())
+                from monstim_gui.core.application_state import app_state
+
+                load_policy = app_state.get_load_policy()
+                new_sess = old_sess.repo.load(config=self.gui.resolved_config, lazy_open_h5=load_policy.lazy_open_h5)
                 idx = self.gui.current_dataset.get_all_sessions(include_excluded=True).index(old_sess)
                 self.gui.current_dataset.get_all_sessions(include_excluded=True)[idx] = new_sess
                 self.gui.set_current_session(new_sess)
@@ -806,6 +824,7 @@ class DataManager:
             QMessageBox.warning(self.gui, "Warning", "Please select a session first.")
 
     def reload_current_dataset(self):
+        self._cancel_cache_warmup()
         logger.info("Reloading current dataset.")
         if self.gui.current_dataset:
             if self.gui.current_dataset.repo is not None:
@@ -833,7 +852,10 @@ class DataManager:
 
                 old_ds = self.gui.current_dataset
                 parent_experiment = old_ds.parent_experiment
-                new_ds = old_ds.repo.load(config=self.gui.config_repo.read_config())
+                from monstim_gui.core.application_state import app_state
+
+                load_policy = app_state.get_load_policy()
+                new_ds = old_ds.repo.load(config=self.gui.resolved_config, lazy_open_h5=load_policy.lazy_open_h5)
                 if parent_experiment is not None:
                     # Update the dataset in the parent experiment's list if it exists.
                     logger.info(f"Reloading dataset in parent experiment: {parent_experiment.id}.")
@@ -852,6 +874,7 @@ class DataManager:
             QMessageBox.warning(self.gui, "Warning", "Please select a dataset first.")
 
     def reload_current_experiment(self):
+        self._cancel_cache_warmup()
         if self.gui.current_experiment:
             logger.info(f"Reloading current experiment: {self.gui.current_experiment.id}.")
             if self.gui.current_experiment.repo is not None:
@@ -889,7 +912,14 @@ class DataManager:
                 # Reload the experiment from the repository.
                 old_expt = self.gui.current_experiment
                 logger.info(f"Reloading experiment from repository: {old_expt.repo.folder.name}.")
-                new_expt = old_expt.repo.load(config=self.gui.config_repo.read_config())
+                from monstim_gui.core.application_state import app_state
+
+                load_policy = app_state.get_load_policy()
+                new_expt = old_expt.repo.load(
+                    config=self.gui.resolved_config,
+                    lazy_open_h5=load_policy.lazy_open_h5,
+                    load_workers=load_policy.load_workers,
+                )
                 self.gui.set_current_experiment(new_expt)
                 if old_expt is not new_expt:
                     old_expt.close()
@@ -905,7 +935,7 @@ class DataManager:
                 self.gui.data_selection_widget.update()  # Will automatically restore selection based on current_experiment
 
             if self.gui.current_experiment:
-                self.gui.current_experiment.reset_all_caches()
+                self.gui.current_experiment.invalidate_aggregate_results()
             self.gui.plot_widget.on_data_selection_changed()
 
             logger.debug("Experiment reloaded successfully.")
@@ -931,18 +961,18 @@ class DataManager:
         logger.debug("Showing preferences window.")
         from monstim_gui.dialogs.preferences import PreferencesDialog
 
-        window = PreferencesDialog(get_config_path(), parent=self.gui)
+        window = PreferencesDialog(get_config_path(), parent=self.gui, config_repo=self.gui.config_repo)
         if window.exec() == QDialog.DialogCode.Accepted:
             # After closing preferences, refresh the profile selector in the main window
             if hasattr(self.gui, "refresh_profile_selector"):
                 self.gui.refresh_profile_selector()
-            self.gui.update_domain_configs()
+            self.gui.resolved_config = self.gui.config_repo.resolve_config(self.gui.active_profile_data)
+            self.gui.update_domain_configs(self.gui.resolved_config)
             self.gui.status_bar.showMessage("Preferences applied successfully.", 5000)
             logger.debug("Preferences applied successfully.")
         else:
             if hasattr(self.gui, "refresh_profile_selector"):
                 self.gui.refresh_profile_selector()
-            self.gui.update_domain_configs()
             self.gui.status_bar.showMessage("No changes made to preferences.", 5000)
             logger.debug("No changes made to preferences.")
 
@@ -956,6 +986,7 @@ class DataManager:
         return False
 
     def load_experiment(self, index):
+        self._cancel_cache_warmup()
         if index < 0 or index >= len(self.gui.expts_dict_keys):
             logger.warning(f"Invalid experiment index: {index}. Available experiments: {len(self.gui.expts_dict_keys)}")
             return
@@ -1075,7 +1106,7 @@ class DataManager:
         QApplication.processEvents()
 
         # Create and start loading thread
-        config = self.gui.config_repo.read_config()
+        config = self.gui.resolved_config
         self.loading_thread = ExperimentLoadingThread(exp_path, config)
 
         # Create a lambda to handle dynamic resizing when status updates

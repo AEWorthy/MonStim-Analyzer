@@ -1,4 +1,6 @@
 __all__ = [
+    "ConfigChange",
+    "ConfigResolver",
     "CustomYAMLLoader",
     "DatasetAnnot",
     "ExperimentAnnot",
@@ -6,9 +8,11 @@ __all__ = [
     "LatencyWindowNotFoundError",
     "RecordingAnnot",
     "RecordingMeta",
+    "ResolvedConfig",
     "SessionAnnot",
     "SignalChannel",
     "StimCluster",
+    "clear_config_cache",
     "deep_equal",
     "format_report",
     "get_base_path",
@@ -26,6 +30,7 @@ __all__ = [
     "to_camel_case",
 ]
 
+from .configuration import ConfigChange, ConfigResolver, ResolvedConfig
 from .data_models import (  # Factory and utility methods
     DatasetAnnot,
     ExperimentAnnot,
@@ -39,6 +44,7 @@ from .data_models import (  # Factory and utility methods
 from .utils import (
     CustomYAMLLoader,
     LatencyWindowNotFoundError,
+    clear_config_cache,
     deep_equal,
     format_report,
     get_base_path,

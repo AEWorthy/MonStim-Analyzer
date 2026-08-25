@@ -8,6 +8,7 @@ import logging
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDialog,
     QDoubleSpinBox,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -22,8 +24,10 @@ from PySide6.QtWidgets import (
 )
 
 from monstim_gui.core.application_state import ApplicationState
+from monstim_gui.core.load_policy import WarmUpLevelPolicy
 from monstim_gui.core.ui_config import ui_config
 from monstim_gui.core.ui_scaling import ui_scaling
+from monstim_signals.core.configuration import CALCULATION_METHODS
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +46,7 @@ class ProgramSettingsDialog(QDialog):
         """Set up the dialog UI."""
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.resize(500, 600)
+        self.resize(680, 900)
 
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -51,6 +55,7 @@ class ProgramSettingsDialog(QDialog):
         main_layout.addWidget(self.create_display_group())
         main_layout.addWidget(self.create_ui_scaling_group())
         main_layout.addWidget(self.create_performance_group())
+        main_layout.addWidget(self.create_cache_warmup_group())
         main_layout.addWidget(self.create_tracking_group())
         main_layout.addWidget(self.create_data_management_group())
 
@@ -238,6 +243,42 @@ class ProgramSettingsDialog(QDialog):
 
         return group
 
+    def create_cache_warmup_group(self):
+        """Create independent, opt-in warm-up controls for each hierarchy level."""
+        group = QGroupBox("Plot Cache Warm-Up")
+        layout = QVBoxLayout(group)
+        info = QLabel("Disabled by default. Enable a level to trade a slower selection/load for faster repeated plotting and editing.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        self._warm_widgets = {}
+        aggregate_labels = {
+            "session": "Amplitude arrays and extrema details",
+            "dataset": "Dataset curves, M/H arrays, M-max, distributions",
+            "experiment": "Dataset results and experiment aggregates",
+        }
+        for level in ("session", "dataset", "experiment"):
+            box = QGroupBox(level.title())
+            form = QFormLayout(box)
+            enabled = QCheckBox("Warm when this level becomes current")
+            filtered = QCheckBox("Filtered signals")
+            methods = QListWidget()
+            methods.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+            methods.setMaximumHeight(72)
+            for method in sorted(CALCULATION_METHODS):
+                methods.addItem(method)
+            mmax = QCheckBox("Prepare M-max (default method if none selected)")
+            aggregates = QCheckBox(aggregate_labels[level])
+            form.addRow(enabled)
+            form.addRow(filtered)
+            form.addRow("Latency methods:", methods)
+            form.addRow(mmax)
+            form.addRow(aggregates)
+            controls = (filtered, methods, mmax, aggregates)
+            enabled.toggled.connect(lambda checked, items=controls: [item.setEnabled(checked) for item in items])
+            self._warm_widgets[level] = (enabled, filtered, methods, mmax, aggregates)
+            layout.addWidget(box)
+        return group
+
     def create_display_group(self):
         """Create the display settings group."""
         group = QGroupBox("Display Settings")
@@ -328,6 +369,18 @@ class ProgramSettingsDialog(QDialog):
         # New performance settings
         self.lazy_open_checkbox.setChecked(self.app_state.should_use_lazy_open_h5())
         self.parallel_load_checkbox.setChecked(self.app_state.should_use_parallel_loading())
+        for level, widgets in self._warm_widgets.items():
+            policy = self.app_state.get_warm_up_policy(level)
+            enabled, filtered, methods, mmax, aggregates = widgets
+            enabled.setChecked(policy.enabled)
+            filtered.setChecked(policy.filtered_signals)
+            selected = set(policy.methods)
+            for index in range(methods.count()):
+                methods.item(index).setSelected(methods.item(index).text() in selected)
+            mmax.setChecked(policy.prepare_mmax)
+            aggregates.setChecked(policy.aggregates)
+            for control in (filtered, methods, mmax, aggregates):
+                control.setEnabled(policy.enabled)
         # Tracking settings
         self.session_tracking_checkbox.setChecked(self.app_state.should_track_session_restoration())
         self.profile_tracking_checkbox.setChecked(self.app_state.should_track_analysis_profiles())
@@ -352,6 +405,13 @@ class ProgramSettingsDialog(QDialog):
         self.app_state.set_setting("use_opengl_acceleration", self.opengl_checkbox.isChecked())
         self.app_state.set_setting("use_lazy_open_h5", self.lazy_open_checkbox.isChecked())
         self.app_state.set_setting("enable_parallel_loading", self.parallel_load_checkbox.isChecked())
+        for level, widgets in self._warm_widgets.items():
+            enabled, filtered, methods, mmax, aggregates = widgets
+            selected_methods = tuple(item.text() for item in methods.selectedItems())
+            self.app_state.set_warm_up_policy(
+                level,
+                WarmUpLevelPolicy(enabled.isChecked(), filtered.isChecked(), selected_methods, mmax.isChecked(), aggregates.isChecked()),
+            )
         # Save tracking settings
         self.app_state.set_setting("track_session_restoration", self.session_tracking_checkbox.isChecked())
         self.app_state.set_setting("track_analysis_profiles", self.profile_tracking_checkbox.isChecked())
@@ -410,6 +470,12 @@ class ProgramSettingsDialog(QDialog):
                 self.lazy_open_checkbox.setChecked(True)
             if hasattr(self, "parallel_load_checkbox"):
                 self.parallel_load_checkbox.setChecked(True)
+            for enabled, filtered, methods, mmax, aggregates in self._warm_widgets.values():
+                enabled.setChecked(False)
+                filtered.setChecked(True)
+                methods.clearSelection()
+                mmax.setChecked(False)
+                aggregates.setChecked(False)
             # Reset tracking settings to defaults
             self.session_tracking_checkbox.setChecked(True)
             self.profile_tracking_checkbox.setChecked(True)

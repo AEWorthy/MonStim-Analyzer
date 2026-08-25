@@ -19,6 +19,7 @@ import yaml
 from monstim_gui.core.application_state import ApplicationState
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.managers.profile_manager import ProfileManager
+from monstim_signals.core.configuration import deep_merge
 
 # --- Test Annotations ---
 # Purpose: ConfigRepository I/O, ProfileManager save/load/list, ApplicationState QSettings integration
@@ -217,10 +218,8 @@ class TestConfigRepository:
         with pytest.raises(FileNotFoundError):
             repo.read_config()
 
-    def test_update_nested_dict(self):
-        """Test the nested dictionary update functionality."""
-        repo = ConfigRepository(self.default_config_path)
-
+    def test_deep_merge(self):
+        """Test the shared nested dictionary merge implementation."""
         base = {
             "level1": {"level2": {"keep": "original", "update": "old_value"}, "keep_section": "unchanged"},
             "top_level": "original",
@@ -228,7 +227,7 @@ class TestConfigRepository:
 
         update = {"level1": {"level2": {"update": "new_value", "add": "new_key"}, "new_section": "added"}, "new_top": "added"}
 
-        result = repo._update_nested_dict(base.copy(), update)
+        result = deep_merge(base, update)
 
         # Check updates applied correctly
         assert result["level1"]["level2"]["update"] == "new_value"
@@ -679,10 +678,12 @@ class TestConfigurationIntegration:
 
         # Create realistic default config
         self.default_config = {
+            "bin_size": 0.01,
             "time_window": 8.0,
             "pre_stim_time": 2.0,
             "default_method": "rms",
             "butter_filter_args": {"lowcut": 100, "highcut": 3500, "order": 4},
+            "m_max_args": {"max_window_size": 15, "min_window_size": 2, "threshold": 0.3, "validation_tolerance": 1.05},
             "m_color": "tab:red",
             "h_color": "tab:blue",
         }

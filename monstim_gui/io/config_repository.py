@@ -2,6 +2,9 @@ import os
 
 import yaml
 
+from monstim_signals.core.configuration import ConfigResolver, ResolvedConfig
+from monstim_signals.core.utils import clear_config_cache
+
 
 class ConfigRepository:
     """
@@ -11,34 +14,29 @@ class ConfigRepository:
     def __init__(self, default_config_file: str, user_config_file: str | None = None):
         self.default_config_file = default_config_file
         self.user_config_file = user_config_file or self._get_user_config_path()
+        self.resolver = ConfigResolver(self.default_config_file, self.user_config_file)
 
     def _get_user_config_path(self) -> str:
         config_dir = os.path.dirname(self.default_config_file)
         return os.path.join(config_dir, "config-user.yml")
 
     def read_config(self) -> dict:
-        with open(self.default_config_file) as file:
-            config = yaml.safe_load(file)
-        if os.path.exists(self.user_config_file):
-            with open(self.user_config_file) as file:
-                user_config = yaml.safe_load(file)
-            if user_config:
-                # Coerce user config types to match default config
-                coerced_user = self.coerce_types(user_config, config)
-                self._update_nested_dict(config, coerced_user)
-        return config
+        # ``read_config`` is the storage/UI API and may contain application
+        # keys or deliberately partial configs.  Domain consumers call
+        # ``resolve_config`` when they need the validated typed sections.
+        return self.resolver.load_raw()
+
+    def resolve_config(self, profile: dict | None = None) -> ResolvedConfig:
+        return self.resolver.resolve(profile)
+
+    def refresh(self) -> None:
+        self.resolver.invalidate()
+        clear_config_cache()
 
     def write_config(self, config: dict) -> None:
         with open(self.user_config_file, "w") as file:
             yaml.safe_dump(config, file)
-
-    def _update_nested_dict(self, d: dict, u: dict) -> dict:
-        for k, v in u.items():
-            if isinstance(v, dict):
-                d[k] = self._update_nested_dict(d.get(k, {}), v)
-            else:
-                d[k] = v
-        return d
+        self.refresh()
 
     @staticmethod
     def coerce_types(user_data, reference_data):

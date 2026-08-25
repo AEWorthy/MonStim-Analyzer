@@ -49,7 +49,7 @@ class TestSessionAnnotationOverlay:
 
             # Exclude one recording via annot overlay and reset caches
             session.annot.excluded_recordings.append(first_id)
-            session.reset_all_caches()
+            session.invalidate_selection_results()
             after_filtered = len(session.recordings_filtered)
 
             assert after_filtered == max(0, before_filtered - 1)
@@ -57,7 +57,7 @@ class TestSessionAnnotationOverlay:
 
             # Restore and verify back to original count
             session.restore_recording(first_id)
-            session.reset_all_caches()
+            session.invalidate_selection_results()
             assert len(session.recordings_filtered) == before_filtered
             assert first_id not in session.excluded_recordings
         finally:

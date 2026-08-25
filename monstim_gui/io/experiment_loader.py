@@ -8,6 +8,8 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from monstim_gui.core.application_state import app_state
+from monstim_signals.core import ResolvedConfig, load_config
+from monstim_signals.core.configuration import deep_merge
 
 # Note: skip preflight migration scans during load for performance.
 # Post-load migrations can be initiated separately in a background task.
@@ -248,18 +250,19 @@ class ExperimentLoadingThread(QThread):
                         # Progress UI failures must not abort experiment loading; log for diagnostics.
                         logger.debug("Non-fatal error while updating catalog progress: %s", exc)
 
-            # Overlay application preferences (QSettings) for loading:
-            cfg = dict(self.config or {})
-            # If config doesn't explicitly set lazy_open_h5, use QSettings default
-            if "lazy_open_h5" not in cfg:
-                cfg["lazy_open_h5"] = app_state.should_use_lazy_open_h5()
-
-            # Determine load_workers: prefer explicit config value, else use QSettings auto behavior
-            if "load_workers" not in cfg:
-                if app_state.should_use_parallel_loading():
-                    cfg["load_workers"] = app_state.get_parallel_load_workers()
-                else:
-                    cfg["load_workers"] = 1
+            # Overlay immutable application loading policy (kept separate from
+            # the resolved domain-analysis configuration).
+            config_values = dict(self.config or {})
+            load_policy = app_state.get_load_policy()
+            # Accept legacy explicit values at the boundary, but never propagate
+            # application loading preferences into the domain config.
+            lazy_open_h5 = config_values.pop("lazy_open_h5", load_policy.lazy_open_h5)
+            load_workers = config_values.pop("load_workers", load_policy.load_workers)
+            domain_config = (
+                self.config
+                if isinstance(self.config, ResolvedConfig) and len(config_values) == len(self.config)
+                else ResolvedConfig(deep_merge(load_config(), config_values))
+            )
 
             # Initial loads may need to create missing annotations. The catalog is
             # non-authoritative and is rebuilt from those source files when needed.
@@ -271,11 +274,11 @@ class ExperimentLoadingThread(QThread):
 
             try:
                 experiment = repo.load(
-                    config=cfg,
+                    config=domain_config,
                     progress_callback=_progress_cb,
                     allow_write=True,
-                    lazy_open_h5=cfg.get("lazy_open_h5"),
-                    load_workers=cfg.get("load_workers", 1),
+                    lazy_open_h5=lazy_open_h5,
+                    load_workers=load_workers,
                 )
             except InterruptedError as e:
                 # Graceful cancellation from progress callback

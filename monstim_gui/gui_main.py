@@ -48,14 +48,17 @@ from monstim_gui.dialogs import (
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.io.help_repository import HelpFileRepository
 from monstim_gui.managers import BulkExportManager, DataManager, PlotController, ReportManager
+from monstim_gui.managers.cache_warmup import CacheWarmUpCoordinator
 from monstim_gui.widgets.gui_layout import setup_main_layout
 from monstim_signals.core import (
+    ResolvedConfig,
     get_config_path,
     get_docs_path,
     get_export_path,
     get_output_path,
     get_source_path,
 )
+from monstim_signals.core.configuration import deep_merge
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
 from monstim_signals.domain.session import Session
@@ -106,6 +109,8 @@ class MonstimGUI(QMainWindow):
         self.bulk_export_manager = BulkExportManager(self)
 
         self.config_repo = ConfigRepository(get_config_path())
+        self.resolved_config = self.config_repo.resolve_config()
+        self.cache_warmup = CacheWarmUpCoordinator(self)
         self.help_repo = HelpFileRepository(get_docs_path())
 
         self.init_ui()
@@ -257,20 +262,12 @@ class MonstimGUI(QMainWindow):
             # Global config
             self.active_profile_path = None
             self.active_profile_data = None
-            config = self.config_repo.read_config()
+            config = self.config_repo.resolve_config()
         else:
             _name, path, data = self._profile_list[idx - 1]
             self.active_profile_path = path
             self.active_profile_data = data
-            # Merge profile data with global config for fallback
-            config = self.config_repo.read_config()
-            # Overlay profile analysis_parameters and latency_window_preset, etc.
-            if "analysis_parameters" in data:
-                config.update(data["analysis_parameters"])
-            if "latency_window_preset" in data:
-                config["latency_window_preset"] = data["latency_window_preset"]
-            if "stimuli_to_plot" in data:
-                config["stimuli_to_plot"] = data["stimuli_to_plot"]
+            config = self.config_repo.resolve_config(data)
 
         # Save profile selection and update session state
         app_state.save_last_profile(profile_name)
@@ -302,10 +299,7 @@ class MonstimGUI(QMainWindow):
 
     def refresh_preferences_dependent_ui(self):
         """Refresh any UI elements that depend on program preferences."""
-        # This method can be called when preferences change to update the UI
-        # Currently no specific UI updates are needed, but this is a hook
-        # for future functionality that might depend on preference settings
-        pass
+        self.cache_warmup.request()
 
     def _recenter_window(self):
         """Re-center the window after UI initialization to account for actual final size."""
@@ -369,20 +363,12 @@ class MonstimGUI(QMainWindow):
             # Global config
             self.active_profile_path = None
             self.active_profile_data = None
-            config = self.config_repo.read_config()
+            config = self.config_repo.resolve_config()
         else:
             _name, path, data = self._profile_list[idx - 1]
             self.active_profile_path = path
             self.active_profile_data = data
-            # Merge profile data with global config for fallback
-            config = self.config_repo.read_config()
-            # Overlay profile analysis_parameters and latency_window_preset, etc.
-            if "analysis_parameters" in data:
-                config.update(data["analysis_parameters"])
-            if "latency_window_preset" in data:
-                config["latency_window_preset"] = data["latency_window_preset"]
-            if "stimuli_to_plot" in data:
-                config["stimuli_to_plot"] = data["stimuli_to_plot"]
+            config = self.config_repo.resolve_config(data)
 
         self.update_domain_configs(config)
         logger.info(f"Applied configuration for profile: {profile_name}")
@@ -728,38 +714,36 @@ class MonstimGUI(QMainWindow):
 
     def _get_effective_config(self):
         """Get the effective config including active profile data."""
-        config = self.config_repo.read_config()
-        if self.active_profile_data:
-            data = self.active_profile_data
-            if "analysis_parameters" in data:
-                config.update(data["analysis_parameters"])
-            if "latency_window_preset" in data:
-                config["latency_window_preset"] = data["latency_window_preset"]
-            if "stimuli_to_plot" in data:
-                config["stimuli_to_plot"] = data["stimuli_to_plot"]
-        return config
+        return self.resolved_config
 
     def update_domain_configs(self, config=None):
         """Propagate the current config to all loaded domain objects."""
         if config is None:
             config = self._get_effective_config()
+        elif not isinstance(config, ResolvedConfig):
+            config = ResolvedConfig(deep_merge(self.resolved_config, config))
+        self.cache_warmup.cancel_and_wait()
+        self.resolved_config = config
         if self.current_experiment:
             self.current_experiment.set_config(config)
-        if self.current_dataset:
+        elif self.current_dataset:
             self.current_dataset.set_config(config)
-        if self.current_session:
+        elif self.current_session:
             self.current_session.set_config(config)
+        self.cache_warmup.request()
 
     def set_current_experiment(self, experiment: Experiment | None):
         """Set the current experiment and ensure config is injected."""
+        if experiment is not self.current_experiment:
+            self.cache_warmup.cancel_and_wait()
         if experiment is None:
             self.current_experiment = None
             self._schedule_latency_dialog_refresh()
             return
-        config = self._get_effective_config()
-        experiment.set_config(config)
+        experiment.set_config(self.resolved_config)
         self.current_experiment = experiment
         self._schedule_latency_dialog_refresh()
+        self.cache_warmup.request()
 
     def set_current_dataset(self, dataset: Dataset | None):
         """Set the current dataset and ensure config is injected."""
@@ -767,10 +751,11 @@ class MonstimGUI(QMainWindow):
             self.current_dataset = None
             self._schedule_latency_dialog_refresh()
             return
-        config = self._get_effective_config()
-        dataset.set_config(config)
+        if dataset.parent_experiment is None or dataset.parent_experiment is not self.current_experiment:
+            dataset.set_config(self.resolved_config)
         self.current_dataset = dataset
         self._schedule_latency_dialog_refresh()
+        self.cache_warmup.request()
 
     def set_current_session(self, session: Session | None):
         """Set the current session and ensure config is injected."""
@@ -778,10 +763,11 @@ class MonstimGUI(QMainWindow):
             self.current_session = None
             self._schedule_latency_dialog_refresh()
             return
-        config = self._get_effective_config()
-        session.set_config(config)
+        if session.parent_dataset is None or session.parent_dataset is not self.current_dataset:
+            session.set_config(self.resolved_config)
         self.current_session = session
         self._schedule_latency_dialog_refresh()
+        self.cache_warmup.request()
 
     def _schedule_latency_dialog_refresh(self) -> None:
         """Debounce updates until a selection change has finished updating its hierarchy."""
@@ -800,6 +786,7 @@ class MonstimGUI(QMainWindow):
 
         # Stop any running background threads gracefully
         logger.debug("Stopping background threads...")
+        self.cache_warmup.cancel_and_wait()
 
         # Stop loading thread if running
         if hasattr(self.data_manager, "loading_thread") and self.data_manager.loading_thread.isRunning():
@@ -842,11 +829,18 @@ class MonstimGUI(QMainWindow):
 
         logger.debug("All background threads stopped.")
 
+        if self.current_experiment is not None:
+            self.current_experiment.close(force_gc=False)
+
         ui_config.save_window_state(self)
         try:
             clear_math_cache()
         except Exception as e:
             logger.info(f"Cache clear failed: {e}")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.cache_warmup.request()
 
     def closeEvent(self, event):
         """Handle application close event - save current session state."""

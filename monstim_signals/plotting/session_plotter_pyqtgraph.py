@@ -1509,32 +1509,16 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             if channel_index >= self.emg_object.num_channels:
                 continue
 
-            # Gather window objects
             windows = self.emg_object.latency_windows
-
-            # Collect amplitudes across windows to compute common bin edges
-            all_amps = []
-            window_to_amps: dict[str, np.ndarray] = {}
-            for w in windows:
-                amps = self.emg_object.get_lw_reflex_amplitudes(method=method, channel_index=channel_index, window=w)
-                amps_arr = np.array(amps) if amps is not None else np.array([])
-                amps_arr = amps_arr[~np.isnan(amps_arr)] if amps_arr.size > 0 else np.array([])
-                window_to_amps[getattr(w, "label", str(w))] = amps_arr
-                if amps_arr.size > 0:
-                    all_amps.extend(amps_arr.tolist())
-
-            if len(all_amps) == 0:
+            distribution = self.emg_object.get_lw_distribution(method, channel_index, bins, density)
+            bin_edges = distribution["bin_edges"]
+            bin_centers = distribution["bin_centers"]
+            window_values = distribution["values"]
+            if bin_edges.size == 0:
                 # Nothing to plot for this channel
                 self.set_labels(plot_item, title=f"{self.emg_object.channel_names[channel_index]}", x_label="EMG Amp.", y_label="Frequency")
                 plot_item.showGrid(True, True)
                 continue
-
-            all_amps = np.array(all_amps)
-
-            # Determine bin edges
-            bin_edges = np.histogram_bin_edges(all_amps, bins=bins) if isinstance(bins, int) else np.asarray(bins)
-
-            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
 
             # Add legend container if requested
             if plot_legend:
@@ -1544,18 +1528,10 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                     logger.exception("Failed to add legend to plot item")
 
             # Plot each window
-            for window_label, amps in window_to_amps.items():
-                if amps.size == 0:
+            for window_label, counts in window_values.items():
+                if counts.size == 0:
                     continue
                 try:
-                    counts, _ = np.histogram(amps, bins=bin_edges)
-                    if density:
-                        # Convert bin counts to a probability density.  Normalize by
-                        # the number of observations and each bin's width so that
-                        # sum(value * bin_width) == 1 for bins covering the data.
-                        counts = counts.astype(float, copy=False)
-                        counts /= amps.size * np.diff(bin_edges)
-
                     for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts, strict=True):
                         raw_data_dict["channel_index"].append(channel_index)
                         raw_data_dict["window_label"].append(window_label)

@@ -27,6 +27,12 @@ def _refresh_data_views(gui, *experiment_ids):
     refresh(*paths)
 
 
+def _cancel_cache_warmup(gui) -> None:
+    coordinator = getattr(gui, "cache_warmup", None)
+    if coordinator is not None:
+        coordinator.cancel_and_wait()
+
+
 class Command(abc.ABC):
     command_name: str = None
 
@@ -578,38 +584,48 @@ class SetLatencyWindowsCommand(Command):
         self.old_windows = {s.id: copy.deepcopy(s.annot.latency_windows) for s in self.sessions}
 
     def _apply(self, windows):
+        _cancel_cache_warmup(self.gui)
         import copy
 
         from monstim_signals.io.repositories import SessionRepository
 
+        calculation_changed = False
         for s in self.sessions:
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = [copy.deepcopy(w) for w in windows]
-            s.update_latency_window_parameters()
-        SessionRepository.save_many(self.sessions)
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
     def execute(self):
         self._apply(self.new_windows)
 
     def undo(self):
+        _cancel_cache_warmup(self.gui)
         from monstim_signals.io.repositories import SessionRepository
 
+        calculation_changed = False
         for s in self.sessions:
             windows = self.old_windows[s.id]
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = windows
-            s.update_latency_window_parameters()
-        SessionRepository.save_many(self.sessions)
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
 
 class InsertSingleLatencyWindowCommand(Command):
@@ -667,35 +683,43 @@ class InsertSingleLatencyWindowCommand(Command):
         return result
 
     def execute(self):
+        _cancel_cache_warmup(self.gui)
         from monstim_signals.io.repositories import SessionRepository
 
+        calculation_changed = False
         for s in self.sessions:
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = self._merge_window(s.annot.latency_windows, self.new_window)
-            s.update_latency_window_parameters()
-        SessionRepository.save_many(self.sessions)
-
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
     def undo(self):
+        _cancel_cache_warmup(self.gui)
         from monstim_signals.io.repositories import SessionRepository
 
+        calculation_changed = False
         for s in self.sessions:
             windows = self.old_windows[s.id]
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = windows
-            s.update_latency_window_parameters()
-        SessionRepository.save_many(self.sessions)
-
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
 
 class ChangeChannelNamesCommand(Command):
@@ -775,7 +799,7 @@ class BulkRecordingExclusionCommand(Command):
                             self._previous_curation[key] = dict(previous) if previous is not None else None
                         session.annot.recording_curation[recording_id] = curation
                 session.annot.excluded_recordings = sorted(excluded)
-                session.reset_all_caches()
+                session.invalidate_selection_results()
                 changed_sessions.append(session)
 
             self._save_sessions(changed_sessions)
@@ -831,7 +855,7 @@ class BulkRecordingExclusionCommand(Command):
                         else:
                             session.annot.recording_curation[recording_id] = previous
                 session.annot.excluded_recordings = sorted(excluded)
-                session.reset_all_caches()
+                session.invalidate_selection_results()
                 changed_sessions.append(session)
 
             self.gui.data_selection_widget.sync_combo_selections()

@@ -661,8 +661,7 @@ class DataSelectionWidget(QGroupBox):
         """Handle when exclusions are applied from the recording exclusion editor."""
         # Refresh the current session data and update UI
         if self.parent.current_session:
-            # Reset cached properties that might be affected by exclusions
-            self.parent.current_session.reset_all_caches()
+            self.parent.current_session.invalidate_selection_results()
 
         # Notify other parts of the UI that data has changed
         self.parent.plot_widget.on_data_selection_changed()

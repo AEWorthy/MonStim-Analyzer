@@ -104,10 +104,11 @@ class TestDomainModelWithRealData:
         assert filtered1 is not filtered2
         assert filtered1[0] is filtered2[0]
 
-        # all_recordings_* properties SHOULD be cached (same list object)
+        # Containers are copied while the per-recording arrays are cached.
         all_raw1 = session.all_recordings_raw
         all_raw2 = session.all_recordings_raw
-        assert all_raw1 is all_raw2
+        assert all_raw1 is not all_raw2
+        assert all_raw1[0] is all_raw2[0]
 
         # Different property types should be different objects
         assert raw1[0] is not filtered1[0]
@@ -125,7 +126,7 @@ class TestDomainModelWithRealData:
             session.annot.excluded_recordings.append(first_recording.id)
 
             # Reset cache to see changes
-            session.reset_all_caches()
+            session.invalidate_selection_results()
 
             # Should have one fewer recording
             assert len(session.recordings_filtered) == original_count - 1
@@ -163,7 +164,7 @@ class TestDomainModelWithRealData:
         # Add some exclusions
         if len(original_recordings) > 1:
             session.annot.excluded_recordings = [original_recordings[0].id]
-            session.reset_all_caches()
+            session.invalidate_selection_results()
 
             # Original recordings should be unchanged
             assert len(session._all_recordings) == len(original_recordings)

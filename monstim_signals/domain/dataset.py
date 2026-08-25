@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from monstim_signals.core import DatasetAnnot, LatencyWindow, load_config
+from monstim_signals.core import ConfigChange, DatasetAnnot, LatencyWindow, LatencyWindowNotFoundError, ResolvedConfig, load_config
+from monstim_signals.core.configuration import deep_merge
 from monstim_signals.domain.session import Session
 from monstim_signals.plotting import DatasetPlotterPyQtGraph
+from monstim_signals.transform import NoCalculableMmaxError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.experiment import Experiment
@@ -27,14 +29,16 @@ class Dataset:
         sessions: list[Session],
         annot: DatasetAnnot,
         repo: Any = None,
-        config: dict | None = None,
+        config: ResolvedConfig | dict | None = None,
     ):
         self.id: str = dataset_id
         self._all_sessions: list[Session] = sessions
         self.annot: DatasetAnnot = annot
         self.repo: DatasetRepository = repo
         self.parent_experiment: Experiment | None = None
-        self._config = config
+        self._config = config if isinstance(config, ResolvedConfig) else ResolvedConfig(deep_merge(load_config(), config or {}))
+        self._aggregate_revision = 0
+        self._aggregate_cache: dict[object, tuple[object, object]] = {}
         for sess in self._all_sessions:
             sess.parent_dataset = self
 
@@ -69,7 +73,7 @@ class Dataset:
             self.repo.save(self)
 
     def _load_config_settings(self) -> None:
-        _config = self._config if self._config is not None else load_config()
+        _config = self._config
         self.bin_size = _config["bin_size"]
         self.default_method = _config["default_method"]
         self.m_color = _config["m_color"]
@@ -341,13 +345,16 @@ class Dataset:
     @property
     def stimulus_voltages(self) -> np.ndarray:
         """Return sorted unique stimulus voltages binned by `bin_size`."""
+        hit, cached = self._get_aggregate_cache(("stimulus_voltages", self.bin_size))
+        if hit:
+            return cached
         if not self.sessions:
             return np.array([])
         binned_voltages = set()
         for session in self.sessions:
             vols = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             binned_voltages.update(vols.tolist())
-        return np.array(sorted(binned_voltages))
+        return self._store_aggregate_cache(("stimulus_voltages", self.bin_size), np.array(sorted(binned_voltages)))
 
     def get_all_sessions(self, include_excluded=False):
         """
@@ -357,6 +364,44 @@ class Dataset:
         if include_excluded:
             return self._all_sessions
         return [sess for sess in self._all_sessions if sess.id not in self.excluded_sessions]
+
+    @staticmethod
+    def _freeze_cache_value(value):
+        if isinstance(value, np.ndarray):
+            stored = np.array(value, copy=True)
+            stored.setflags(write=False)
+            return stored
+        if isinstance(value, dict):
+            return {key: Dataset._freeze_cache_value(item) for key, item in value.items()}
+        if isinstance(value, tuple):
+            return tuple(Dataset._freeze_cache_value(item) for item in value)
+        if isinstance(value, list):
+            return [Dataset._freeze_cache_value(item) for item in value]
+        return value
+
+    @staticmethod
+    def _copy_cache_value(value):
+        if isinstance(value, np.ndarray):
+            return value.copy()
+        if isinstance(value, dict):
+            return {key: Dataset._copy_cache_value(item) for key, item in value.items()}
+        if isinstance(value, tuple):
+            return tuple(Dataset._copy_cache_value(item) for item in value)
+        if isinstance(value, list):
+            return [Dataset._copy_cache_value(item) for item in value]
+        return value
+
+    def _get_aggregate_cache(self, key) -> tuple[bool, object]:
+        entry = self._aggregate_cache.get(key)
+        token = self.cache_token
+        if entry is None or entry[0] != token:
+            return False, None
+        return True, self._copy_cache_value(entry[1])
+
+    def _store_aggregate_cache(self, key, value):
+        stored = self._freeze_cache_value(value)
+        self._aggregate_cache[key] = (self.cache_token, stored)
+        return self._copy_cache_value(stored)
 
     # ------------------------------------------------------------------
     # Latency window helper methods
@@ -378,6 +423,7 @@ class Dataset:
 
         SessionRepository.save_many(self.sessions)
         self.update_latency_window_parameters()
+        self.invalidate_aggregate_results()
 
     def remove_latency_window(self, name: str) -> None:
         if not self.sessions:
@@ -389,6 +435,7 @@ class Dataset:
 
         SessionRepository.save_many(self.sessions)
         self.update_latency_window_parameters()
+        self.invalidate_aggregate_results()
 
     def apply_latency_window_preset(self, preset_name: str) -> None:
         """Apply a latency window preset to all sessions in the dataset."""
@@ -401,18 +448,45 @@ class Dataset:
 
         SessionRepository.save_many(self.sessions)
         self.update_latency_window_parameters()
+        self.invalidate_aggregate_results()
 
     # ──────────────────────────────────────────────────────────────────
     # 0) Cached properties and cache reset methods
     # ──────────────────────────────────────────────────────────────────
-    def reset_all_caches(self):
-        """
-        Resets all cached properties in the dataset.
-        This is useful when the underlying data has changed and you need to refresh the cached values.
-        """
-        for session in self.sessions:
-            session.reset_all_caches()
-        self.update_latency_window_parameters()
+    @property
+    def cache_token(self) -> tuple[object, ...]:
+        active = tuple((session.id, session.cache_token) for session in self.sessions)
+        return (self._aggregate_revision, active)
+
+    def invalidate_aggregate_results(self) -> None:
+        self._aggregate_revision += 1
+        self._aggregate_cache.clear()
+
+    def invalidate_signal_data(self) -> None:
+        for session in self.get_all_sessions(include_excluded=True):
+            session.invalidate_signal_data()
+        self.invalidate_aggregate_results()
+
+    def invalidate_window_results(self) -> None:
+        for session in self.get_all_sessions(include_excluded=True):
+            session.invalidate_window_results()
+        self.invalidate_aggregate_results()
+
+    def invalidate_selection_results(self) -> None:
+        for session in self.get_all_sessions(include_excluded=True):
+            session.invalidate_selection_results()
+        self.invalidate_aggregate_results()
+
+    def invalidate_analysis_results(self) -> None:
+        for session in self.get_all_sessions(include_excluded=True):
+            session.invalidate_analysis_results()
+        self.invalidate_aggregate_results()
+
+    def release_cached_data(self) -> None:
+        self._aggregate_revision += 1
+        self._aggregate_cache.clear()
+        for session in self.get_all_sessions(include_excluded=True):
+            session.release_cached_data()
 
     def update_latency_window_parameters(self):
         """
@@ -421,30 +495,31 @@ class Dataset:
         for session in self.sessions:
             session.update_latency_window_parameters()
 
-    def apply_config(self, reset_caches: bool = True) -> None:
+    def apply_config(self, changes: ConfigChange = ConfigChange.PLOT) -> None:
         """
         Applies user preferences to the dataset.
         This method is a placeholder for any future preferences that might be added.
         """
-        for session in self.get_all_sessions(include_excluded=True):
-            session.apply_config()
-
         self._load_config_settings()
-        self.plotter = DatasetPlotterPyQtGraph(self)
+        if changes & (ConfigChange.SIGNAL | ConfigChange.ANALYSIS):
+            self.invalidate_aggregate_results()
 
-        if reset_caches:
-            self.reset_all_caches()
-
-    def set_config(self, config: dict) -> None:
+    def set_config(self, config: ResolvedConfig | dict) -> None:
         """
         Update the configuration for this dataset and all child sessions.
         """
-        self._config = config
+        resolved = config if isinstance(config, ResolvedConfig) else ResolvedConfig(deep_merge(self._config, config))
+        changes = resolved.diff(self._config)
+        if changes == ConfigChange.NONE:
+            return
+        recreate_plotter = resolved.plot.construction_fingerprint != self._config.plot.construction_fingerprint
+        self._config = resolved
         for sess in self.get_all_sessions(include_excluded=True):
-            if hasattr(sess, "set_config"):
-                sess.set_config(config)
+            sess.set_config(resolved)
 
-        self.apply_config(reset_caches=True)
+        self.apply_config(changes)
+        if recreate_plotter:
+            self.plotter = DatasetPlotterPyQtGraph(self)
 
     # ──────────────────────────────────────────────────────────────────
     # 1) Useful properties for GUI & analysis code
@@ -498,6 +573,10 @@ class Dataset:
         Returns:
             float: The average M-wave amplitude for the specified channel.
         """
+        cache_key = ("avg_mmax", method, channel_index, return_avg_mmax_thresholds)
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
         m_max_amplitudes = []
         m_max_thresholds = []
 
@@ -507,13 +586,13 @@ class Dataset:
                 m_max_amplitudes.append(m_max)
                 m_max_thresholds.append(mmax_low_stim)
 
-            except ValueError as e:
+            except (LatencyWindowNotFoundError, NoCalculableMmaxError, ValueError) as e:
                 logger.warning(f"M-max could not be calculated for session {session.id} channel {channel_index}: {e}")
 
         if not m_max_amplitudes:
             if return_avg_mmax_thresholds:
-                return None, None
-            return None
+                return self._store_aggregate_cache(cache_key, (None, None))
+            return self._store_aggregate_cache(cache_key, None)
 
         # Calculate M-max for dataset level - use mean of all valid sessions
         if len(m_max_amplitudes) == 1:
@@ -531,12 +610,16 @@ class Dataset:
             logger.debug(f"  Mean M-max: {final_mmax}")
 
         if return_avg_mmax_thresholds:
-            return final_mmax, final_mthresh
+            return self._store_aggregate_cache(cache_key, (final_mmax, final_mthresh))
         else:
-            return final_mmax
+            return self._store_aggregate_cache(cache_key, final_mmax)
 
     def get_avg_m_wave_amplitudes(self, method: str, channel_index: int):
         """Average M-wave amplitudes for each stimulus bin across sessions."""
+        cache_key = ("avg_m_wave", method, channel_index, self.bin_size)
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
         m_wave_bins = {v: [] for v in self.stimulus_voltages}
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
@@ -545,22 +628,30 @@ class Dataset:
                 m_wave_bins[volt].append(amp)
         avg = [float(np.mean(m_wave_bins[v])) if m_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         sem = [(float(np.std(m_wave_bins[v]) / np.sqrt(len(m_wave_bins[v]))) if m_wave_bins[v] else np.nan) for v in self.stimulus_voltages]
-        return avg, sem
+        return self._store_aggregate_cache(cache_key, (avg, sem))
 
     def get_m_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
         """
         Get M-wave amplitudes at a specific stimulus voltage across all sessions.
         """
+        cache_key = ("m_wave_at_voltage", method, channel_index, float(voltage), self.bin_size)
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
         amps = []
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             if voltage in binned:
                 idx = np.where(binned == voltage)[0][0]
                 amps.append(session.get_m_wave_amplitudes(method, channel_index)[idx])
-        return np.array(amps)
+        return self._store_aggregate_cache(cache_key, np.array(amps))
 
     def get_avg_h_wave_amplitudes(self, method: str, channel_index: int) -> tuple[np.ndarray, np.ndarray]:
         """Average H-reflex amplitudes for each stimulus bin across sessions."""
+        cache_key = ("avg_h_wave", method, channel_index, self.bin_size)
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
         h_wave_bins = {v: [] for v in self.stimulus_voltages}
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
@@ -569,16 +660,20 @@ class Dataset:
                 h_wave_bins[volt].append(amp)
         avg = [float(np.mean(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
         std = [float(np.std(h_wave_bins[v])) if h_wave_bins[v] else np.nan for v in self.stimulus_voltages]
-        return np.array(avg), np.array(std)
+        return self._store_aggregate_cache(cache_key, (np.array(avg), np.array(std)))
 
     def get_h_wave_amplitudes_at_voltage(self, method: str, channel_index: int, voltage: float) -> np.ndarray:
+        cache_key = ("h_wave_at_voltage", method, channel_index, float(voltage), self.bin_size)
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
         amps = []
         for session in self.sessions:
             binned = np.round(np.array(session.stimulus_voltages) / self.bin_size) * self.bin_size
             if voltage in binned:
                 idx = np.where(binned == voltage)[0][0]
                 amps.append(session.get_h_wave_amplitudes(method, channel_index)[idx])
-        return np.array(amps)
+        return self._store_aggregate_cache(cache_key, np.array(amps))
 
     def get_lw_reflex_amplitudes(self, method: str, channel_index: int, window: str | LatencyWindow) -> dict[str, list[np.ndarray]]:
         """Return reflex amplitudes for a latency window across sessions.
@@ -588,11 +683,14 @@ class Dataset:
         Returns mapping: session_id -> np.ndarray of amplitudes (ordered by that session's
         stimulus sequence).
         """
-        if not self.sessions:
-            return {}
-
         window_name: str
         window_name = window.name if isinstance(window, LatencyWindow) else str(window)
+        cache_key = ("lw_amplitudes", method, channel_index, window_name.casefold())
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
+        if not self.sessions:
+            return {}
 
         result: dict[str, list[np.ndarray]] = {}
         missing_sessions: list[str] = []
@@ -604,7 +702,7 @@ class Dataset:
 
         if missing_sessions:
             logger.warning(f"Dataset {self.id}: latency window '{window_name}' absent in sessions: {missing_sessions}.")
-        return result
+        return self._store_aggregate_cache(cache_key, result)
 
     def get_average_lw_reflex_curve(self, method: str, channel_index: int, window: str | LatencyWindow) -> dict[str, np.ndarray]:
         """
@@ -612,11 +710,14 @@ class Dataset:
 
         Curve's X-axis is the stimulus voltage (float), Y-axis is the average reflex amplitude (float) for a given channel/window.
         """
-        if not self.sessions:
-            return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
-
         window_name: str
         window_name = window.name if isinstance(window, LatencyWindow) else str(window)
+        cache_key = ("average_lw_curve", method, channel_index, window_name.casefold(), self.bin_size)
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
+        if not self.sessions:
+            return {"voltages": np.array([]), "means": np.array([]), "stdevs": np.array([]), "n_sessions": np.array([])}
 
         # Get all reflex amplitudes across available sessions
         all_amplitudes = self.get_lw_reflex_amplitudes(method, channel_index, window_name)
@@ -646,12 +747,43 @@ class Dataset:
         stdevs = [float(np.std(bin_amplitudes[v])) if bin_amplitudes[v] else np.nan for v in sorted_volts]
         n_sessions = [contrib_counts[v] for v in sorted_volts]
 
-        return {
-            "voltages": np.array(sorted_volts),
-            "means": np.array(means),
-            "stdevs": np.array(stdevs),
-            "n_sessions": np.array(n_sessions),
-        }
+        return self._store_aggregate_cache(
+            cache_key,
+            {
+                "voltages": np.array(sorted_volts),
+                "means": np.array(means),
+                "stdevs": np.array(stdevs),
+                "n_sessions": np.array(n_sessions),
+            },
+        )
+
+    def get_lw_distribution(self, method: str, channel_index: int, bins=30, density: bool = False) -> dict[str, object]:
+        """Return cached distribution results using common bins across windows."""
+        bins_key = int(bins) if isinstance(bins, int) else tuple(np.asarray(bins, dtype=float))
+        cache_key = ("lw_distribution", method, channel_index, bins_key, bool(density))
+        hit, cached = self._get_aggregate_cache(cache_key)
+        if hit:
+            return cached
+        amplitudes = {}
+        for window_name in self.unique_latency_window_names():
+            per_session = self.get_lw_reflex_amplitudes(method, channel_index, window_name)
+            values = np.concatenate(list(per_session.values())) if per_session else np.array([])
+            amplitudes[window_name] = values[np.isfinite(values)]
+        nonempty = [values for values in amplitudes.values() if values.size]
+        if not nonempty:
+            return self._store_aggregate_cache(
+                cache_key,
+                {"bin_edges": np.array([]), "bin_centers": np.array([]), "values": amplitudes},
+            )
+        edges = np.histogram_bin_edges(np.concatenate(nonempty), bins=bins) if isinstance(bins, int) else np.asarray(bins, dtype=float)
+        centers = (edges[:-1] + edges[1:]) / 2.0
+        values_by_window = {}
+        for window_name, values in amplitudes.items():
+            counts, _ = np.histogram(values, bins=edges)
+            if density and values.size:
+                counts = counts.astype(float, copy=False) / (values.size * np.diff(edges))
+            values_by_window[window_name] = counts
+        return self._store_aggregate_cache(cache_key, {"bin_edges": edges, "bin_centers": centers, "values": values_by_window})
 
     # ──────────────────────────────────────────────────────────────────
     # 2) User actions that update annot files
@@ -665,7 +797,7 @@ class Dataset:
         """
         for session in self.sessions:
             session.invert_channel_polarity(channel_index)
-        self.reset_all_caches()
+        self.invalidate_aggregate_results()
         logger.info(f"Inverted polarity of channel {channel_index} in dataset {self.id}.")
 
     def exclude_session(self, session_id: str) -> None:
@@ -675,7 +807,7 @@ class Dataset:
             return
         if session_id not in self.annot.excluded_sessions:
             self.annot.excluded_sessions.append(session_id)
-            self.reset_all_caches()
+            self.invalidate_aggregate_results()
             if self.repo is not None:
                 self.repo.save(self)
         else:
@@ -690,7 +822,7 @@ class Dataset:
         """Restore a previously excluded session by its ID."""
         if session_id in self.annot.excluded_sessions:
             self.annot.excluded_sessions.remove(session_id)
-            self.reset_all_caches()
+            self.invalidate_aggregate_results()
             if self.repo is not None:
                 self.repo.save(self)
         else:
@@ -757,6 +889,36 @@ class Dataset:
     # ──────────────────────────────────────────────────────────────────
     # 2) Clean up
     # ──────────────────────────────────────────────────────────────────
+    def prepare_cache(self, products, methods=(), progress=None, cancelled=None) -> int:
+        """Warm child products and optional dataset aggregates without Qt."""
+        requested = set(products)
+        selected_methods = tuple(dict.fromkeys(methods))
+        if ("mmax" in requested or "dataset_aggregates" in requested) and not selected_methods:
+            selected_methods = (self.default_method,)
+        completed = 0
+        for session in self.sessions:
+            if cancelled and cancelled():
+                return completed
+            completed += session.prepare_cache(requested, selected_methods, progress, cancelled)
+        if "dataset_aggregates" in requested:
+            for method in selected_methods:
+                for channel in range(self.num_channels):
+                    if cancelled and cancelled():
+                        return completed
+                    try:
+                        self.get_avg_m_wave_amplitudes(method, channel)
+                        self.get_avg_h_wave_amplitudes(method, channel)
+                    except LatencyWindowNotFoundError as exc:
+                        logger.debug("Skipping canonical-wave warm-up for %s channel %s: %s", self.id, channel, exc)
+                    self.get_avg_m_max(method, channel)
+                    self.get_lw_distribution(method, channel)
+                    for window_name in self.unique_latency_window_names():
+                        self.get_average_lw_reflex_curve(method, channel, window_name)
+                    completed += 1
+                    if progress:
+                        progress(completed, 0, f"{self.id} aggregates / channel {channel + 1} / {method}")
+        return completed
+
     def close(self, force_gc: bool = True) -> None:
         """Close all sessions in the dataset.
 
@@ -764,6 +926,7 @@ class Dataset:
             force_gc: If True, force garbage collection after closing.
                      Set to False when closing as part of full experiment.
         """
+        self._aggregate_cache.clear()
         for sess in self.get_all_sessions(include_excluded=True):
             if hasattr(sess, "close"):
                 # Don't GC at session level when closing dataset/experiment

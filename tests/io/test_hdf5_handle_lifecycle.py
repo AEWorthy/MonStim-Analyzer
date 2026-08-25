@@ -36,6 +36,81 @@ def test_session_close_releases_eager_raw_h5_handles(tmp_path: Path):
     _assert_raw_files_renameable(session_dir)
 
 
+def test_filter_warmup_closes_h5_and_reuses_cached_arrays(tmp_path: Path, monkeypatch):
+    session_dir = create_minimal_session_folder(tmp_path, num_recordings=2)
+    session = repo_mod.SessionRepository(session_dir).load(lazy_open_h5=True)
+    calls = 0
+    for recording in session.all_recordings:
+        original = recording.raw_view
+
+        def counted(*args, _original=original, **kwargs):
+            nonlocal calls
+            calls += 1
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(recording, "raw_view", counted)
+    try:
+        session.prepare_cache({"filtered_signals"})
+        assert calls == 2
+        assert session.all_recordings_raw
+        assert calls == 2
+        _assert_raw_files_renameable(session_dir)
+        session.prepare_cache({"filtered_signals"})
+        session.invalidate_window_results()
+        session.invalidate_selection_results()
+        assert session.all_recordings_filtered
+        assert calls == 2
+        _assert_raw_files_renameable(session_dir)
+    finally:
+        session.close()
+
+
+def test_filter_error_closes_h5_handle(tmp_path: Path, monkeypatch):
+    session_dir = create_minimal_session_folder(tmp_path, num_recordings=1)
+    session = repo_mod.SessionRepository(session_dir).load(lazy_open_h5=True)
+    import monstim_signals.domain.session as session_module
+
+    def fail_filter(*args, **kwargs):
+        raise RuntimeError("filter failed")
+
+    monkeypatch.setattr(session_module, "butter_bandpass_filter", fail_filter)
+    try:
+        with pytest.raises(RuntimeError, match="filter failed"):
+            session.prepare_cache({"filtered_signals"})
+        _assert_raw_files_renameable(session_dir)
+    finally:
+        session.close()
+
+
+def test_cancelled_warmup_keeps_completed_recording_cache(tmp_path: Path, monkeypatch):
+    session_dir = create_minimal_session_folder(tmp_path, num_recordings=2)
+    session = repo_mod.SessionRepository(session_dir).load(lazy_open_h5=True)
+    calls = 0
+    cancelled = False
+    for recording in session.all_recordings:
+        original = recording.raw_view
+
+        def counted(*args, _original=original, **kwargs):
+            nonlocal calls
+            calls += 1
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(recording, "raw_view", counted)
+
+    def progress(completed, total, detail):
+        nonlocal cancelled
+        cancelled = completed == 1
+
+    try:
+        assert session.prepare_cache({"filtered_signals"}, progress=progress, cancelled=lambda: cancelled) == 1
+        assert calls == 1
+        _assert_raw_files_renameable(session_dir)
+        session.prepare_cache({"filtered_signals"})
+        assert calls == 2
+    finally:
+        session.close()
+
+
 def test_dataset_close_releases_excluded_session_handles(tmp_path: Path):
     dataset_dir = tmp_path / "250916 C554.1 post-dec vibes1"
     dataset_dir.mkdir()

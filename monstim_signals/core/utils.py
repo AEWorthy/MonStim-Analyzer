@@ -2,6 +2,7 @@
 import os
 import sys
 from pathlib import Path
+from threading import RLock
 
 import yaml
 from PySide6.QtCore import QStandardPaths
@@ -149,6 +150,18 @@ def deep_equal(val1, val2) -> bool:
     return val1 == val2
 
 
+_CONFIG_RESOLVERS = {}
+_CONFIG_RESOLVER_LOCK = RLock()
+
+
+def clear_config_cache() -> None:
+    """Force subsequent configuration loads to re-read YAML files."""
+    with _CONFIG_RESOLVER_LOCK:
+        for resolver in _CONFIG_RESOLVERS.values():
+            resolver.invalidate()
+        _CONFIG_RESOLVERS.clear()
+
+
 def load_config(config_file=None):
     """
     Loads the config.yml file into a YAML object that can be used to reference hard-coded configurable constants.
@@ -156,14 +169,17 @@ def load_config(config_file=None):
     Args:
         config_file (str): location of the 'config.yml' file.
     """
-    if config_file is None:
-        default_config_file = get_config_path()
-        user_config_file = os.path.join(os.path.dirname(default_config_file), "config-user.yml")
-        # if it exists, get user config file
-        config_file = user_config_file if os.path.exists(user_config_file) else default_config_file
-    with open(config_file) as file:
-        config = yaml.safe_load(file)
-    return config
+    from monstim_signals.core.configuration import ConfigResolver
+
+    default_config_file = str(config_file or get_config_path())
+    user_config_file = os.path.join(os.path.dirname(default_config_file), "config-user.yml") if config_file is None else None
+    key = (default_config_file, user_config_file)
+    with _CONFIG_RESOLVER_LOCK:
+        resolver = _CONFIG_RESOLVERS.get(key)
+        if resolver is None:
+            resolver = ConfigResolver(default_config_file, user_config_file)
+            _CONFIG_RESOLVERS[key] = resolver
+        return resolver.resolve().to_dict()
 
 
 # Custom YAML loader to handle tuples

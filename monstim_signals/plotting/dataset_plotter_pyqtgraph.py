@@ -673,25 +673,11 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if channel_index >= self.emg_object.num_channels:
                     continue
 
-                # Gather window names available in the dataset
-                window_names = getattr(self.emg_object, "unique_latency_window_names", list)()
-
-                # Collect amplitudes across all windows to determine common bin edges
-                all_amps_for_channel = []
-                window_to_amps: dict[str, np.ndarray] = {}
-                for window_name in window_names:
-                    per_session_amps = self.emg_object.get_lw_reflex_amplitudes(method, channel_index, window_name)
-                    # per_session_amps is a dict session_id -> np.ndarray
-                    amps_concat = np.concatenate(list(per_session_amps.values())) if per_session_amps else np.array([])
-                    # Filter NaN
-                    amps_concat = amps_concat[~np.isnan(amps_concat)] if amps_concat.size > 0 else np.array([])
-                    window_to_amps[window_name] = amps_concat
-                    if amps_concat.size > 0:
-                        all_amps_for_channel.extend(amps_concat.tolist())
-
-                # (no debug logging here; keep function output clean)
-
-                if len(all_amps_for_channel) == 0:
+                distribution = self.emg_object.get_lw_distribution(method, channel_index, bins, density)
+                bin_edges = distribution["bin_edges"]
+                bin_centers = distribution["bin_centers"]
+                window_values = distribution["values"]
+                if bin_edges.size == 0:
                     # Nothing to plot for this channel
                     self.set_labels(
                         plot_item,
@@ -702,13 +688,6 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     plot_item.showGrid(True, True)
                     continue
 
-                all_amps_for_channel = np.array(all_amps_for_channel)
-
-                # Determine bin edges (common for all windows)
-                bin_edges = np.histogram_bin_edges(all_amps_for_channel, bins=bins) if isinstance(bins, int) else np.asarray(bins)
-
-                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
-
                 # Plot each window's distribution
                 # Add legend container if requested (one per plot_item)
                 if plot_legend:
@@ -717,18 +696,11 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     except Exception:
                         logger.warning("Could not add legend to plot item; continuing without legend.")
 
-                for window_name, amps in window_to_amps.items():
-                    if amps.size == 0:
+                for window_name, counts in window_values.items():
+                    if counts.size == 0:
                         continue
 
                     try:
-                        # Convert counts to density explicitly so both plotters use
-                        # the same normalization: probability per amplitude unit.
-                        counts, _ = np.histogram(amps, bins=bin_edges)
-                        if density:
-                            counts = counts.astype(float, copy=False)
-                            counts /= amps.size * np.diff(bin_edges)
-
                         # record raw data
                         for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts, strict=True):
                             raw_data_dict["channel_index"].append(channel_index)
