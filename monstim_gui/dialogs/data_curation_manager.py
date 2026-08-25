@@ -5,32 +5,24 @@ and drag-and-drop dataset organization between experiments.
 """
 
 # TODO: Data Curation Manager feature roadmap
-# - Thumbnail / quick-preview column: show a small sparkline or thumbnail per-dataset
-#   (representative session trace) to help visually triage datasets before moving/deleting.
-# - Search / filter box: add a text input above the tree to filter experiments/datasets by
-#   name, date, animal_id, condition, or tags.
-# - Dry-run / preview modal for batch move/copy/delete: show affected items, conflicts,
-#   and allow skip/overwrite/rename decisions before executing changes.
-# - Multi-select drag & drop ghosting: when dragging multiple checked datasets, show a
-#   drag ghost with count and optionally a preview to make multi-drag operations clear.
-# - Batch rename tooling: pattern-based renaming (tokens or regex) with a preview before applying.
 # - Recycle bin / safe-delete: move datasets to a hidden .trash instead of immediate permanent deletion,
 #   add restore & purge UI, and schedule automatic purge after configurable retention.
-# - Inline / bulk metadata editor: allow editing dataset metadata (date/animal/condition) from the tree
-#   or an edit pane; support bulk edits and preview.
-# - Validation & consistency checker: validate selected datasets for missing files, mismatched channels,
-#   missing latency windows, etc., and provide quick-fix suggestions.
 # - Background workers and progress/cancellation: run long operations (move/copy/import) in background
 #   threads with progress dialogs and per-item error reporting.
-# - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
-# - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
+# - Dry-run / preview modal for batch move/copy/delete: show affected items, conflicts,
+#   and allow skip/overwrite/rename decisions before executing changes.
+# - Validation & consistency checker: validate selected datasets for missing files, mismatched channels,
+#   missing latency windows, etc., and provide quick-fix suggestions.
 # - Add a Trim operation to remove 0-indexed recording numbers from all sessions in the selected data.
 #   Make sure it can handle negative indexing to trim from the ends. Useful for trimming known bad recordings like the first/second ones.
+# - Inline / bulk metadata editor: allow editing dataset metadata (date/animal/condition) from the tree
+#   or an edit pane; support bulk edits and preview.
+# - Batch rename tooling: pattern-based renaming (tokens or regex) with a preview before applying.
+# - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
+# - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
 
 import logging
-
-logger = logging.getLogger(__name__)
-import re
+import shlex
 from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
@@ -59,6 +51,8 @@ from PySide6.QtWidgets import (
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
+
+logger = logging.getLogger(__name__)
 
 
 def auto_refresh(method):
@@ -1090,7 +1084,7 @@ class DataCurationManager(QDialog):
             return
 
         qualifiers = [
-            # Name and ID excluded
+            ("id", "Dataset ID"),
             ("animal", "Animal"),
             ("condition", "Condition"),
             ("date", "Date (dataset)"),
@@ -1400,13 +1394,20 @@ class DataCurationManager(QDialog):
         Supports:
         - plain tokens across name/id/animal/condition/date/added/modified
         - quoted phrases: "rev light"
-        - field qualifiers: animal:WT, cond:rev-light, id:123, date:2025, added:2024-12, modified:2025
-        Tokens are ANDed. Matching is case-insensitive and substring-based.
+        - field qualifiers: animal:WT, condition:"rev light", id:123, date:2025,
+          added:2024-12, modified:2025, status:Complete, experiment:exp-1
+        - alternatives within one qualifier: animal:(WT|KO)
+        Tokens and qualifier groups are ANDed. Matching is case-insensitive and substring-based.
         """
         try:
             q = (text or "").strip()
-            token_pattern = r"\w+:[^\s\"]+|\"[^\"]+\"|[^\s]+"
-            tokens = re.findall(token_pattern, q)
+            try:
+                # shlex keeps qualified quoted values (animal:"rev light") and
+                # grouped alternatives as one token while accepting ordinary text.
+                tokens = shlex.split(q, posix=True)
+            except ValueError:
+                # Keep filtering responsive while the user is typing an unfinished quote.
+                tokens = q.split()
 
             def norm(s):
                 return str(s or "").strip().lower()
@@ -1427,6 +1428,12 @@ class DataCurationManager(QDialog):
                 "exp": "experiment_id",
                 "status": "status",
             }
+
+            def qualifier_values(value: str) -> list[str]:
+                """Return the OR alternatives encoded by the filter dialog."""
+                if value.startswith("(") and value.endswith(")"):
+                    return [part for part in value[1:-1].split("|") if part]
+                return [value]
 
             # Token match helper includes status based on metadata or column text
             def token_matches(meta: dict, name_text: str, token: str, ds_data: dict, status_text: str) -> bool:
@@ -1454,15 +1461,18 @@ class DataCurationManager(QDialog):
                         fields.append(norm(status_text))
                         fields.append(norm(ds_data.get("experiment_id")))
                         return any(tt in f for f in fields)
+                    values = [norm(value) for value in qualifier_values(v)]
                     # experiment qualifier matches against dataset's experiment_id
                     if fkey == "experiment_id":
-                        return norm(v) in norm(ds_data.get("experiment_id"))
+                        field_value = norm(ds_data.get("experiment_id"))
+                        return any(value in field_value for value in values)
                     # status qualifier should match meta status or column text
                     if fkey == "status":
                         mv = norm(meta.get("status"))
                         sv = norm(status_text)
-                        return norm(v) in mv or norm(v) in sv
-                    return norm(v) in norm(meta.get(fkey))
+                        return any(value in mv or value in sv for value in values)
+                    field_value = norm(meta.get(fkey))
+                    return any(value in field_value for value in values)
                 tt = norm(t)
                 fields = [norm(name_text)] + [
                     norm(meta.get(x)) for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
@@ -1506,6 +1516,8 @@ class DataCurationManager(QDialog):
                             "modified": "date_modified",
                             "date_modified": "date_modified",
                         }
+                        if key == "status":
+                            return "Complete" if exp_meta.get("is_completed") else "Incomplete"
                         fk = kmap.get(key)
                         return exp_meta.get(fk) if fk else None
 
@@ -1515,10 +1527,10 @@ class DataCurationManager(QDialog):
                         return any(phrase in v for v in fields)
                     if ":" in t:
                         k, v = t.split(":", 1)
-                        val = norm(v)
+                        values = [norm(value) for value in qualifier_values(v)]
                         fv = norm(get_exp_field(k.lower()))
                         if fv:
-                            return val in fv
+                            return any(value in fv for value in values)
                         # Unknown qualifier: treat as plain token
                         tt = norm(t)
                         fields = [norm(exp_name)] + [norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")]
