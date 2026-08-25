@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QFont, QKeySequence
-from PySide6.QtWidgets import QMenuBar, QMessageBox
+from PySide6.QtWidgets import QMenu, QMenuBar, QMessageBox
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
@@ -18,7 +18,12 @@ class MenuBar(QMenuBar):
 
     def create_file_menu(self):
         # File menu
-        file_menu = self.addMenu("File")
+        # Keep explicit references to the top-level menus.  Besides making
+        # ownership unambiguous, this prevents their Python wrappers from
+        # being collected while another top-level window is active.
+        file_menu = QMenu("File", self)
+        self.addMenu(file_menu)
+        self.file_menu = file_menu
 
         import_action = file_menu.addAction("Import an Experiment")
         import_action.triggered.connect(self.parent.data_manager.import_expt_data)
@@ -81,7 +86,9 @@ class MenuBar(QMenuBar):
 
     def create_edit_menu(self):
         # Edit menu
-        edit_menu = self.addMenu("Edit")
+        edit_menu = QMenu("Edit", self)
+        self.addMenu(edit_menu)
+        self.edit_menu = edit_menu
 
         # # Add undo and redo buttons to the menu bar
         self.undo_action = edit_menu.addAction("Undo")
@@ -188,7 +195,9 @@ class MenuBar(QMenuBar):
 
     def create_help_menu(self):
         # Help menu
-        help_menu = self.addMenu("Help")
+        help_menu = QMenu("Help", self)
+        self.addMenu(help_menu)
+        self.help_menu = help_menu
 
         # About button
         about_action = help_menu.addAction("About")
@@ -223,7 +232,9 @@ class MenuBar(QMenuBar):
 
     def create_tools_menu(self):
         """Create clearly separated developer/recovery operations."""
-        advanced_menu = self.addMenu("Tools")
+        advanced_menu = QMenu("Tools", self)
+        self.addMenu(advanced_menu)
+        self.tools_menu = advanced_menu
         rebuild_all_action = advanced_menu.addAction("Force Rebuild All Data Catalogs…")
         rebuild_all_action.triggered.connect(self._force_rebuild_all_catalogs)
         rebuild_all_action.setStatusTip("Re-scan every experiment and rebuild all catalogs; this may take a very long time")

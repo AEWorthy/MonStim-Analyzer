@@ -107,7 +107,10 @@ def select_extrema_ptt_pair(
     """Select the deterministic best adjacent max/min pair for one window."""
     if span.end_sample - span.start_sample < 3:
         return _invalid_result(span, "invalid_window")
-    inside = [item for item in extrema if span.start_sample < item.sample_index < span.end_sample - 1]
+    # Treat the flag interval as an inclusive interval over the samples it
+    # covers.  Extrema on either edge are valid candidates; excluding them
+    # made a response peak or trough disappear when it landed on a flag.
+    inside = [item for item in extrema if span.start_sample <= item.sample_index < span.end_sample]
     claimed_by_sample = claimed_by_sample or {}
     available = [item for item in inside if item.sample_index not in claimed_by_sample]
     owners = tuple(dict.fromkeys(claimed_by_sample[item.sample_index] for item in inside if item.sample_index in claimed_by_sample))

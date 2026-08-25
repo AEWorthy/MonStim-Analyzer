@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 from monstim_gui.dialogs.latency import LatencyWindowsDialog
@@ -37,6 +38,8 @@ def test_live_dialog_refreshes_session_draft_and_context():
     first = _session("S1", 1.0)
     gui = _GUI(first)
     dialog = LatencyWindowsDialog(first, gui, config_repo=_ConfigRepo())
+
+    assert not bool(dialog.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
 
     assert dialog.apply_level_combo.currentData() == "session"
     assert "Session annotation" in dialog.value_source_label.text()

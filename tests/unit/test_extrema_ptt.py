@@ -9,11 +9,11 @@ from monstim_signals.transform.extrema import (
 )
 
 
-def test_extrema_ptt_ignores_endpoints_and_selects_adjacent_pair():
-    signal = np.array([100.0, 0.0, 2.0, 0.0, -3.0, 0.0, 100.0])
-    result = calculate_extrema_ptt_result(signal, make_window_span(0, "W", 0, 7, 1000), 1000)
+def test_extrema_ptt_includes_extrema_on_window_edges():
+    signal = np.array([0.0, 2.0, 0.0, -3.0, 0.0, 100.0])
+    result = calculate_extrema_ptt_result(signal, make_window_span(0, "W", 1, 4, 1000), 1000)
     assert result.amplitude == 5.0
-    assert (result.selected_max.sample_index, result.selected_min.sample_index) == (2, 4)
+    assert (result.selected_max.sample_index, result.selected_min.sample_index) == (1, 3)
 
 
 def test_extrema_ptt_zero_and_invalid_semantics():

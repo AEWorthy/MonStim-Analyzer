@@ -69,7 +69,8 @@ class LatencyWindowsDialog(QDialog):
         self.gui: MonstimGUI = parent
         self._draft_dirty = False
         self.setModal(False)  # Allow interaction with main window
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)  # Make it a standalone window that stays on top
+        # Keep Qt's normal parented QDialog flags.  Custom top-level/tool flags
+        # can make the dialog compete with the main window's popup windows.
         self.setWindowTitle("Manage Latency Windows")
         self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, list[QDoubleSpinBox]]]
         self._move_buttons: dict[QGroupBox, tuple[QPushButton, QPushButton]] = {}

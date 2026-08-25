@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
 )
 
+from monstim_gui.core.responsive_widgets import ResponsiveComboBox
+
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
@@ -86,18 +88,18 @@ class DataSelectionWidget(QGroupBox):
         form.setContentsMargins(6, 4, 4, 2)
 
         # Combos
-        self.experiment_combo = QComboBox()
+        self.experiment_combo = ResponsiveComboBox()
         self.experiment_combo.currentIndexChanged.connect(self._on_experiment_combo_changed)
         self.experiment_combo.setToolTip("Select an experiment")
         self.experiment_combo.wheelEvent = lambda event: None
 
-        self.dataset_combo = QComboBox()
+        self.dataset_combo = ResponsiveComboBox()
         self.dataset_combo.currentIndexChanged.connect(self._on_dataset_combo_changed)
         self.dataset_combo.setEnabled(False)
         self.dataset_combo.setToolTip("Select a dataset")
         self.dataset_combo.wheelEvent = lambda event: None
 
-        self.session_combo = QComboBox()
+        self.session_combo = ResponsiveComboBox()
         self.session_combo.currentIndexChanged.connect(self._on_session_combo_changed)
         self.session_combo.setEnabled(False)
         self.session_combo.setToolTip("Select a session")
