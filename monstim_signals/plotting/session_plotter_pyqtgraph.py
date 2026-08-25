@@ -127,6 +127,12 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             logger.warning("Could not calculate extrema annotations: %s", exc)
             return
         windows = self.emg_object.latency_windows
+        try:
+            spans = self.emg_object._window_spans(channel_index)
+        except AttributeError, TypeError, ValueError:
+            # Lightweight plotter doubles do not expose Session's span API.
+            # Their selected result ownership remains the best available view.
+            spans = ()
         grouped: dict[tuple[int, str], list[tuple[object, object]]] = {}
         for result in results:
             if result.selected_max is not None and result.selected_min is not None:
@@ -135,24 +141,38 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         for (sample_index, kind), selections in grouped.items():
             result, extremum = selections[0]
             time_ms = sample_index * 1000 / self.emg_object.scan_rate - self.emg_object.stim_start
-            details = "; ".join(
+            selected_indices = {chosen.window_index for chosen, _item in selections}
+            owner_indices = (
+                [
+                    span.window_index
+                    for span in spans
+                    if span.start_sample >= 0
+                    and span.end_sample <= self.emg_object.num_samples
+                    and span.end_sample - span.start_sample >= 3
+                    and span.start_sample <= sample_index <= span.end_sample
+                ]
+                if method == "extrema_ptt" and spans
+                else [chosen.window_index for chosen, _item in selections]
+            )
+            selected_details = "; ".join(
                 f"{chosen.window_name} {kind}: PTT={chosen.amplitude:.4g}, priority={chosen.priority_rank}" for chosen, _item in selections
             )
-            tooltip = f"{time_ms:.3f} ms, {extremum.value:.4g}; {details}"
+            containment = ", ".join(windows[index].name for index in owner_indices)
+            tooltip = f"{time_ms:.3f} ms, {extremum.value:.4g}; contained by: {containment}; selected for PTT: {selected_details}"
             marker_items: list[pg.ScatterPlotItem]
-            if method == "extrema_ptt" and len(selections) > 1:
-                if len(selections) <= _MAX_MIXED_EXTREMA_WINDOWS:
-                    span_angle = 360 / len(selections)
+            if method == "extrema_ptt" and len(owner_indices) > 1:
+                if len(owner_indices) <= _MAX_MIXED_EXTREMA_WINDOWS:
+                    span_angle = 360 / len(owner_indices)
                     marker_items = [
                         pg.ScatterPlotItem(
                             [time_ms],
                             [extremum.value],
                             symbol=_pie_wedge_symbol(index * span_angle, span_angle),
                             size=10,
-                            brush=pg.mkBrush(self._convert_matplotlib_color(windows[chosen.window_index].color)),
+                            brush=pg.mkBrush(self._convert_matplotlib_color(windows[window_index].color)),
                             pen=pg.mkPen(None),
                         )
-                        for index, (chosen, _item) in enumerate(selections)
+                        for index, window_index in enumerate(owner_indices)
                     ]
                     marker_items.append(
                         pg.ScatterPlotItem([time_ms], [extremum.value], symbol="o", size=10, brush=None, pen=pg.mkPen("w", width=1.2))
@@ -164,13 +184,14 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                         )
                     ]
             else:
+                display_window_index = next((index for index in owner_indices if index in selected_indices), result.window_index)
                 marker_items = [
                     pg.ScatterPlotItem(
                         [time_ms],
                         [extremum.value],
                         symbol="t" if kind == "max" else "t1",
                         size=10,
-                        brush=pg.mkBrush(self._convert_matplotlib_color(windows[result.window_index].color)),
+                        brush=pg.mkBrush(self._convert_matplotlib_color(windows[display_window_index].color)),
                         pen=pg.mkPen("w", width=1.2),
                     )
                 ]
@@ -180,7 +201,7 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
                 self.extrema_items.append(marker)
             if labels:
                 label = pg.TextItem(
-                    f"{', '.join(chosen.window_name for chosen, _item in selections)} {kind}\n{time_ms:.2f} ms",
+                    f"{', '.join(windows[index].name for index in owner_indices)} {kind}\n{time_ms:.2f} ms",
                     color="w",
                     anchor=(0.5, 1.2),
                 )

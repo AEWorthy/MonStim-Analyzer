@@ -107,10 +107,11 @@ def select_extrema_ptt_pair(
     """Select the deterministic best adjacent max/min pair for one window."""
     if span.end_sample - span.start_sample < 3:
         return _invalid_result(span, "invalid_window")
-    # Treat the flag interval as an inclusive interval over the samples it
-    # covers.  Extrema on either edge are valid candidates; excluding them
-    # made a response peak or trough disappear when it landed on a flag.
-    inside = [item for item in extrema if span.start_sample <= item.sample_index < span.end_sample]
+    # Extrema PTT treats the two visible latency flags as a closed interval.
+    # Consequently, a boundary extremum is available to both adjacent or
+    # overlapping windows in independent mode.  Exclusive mode subsequently
+    # resolves that shared candidate through its ordered claim pass.
+    inside = [item for item in extrema if span.start_sample <= item.sample_index <= span.end_sample]
     claimed_by_sample = claimed_by_sample or {}
     available = [item for item in inside if item.sample_index not in claimed_by_sample]
     owners = tuple(dict.fromkeys(claimed_by_sample[item.sample_index] for item in inside if item.sample_index in claimed_by_sample))
@@ -178,7 +179,7 @@ def calculate_extrema_ptt_result(
     data = np.asarray(emg_data, dtype=float).reshape(-1)
     if span.start_sample < 0 or span.end_sample > len(data):
         return _invalid_result(span, "window_out_of_bounds")
-    if not np.isfinite(data[span.start_sample : span.end_sample]).any():
+    if not np.isfinite(data[span.start_sample : min(span.end_sample + 1, len(data))]).any():
         return _invalid_result(span, "non_finite_data")
     return select_extrema_ptt_pair(precomputed_extrema if precomputed_extrema is not None else detect_signal_extrema(data), span)
 

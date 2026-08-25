@@ -3,8 +3,6 @@
 import numpy as np
 from scipy import signal
 
-from .amplitude import _calculate_average_amplitude_unrectified
-
 
 def butter_bandpass(lowcut: float, highcut: float, fs: float, order: int):
     """Design a Butterworth bandpass filter.
@@ -51,5 +49,9 @@ def correct_emg_to_baseline(channel_recording: np.ndarray, scan_rate: float, sti
     Returns:
         array: The corrected EMG signal.
     """
-    baseline_emg = _calculate_average_amplitude_unrectified(channel_recording, 0, stim_delay, scan_rate)
+    # Baseline correction is not a latency-window measurement.  It covers the
+    # samples strictly before stimulus onset, so the sample at stim_delay does
+    # not influence the baseline estimate.
+    baseline_end_sample = int(stim_delay * scan_rate / 1000)
+    baseline_emg = np.mean(channel_recording[:baseline_end_sample])
     return channel_recording - baseline_emg

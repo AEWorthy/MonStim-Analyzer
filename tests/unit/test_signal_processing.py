@@ -121,15 +121,29 @@ class TestAmplitudeCalculations:
             assert not np.isnan(result), f"Method {method} returned NaN"
             assert result >= 0 or method == "average_unrectified", f"Method {method} returned negative value: {result}"
 
-    def test_empty_window_handling(self):
-        """Test behavior with empty or invalid time windows."""
-        # Empty window (start == end)
+    def test_closed_window_and_invalid_window_handling(self):
+        """Latency windows include both flags; reversed windows remain invalid."""
+        # A zero-duration closed interval contains its one boundary sample.
         result = _calculate_rms_amplitude(self.sine_signal, 5, 5, self.scan_rate)
-        assert np.isnan(result), "Empty window should return NaN"
+        sample_index = int(5 * self.scan_rate / 1000)
+        assert result == abs(self.sine_signal[sample_index])
 
         # Invalid window (start > end)
         result = _calculate_rms_amplitude(self.sine_signal, 8, 2, self.scan_rate)
         assert np.isnan(result), "Invalid window should return NaN"
+
+    def test_all_scalar_methods_include_the_end_flag_sample(self):
+        signal = np.array([1.0, -2.0, 100.0])
+        expected = {
+            "average_rectified": 1.5,
+            "peak_to_trough": 3.0,
+            "rms": np.sqrt(2.5),
+            "average_unrectified": -0.5,
+            "auc": 0.003,
+        }
+
+        for method, value in expected.items():
+            assert calculate_emg_amplitude(signal, 0, 1, 1000, method) == pytest.approx(value)
 
 
 class TestFiltering:

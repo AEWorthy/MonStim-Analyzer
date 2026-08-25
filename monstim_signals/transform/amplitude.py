@@ -3,6 +3,13 @@
 import numpy as np
 
 
+def _latency_window_samples(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float) -> np.ndarray:
+    """Return the closed sample interval covered by a latency window."""
+    start_index = int(start_ms * scan_rate / 1000)
+    end_index = int(end_ms * scan_rate / 1000)
+    return emg_data[start_index : end_index + 1]
+
+
 def rectify_emg(emg_array: np.ndarray):
     """Rectify EMG data by taking the absolute value.
 
@@ -28,9 +35,7 @@ def _calculate_average_amplitude_rectified(emg_data: np.ndarray, start_ms: float
     Returns:
         float: Mean of rectified signal, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     rectified_emg_window = rectify_emg(emg_window)
@@ -51,9 +56,7 @@ def _calculate_peak_to_trough_amplitude(emg_data: np.ndarray, start_ms: float, e
     Returns:
         float: Maximum minus minimum value, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     return np.max(emg_window) - np.min(emg_window)
@@ -73,9 +76,7 @@ def _calculate_rms_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: floa
     Returns:
         float: RMS amplitude, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     squared_emg_window = np.square(emg_window)
@@ -97,9 +98,7 @@ def _calculate_average_amplitude_unrectified(emg_data: np.ndarray, start_ms: flo
     Returns:
         float: Mean of raw signal, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     return np.mean(emg_window)
@@ -120,9 +119,7 @@ def _calculate_auc_rectified(emg_data: np.ndarray, start_ms: float, end_ms: floa
     Returns:
         float: Area under rectified curve in V·s, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     rectified_emg_window = rectify_emg(emg_window)

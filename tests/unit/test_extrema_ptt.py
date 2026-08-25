@@ -9,11 +9,37 @@ from monstim_signals.transform.extrema import (
 )
 
 
-def test_extrema_ptt_includes_extrema_on_window_edges():
+def test_extrema_ptt_includes_extrema_on_both_latency_flags():
     signal = np.array([0.0, 2.0, 0.0, -3.0, 0.0, 100.0])
     result = calculate_extrema_ptt_result(signal, make_window_span(0, "W", 1, 4, 1000), 1000)
     assert result.amplitude == 5.0
     assert (result.selected_max.sample_index, result.selected_min.sample_index) == (1, 3)
+
+
+def test_independent_adjacent_windows_share_an_extremum_on_their_common_flag():
+    signal = np.array([0.0, 2.0, 0.0, -3.0, 0.0, 1.0, 0.0])
+    early = calculate_extrema_ptt_result(signal, make_window_span(0, "early", 0, 3, 1000), 1000)
+    late = calculate_extrema_ptt_result(signal, make_window_span(1, "late", 3, 7, 1000), 1000)
+
+    assert early.amplitude == 5.0
+    assert (early.selected_max.sample_index, early.selected_min.sample_index) == (1, 3)
+    assert late.amplitude == 4.0
+    assert (late.selected_max.sample_index, late.selected_min.sample_index) == (5, 3)
+
+
+def test_exclusive_adjacent_windows_resolve_a_shared_boundary_extremum_by_priority():
+    signal = np.array([0.0, 2.0, 0.0, -3.0, 0.0, 1.0, 0.0])
+    early, late = calculate_exclusive_extrema_ptt_results(
+        signal,
+        (make_window_span(0, "early", 0, 3, 1000), make_window_span(1, "late", 3, 7, 1000)),
+        1000,
+    )
+
+    assert early.amplitude == 5.0
+    assert late.amplitude == 0.0
+    assert late.zero_reason == "single_extremum"
+    assert late.excluded_owned_extrema_count == 1
+    assert late.excluded_owner_window_indices == (0,)
 
 
 def test_extrema_ptt_zero_and_invalid_semantics():
