@@ -1,14 +1,21 @@
 import os
+from pathlib import Path
 
+import pytest
 from matplotlib.figure import Figure
 
 from monstim_gui.dialogs import help_about as ha
 
 
 def setup_function():
-    # Ensure cache and files are cleared before each test
+    # Ensure in-memory entries cannot leak between tests.
     ha._IMG_CACHE.clear()
-    ha.clear_math_cache()
+
+
+@pytest.fixture(autouse=True)
+def isolated_math_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Keep renderer tests independent of the user's Qt cache directory."""
+    monkeypatch.setattr(ha, "_CACHE_DIR", tmp_path)
 
 
 def test_render_and_cache(tmp_path):

@@ -34,7 +34,6 @@ def _session(session_id: str, start: float) -> Session:
 
 
 def test_live_dialog_refreshes_session_draft_and_context():
-    QApplication.instance() or QApplication([])
     first = _session("S1", 1.0)
     gui = _GUI(first)
     dialog = LatencyWindowsDialog(first, gui, config_repo=_ConfigRepo())
@@ -64,7 +63,6 @@ def test_live_dialog_refreshes_session_draft_and_context():
 
 
 def test_latency_window_text_fields_select_existing_value_on_focus():
-    QApplication.instance() or QApplication([])
     session = _session("S1", 1.0)
     gui = _GUI(session)
     dialog = LatencyWindowsDialog(session, gui, config_repo=_ConfigRepo())

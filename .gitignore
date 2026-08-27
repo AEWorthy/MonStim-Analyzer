@@ -14,7 +14,7 @@ TEST_MIGR
 AGENTS.md
 
 /old_environment.yml
-docs/config-user.yml
+*\config-user.yml
 
 # Obtained from https://github.com/github/gitignore/blob/main/Python.gitignore
 

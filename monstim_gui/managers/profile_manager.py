@@ -7,16 +7,19 @@ import os
 import yaml
 
 from monstim_gui.io.config_repository import ConfigRepository
+from monstim_signals.core import get_docs_path
 
-PROFILE_DIR = os.path.join(os.path.dirname(__file__), "../../docs/analysis_profiles")
-PROFILE_DIR = os.path.abspath(PROFILE_DIR)
+
+def get_bundled_profile_dir() -> str:
+    """Return the shipped analysis-profile directory in source and packaged builds."""
+    return os.path.join(get_docs_path(), "resources", "analysis_profiles")
 
 
 class ProfileManager:
     """Handles loading, saving, and listing analysis profiles."""
 
-    def __init__(self, profile_dir=PROFILE_DIR, reference_config=None):
-        self.profile_dir = profile_dir
+    def __init__(self, profile_dir=None, reference_config=None):
+        self.profile_dir = profile_dir or get_bundled_profile_dir()
         os.makedirs(self.profile_dir, exist_ok=True)
         self.reference_config = reference_config
 

@@ -13,9 +13,10 @@ from matplotlib import rc_context
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from mdx_math import MathExtension
+from PIL import Image
 from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer, QUrl
-from PySide6.QtGui import QFont, QIcon, QImage, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
+from PySide6.QtGui import QDesktopServices, QFont, QIcon, QPalette, QPixmap
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTextBrowser, QToolButton, QVBoxLayout, QWidget
 
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_signals.core import get_source_path
@@ -111,16 +112,14 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
         # If matplotlib or fonts fail in frozen app, log and fall back.
         logger.exception("Failed to save math image via matplotlib")
         try:
-            qimg = QImage(1, 1, QImage.Format_ARGB32)
-            qimg.fill(0)  # fully transparent
-            saved = qimg.save(str(out_path), "PNG")
-            if saved:
+            Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(out_path, format="PNG")
+            if out_path.exists():
                 logger.debug(f"Wrote fallback transparent image to {out_path}")
                 png_bytes = out_path.read_bytes()
             else:
-                logger.error("Failed to save fallback QImage PNG.")
+                logger.error("Failed to save fallback transparent PNG.")
         except Exception:
-            logger.exception("Fallback QImage save also failed")
+            logger.exception("Fallback transparent PNG save also failed")
     finally:
         if fig is not None:
             try:
@@ -130,28 +129,23 @@ def _render_tex_to_img(tex: str, fontsize: int = 12, dark_mode: bool = False) ->
             except TypeError:
                 logger.exception("Failed to clear matplotlib figure during cleanup")
 
-    # Get actual image dimensions (at render DPI)
-    img = QImage()
-    loaded = False
+    # Read dimensions without Qt: this helper also runs in headless tests
+    # before a QApplication exists. QImage initialization/loading may query a
+    # screen's DPI and crash on Linux when no GUI application is present.
+    render_w, render_h = 0, 0
     try:
         if png_bytes:
-            loaded = img.loadFromData(png_bytes)
-        if not loaded:
-            # As a fallback try loading directly from the saved file
-            try:
-                loaded = img.load(str(out_path))
-            except Exception:
-                loaded = False
-                logger.exception(f"Failed to load generated math PNG for tex='{tex}' from file {out_path}")
+            with Image.open(io.BytesIO(png_bytes)) as img:
+                render_w, render_h = img.size
+        else:
+            with Image.open(out_path) as img:
+                render_w, render_h = img.size
     except Exception:
-        loaded = False
-        logger.exception(f"Failed to load generated math PNG for tex='{tex}' from data or file {out_path}")
+        logger.exception(f"Failed to read generated math PNG dimensions for tex='{tex}' from data or file {out_path}")
 
-    if not loaded:
+    if not (render_w and render_h):
         tex_display = f"{tex[:40]}..." if len(tex) > 40 else tex
-        logger.error(f"Failed to load generated math PNG for tex='{tex_display}' from data or file {out_path}")
-
-    render_w, render_h = img.width(), img.height()
+        logger.error(f"Failed to read generated math PNG dimensions for tex='{tex_display}' from data or file {out_path}")
 
     # Calculate display dimensions (scaled down by DPI ratio)
     display_w = int(render_w * _DPI_SCALE)
@@ -252,7 +246,7 @@ class HelpWindow(QDialog):
     Supports Ctrl+wheel zoom which scales both text and math images together.
     """
 
-    def __init__(self, markdown_content, title=None, parent=None):
+    def __init__(self, markdown_content, title=None, parent=None, *, help_repository=None, source_file: str | None = None):
         super().__init__(parent)
         self.setWindowTitle(title if title else "Help")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), "info.png")))
@@ -261,6 +255,11 @@ class HelpWindow(QDialog):
 
         # Store for zoom re-rendering
         self._markdown_content = markdown_content
+        self._help_repository = help_repository
+        self._source_file = source_file
+        self._history: list[tuple[str, str | None]] = []
+        self._pending_anchor = ""
+        self._reset_scroll = False
         self._zoom_scale = 1.0
         # Accumulate discrete zoom steps during rapid scrolling (debounced)
         # Positive = zoom in steps, Negative = zoom out steps
@@ -295,7 +294,9 @@ class HelpWindow(QDialog):
 
         # Create text browser
         self.text_browser = QTextBrowser()
-        self.text_browser.setOpenExternalLinks(True)
+        self.text_browser.setOpenLinks(False)
+        self.text_browser.setOpenExternalLinks(False)
+        self.text_browser.anchorClicked.connect(self._open_link)
 
         # Install event filter on the viewport (where wheel events actually go)
         self.text_browser.viewport().installEventFilter(self)
@@ -305,11 +306,48 @@ class HelpWindow(QDialog):
 
         # Close button
         btn_row = QHBoxLayout()
+        self.back_button = QToolButton()
+        self.back_button.setText("Back")
+        self.back_button.setToolTip("Return to the previous help topic")
+        self.back_button.setEnabled(False)
+        self.back_button.clicked.connect(self._go_back)
+        btn_row.addWidget(self.back_button)
         btn_row.addStretch()
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.close)
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
+
+    def _open_link(self, url: QUrl) -> None:
+        """Open bundled Markdown links in this help window, not a blank browser page."""
+        href = url.toString()
+        if self._help_repository is not None and self._source_file is not None:
+            resolved = self._help_repository.resolve_help_link(self._source_file, href)
+            if resolved is not None:
+                target_file, anchor = resolved
+                self._history.append((self._markdown_content, self._source_file))
+                self.back_button.setEnabled(True)
+                self._load_document(self._help_repository.read_help_file(target_file), target_file, anchor)
+                return
+        if url.scheme() in {"http", "https", "mailto"}:
+            QDesktopServices.openUrl(url)
+            return
+        QMessageBox.warning(self, "Help link unavailable", f"The linked help page could not be found:\n{href}")
+
+    def _load_document(self, markdown_content: str, source_file: str, anchor: str = "") -> None:
+        self._markdown_content = markdown_content
+        self._source_file = source_file
+        self._pending_anchor = anchor
+        self._reset_scroll = True
+        self.setWindowTitle(f"Help — {Path(source_file).stem.replace('_', ' ').title()}")
+        self._initial_render()
+
+    def _go_back(self) -> None:
+        if not self._history:
+            return
+        markdown_content, source_file = self._history.pop()
+        self.back_button.setEnabled(bool(self._history))
+        self._load_document(markdown_content, source_file or "")
 
     def _initial_render(self):
         """Initial render of markdown content (called once on init)."""
@@ -341,10 +379,15 @@ class HelpWindow(QDialog):
 
         self.text_browser.setHtml(final_html)
 
-        # Restore scroll position (as fraction of new total)
+        # Restore scroll position (as fraction of new total), unless navigating.
         if scrollbar:
             new_max = scrollbar.maximum()
-            scrollbar.setValue(int(scroll_frac * new_max))
+            scrollbar.setValue(0 if self._reset_scroll else int(scroll_frac * new_max))
+        if self._pending_anchor:
+            anchor = self._pending_anchor
+            self._pending_anchor = ""
+            QTimer.singleShot(0, lambda: self.text_browser.scrollToAnchor(anchor))
+        self._reset_scroll = False
 
     def _update_zoom(self, delta: int):
         """Queue a zoom update (debounced to prevent lag during rapid scrolling).
@@ -422,12 +465,12 @@ class HelpWindow(QDialog):
             self._update_html()
 
 
-def create_help_window(markdown_content, title=None, parent=None):
+def create_help_window(markdown_content, title=None, parent=None, *, help_repository=None, source_file: str | None = None):
     """Create a help window that renders Markdown with LaTeX math as images.
 
     Supports Ctrl+wheel zoom.
     """
-    return HelpWindow(markdown_content, title=title, parent=parent)
+    return HelpWindow(markdown_content, title=title, parent=parent, help_repository=help_repository, source_file=source_file)
 
 
 def clear_math_cache():

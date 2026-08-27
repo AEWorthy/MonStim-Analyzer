@@ -207,17 +207,17 @@ class MenuBar(QMenuBar):
 
         # Show Help button
         help_action = help_menu.addAction("Show Help")
-        help_action.triggered.connect(lambda: self.parent.show_help_dialog("readme.md"))
+        help_action.triggered.connect(lambda: self.parent.show_help_dialog("user/index.md"))
         help_action.setStatusTip("Open the application help documentation")
 
         # Show EMG processing info button
         processing_info_action = help_menu.addAction("Show EMG Processing Info")
-        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog("Transform_EMG.md"))
+        processing_info_action.triggered.connect(lambda: self.parent.show_help_dialog("science/emg_processing.md"))
         processing_info_action.setStatusTip("Read about the EMG processing and transformation steps")
 
         # Show Experiment Import Info button
         data_import_action = help_menu.addAction("Show Experiment Import Info")
-        data_import_action.triggered.connect(lambda: self.parent.show_help_dialog("multi_experiment_import.md"))
+        data_import_action.triggered.connect(lambda: self.parent.show_help_dialog("user/importing_experiments.md"))
         data_import_action.setStatusTip("Read instructions for importing experiments")
 
         help_menu.addSeparator()

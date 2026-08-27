@@ -1,20 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QApplication, QGroupBox, QSpinBox, QWidget
+from PySide6.QtWidgets import QGroupBox, QSpinBox, QWidget
 
 pytestmark = pytest.mark.unit
 
-
-@pytest.fixture
-def qt_app():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
-
-
-def test_experiment_group_displays_status_and_exports_dataset_ids(qt_app):
+def test_experiment_group_displays_status_and_exports_dataset_ids():
     from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
 
     group = _ExperimentGroup(
@@ -37,7 +28,7 @@ def test_experiment_group_displays_status_and_exports_dataset_ids(qt_app):
     assert group.selected_dataset_ids == ["DS_FOLDER_ID"]
 
 
-def test_completed_only_filter_limits_experiment_checkbox_selection(qt_app):
+def test_completed_only_filter_limits_experiment_checkbox_selection():
     from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
 
     group = _ExperimentGroup(
@@ -97,7 +88,7 @@ def test_discover_experiment_status_reads_completion_metadata(monkeypatch, tmp_p
     assert status.datasets[1].is_excluded is True
 
 
-def test_bulk_export_dialog_does_not_expose_worker_count(qt_app):
+def test_bulk_export_dialog_does_not_expose_worker_count():
     from monstim_gui.dialogs.bulk_export_dialog import BulkExportDialog
 
     gui = QWidget()
@@ -117,7 +108,7 @@ def test_bulk_export_dialog_does_not_expose_worker_count(qt_app):
     assert dialog.findChildren(QSpinBox) == []
 
 
-def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled(qt_app):
+def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled():
     from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
 
     class DummyRecording:
@@ -150,7 +141,7 @@ def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled
     assert evaluation["flagged"] is False
 
 
-def test_recording_exclusion_preview_is_explicit_and_skips_quality_work_for_stimulus_rules(qt_app, monkeypatch):
+def test_recording_exclusion_preview_is_explicit_and_skips_quality_work_for_stimulus_rules(monkeypatch):
     from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
 
     class DummyRecording:

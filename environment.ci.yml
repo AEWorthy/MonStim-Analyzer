@@ -3,7 +3,9 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python
+  # The workflow creates monstim with its matrix-selected Python version.
+  # Do not unconstrain it here: Conda otherwise upgrades it to the latest
+  # release while updating the remaining dependencies.
   - numpy=2.5.*
   - pandas=3.*
   - matplotlib-base=3.*

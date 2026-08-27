@@ -705,11 +705,11 @@ class MonstimGUI(QMainWindow):
 
     def show_help_dialog(self, topic=None):
         """Show help dialog using HelpFileRepository."""
-        file = "readme.md" if topic is None else topic
+        file = "user/using_monstim.md" if topic is None else topic
         markdown_content = self.help_repo.read_help_file(file)
         from monstim_gui.dialogs.help_about import create_help_window
 
-        self.help_window = create_help_window(markdown_content, title=topic, parent=self)
+        self.help_window = create_help_window(markdown_content, title=topic, parent=self, help_repository=self.help_repo, source_file=file)
         self.help_window.show()
 
     def _get_effective_config(self):

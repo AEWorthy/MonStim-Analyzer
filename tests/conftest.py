@@ -10,6 +10,42 @@ import pytest
 # Ensure Qt doesn't try to connect to a display in CI/headless
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+# VS Code launches the selected Conda interpreter directly for pytest instead
+# of activating the environment first.  On Windows that leaves its base
+# environment's DLL directories ahead of this environment's BLAS/LAPACK
+# runtime, which can make SciPy fail natively at its first LAPACK call.
+# Keep the handle alive so this environment-local directory remains available
+# for the entire test process.  This runs before pytest imports test modules.
+_conda_library_bin = Path(sys.prefix) / "Library" / "bin"
+if sys.platform == "win32" and _conda_library_bin.is_dir():
+    _conda_library_bin_text = str(_conda_library_bin)
+    _path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if _conda_library_bin_text.casefold() not in {entry.casefold() for entry in _path_entries}:
+        os.environ["PATH"] = os.pathsep.join([_conda_library_bin_text, *_path_entries])
+    else:
+        os.environ["PATH"] = os.pathsep.join(
+            [_conda_library_bin_text, *(entry for entry in _path_entries if entry.casefold() != _conda_library_bin_text.casefold())]
+        )
+    _conda_dll_directory = os.add_dll_directory(_conda_library_bin_text)
+else:
+    _conda_dll_directory = None
+
+@pytest.fixture(scope="session")
+def qapplication():
+    """Keep one QApplication alive for the complete Qt-test session.
+
+    PySide owns the native Qt application through its Python wrapper.  A
+    throwaway ``QApplication.instance() or QApplication([])`` expression can
+    therefore destroy the application while PyQtGraph still owns graphics
+    objects, which is prone to intermittent native crashes on Windows.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    application = QApplication.instance() or QApplication([])
+    yield application
+    # Do not call quit() or delete the wrapper: widgets may be finalized after
+    # individual test teardown, and Qt should own the shutdown sequence.
+
 # Ensure the project root is importable so `monstim_gui` and `monstim_signals` resolve under pytest
 project_root = Path(__file__).resolve().parents[1]
 if str(project_root) not in sys.path:
