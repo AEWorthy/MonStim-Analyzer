@@ -87,7 +87,7 @@ def get_docs_path() -> str:
 
 def get_config_path() -> str:
     """Return the location of ``config.yml``."""
-    return os.path.join(get_docs_path(), "config.yml")
+    return os.path.join(get_docs_path(), "resources", "config.yml")
 
 
 def get_output_bin_path() -> str:

@@ -1,10 +1,36 @@
 from types import SimpleNamespace
 
 import pyqtgraph as pg
-from PySide6.QtWidgets import QApplication
+import pytest
 
 from monstim_signals.plotting.session_plotter_pyqtgraph import SessionPlotterPyQtGraph
 from monstim_signals.transform.extrema import make_window_span
+
+
+class _ScatterPlotItem:
+    """Capture annotation options without constructing a native graphics item."""
+
+    def __init__(self, *_args, **kwargs):
+        self.opts = kwargs
+        self.tooltip = None
+
+    def setToolTip(self, tooltip):
+        self.tooltip = tooltip
+
+
+class _PlotItem:
+    """Minimal plot sink required by the annotation helper."""
+
+    def __init__(self):
+        self.items = []
+
+    def addItem(self, item, **_kwargs):
+        self.items.append(item)
+
+
+@pytest.fixture(autouse=True)
+def _scatter_plot_item_spy(monkeypatch):
+    monkeypatch.setattr(pg, "ScatterPlotItem", _ScatterPlotItem)
 
 
 def _result(window_index: int, maximum_index: int, minimum_index: int):
@@ -35,8 +61,7 @@ def _plotter(results, spans=()):
 
 
 def _render(results, method, spans=()):
-    QApplication.instance() or QApplication([])
-    plot = pg.PlotItem()
+    plot = _PlotItem()
     plotter = _plotter(results, spans)
     plotter._plot_extrema_annotations(plot, 0, "recording", method, labels=False)
     return plotter.extrema_items

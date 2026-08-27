@@ -14,7 +14,7 @@ import pytest
 
 # Import Qt before other imports to ensure proper initialization
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QComboBox, QWidget
+from PySide6.QtWidgets import QComboBox, QWidget
 
 from monstim_gui.core.application_state import ApplicationState
 from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
@@ -801,16 +801,7 @@ class TestUIConfigManagement:
 class TestResponsiveWidgets:
     """Test responsive widget behavior and scaling."""
 
-    @pytest.fixture
-    def qt_app(self):
-        """Create QApplication for widget testing."""
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication([])
-        yield app
-        # Don't quit the app as it might be used by other tests
-
-    def test_responsive_combo_box_initialization(self, qt_app):
+    def test_responsive_combo_box_initialization(self):
         """Test ResponsiveComboBox initialization."""
         combo = ResponsiveComboBox()
 
@@ -819,7 +810,7 @@ class TestResponsiveWidgets:
         assert combo.minimumWidth() > 0
         assert combo.minimumContentsLength() == 15
 
-    def test_responsive_combo_box_add_item(self, qt_app):
+    def test_responsive_combo_box_add_item(self):
         """Test ResponsiveComboBox addItem with tooltip."""
         combo = ResponsiveComboBox()
 
@@ -837,7 +828,7 @@ class TestResponsiveWidgets:
         # Tooltip might be set based on actual width calculation
         assert tooltip is None or tooltip == long_text
 
-    def test_responsive_combo_box_show_popup(self, qt_app):
+    def test_responsive_combo_box_show_popup(self):
         """Test ResponsiveComboBox popup sizing."""
         combo = ResponsiveComboBox()
         combo.addItem("Short")
@@ -854,7 +845,7 @@ class TestResponsiveWidgets:
         # Verify view width was set (exact value depends on font metrics)
         mock_view.setMinimumWidth.assert_called()
 
-    def test_responsive_scroll_area_initialization(self, qt_app):
+    def test_responsive_scroll_area_initialization(self):
         """Test ResponsiveScrollArea initialization."""
         scroll_area = ResponsiveScrollArea()
 
@@ -863,7 +854,7 @@ class TestResponsiveWidgets:
         assert scroll_area.minimumSize().width() > 0
         assert scroll_area.minimumSize().height() > 0
 
-    def test_responsive_scroll_area_set_widget(self, qt_app):
+    def test_responsive_scroll_area_set_widget(self):
         """Test ResponsiveScrollArea setWidget method."""
         scroll_area = ResponsiveScrollArea()
 
