@@ -99,10 +99,10 @@ class PlotWidget(QGroupBox):
         options_box_layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins
         options_box_layout.addWidget(self.options_scroll)
 
-        self.layout.addWidget(self.options_box, 0)  # No stretch - size to content only
-
-        # Add a stretch spacer to push buttons to bottom
-        self.layout.addStretch(1)
+        # Let the options panel take the remaining vertical space.  This keeps
+        # the plot buttons anchored at the bottom while allowing the panel to
+        # grow as its containing window grows.
+        self.layout.addWidget(self.options_box, 1)
 
         # Create the buttons for plotting and extracting data
         btn_row = QHBoxLayout()
@@ -443,8 +443,7 @@ class PlotWidget(QGroupBox):
             # Connect option change signals so modifications are saved immediately
             self.connect_option_change_signals()
 
-            # Recalculate size after options are initialized with a slight delay
-            # to ensure all widgets are properly laid out
+            # Refresh the option content's geometry after it is initialized.
             QTimer.singleShot(50, self.recalculate_options_size)
 
         self.options_layout.update()
@@ -453,48 +452,15 @@ class PlotWidget(QGroupBox):
             self.current_option_widget.recording_cycler.reset_max_recordings()
 
     def recalculate_options_size(self):
-        """Recalculate and adjust the options area size after options are initialized"""
+        """Refresh option geometry without constraining the resizable panel."""
         if self.current_option_widget:
-            # Force the widget to update its size hint first
             self.current_option_widget.adjustSize()
             self.options_content.adjustSize()
-
-            # Get the actual size needed for the content
-            content_size = self.options_content.sizeHint()
-            needed_height = content_size.height() + 10
-
-            # Get the available space in the parent widget
-            # We need to account for other widgets in the layout
-            parent_height = self.parent.height() if self.parent else 600  # fallback height
-
-            # Calculate approximate available space for options
-            # Account for form layout, buttons, margins, etc.
-            form_height = 120  # Approximate height of form elements above options
-            button_height = 40  # Approximate height of buttons below
-            margins = 40  # Various margins and spacing
-            available_height = parent_height - form_height - button_height - margins
-
-            # Always limit to available space to prevent window expansion
-            max_allowed_height = max(150, min(needed_height, available_height))
-
-            # Set size constraints
-            self.options_scroll.setMinimumHeight(max_allowed_height)
-            self.options_scroll.setMaximumHeight(max_allowed_height)
-
-            # Enable scrollbar if content exceeds available space
-            if needed_height > max_allowed_height:
-                self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            else:
-                self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-            # Update all geometries to apply the changes
+            self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.options_content.updateGeometry()
             self.options_scroll.updateGeometry()
             self.options_box.updateGeometry()
-            self.updateGeometry()
-
-            # Force layout recalculation
             self.layout.invalidate()
-            self.layout.update()
 
     def get_plot_options(self):
         if self.current_option_widget:
