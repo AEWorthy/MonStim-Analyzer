@@ -34,8 +34,9 @@ MonStim uses forward-and-reverse filtering to avoid net phase shift. It does not
 | Plateau variation threshold | 0.3 | An absolute standard-deviation limit; its meaning depends on your signal scale. |
 | Validation tolerance | 1.05 | Allows a candidate up to 5% above the relevant mean. |
 | Smoothing-window ratio | 0.25 | Sets the Savitzky–Golay window from the number of stimulus levels. |
+| M-wave recognition names | M-wave aliases | Global names that identify the M-response latency window for M-max. The user list replaces the shipped aliases; an empty list disables automatic recognition. |
 
-The M-max estimator also uses a third-order smoothing polynomial, a 95th-percentile candidate, a top-20% candidate, and a high-stimulus fallback. These are reproducibility settings, not physiological constants. See [M-max estimation](mmax_estimation.md) before using M-max normalization.
+The M-wave recognition names are global user settings, not profile settings. Edit them in **File > Analysis Preferences > Latency Window Settings**. The M-max estimator also uses a third-order smoothing polynomial, a 95th-percentile candidate, a top-20% candidate, and a high-stimulus fallback. These are reproducibility settings, not physiological constants. See [M-max estimation](mmax_estimation.md) before using M-max normalization.
 
 ## Presets and appearance
 

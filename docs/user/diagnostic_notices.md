@@ -36,7 +36,7 @@ Read the notice text itself: it identifies the affected level and usually the wi
 
 ## M-wave naming
 
-For M-max-related checks, MonStim recognizes these M-wave names without regard to case: `M-wave`, `M_wave`, `M wave`, `Mwave`, `M-response`, and `M response`. Use a consistent name across comparable sessions to make plots and notices easier to interpret.
+For M-max-related checks, MonStim recognizes the global **M-wave Recognition Names** without regard to case. The shipped list is `M-wave`, `M_wave`, `M wave`, `Mwave`, `M-response`, `M_response`, and `M response`, and you can replace it in **File > Analysis Preferences > Latency Window Settings**. An empty list disables automatic M-wave recognition. Use a consistent name across comparable sessions to make plots and notices easier to interpret. See [M-max estimation and review](../science/mmax_estimation.md) for the complete setup guidance.
 
 ## Related topics
 

@@ -8,6 +8,16 @@ M-max in MonStim is an estimate derived from M-wave amplitudes across stimulus l
 
 For each channel, MonStim takes paired stimulus voltages and M-wave amplitudes calculated with the current amplitude method. Dataset and experiment results aggregate child values; changing method, latency windows, exclusions, or binning can therefore change M-max.
 
+## Name and create the M-wave window
+
+M-max uses the first latency window whose name matches a configured M-wave recognition name without regard to case. The shipped names are `M-wave`, `M_wave`, `M wave`, `Mwave`, `M-response`, `M_response`, and `M response`; use the canonical name `M-wave` for new work. You can add or remove names globally in **File > Analysis Preferences > Latency Window Settings > M-wave Recognition Names**. The list replaces the shipped names, does not extend them, and is not controlled by analysis profiles.
+
+An empty recognition-name list intentionally disables automatic M-wave classification. M-max calculation and relative-to-M-max normalization will then have no M-response window until you restore or add a name.
+
+Create or adjust the window in **Edit > Session/Dataset/Experiment > Manage Latency Windows**. The window must cover the intended M-response for the channel and protocol; inspect it on the signal before relying on its amplitudes. Configure only one recognized M-wave window in a session—if several recognized names are present, MonStim uses the first one in the window order.
+
+For the editor workflow, channel-specific starts, and the difference between Session, Dataset, and Experiment changes, see [Latency windows](../user/latency_windows.md).
+
 ## Step 1: smooth and search for a low-variation run
 
 The M-wave amplitude sequence is smoothed with a third-order Savitzky–Golay filter. If no explicit smoothing length is supplied, MonStim uses `int(number_of_points × savgol_window_ratio)`, enforces a minimum length of 5, and makes the length odd.

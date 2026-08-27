@@ -8,7 +8,7 @@ import pytest
 from markdown.extensions.tables import TableExtension
 from PySide6.QtCore import QUrl
 
-from monstim_gui.dialogs.help_about import HelpWindow, _render_tex_to_img
+from monstim_gui.dialogs.help_about import HelpWindow, _normalise_help_tables, _render_tex_to_img
 from monstim_gui.io.help_repository import HelpFileRepository
 from monstim_gui.managers.profile_manager import get_bundled_profile_dir
 from monstim_signals.core import get_config_path, get_docs_path
@@ -57,6 +57,42 @@ def test_analysis_methods_math_table_keeps_four_columns():
     rows = re.findall(r"<tr>(.*?)</tr>", html, flags=re.DOTALL)
     assert len(rows) == 8
     assert all(len(re.findall(r"<(?:td|th)", row)) == 4 for row in rows)
+
+
+def test_help_table_normalisation_sets_qt_friendly_geometry():
+    html = """<table>
+<thead><tr><th>Method</th><th>Calculation</th><th>Units</th><th>Important limit</th></tr></thead>
+<tbody><tr><td>rms</td><td>formula</td><td>signal units</td><td>Limit</td></tr></tbody>
+</table>"""
+
+    normalised = _normalise_help_tables(html)
+
+    assert '<table width="100%" border="1" cellspacing="0" cellpadding="6">' in normalised
+    assert re.findall(r'<th\b[^>]* width="(\d+%)"[^>]*>', normalised) == ["25%", "30%", "14%", "31%"]
+    assert normalised.count('valign="top"') == 8
+
+
+def test_help_table_normalisation_evenly_allocates_generic_columns():
+    html = "<table><thead><tr><th>One</th><th>Two</th><th>Three</th></tr></thead></table>"
+
+    normalised = _normalise_help_tables(html)
+
+    assert re.findall(r'<th\b[^>]* width="(\d+%)"[^>]*>', normalised) == ["34%", "33%", "33%"]
+
+
+def test_help_window_applies_document_style_and_normalised_tables():
+    repository = HelpFileRepository(get_docs_path())
+    dialog = HelpWindow(
+        repository.read_help_file("science/analysis_methods.md"),
+        help_repository=repository,
+        source_file="science/analysis_methods.md",
+    )
+
+    try:
+        assert "th, td" in dialog.text_browser.document().defaultStyleSheet()
+        assert '<table width="100%" border="1" cellspacing="0" cellpadding="6">' in dialog._html_template
+    finally:
+        dialog.close()
 
 
 def test_analysis_methods_absolute_value_math_renders():

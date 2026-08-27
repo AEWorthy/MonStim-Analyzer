@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from monstim_signals.core import LatencyWindow, RecordingAnnot, RecordingMeta, SessionAnnot, StimCluster
+from monstim_signals.core import LatencyWindow, LatencyWindowNotFoundError, RecordingAnnot, RecordingMeta, SessionAnnot, StimCluster
 from monstim_signals.domain.recording import Recording
 from monstim_signals.domain.session import Session
 
@@ -79,3 +79,27 @@ def test_session_missing_m_wave_and_no_recordings():
     codes = {n["code"] for n in notices}
     assert "missing_m_wave_window" in codes
     assert "no_active_recordings" in codes
+
+
+def test_session_uses_configured_m_wave_window_names():
+    session = Session(
+        session_id="S-custom-m-name",
+        recordings=[_make_recording("r0", 0.5)],
+        annot=SessionAnnot.create_empty(),
+    )
+    session.annot.latency_windows = [
+        LatencyWindow(name="M-wave", color="blue", start_times=[5.0], durations=[2.0]),
+        LatencyWindow(name="Motor response", color="green", start_times=[8.0], durations=[2.0]),
+    ]
+
+    session.set_config({"m_wave_window_names": ["Motor response"]})
+
+    assert session.has_m_wave_window()
+    assert session._find_reflex_latency_window(session.m_wave_window_names).name == "Motor response"
+
+    session.set_config({"m_wave_window_names": []})
+
+    assert not session.has_m_wave_window()
+    assert "missing_m_wave_window" in {notice["code"] for notice in session.collect_notices()}
+    with pytest.raises(LatencyWindowNotFoundError):
+        session.get_m_wave_amplitudes("rms", 0)

@@ -6,7 +6,7 @@ Use these methods when the intended amplitude is the distance between a physiolo
 
 ## Two choices
 
-- **Extrema peak-to-trough** evaluates each latency window independently. Overlapping windows may use the same detected extremum.
+- **Extrema peak-to-trough** evaluates each latency window independently. Overlapping windows may both use the same detected extremum.
 - **Exclusive extrema peak-to-trough** evaluates all windows for one recording and channel together. Earlier windows have priority; if starts tie, the order in the latency-window table breaks the tie. Once a pair is selected for an earlier window, its two extrema are unavailable to later windows.
 
 Exclusive mode prevents reuse of the same detected samples. It does not separate superimposed physiological responses, so inspect the trace rather than treating exclusivity as proof of attribution.
@@ -19,7 +19,7 @@ A valid window with no complete pair returns `0.0`. A window that is invalid or 
 
 ## Review and export
 
-For filtered EMG and individual-recording plots, enable **Show PTT Extrema** to see the selected pair. The option is unavailable for raw or rectified signals because these methods are defined on the filtered, unrectified trace.
+For filtered EMG and individual-recording plots, enable **Show PTT Extrema** to see the selected pair(s). The option is unavailable for raw or rectified signals because these methods are defined on the filtered, unrectified trace.
 
 Longform exports include the selected extrema and the reason for the result, including exclusion by an earlier window in exclusive mode. Selected times are relative to the primary stimulus; sample indices refer to the full recording.
 

@@ -18,6 +18,8 @@ Use **Session** while developing or checking timing. Use **Dataset** or **Experi
 
 Select a window to edit its name, color, duration, and start time. Names should describe the planned measurement (for example, `M-wave` or `H-reflex`) and be consistent across sessions you intend to compare.
 
+**M-max naming:** a window is treated as an M-response only when its name matches one of the global **M-wave Recognition Names** in **File > Analysis Preferences > Latency Window Settings** (case-insensitive). The shipped list includes `M-wave`, `M_response`, and related spellings. Change that global list when your protocol uses a different moniker; use a different name when a similarly named window must not be classified for M-max. An empty list disables automatic M-wave recognition.
+
 Choose one start-time mode:
 
 - **Global** uses the same start time for every channel. Set it in **Start**.

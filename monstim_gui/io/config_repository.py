@@ -26,6 +26,11 @@ class ConfigRepository:
         # ``resolve_config`` when they need the validated typed sections.
         return self.resolver.load_raw()
 
+    def read_default_config(self) -> dict:
+        """Return the shipped configuration before any user override is merged."""
+        with open(self.default_config_file, encoding="utf-8") as file:
+            return yaml.safe_load(file) or {}
+
     def resolve_config(self, profile: dict | None = None) -> ResolvedConfig:
         return self.resolver.resolve(profile)
 

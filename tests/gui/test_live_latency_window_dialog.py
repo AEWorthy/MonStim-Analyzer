@@ -6,13 +6,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 from monstim_gui.dialogs.latency import LatencyWindowsDialog
+from monstim_gui.dialogs.preferences import MWaveWindowNamesEditor
 from monstim_signals.core import LatencyWindow, SessionAnnot
 from monstim_signals.domain.session import Session
 
 
 class _ConfigRepo:
     def read_config(self):
-        return {}
+        return {"m_wave_window_names": ["M-wave", "M_response"]}
 
 
 class _GUI(QWidget):
@@ -43,6 +44,9 @@ def test_live_dialog_refreshes_session_draft_and_context():
     assert dialog.apply_level_combo.currentData() == "session"
     assert "Session annotation" in dialog.value_source_label.text()
     assert "S1" in dialog.value_source_label.text()
+    assert "exact name matches" in dialog.editor.m_wave_name_note.text()
+    assert "M_response" in dialog.editor.m_wave_name_note.text()
+    assert "M-artifact" in dialog.editor.m_wave_name_note.text()
     assert dialog.editor.windows()[0].start_times == [1.0]
     dialog.editor.table.selectRow(0)
     QApplication.processEvents()
@@ -86,3 +90,15 @@ def test_latency_window_text_fields_select_existing_value_on_focus():
         assert field.selectedText() == field.text()
 
     dialog.close()
+
+
+def test_m_wave_window_names_editor_restores_defaults_and_allows_empty_list():
+    editor = MWaveWindowNamesEditor(["Protocol M"], ["M-wave", "M_response"])
+
+    assert editor.validate() == ["Protocol M"]
+    editor.set_names([])
+    assert editor.validate() == []
+    assert not editor.empty_notice.isHidden()
+
+    editor.restore_shipped_defaults()
+    assert editor.validate() == ["M-wave", "M_response"]

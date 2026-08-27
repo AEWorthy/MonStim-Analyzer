@@ -30,7 +30,7 @@ This is the in-app reference for MonStim Analyzer. Links open in the same help w
 
 ## How to read technical defaults
 
-MonStim defaults are **starting policies**, not universal physiological constants. They make results reproducible. Validate cutoff frequencies, latency windows, stimulus spacing, and M-max settings against the acquisition protocol, muscle, species, and analysis plan before treating an output as a scientific conclusion.
+MonStim defaults are **starting policies**, not universal physiological constants. They make results reproducible. Validate cutoff frequencies, latency windows, stimulus spacing, and M-max settings against your acquisition protocol, muscle, species, and analysis plan before treating an output as a scientific conclusion.
 
 ---
 

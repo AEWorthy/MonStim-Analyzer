@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_M_WAVE_WINDOW_NAMES = frozenset({"m-wave", "m_wave", "m wave", "mwave", "m-response", "m_response", "m response"})
 _H_REFLEX_WINDOW_NAMES = frozenset(
     {"h-wave", "h_wave", "h wave", "hwave", "h-reflex", "h_reflex", "h reflex", "hresponse", "h_response", "h response"}
 )
@@ -120,6 +119,7 @@ class Session:
         self.butter_filter_args = _config["butter_filter_args"]
         self.default_method: str = _config["default_method"]
         self.default_channel_names: list[str] = _config.get("default_channel_names", [])
+        self.m_wave_window_names = frozenset(name.casefold() for name in _config["m_wave_window_names"])
 
     def _load_session_parameters(self):
         # ---------- Pull session-wide parameters from the first recording's meta ----------
@@ -519,7 +519,7 @@ class Session:
 
     def has_m_wave_window(self) -> bool:
         """Check if the session has a defined M-wave latency window."""
-        return self._find_reflex_latency_window(_M_WAVE_WINDOW_NAMES) is not None
+        return self._find_reflex_latency_window(self.m_wave_window_names) is not None
 
     def has_h_reflex_window(self) -> bool:
         """Check if the session has a defined H-reflex latency window."""
@@ -780,7 +780,7 @@ class Session:
         """
         for window in self.latency_windows:
             lname = (window.name or "").casefold()
-            if lname in _M_WAVE_WINDOW_NAMES:
+            if lname in self.m_wave_window_names:
                 self.m_start = window.start_times
                 self.m_duration = window.durations
             elif lname in _H_REFLEX_WINDOW_NAMES:
@@ -886,7 +886,7 @@ class Session:
     def get_m_wave_amplitudes(self, method, channel_index):
         """Return a list of M-wave amplitudes for each recording."""
 
-        m_window = self._find_reflex_latency_window(_M_WAVE_WINDOW_NAMES)
+        m_window = self._find_reflex_latency_window(self.m_wave_window_names)
         if m_window is None:
             raise LatencyWindowNotFoundError(window_name="M-wave", object_type="Session", object_id=self.id)
 

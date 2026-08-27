@@ -10,6 +10,17 @@ default_channel_names: # (list) default channel names for EMG analysis. default 
   - 'TA'
   - 'SOL'
 
+# Names recognized as the M-response latency window for M-max calculations.
+# Matching is exact after case-folding. An empty user override disables automatic recognition.
+m_wave_window_names:
+  - 'M-wave'
+  - 'M_wave'
+  - 'M wave'
+  - 'Mwave'
+  - 'M-response'
+  - 'M_response'
+  - 'M response'
+
 # EMG Filter Parameters.
 butter_filter_args: # dict for butter_bandpass_filter() function. default is below.
   lowcut: 100 # (int) lowcut frequency (in Hz).

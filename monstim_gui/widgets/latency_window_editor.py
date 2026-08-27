@@ -283,12 +283,22 @@ class LatencyWindowEditor(QWidget):
 
     changed = Signal()
 
-    def __init__(self, channel_names: list[str], parent=None, *, compact: bool = False, minimal_toolbar: bool = False, toolbar_extra=None):
+    def __init__(
+        self,
+        channel_names: list[str],
+        parent=None,
+        *,
+        compact: bool = False,
+        minimal_toolbar: bool = False,
+        toolbar_extra=None,
+        m_wave_window_names: list[str] | tuple[str, ...] | None = None,
+    ):
         super().__init__(parent)
         self.channel_names = channel_names or ["Default"]
         self.compact = compact
         self.minimal_toolbar = minimal_toolbar
         self.toolbar_extra = toolbar_extra
+        self.m_wave_window_names = tuple(m_wave_window_names) if m_wave_window_names is not None else None
         self.model = LatencyWindowTableModel(len(self.channel_names), self)
         self.undo_stack = QUndoStack(self)
         self._history_replaying = False
@@ -476,6 +486,23 @@ class LatencyWindowEditor(QWidget):
         self.start_details.addWidget(global_panel)
         self.start_details.addWidget(per_channel_panel)
         form.addRow("Name", self.name_edit)
+        if self.m_wave_window_names is not None:
+            if self.m_wave_window_names:
+                names = ", ".join(self.m_wave_window_names)
+                note = (
+                    f"M-max naming: exact name matches (case-insensitive): {names} "
+                    f"{'is' if len(self.m_wave_window_names) == 1 else 'are'} classified as M-responses. "
+                    "To keep a similarly named window out of M-max, use a different name, such as M-artifact."
+                )
+            else:
+                note = "M-max automatic M-response naming is disabled in Preferences. No window name is classified automatically."
+            self.m_wave_name_note = QLabel(note)
+            self.m_wave_name_note.setObjectName("m_wave_name_note")
+            self.m_wave_name_note.setWordWrap(True)
+            self.m_wave_name_note.setToolTip(
+                "M-max uses the first latency window with one of these exact names. Choose another name when this is not the M-response window."
+            )
+            form.addRow(self.m_wave_name_note)
         form.addRow("Color", self.color_combo)
         form.addRow("Duration", self.duration_spin)
         form.addRow("Start mode", mode_widget)

@@ -8,7 +8,7 @@ Tests should demonstrate the behavior a change protects, not merely execute code
 
 ```powershell
 # Focused test while developing
-conda run -n monstim python -m pytest tests/gui/test_help_navigation.py -q -p no:cacheprovider --basetemp=.pytest_tmp_help
+conda run -n monstim python -m pytest tests/gui/test_help_navigation.py -q
 
 # Default suite (legacy tests remain excluded by pytest configuration)
 conda run -n monstim python -m pytest
@@ -27,10 +27,6 @@ Use `-k <expression>` or a precise node ID to narrow a failure. For GUI tests, k
 - Treat files under `tests/fixtures` as read-only inputs.
 - Verify an undo/redo round trip for every undoable mutation.
 - For a bug fix, add the smallest regression test that fails before the fix.
-
-## Windows notes
-
-Cloud-synced worktrees can leave temporary test folders locked. A cleanup failure is an environment problem, not proof that tests passed or failed. Use a unique `--basetemp`, close file handles, and report cleanup failures separately from test results.
 
 ## Before handoff
 

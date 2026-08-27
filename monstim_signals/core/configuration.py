@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 
 CALCULATION_METHODS = frozenset({"peak_to_trough", "extrema_ptt", "exclusive_extrema_ptt", "rms", "average_rectified", "average_unrectified", "auc"})
+GLOBAL_ONLY_PROFILE_KEYS = frozenset({"m_wave_window_names"})
 
 
 def _freeze(value: Any) -> Any:
@@ -87,10 +88,11 @@ class AnalysisConfig:
     default_method: str
     m_max_args: Mapping[str, Any]
     h_threshold: float
+    m_wave_window_names: tuple[str, ...]
 
     @property
     def fingerprint(self) -> tuple[Any, ...]:
-        return (self.bin_size, self.default_method, _fingerprint(self.m_max_args), self.h_threshold)
+        return (self.bin_size, self.default_method, _fingerprint(self.m_max_args), self.h_threshold, self.m_wave_window_names)
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,7 @@ class ResolvedConfig(Mapping[str, Any]):
             default_method=str(self._values["default_method"]),
             m_max_args=self._values["m_max_args"],
             h_threshold=float(self._values.get("h_threshold", 0.5)),
+            m_wave_window_names=tuple(self._values["m_wave_window_names"]),
         )
         plot_keys = {
             "time_window",
@@ -167,7 +170,7 @@ class ResolvedConfig(Mapping[str, Any]):
         result = {key: _thaw(value) for key, value in values.items()}
         if isinstance(result.get("default_channel_names"), str):
             result["default_channel_names"] = [name.strip() for name in result["default_channel_names"].split(",") if name.strip()]
-        required = {"bin_size", "time_window", "pre_stim_time", "default_method", "butter_filter_args", "m_max_args"}
+        required = {"bin_size", "time_window", "pre_stim_time", "default_method", "butter_filter_args", "m_max_args", "m_wave_window_names"}
         missing = sorted(required - result.keys())
         if missing:
             raise ValueError(f"Missing required configuration keys: {', '.join(missing)}")
@@ -179,6 +182,15 @@ class ResolvedConfig(Mapping[str, Any]):
         if method not in CALCULATION_METHODS:
             raise ValueError(f"Invalid default_method '{method}'")
         result["default_method"] = method
+        m_wave_names = result["m_wave_window_names"]
+        if not isinstance(m_wave_names, list) or not all(isinstance(name, str) for name in m_wave_names):
+            raise ValueError("m_wave_window_names must be a list of strings")
+        normalized_m_wave_names = [name.strip() for name in m_wave_names]
+        if any(not name for name in normalized_m_wave_names):
+            raise ValueError("m_wave_window_names cannot contain blank names")
+        if len({name.casefold() for name in normalized_m_wave_names}) != len(normalized_m_wave_names):
+            raise ValueError("m_wave_window_names cannot contain duplicate names ignoring case")
+        result["m_wave_window_names"] = normalized_m_wave_names
         for key in ("bin_size", "time_window", "pre_stim_time", "h_threshold"):
             if key in result:
                 result[key] = float(result[key])
@@ -297,6 +309,9 @@ class ConfigResolver:
         overlay: Mapping[str, Any] = {}
         if profile:
             overlay = profile.get("analysis_parameters", {})
+            global_only = sorted(GLOBAL_ONLY_PROFILE_KEYS & overlay.keys())
+            if global_only:
+                raise ValueError(f"Global-only analysis profile keys: {', '.join(global_only)}")
             unknown = sorted(_unknown_paths(self._load_base(), overlay))
             if unknown:
                 raise ValueError(f"Unknown analysis profile keys: {', '.join(unknown)}")

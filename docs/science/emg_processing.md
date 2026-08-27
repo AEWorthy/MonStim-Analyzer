@@ -8,7 +8,7 @@ MonStim keeps the acquired recording available and derives display/analysis sign
 
 For EMG channels, MonStim applies the configured Butterworth bandpass filter using forward-and-reverse filtering. This avoids a net phase shift but does not make an unsuitable cutoff valid. The shipped filter is 100–3500 Hz, fourth order; confirm that the cutoffs are appropriate for the acquisition rate and scientific protocol.
 
-Force and length channels use pre-stimulus baseline subtraction instead of the EMG bandpass filter. Other channel types pass through without this filtering. A configured polarity inversion is applied after the channel's processing step.
+Identified force and length channels use pre-stimulus baseline subtraction instead of the EMG bandpass filter. Other non-EMG channel types pass through without this filtering. A configured polarity inversion is applied after the channel's processing step.
 
 ## Signal forms in plots
 

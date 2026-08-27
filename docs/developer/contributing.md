@@ -13,8 +13,6 @@ conda run -n monstim python -m pytest <target>
 conda run -n monstim ruff check <paths>
 ```
 
-Use a unique pytest base directory for GUI or repeated Windows runs, for example `--basetemp=.pytest_tmp_my_change -p no:cacheprovider`. Do not switch to a system interpreter just because it is available.
-
 ## Code boundaries
 
 | Area | Responsibility | Keep out of it |

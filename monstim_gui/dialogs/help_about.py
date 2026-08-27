@@ -1,4 +1,5 @@
 import hashlib
+import html as html_lib
 import io
 import logging
 import os
@@ -240,6 +241,86 @@ def _replace_placeholders_with_images(html: str, math_items: list[tuple[str, boo
     return re.sub(r"<!--MATH:(\d+)-->", _sub, html)
 
 
+def _help_document_stylesheet(dark_mode: bool) -> str:
+    """Return a conservative stylesheet supported by Qt rich text.
+
+    QTextBrowser implements a deliberately small CSS subset, so table geometry
+    is supplied as HTML attributes in :func:`_normalise_help_tables`.  This
+    stylesheet handles the visual details that Qt does support consistently.
+    """
+    palette = QApplication.palette()
+    text = palette.color(QPalette.ColorRole.Text).name()
+    background = palette.color(QPalette.ColorRole.Base).name()
+    link = palette.color(QPalette.ColorRole.Link).name()
+    header_background = "#3c3c3c" if dark_mode else "#e9edf2"
+    rule = "#666666" if dark_mode else "#b8c0ca"
+    code_background = "#383838" if dark_mode else "#f2f4f6"
+
+    return f"""
+        body {{ color: {text}; background-color: {background}; line-height: 1.35; }}
+        h1 {{ margin-top: 0; margin-bottom: 14px; }}
+        h2 {{ margin-top: 20px; margin-bottom: 8px; }}
+        h3 {{ margin-top: 16px; margin-bottom: 6px; }}
+        p {{ margin-top: 0; margin-bottom: 10px; }}
+        ul, ol {{ margin-top: 3px; margin-bottom: 10px; }}
+        li {{ margin-top: 2px; margin-bottom: 2px; }}
+        a {{ color: {link}; text-decoration: underline; }}
+        code {{ background-color: {code_background}; padding: 1px 3px; }}
+        table {{ border: 1px solid {rule}; margin-top: 8px; margin-bottom: 12px; }}
+        th {{ background-color: {header_background}; font-weight: bold; }}
+        th, td {{ padding: 6px; border: 1px solid {rule}; }}
+    """
+
+
+def _normalise_help_tables(html: str) -> str:
+    """Add Qt-friendly geometry and cell attributes to Markdown tables.
+
+    Python-Markdown emits bare table tags.  Qt's rich-text layout otherwise
+    sizes those tables from their widest cell, which makes prose columns and
+    inline math compete for space.  Attributes are more reliably honoured by
+    QTextDocument than modern table CSS.
+    """
+
+    def replace_table(match: re.Match[str]) -> str:
+        table = match.group(0)
+        headers = re.findall(r"<th\b[^>]*>(.*?)</th>", table, flags=re.DOTALL | re.IGNORECASE)
+        column_count = len(headers)
+        if not column_count:
+            return table
+
+        header_names = [html_lib.unescape(re.sub(r"<[^>]+>", "", header)).strip().casefold() for header in headers]
+        # Documentation comparison tables often put a compact identifier next
+        # to a formula and explanatory prose.  Give each of those a useful
+        # minimum share rather than allowing Qt to infer it from a single row.
+        if header_names == ["method", "calculation", "units", "important limit"]:
+            widths = ["25%", "30%", "14%", "31%"]
+        else:
+            base_width, remainder = divmod(100, column_count)
+            widths = [f"{base_width + (index < remainder)}%" for index in range(column_count)]
+
+        cell_index = 0
+
+        def replace_cell(cell_match: re.Match[str]) -> str:
+            nonlocal cell_index
+            tag = cell_match.group(1).lower()
+            attributes = cell_match.group(2)
+            width = widths[cell_index % column_count]
+            cell_index += 1
+            alignment = ' align="left"' if tag == "th" else ""
+            return f'<{tag}{attributes} width="{width}" valign="top"{alignment}>'
+
+        table = re.sub(r"<(th|td)\b([^>]*)>", replace_cell, table, flags=re.IGNORECASE)
+        return re.sub(
+            r"<table>",
+            '<table width="100%" border="1" cellspacing="0" cellpadding="6">',
+            table,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+    return re.sub(r"<table>.*?</table>", replace_table, html, flags=re.DOTALL | re.IGNORECASE)
+
+
 class HelpWindow(QDialog):
     """Help window that renders Markdown with LaTeX math as images.
 
@@ -363,6 +444,7 @@ class HelpWindow(QDialog):
         html = md.convert(self._markdown_content)
 
         # Extract math and replace with placeholders (only done once)
+        html = _normalise_help_tables(html)
         self._html_template, self._math_items = _replace_math_with_placeholders(html)
 
         # Render at current scale
@@ -377,6 +459,7 @@ class HelpWindow(QDialog):
         scroll_max = scrollbar.maximum() if scrollbar else 0
         scroll_frac = scrollbar.value() / scroll_max if scroll_max > 0 else 0
 
+        self.text_browser.document().setDefaultStyleSheet(_help_document_stylesheet(self._dark_mode))
         self.text_browser.setHtml(final_html)
 
         # Restore scroll position (as fraction of new total), unless navigating.

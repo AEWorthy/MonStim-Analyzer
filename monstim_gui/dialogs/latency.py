@@ -262,7 +262,14 @@ class LatencyWindowsDialog(QDialog):
         if not self.presets:
             self.preset_button.setToolTip("No latency-window presets are configured")
 
-        self.editor = LatencyWindowEditor(self.data.channel_names, self, minimal_toolbar=True, toolbar_extra=self.preset_button)
+        m_wave_window_names = self.config_repo.read_config().get("m_wave_window_names", [])
+        self.editor = LatencyWindowEditor(
+            self.data.channel_names,
+            self,
+            minimal_toolbar=True,
+            toolbar_extra=self.preset_button,
+            m_wave_window_names=m_wave_window_names,
+        )
         self.editor.changed.connect(self._mark_draft_dirty)
         layout.addWidget(self.editor, 1)
 

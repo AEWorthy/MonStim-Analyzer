@@ -58,6 +58,84 @@ class StimulusSelectorWidget(QWidget):
             cb.setChecked(sig in selected)
 
 
+class MWaveWindowNamesEditor(QWidget):
+    """Editable global list of latency-window names recognized as M-responses."""
+
+    def __init__(self, names: list[str], shipped_defaults: list[str], parent=None):
+        super().__init__(parent)
+        self.shipped_defaults = list(shipped_defaults)
+        self._name_fields: list[QLineEdit] = []
+        layout = QVBoxLayout(self)
+        self._names_layout = QVBoxLayout()
+        self._names_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self._names_layout)
+
+        controls = QHBoxLayout()
+        add_button = QPushButton("Add name")
+        reset_button = QPushButton("Restore shipped defaults")
+        add_button.clicked.connect(lambda: self.add_name())
+        reset_button.clicked.connect(self.restore_shipped_defaults)
+        controls.addWidget(add_button)
+        controls.addWidget(reset_button)
+        controls.addStretch()
+        layout.addLayout(controls)
+
+        self.empty_notice = QLabel(
+            "An empty list disables automatic M-wave recognition. M-max and relative-to-M-max normalization then require a non-empty list."
+        )
+        self.empty_notice.setWordWrap(True)
+        layout.addWidget(self.empty_notice)
+        self.set_names(names)
+
+    def add_name(self, name: str = "") -> None:
+        row = QWidget(self)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        field = QLineEdit(name, row)
+        field.setPlaceholderText("Latency-window name")
+        remove_button = QPushButton("Remove", row)
+
+        def remove() -> None:
+            self._name_fields.remove(field)
+            self._names_layout.removeWidget(row)
+            row.deleteLater()
+            self._update_empty_notice()
+
+        remove_button.clicked.connect(remove)
+        row_layout.addWidget(field, 1)
+        row_layout.addWidget(remove_button)
+        self._names_layout.addWidget(row)
+        self._name_fields.append(field)
+        self._update_empty_notice()
+
+    def set_names(self, names: list[str]) -> None:
+        while self._name_fields:
+            field = self._name_fields.pop()
+            row = field.parentWidget()
+            self._names_layout.removeWidget(row)
+            row.deleteLater()
+        for name in names:
+            self.add_name(name)
+        self._update_empty_notice()
+
+    def restore_shipped_defaults(self) -> None:
+        self.set_names(self.shipped_defaults)
+
+    def names(self) -> list[str]:
+        return [field.text() for field in self._name_fields]
+
+    def validate(self) -> list[str]:
+        names = [name.strip() for name in self.names()]
+        if any(not name for name in names):
+            raise ValueError("M-wave recognition names cannot be blank. Remove an unused row instead.")
+        if len({name.casefold() for name in names}) != len(names):
+            raise ValueError("M-wave recognition names must be unique without regard to case.")
+        return names
+
+    def _update_empty_notice(self) -> None:
+        self.empty_notice.setVisible(not self._name_fields)
+
+
 class LatencyWindowPresetEditor(QWidget):
     """Widget to create and edit latency window presets."""
 
@@ -293,6 +371,7 @@ class PreferencesDialog(QDialog):
         self.default_config_file = default_config_file
         self.config_repo = config_repo or ConfigRepository(default_config_file)
         self.config = self.config_repo.read_config()
+        self.shipped_config = self.config_repo.read_default_config()
         self.profile_manager = ProfileManager(reference_config=self.config)
         self.active_profile_path = None
         self.active_profile_data = None
@@ -370,6 +449,7 @@ class PreferencesDialog(QDialog):
                 "EMG Filter Settings": ["butter_filter_args"],
                 "'Suspected H-reflex' Plot Settings": ["h_threshold"],
                 "M-max Calculation Settings": ["m_max_args"],
+                "M-wave Recognition Names": ["m_wave_window_names"],
                 "Plot Style Settings": [
                     "title_font_size",
                     "axis_label_font_size",
@@ -388,7 +468,7 @@ class PreferencesDialog(QDialog):
                     "'Suspected H-reflex' Plot Settings",
                     "Plot Style Settings",
                 ],
-                "Latency Window Settings": ["Latency Window Presets"],
+                "Latency Window Settings": ["M-wave Recognition Names", "Latency Window Presets"],
                 "Misc.": [
                     "EMG Filter Settings",
                     "Dataset Parsing Parameters",
@@ -405,6 +485,18 @@ class PreferencesDialog(QDialog):
                 tab_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 tab_layout = QVBoxLayout(tab_content)
                 for section in section_names:
+                    if section == "M-wave Recognition Names":
+                        group = QGroupBox(section)
+                        vbox = QVBoxLayout(group)
+                        editor = MWaveWindowNamesEditor(
+                            self.config["m_wave_window_names"],
+                            self.shipped_config["m_wave_window_names"],
+                            group,
+                        )
+                        vbox.addWidget(editor)
+                        self.fields["m_wave_window_names"] = editor
+                        tab_layout.addWidget(group)
+                        continue
                     if section == "Latency Window Presets":
                         group = QGroupBox(section)
                         group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
@@ -548,7 +640,7 @@ class PreferencesDialog(QDialog):
 
     def _on_add_analysis_param(self, layout, add_param_btn):
         # Get available global keys (excluding latency window and already present)
-        latency_keys = {"latency_window_presets", "latency_window_preset"}
+        latency_keys = {"latency_window_presets", "latency_window_preset", "m_wave_window_names"}
         global_keys = set(self.config.keys()) - latency_keys
         already = set(self.analysis_param_fields.keys())
         available = sorted(global_keys - already)
@@ -753,6 +845,12 @@ class PreferencesDialog(QDialog):
             for key, field in self.fields.items():
                 if isinstance(field, LatencyWindowPresetEditor):
                     value = field.get_presets()
+                elif isinstance(field, MWaveWindowNamesEditor):
+                    try:
+                        value = field.validate()
+                    except ValueError as error:
+                        QMessageBox.warning(self, "Invalid M-wave recognition names", str(error))
+                        return
                 elif isinstance(field, QTextEdit):
                     raw = field.toPlainText()
                     value = raw
