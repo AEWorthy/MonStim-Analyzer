@@ -44,17 +44,20 @@ def test_live_dialog_refreshes_session_draft_and_context():
     assert dialog.apply_level_combo.currentData() == "session"
     assert "Session annotation" in dialog.value_source_label.text()
     assert "S1" in dialog.value_source_label.text()
-    assert "exact name matches" in dialog.editor.m_wave_name_note.text()
-    assert "M_response" in dialog.editor.m_wave_name_note.text()
-    assert "M-artifact" in dialog.editor.m_wave_name_note.text()
     assert dialog.editor.windows()[0].start_times == [1.0]
     dialog.editor.table.selectRow(0)
     QApplication.processEvents()
+    assert dialog.editor.m_wave_name_note.text() == "(M-max Compatible Window)"
+    assert not dialog.editor.m_wave_name_note.isHidden()
     assert dialog.editor.global_radio.isChecked()
     assert dialog.editor.start_details.currentIndex() == 0
     dialog.editor.per_channel_radio.setChecked(True)
     assert dialog.editor.start_details.currentIndex() == 1
     assert dialog.editor.model.rows[0].per_channel
+
+    dialog.editor.name_edit.setText("H-reflex")
+    dialog.editor._apply_single_details()
+    assert dialog.editor.m_wave_name_note.isHidden()
 
     gui.current_session = _session("S2", 7.5)
     dialog.refresh_from_current_selection()

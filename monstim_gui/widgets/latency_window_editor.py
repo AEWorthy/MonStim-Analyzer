@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 
 from PySide6.QtCore import QAbstractTableModel, QByteArray, QItemSelectionModel, QModelIndex, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QKeySequence, QShortcut, QUndoCommand, QUndoStack
+from PySide6.QtGui import QColor, QKeySequence, QPalette, QShortcut, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -299,6 +299,7 @@ class LatencyWindowEditor(QWidget):
         self.minimal_toolbar = minimal_toolbar
         self.toolbar_extra = toolbar_extra
         self.m_wave_window_names = tuple(m_wave_window_names) if m_wave_window_names is not None else None
+        self._m_wave_window_name_keys = frozenset(name.casefold() for name in self.m_wave_window_names or ())
         self.model = LatencyWindowTableModel(len(self.channel_names), self)
         self.undo_stack = QUndoStack(self)
         self._history_replaying = False
@@ -486,22 +487,14 @@ class LatencyWindowEditor(QWidget):
         self.start_details.addWidget(global_panel)
         self.start_details.addWidget(per_channel_panel)
         form.addRow("Name", self.name_edit)
-        if self.m_wave_window_names is not None:
-            if self.m_wave_window_names:
-                names = ", ".join(self.m_wave_window_names)
-                note = (
-                    f"M-max naming: exact name matches (case-insensitive): {names} "
-                    f"{'is' if len(self.m_wave_window_names) == 1 else 'are'} classified as M-responses. "
-                    "To keep a similarly named window out of M-max, use a different name, such as M-artifact."
-                )
-            else:
-                note = "M-max automatic M-response naming is disabled in Preferences. No window name is classified automatically."
-            self.m_wave_name_note = QLabel(note)
+        if self.m_wave_window_names:
+            self.m_wave_name_note = QLabel("(M-max Compatible Window)")
             self.m_wave_name_note.setObjectName("m_wave_name_note")
-            self.m_wave_name_note.setWordWrap(True)
-            self.m_wave_name_note.setToolTip(
-                "M-max uses the first latency window with one of these exact names. Choose another name when this is not the M-response window."
-            )
+            self.m_wave_name_note.setStyleSheet("font-style: italic;")
+            palette = self.m_wave_name_note.palette()
+            palette.setColor(QPalette.ColorRole.WindowText, palette.color(QPalette.ColorRole.PlaceholderText))
+            self.m_wave_name_note.setPalette(palette)
+            self.m_wave_name_note.setVisible(False)
             form.addRow(self.m_wave_name_note)
         form.addRow("Color", self.color_combo)
         form.addRow("Duration", self.duration_spin)
@@ -676,6 +669,7 @@ class LatencyWindowEditor(QWidget):
         self.channel_start_label.setText(f"Start / {len(self.channel_names)} channels:")
         self.channel_table.blockSignals(False)
         self.inspector.setCurrentIndex(1)
+        self._update_m_wave_name_note()
 
     def _apply_single_details(self, *_):
         if not hasattr(self, "_detail_row"):
@@ -688,6 +682,14 @@ class LatencyWindowEditor(QWidget):
             window.start_times = [self.global_start_spin.value()] * self.model.channel_count
         self.model.dataChanged.emit(self.model.index(self._detail_row, 2), self.model.index(self._detail_row, 5))
         self.changed.emit()
+        self._update_m_wave_name_note()
+
+    def _update_m_wave_name_note(self) -> None:
+        """Show the compact M-max marker only for a configured M-wave name."""
+        if not hasattr(self, "m_wave_name_note"):
+            return
+        name_key = self.name_edit.text().strip().casefold()
+        self.m_wave_name_note.setVisible(name_key in self._m_wave_window_name_keys)
 
     def _apply_channel_details(self, *_):
         if not hasattr(self, "_detail_row") or self.global_radio.isChecked():
