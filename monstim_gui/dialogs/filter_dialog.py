@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -19,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# TODO: Fix filter dialog to align with valid search terms and keys. May require revamping the data curation search system.
+logger = logging.getLogger(__name__)
 
 
 class FilterDialog(QDialog):
@@ -34,20 +33,23 @@ class FilterDialog(QDialog):
     - Builds a tokenized query string suitable for the manager's `_apply_filter` method.
     """
 
-    def __init__(self, qualifiers: List[Tuple[str, str]], terms_by_key: Dict[str, Dict[str, int]], parent=None):
+    def __init__(self, qualifiers: list[tuple[str, str]], terms_by_key: dict[str, dict[str, int]], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Filter Builder")
         self.resize(560, 500)
         self._qualifiers = qualifiers
         self._terms_by_key = terms_by_key or {}
-        self._checkboxes: Dict[str, List[QCheckBox]] = {}
+        self._checkboxes: dict[str, list[QCheckBox]] = {}
 
         main = QVBoxLayout(self)
         main.setContentsMargins(10, 10, 10, 10)
         main.setSpacing(8)
 
         # Quick help
-        help_lbl = QLabel("Select terms to filter. Use key:value qualifiers. Combine with free-text tokens below.")
+        help_lbl = QLabel(
+            "Select known values to filter. Values selected within one field match any value; "
+            "different fields are combined. Add plain text or quoted phrases below."
+        )
         help_lbl.setWordWrap(True)
         main.addWidget(help_lbl)
 
@@ -74,12 +76,15 @@ class FilterDialog(QDialog):
             vbox = QVBoxLayout()
             vbox.setContentsMargins(6, 6, 6, 6)
             vbox.setSpacing(4)
-            boxes: List[QCheckBox] = []
+            boxes: list[QCheckBox] = []
             for v in values:
                 count = values_map.get(v, 0)
                 label_text = f"{v} ({count})" if v else f"(empty) ({count})"
                 cb = QCheckBox(label_text)
                 cb.setTristate(False)
+                # Keep the source value separate from presentation text.  Values such as
+                # "Excluded (Complete)" cannot be recovered reliably from the label.
+                cb.setProperty("filter_value", v)
                 vbox.addWidget(cb)
                 boxes.append(cb)
             gb.setLayout(vbox)
@@ -138,35 +143,41 @@ class FilterDialog(QDialog):
                     cb.setChecked(False)
             self.free_text.clear()
         except Exception:
-            pass
+            logger.exception("Failed to clear filter dialog checkboxes and free-text field")
 
     def _apply(self):
-        """Build a query string like 'animal:WT cond:rev-light "extra phrase" foxp2' and accept."""
+        """Build a query string understood by DataCurationManager's search parser."""
         try:
-            tokens: List[str] = []
+            tokens: list[str] = []
             for key, _label in self._qualifiers:
+                selected_values: list[str] = []
                 for cb in self._checkboxes.get(key, []):
                     if cb.isChecked():
-                        # Extract original value without the appended count
-                        txt = cb.text().strip()
-                        if txt.endswith(")") and "(" in txt:
-                            val = txt[: txt.rfind("(")].strip()
-                        else:
-                            val = txt
+                        val = str(cb.property("filter_value") or "")
                         if val:
-                            # Quote values that contain spaces
-                            if " " in val:
-                                tokens.append(f'{key}:"{val}"')
-                            else:
-                                tokens.append(f"{key}:{val}")
+                            selected_values.append(val)
+                if selected_values:
+                    encoded_values = [self._quote_value(value) for value in selected_values]
+                    if len(encoded_values) == 1:
+                        tokens.append(f"{key}:{encoded_values[0]}")
+                    else:
+                        # The search parser treats alternatives for one qualifier as OR.
+                        tokens.append(f"{key}:({'|'.join(encoded_values)})")
             extra = self.free_text.text().strip()
             if extra:
                 tokens.append(extra)
             self._result_query = " ".join(tokens).strip()
-        except Exception as e:
-            logging.error(f"Failed to build filter tokens: {e}")
+        except Exception:
+            logger.exception("Failed to build filter tokens")
             self._result_query = ""
         self.accept()
+
+    @staticmethod
+    def _quote_value(value: str) -> str:
+        """Quote a qualifier value when needed for the token parser."""
+        if not any(char.isspace() or char in '()|"' for char in value):
+            return value
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
     def result_query(self) -> str:
         return getattr(self, "_result_query", "")

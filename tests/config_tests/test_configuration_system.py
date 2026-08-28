@@ -19,6 +19,7 @@ import yaml
 from monstim_gui.core.application_state import ApplicationState
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.managers.profile_manager import ProfileManager
+from monstim_signals.core.configuration import deep_merge
 
 # --- Test Annotations ---
 # Purpose: ConfigRepository I/O, ProfileManager save/load/list, ApplicationState QSettings integration
@@ -48,7 +49,6 @@ class TestConfigRepository:
             "title_font_size": 16,
             "m_color": "tab:red",
             "h_color": "tab:blue",
-            "h_threshold": 0.5,
             "preferred_date_format": "YYMMDD",
         }
 
@@ -118,10 +118,22 @@ class TestConfigRepository:
         assert os.path.exists(self.user_config_path)
 
         # Verify written content
-        with open(self.user_config_path, "r") as f:
+        with open(self.user_config_path) as f:
             written_config = yaml.safe_load(f)
 
         assert written_config == test_config
+
+    def test_write_config_omits_shipped_defaults(self):
+        """Saving the resolved UI view must not pin every shipped default."""
+        repo = ConfigRepository(self.default_config_path)
+        resolved = repo.read_config()
+        resolved["bin_size"] = 0.03
+        repo.write_config(resolved)
+
+        with open(self.user_config_path) as f:
+            written_config = yaml.safe_load(f)
+
+        assert written_config == {"bin_size": 0.03}
 
     def test_type_coercion_basic_types(self):
         """Test type coercion for basic data types."""
@@ -217,10 +229,8 @@ class TestConfigRepository:
         with pytest.raises(FileNotFoundError):
             repo.read_config()
 
-    def test_update_nested_dict(self):
-        """Test the nested dictionary update functionality."""
-        repo = ConfigRepository(self.default_config_path)
-
+    def test_deep_merge(self):
+        """Test the shared nested dictionary merge implementation."""
         base = {
             "level1": {"level2": {"keep": "original", "update": "old_value"}, "keep_section": "unchanged"},
             "top_level": "original",
@@ -228,7 +238,7 @@ class TestConfigRepository:
 
         update = {"level1": {"level2": {"update": "new_value", "add": "new_key"}, "new_section": "added"}, "new_top": "added"}
 
-        result = repo._update_nested_dict(base.copy(), update)
+        result = deep_merge(base, update)
 
         # Check updates applied correctly
         assert result["level1"]["level2"]["update"] == "new_value"
@@ -264,7 +274,6 @@ class TestProfileManager:
             "name": "Test Profile 1",
             "description": "A test profile for EMG analysis",
             "analysis_parameters": {"time_window": 10.0, "default_method": "peak_to_trough"},
-            "stimuli_to_plot": ["Electrical"],
         }
 
         self.profile2_data = {
@@ -317,7 +326,7 @@ class TestProfileManager:
         filename = pm.save_profile(self.profile1_data)
 
         # Read raw YAML to check ordering
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, encoding="utf-8") as f:
             content = f.read()
 
         # Check that name comes first, then description, etc.
@@ -428,6 +437,73 @@ class TestProfileManager:
 
         # Should work but without type coercion
         assert loaded_data["name"] == "Test Profile 1"
+
+    def test_builtin_profiles_are_read_only_and_user_profiles_are_writable(self):
+        builtin_dir = os.path.join(self.temp_dir, "builtin")
+        user_dir = os.path.join(self.temp_dir, "user")
+        os.makedirs(builtin_dir)
+        builtin_path = os.path.join(builtin_dir, "example.yml")
+        with open(builtin_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.profile1_data, f)
+
+        pm = ProfileManager(reference_config=self.reference_config, builtin_dir=builtin_dir, user_dir=user_dir)
+        records = pm.list_profile_records()
+        assert records[0].read_only is True
+        with pytest.raises(ValueError, match="read-only"):
+            pm.save_profile(self.profile1_data, builtin_path)
+
+        saved_path = pm.duplicate_profile(builtin_path, "My Copy")
+        assert saved_path.startswith(user_dir)
+        assert os.path.exists(saved_path)
+
+    def test_migration_does_not_copy_any_shipped_profile(self):
+        """Applying settings must not turn a bundled profile into a user profile."""
+        builtin_dir = os.path.join(self.temp_dir, "builtin")
+        user_dir = os.path.join(self.temp_dir, "user")
+        os.makedirs(builtin_dir)
+        shipped_names = (
+            "emg_force_stretch.yml",
+            "emg_force_vibration.yml",
+            "hreflex.yml",
+            "optical-long.yml",
+            "optical-short.yml",
+            "pre-stimulus_view.yml",
+        )
+        for name in shipped_names:
+            with open(os.path.join(builtin_dir, name), "w", encoding="utf-8") as f:
+                yaml.safe_dump({"name": name.removesuffix(".yml")}, f)
+
+        pm = ProfileManager(reference_config=self.reference_config, builtin_dir=builtin_dir, user_dir=user_dir)
+
+        assert pm.migrate_legacy_profiles() == []
+        assert not os.path.exists(user_dir)
+
+    def test_migration_moves_unknown_legacy_profile_to_user_library(self):
+        """Unrecognised files remain eligible for the one-time legacy migration."""
+        builtin_dir = os.path.join(self.temp_dir, "builtin")
+        user_dir = os.path.join(self.temp_dir, "user")
+        os.makedirs(builtin_dir)
+        legacy_path = os.path.join(builtin_dir, "old_custom.yml")
+        with open(legacy_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"name": "Old Custom", "analysis_parameters": {}}, f)
+
+        pm = ProfileManager(reference_config=self.reference_config, builtin_dir=builtin_dir, user_dir=user_dir)
+
+        migrated = pm.migrate_legacy_profiles()
+
+        assert migrated == [os.path.join(user_dir, "old_custom.yml")]
+        assert os.path.exists(migrated[0])
+
+    def test_import_profile_conflict_can_keep_both(self):
+        pm = ProfileManager(self.profile_dir, self.reference_config)
+        pm.save_profile(self.profile1_data)
+        incoming = os.path.join(self.temp_dir, "incoming.yml")
+        with open(incoming, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.profile1_data, f)
+
+        imported = pm.import_profile(incoming, conflict="keep_both")
+        assert os.path.exists(imported)
+        assert pm.load_profile(imported)["name"] == "Test Profile 1 2"
 
 
 class TestApplicationState:
@@ -679,10 +755,12 @@ class TestConfigurationIntegration:
 
         # Create realistic default config
         self.default_config = {
+            "bin_size": 0.01,
             "time_window": 8.0,
             "pre_stim_time": 2.0,
             "default_method": "rms",
             "butter_filter_args": {"lowcut": 100, "highcut": 3500, "order": 4},
+            "m_max_args": {"max_window_size": 15, "min_window_size": 2, "threshold": 0.3, "validation_tolerance": 1.05},
             "m_color": "tab:red",
             "h_color": "tab:blue",
         }
@@ -781,7 +859,7 @@ class TestConfigurationIntegration:
         for profile in profiles:
             profile_manager.save_profile(profile)
 
-        # List and verify all profiles
+        # list and verify all profiles
         listed_profiles = profile_manager.list_profiles()
         assert len(listed_profiles) == 3
 
@@ -791,7 +869,7 @@ class TestConfigurationIntegration:
         assert "Force Analysis" in profile_names
 
         # Test loading each profile
-        for name, filepath, data in listed_profiles:
+        for name, filepath, _data in listed_profiles:
             loaded = profile_manager.load_profile(filepath)
             assert loaded["name"] == name
             assert "analysis_parameters" in loaded

@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PySide6.QtCore import QCoreApplication, QSettings  # noqa: E402
+from PySide6.QtCore import QCoreApplication, QSettings
 
 
 def test_persistence():

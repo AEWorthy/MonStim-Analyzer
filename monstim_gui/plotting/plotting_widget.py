@@ -1,5 +1,7 @@
 import copy
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer
@@ -22,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
+from ..core.ui_theme import install_wheel_change_guard
+from ..widgets.collapsible_group_box import CollapsibleGroupBox
 from .plot_types import PLOT_OPTIONS_DICT
 
 if TYPE_CHECKING:
@@ -31,12 +35,12 @@ if TYPE_CHECKING:
 
 
 # Plotting Widget
-class PlotWidget(QGroupBox):
-    def __init__(self, parent: "MonstimGUI"):
-        super().__init__("Plotting", parent)
-        self.current_option_widget: "BasePlotOptions" = None
-        self.parent: "MonstimGUI" = parent
-        self.layout: "QVBoxLayout" = QVBoxLayout()
+class PlotWidget(CollapsibleGroupBox):
+    def __init__(self, parent: MonstimGUI):
+        super().__init__("Plotting", parent, expanded=True)
+        self.current_option_widget: BasePlotOptions = None
+        self.parent: MonstimGUI = parent
+        self.layout: QVBoxLayout = QVBoxLayout()
         self.layout.setContentsMargins(4, 4, 4, 4)
         self.layout.setSpacing(4)
 
@@ -72,6 +76,7 @@ class PlotWidget(QGroupBox):
         self.plot_type_label.setToolTip("Select the type of plot to generate")
         form.addRow(self.plot_type_label, self.plot_type_combo)
         self.plot_type_combo.currentTextChanged.connect(self.on_plot_type_changed)
+        self._wheel_change_guard = install_wheel_change_guard(self)
 
         self.layout.addLayout(form)
 
@@ -97,10 +102,10 @@ class PlotWidget(QGroupBox):
         options_box_layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins
         options_box_layout.addWidget(self.options_scroll)
 
-        self.layout.addWidget(self.options_box, 0)  # No stretch - size to content only
-
-        # Add a stretch spacer to push buttons to bottom
-        self.layout.addStretch(1)
+        # Let the options panel take the remaining vertical space.  This keeps
+        # the plot buttons anchored at the bottom while allowing the panel to
+        # grow as its containing window grows.
+        self.layout.addWidget(self.options_box, 1)
 
         # Create the buttons for plotting and extracting data
         btn_row = QHBoxLayout()
@@ -118,6 +123,7 @@ class PlotWidget(QGroupBox):
         self.create_additional_options()
         # self.import_canvas()
         self.setLayout(self.layout)
+        self.set_expanded(True)
 
     def initialize_plot_widget(self):
         # Occurs after the data has been loaded. Called from EMGAnalysisGUI.
@@ -141,6 +147,10 @@ class PlotWidget(QGroupBox):
         # Initialize plot types and options
         self.update_plot_types()
         self.update_plot_options()
+
+    def _guard_plot_option_wheels(self) -> None:
+        """Keep scrolling the options pane from changing plot controls."""
+        self._wheel_change_guard = install_wheel_change_guard(self, self._wheel_change_guard)
 
     def create_additional_options(self):
         self.additional_options_layout = QVBoxLayout()
@@ -169,7 +179,7 @@ class PlotWidget(QGroupBox):
             # Deep copy to avoid later mutation
             self.last_options[self.view][plot_type] = copy.deepcopy(current_options)
         except Exception as e:
-            logging.debug(f"Failed to save current options: {e}")
+            logger.debug(f"Failed to save current options: {e}")
 
     def connect_option_change_signals(self):
         """Connect common option widget signals to save_current_options.
@@ -195,28 +205,28 @@ class PlotWidget(QGroupBox):
                 try:
                     w.method_combo.currentTextChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect method_combo signal for {w}: {e}")
+                    logger.debug(f"Failed to connect method_combo signal for {w}: {e}")
 
             # data type combo or other QComboBox children
             for cb in w.findChildren(QComboBox):
                 try:
                     cb.currentTextChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QComboBox signal for {cb}: {e}")
+                    logger.debug(f"Failed to connect QComboBox signal for {cb}: {e}")
 
             # checkboxes
             for chk in w.findChildren(QCheckBox):
                 try:
                     chk.stateChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QCheckBox signal for {chk}: {e}")
+                    logger.debug(f"Failed to connect QCheckBox signal for {chk}: {e}")
 
             # line edits
             for le in w.findChildren(QLineEdit):
                 try:
                     le.textChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QLineEdit signal for {le}: {e}")
+                    logger.debug(f"Failed to connect QLineEdit signal for {le}: {e}")
 
             # spin boxes
             for child in w.findChildren(QWidget):
@@ -224,10 +234,10 @@ class PlotWidget(QGroupBox):
                     if isinstance(child, (QSpinBox, QDoubleSpinBox)):
                         child.valueChanged.connect(self.save_current_options)
                 except Exception as e:
-                    logging.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {child}: {e}")
+                    logger.debug(f"Failed to connect QSpinBox/QDoubleSpinBox signal for {child}: {e}")
 
         except Exception as e:
-            logging.debug(f"Failed to connect option change signals: {e}")
+            logger.debug(f"Failed to connect option change signals: {e}")
 
     def connect_channel_selection_updates(self):
         """Connect channel selector checkboxes to update persistent selection."""
@@ -259,7 +269,7 @@ class PlotWidget(QGroupBox):
                     # Deep copy to ensure no reference sharing
                     self.last_options[self.view][current_plot_type] = copy.deepcopy(current_options)
             except Exception as e:
-                logging.warning(f"Failed to save options for {self.view} - {current_plot_type}: {e}")
+                logger.warning(f"Failed to save options for {self.view} - {current_plot_type}: {e}")
 
         # Change to new view
         self.view = new_view
@@ -309,7 +319,7 @@ class PlotWidget(QGroupBox):
                 # Deep copy to ensure no reference sharing
                 self.last_options[self.view][previous_plot_type] = copy.deepcopy(current_options)
             except Exception as e:
-                logging.warning(f"Failed to save options for {self.view} - {previous_plot_type}: {e}")
+                logger.warning(f"Failed to save options for {self.view} - {previous_plot_type}: {e}")
 
         # Update the last plot type and refresh the options widget
         self.last_plot_type[self.view] = plot_type
@@ -353,28 +363,25 @@ class PlotWidget(QGroupBox):
 
                         self.current_option_widget.set_options(filtered_options)
                     except Exception as e:
-                        logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                        logger.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
                 else:
                     # Apply persistent channel selection even if no other saved options exist
-                    if hasattr(self, "persistent_channel_selection") and hasattr(
-                        self.current_option_widget, "channel_selector"
-                    ):
+                    if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
                         # If persistent selection is empty (first load), populate with all available channels
                         if not self.persistent_channel_selection:
                             all_channels = self.current_option_widget.channel_selector.get_selected_channels()
                             if all_channels:  # Only update if there are channels available
                                 self.persistent_channel_selection = all_channels
-                                logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                                logger.debug(f"First load: auto-selected all {len(all_channels)} channels")
                         else:
-                            self.current_option_widget.channel_selector.set_selected_channels(
-                                self.persistent_channel_selection
-                            )
+                            self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
                 # Connect channel selection updates for real-time persistence
                 self.connect_channel_selection_updates()
 
                 # Connect option change signals so modifications are saved immediately
                 self.connect_option_change_signals()
+                self._guard_plot_option_wheels()
 
                 self.options_layout.update()
 
@@ -383,7 +390,7 @@ class PlotWidget(QGroupBox):
                     self.current_option_widget.recording_cycler.reset_max_recordings()
 
         except AttributeError as e:
-            logging.warning(f"Error refreshing plot options widget: {e}", exc_info=True)
+            logger.warning(f"Error refreshing plot options widget: {e}", exc_info=True)
 
     def update_plot_types(self):
         self.plot_type_combo.blockSignals(True)
@@ -426,7 +433,7 @@ class PlotWidget(QGroupBox):
 
                     self.current_option_widget.set_options(filtered_options)
                 except Exception as e:
-                    logging.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
+                    logger.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
             else:
                 # Apply persistent channel selection even if no other saved options exist
                 if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
@@ -435,7 +442,7 @@ class PlotWidget(QGroupBox):
                         all_channels = self.current_option_widget.channel_selector.get_selected_channels()
                         if all_channels:  # Only update if there are channels available
                             self.persistent_channel_selection = all_channels
-                            logging.debug(f"First load: auto-selected all {len(all_channels)} channels")
+                            logger.debug(f"First load: auto-selected all {len(all_channels)} channels")
                     else:
                         self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
@@ -444,9 +451,9 @@ class PlotWidget(QGroupBox):
 
             # Connect option change signals so modifications are saved immediately
             self.connect_option_change_signals()
+            self._guard_plot_option_wheels()
 
-            # Recalculate size after options are initialized with a slight delay
-            # to ensure all widgets are properly laid out
+            # Refresh the option content's geometry after it is initialized.
             QTimer.singleShot(50, self.recalculate_options_size)
 
         self.options_layout.update()
@@ -455,48 +462,15 @@ class PlotWidget(QGroupBox):
             self.current_option_widget.recording_cycler.reset_max_recordings()
 
     def recalculate_options_size(self):
-        """Recalculate and adjust the options area size after options are initialized"""
+        """Refresh option geometry without constraining the resizable panel."""
         if self.current_option_widget:
-            # Force the widget to update its size hint first
             self.current_option_widget.adjustSize()
             self.options_content.adjustSize()
-
-            # Get the actual size needed for the content
-            content_size = self.options_content.sizeHint()
-            needed_height = content_size.height() + 10
-
-            # Get the available space in the parent widget
-            # We need to account for other widgets in the layout
-            parent_height = self.parent.height() if self.parent else 600  # fallback height
-
-            # Calculate approximate available space for options
-            # Account for form layout, buttons, margins, etc.
-            form_height = 120  # Approximate height of form elements above options
-            button_height = 40  # Approximate height of buttons below
-            margins = 40  # Various margins and spacing
-            available_height = parent_height - form_height - button_height - margins
-
-            # Always limit to available space to prevent window expansion
-            max_allowed_height = max(150, min(needed_height, available_height))
-
-            # Set size constraints
-            self.options_scroll.setMinimumHeight(max_allowed_height)
-            self.options_scroll.setMaximumHeight(max_allowed_height)
-
-            # Enable scrollbar if content exceeds available space
-            if needed_height > max_allowed_height:
-                self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            else:
-                self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-            # Update all geometries to apply the changes
+            self.options_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.options_content.updateGeometry()
             self.options_scroll.updateGeometry()
             self.options_box.updateGeometry()
-            self.updateGeometry()
-
-            # Force layout recalculation
             self.layout.invalidate()
-            self.layout.update()
 
     def get_plot_options(self):
         if self.current_option_widget:

@@ -5,11 +5,11 @@ from typing import Any
 
 import pandas as pd
 
-# # Ensure the project root is in sys.path for sibling imports
-# project_root = Path(__file__).resolve().parent.parent
-# if str(project_root) not in sys.path:
-#     sys.path.insert(0, str(project_root))
 from monstim_signals.core import StimCluster
+
+logger = logging.getLogger(__name__)
+
+MOTOR_LENGTH_STIM_NOISE_THRESHOLD = 0.002
 
 
 def detect_format(path: Path) -> str:
@@ -26,15 +26,15 @@ def detect_format(path: Path) -> str:
                 return "v3h"
             if line.lower().startswith("file version"):
                 return "v3d"
-    raise ValueError(f"Could not detect MonStim version for {path}. " "Please ensure it is a valid MonStim CSV file.")
+    raise ValueError(f"Could not detect MonStim version for {path}. Please ensure it is a valid MonStim CSV file.")
 
 
 def parse(path: Path):
     version = detect_format(path)
     try:
         return PARSERS[version](path)
-    except KeyError:
-        raise RuntimeError(f"No parser for {version}")
+    except KeyError as e:
+        raise RuntimeError(f"No parser for {version}") from e
 
 
 # registry of parser functions
@@ -72,20 +72,17 @@ def normalize_meta(raw_meta: dict[str, str]) -> dict[str, Any]:
         val: Any = v
         try:
             float_val = float(v)
-            if float_val.is_integer():
-                val = int(float_val)
-            else:
-                val = float_val
+            val = int(float_val) if float_val.is_integer() else float_val
         except ValueError:
-            pass
+            logger.debug(f"Could not convert {k}={v} to number, keeping as string")
 
         key = k.strip()
         canon = REVERSE_META_MAP.get(key.lower())
         if not canon:
-            # if it’s completely unknown, carry it under its original name
+            # if it's completely unknown, carry it under its original name
             meta[key.lower().replace(" ", "_")] = val
             continue
-        # if it’s known, use the canonical name
+        # if it's known, use the canonical name
         meta[canon] = val
 
     return meta
@@ -120,7 +117,7 @@ def parse_v3d(path: Path):
         df = pd.read_csv(path, sep=",", skiprows=data_start, header=None)
         data = df.values.astype("float32")
     except (ValueError, pd.errors.ParserError) as e:
-        raise ValueError(f"Could not parse numeric data from v3d file {path}: {str(e)}")
+        raise ValueError(f"Could not parse numeric data from v3d file {path}: {e!s}") from e
     meta = normalize_meta(raw_meta)
 
     # Set channel types and number of channels
@@ -134,7 +131,7 @@ def parse_v3d(path: Path):
     n = 4  # hardcoded for v3d, as it has 4 stimulus channels
     clusters = []
     for i in range(n):
-        stim_type_int = int(float(raw_meta[f"Stim Type {i+1}"]))
+        stim_type_int = int(float(raw_meta[f"Stim Type {i + 1}"]))
         if stim_type_int == 0:
             stim_type = "Optical"
         elif stim_type_int == 2:
@@ -144,7 +141,7 @@ def parse_v3d(path: Path):
             continue
         else:
             stim_type = "Unknown"
-        stim_v = float(raw_meta[f"Stim Value {i+1}"])
+        stim_v = float(raw_meta[f"Stim Value {i + 1}"])
 
         clusters.append(
             StimCluster(
@@ -165,9 +162,7 @@ def parse_v3d(path: Path):
 
     # Set additional metadata
     meta["num_samples"] = int(data.shape[0])
-    meta["emg_amp_gains"] = [
-        int(float(raw_meta[f"EMG amp gain ch {i}"])) for i in range(1, int(float(meta["num_emg_channels"])) + 1)
-    ]
+    meta["emg_amp_gains"] = [int(float(raw_meta[f"EMG amp gain ch {i}"])) for i in range(1, int(float(meta["num_emg_channels"])) + 1)]
     meta["primary_stim"] = 1  # default to channel 1 for v3d
 
     return meta, data
@@ -203,12 +198,11 @@ def parse_v3h(path: Path):
     clusters = []
     for i in range(n):
         stim_type = raw_meta[f"Stim type cluster array {i}.Stimulus Output"]
-        stim_v = float(raw_meta[f"Stim. {i+1}"])
+        stim_v = float(raw_meta[f"Stim. {i + 1}"])
 
-        # TODO: Remove this correction, or use only when recordings are from the old V3H version
         # If stim_type is Motor Length and stim_v is 0, extract from length channel
+        # This is a correction for some older v3h files where the stim value was not recorded correctly.
         if stim_type.lower() == "motor length" and stim_v == 0:
-            # Find the index of the length channel
             try:
                 length_idx = meta["channel_types"].index("length")
                 length_signal = data[:, length_idx]
@@ -236,18 +230,17 @@ def parse_v3h(path: Path):
                             (np.median(trough_deflections) if len(trough_deflections) > 0 else 0),
                         )
                     )
-                    # TODO: Fix this magic number
-                    if stim_v < 0.002:  # if still too low, set to 0
+                    if stim_v < MOTOR_LENGTH_STIM_NOISE_THRESHOLD:
                         stim_v = 0.0
-                        logging.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
+                        logger.debug(f"Motor Length cluster {i} extracted stim_v is too low, using 0")
                     else:
-                        logging.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
+                        logger.info(f"Extracted stim_v for Motor Length cluster {i}: {stim_v}")
                 else:
                     stim_v = 0.0
-                    logging.debug(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
+                    logger.debug(f"Motor Length cluster {i} has no detectable peaks or troughs, using 0 for stim_v")
             except Exception as e:
                 # fallback: leave stim_v as 0 if any error
-                logging.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
+                logger.critical(f"Failed to extract a stim_v for Motor Length channel data: {e}")
                 pass
 
         clusters.append(

@@ -129,31 +129,28 @@ class TestGoldenCSVImport:
 
         # Load domain objects and verify structure
         expt = ExperimentRepository(out_expt).load()
-        assert len(expt.datasets) == len(
-            expected_layout
-        ), f"Dataset count mismatch: expected {len(expected_layout)}, got {len(expt.datasets)}"
+        try:
+            assert len(expt.datasets) == len(expected_layout), f"Dataset count mismatch: expected {len(expected_layout)}, got {len(expt.datasets)}"
 
-        # Check sessions and recording counts per dataset
-        got_by_id = {ds.id: ds for ds in expt.datasets}
-        for ds_name, sessions_map in expected_layout.items():
-            assert ds_name in got_by_id, f"Missing dataset in domain objects: {ds_name}"
-            ds = got_by_id[ds_name]
+            # Check sessions and recording counts per dataset
+            got_by_id = {ds.id: ds for ds in expt.datasets}
+            for ds_name, sessions_map in expected_layout.items():
+                assert ds_name in got_by_id, f"Missing dataset in domain objects: {ds_name}"
+                ds = got_by_id[ds_name]
 
-            # Domain exposes sessions via get_all_sessions
-            sessions = ds.get_all_sessions(include_excluded=True)
-            assert len(sessions) == len(
-                sessions_map
-            ), f"Session count mismatch for {ds_name}: expected {len(sessions_map)}, got {len(sessions)}"
+                # Domain exposes sessions via get_all_sessions
+                sessions = ds.get_all_sessions(include_excluded=True)
+                assert len(sessions) == len(sessions_map), f"Session count mismatch for {ds_name}: expected {len(sessions_map)}, got {len(sessions)}"
 
-            for sess in sessions:
-                want_stems = sessions_map.get(sess.id)
-                assert want_stems is not None, f"Unexpected session {sess.id} in {ds_name}"
+                for sess in sessions:
+                    want_stems = sessions_map.get(sess.id)
+                    assert want_stems is not None, f"Unexpected session {sess.id} in {ds_name}"
 
-                # 1:1 mapping of recordings to stems
-                got_stems = {rec.repo.stem.stem for rec in sess.recordings}
-                assert (
-                    got_stems == want_stems
-                ), f"Recording mismatch in {ds_name}/{sess.id}: expected {want_stems}, got {got_stems}"
+                    # 1:1 mapping of recordings to stems
+                    got_stems = {rec.repo.stem.stem for rec in sess.recordings}
+                    assert got_stems == want_stems, f"Recording mismatch in {ds_name}/{sess.id}: expected {want_stems}, got {got_stems}"
+        finally:
+            expt.close()
 
     def test_import_performance_baseline(self, temp_output_dir: Path, request):
         """Performance baseline test to catch import regressions."""
@@ -201,5 +198,5 @@ class TestGoldenCSVImport:
         assert single_paths == multi_paths, "Threading affects file organization"
 
         # Spot check: file sizes should match
-        for single_f, multi_f in zip(single_files[:5], multi_files[:5]):  # Check first 5
+        for single_f, multi_f in zip(single_files[:5], multi_files[:5], strict=True):  # Check first 5
             assert single_f.stat().st_size == multi_f.stat().st_size, f"Size mismatch: {single_f.name}"

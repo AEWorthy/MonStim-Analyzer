@@ -6,7 +6,7 @@ Usage:
 
 Walks the directory recursively and for each *.annot.json file:
  - Checks if the data_version is older than TARGET_VERSION (2.1.0)
- - If so, updates/sets date_added (if missing) and date_modified to current datetime in ISO format.
+ - If so, updates/sets date_added (if missing) and date_modified to current UTC datetime in ISO format.
  - Updates data_version to TARGET_VERSION.
 
 Respects the repository guidance: run within the activated `monstim` env.
@@ -18,6 +18,8 @@ import argparse
 import datetime
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 from packaging.version import parse as parse_version
@@ -44,12 +46,12 @@ def process_file(path: Path, now_iso: str) -> bool:
     try:
         text = path.read_text(encoding="utf-8")
         if not text.strip():
-            logging.warning(f"Empty annot file: {path}. Initializing basic dates.")
+            logger.warning(f"Empty annot file: {path}. Initializing basic dates.")
             data = {}
         else:
             data = json.loads(text)
     except Exception as e:
-        logging.error(f"Failed reading JSON {path}: {e}")
+        logger.error(f"Failed reading JSON {path}: {e}")
         return False
 
     # Only update files older than target schema
@@ -73,10 +75,10 @@ def process_file(path: Path, now_iso: str) -> bool:
     if changed:  # Write updated JSON back to file
         try:
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            logging.info(f"Updated dates in {path}")
+            logger.info(f"Updated dates in {path}")
             return True
         except Exception as e:
-            logging.error(f"Failed writing JSON {path}: {e}")
+            logger.error(f"Failed writing JSON {path}: {e}")
             return False
     return False
 
@@ -89,18 +91,18 @@ def main() -> int:
     root: Path = args.root
 
     if not root.exists():
-        logging.error(f"Root not found: {root}")
+        logger.error(f"Root not found: {root}")
         return 2
 
-    now_iso = datetime.datetime.now().isoformat(timespec="seconds")
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
     updated = 0
     files_to_process = list(root.rglob("*.annot.json"))
-    logging.info(f"Found {len(files_to_process)} annot.json files to process in {root}")
+    logger.info(f"Found {len(files_to_process)} annot.json files to process in {root}")
     for path in files_to_process:
         if process_file(path, now_iso):
             updated += 1
 
-    logging.info(f"Done. Files updated: {updated}")
+    logger.info(f"Done. Files updated: {updated}")
     return 0
 
 

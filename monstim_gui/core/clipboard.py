@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import copy
 import time
-from typing import List, Literal, Optional
+from typing import Literal
 
 from monstim_signals.core import LatencyWindow
 
@@ -43,10 +43,10 @@ class LatencyWindowClipboard:
         mode, data = LatencyWindowClipboard.get_most_recent()
     """
 
-    _single_window: Optional[LatencyWindow] = None
+    _single_window: LatencyWindow | None = None
     _single_timestamp: float = 0.0
 
-    _multiple_windows: Optional[list[LatencyWindow]] = None
+    _multiple_windows: list[LatencyWindow] | None = None
     _multiple_timestamp: float = 0.0
 
     @classmethod
@@ -56,7 +56,7 @@ class LatencyWindowClipboard:
         cls._single_timestamp = time.time()
 
     @classmethod
-    def set_multiple(cls, windows: List[LatencyWindow]):
+    def set_multiple(cls, windows: list[LatencyWindow]):
         """Store multiple windows with timestamp."""
         cls._multiple_windows = [copy.deepcopy(w) for w in windows]
         cls._multiple_timestamp = time.time()
@@ -115,7 +115,7 @@ class LatencyWindowClipboard:
         """Get the most recently set clipboard data.
 
         Returns:
-            Tuple of (mode, data) where:
+            tuple of (mode, data) where:
             - mode: "single", "multiple", or "none"
             - data: LatencyWindow, list[LatencyWindow], or None
         """

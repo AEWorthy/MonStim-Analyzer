@@ -2,10 +2,12 @@
 UI scaling utilities for handling different screen resolutions and DPI settings.
 """
 
-from typing import Tuple
+import logging
 
 from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QApplication, QWidget
+
+logger = logging.getLogger(__name__)
 
 
 class UIScaling:
@@ -94,7 +96,7 @@ class UIScaling:
 
         return max(scaled_min, min(scaled_max, percentage_width))
 
-    def get_window_geometry(self, base_width: int = 800, base_height: int = 770) -> Tuple[int, int]:
+    def get_window_geometry(self, base_width: int = 800, base_height: int = 770) -> tuple[int, int]:
         """Get optimal window size based on screen resolution."""
         screen = QApplication.instance().primaryScreen()
         if not screen:
@@ -148,26 +150,16 @@ ui_scaling = UIScaling()
 
 
 def setup_dpi_awareness():
-    """Set up DPI awareness for the application."""
-    import os
+    """Keep Qt's native per-monitor DPI behavior enabled.
 
-    # Enable DPI awareness on Windows
-    if os.name == "nt":
-        try:
-            from ctypes import windll
-
-            windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_DPI_AWARE
-        except Exception:
-            pass  # Fallback gracefully if not available
-
-    # Qt DPI settings
-    app = QApplication.instance()
-    if app:
-        app.setAttribute(app.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-        app.setAttribute(app.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    PySide6/Qt 6 uses Per-Monitor V2 DPI awareness on Windows by default.
+    Do not replace it with the legacy system-DPI-aware Win32 setting: that
+    causes a window moved to another monitor to be bitmap-scaled instead of
+    allowing Qt to recalculate its widget and popup metrics.
+    """
 
 
-def get_responsive_margins(base_margin: int = 8) -> Tuple[int, int, int, int]:
+def get_responsive_margins(base_margin: int = 8) -> tuple[int, int, int, int]:
     """Get responsive margins based on UI scaling."""
     scaled = ui_scaling.scale_size(base_margin)
     return (scaled, scaled, scaled, scaled)

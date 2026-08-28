@@ -18,7 +18,7 @@ from monstim_gui.commands import (
 pytestmark = pytest.mark.integration
 
 
-def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str, sessions: list[str] = None):
+def make_experiment_with_dataset(root: Path, exp_name: str, ds_name: str, sessions: list[str] | None = None):
     """Create a minimal experiment folder with a dataset and empty session folders and annotations."""
     sessions = sessions or ["S01", "S02"]
     exp_path = root / exp_name
@@ -75,9 +75,7 @@ class TestDataCurationCommands:
         fake_gui.data_selection_widget.refresh()
 
         inv = CommandInvoker(fake_gui)
-        cmd = MoveDatasetCommand(
-            fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2"
-        )
+        cmd = MoveDatasetCommand(fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2")
         inv.execute(cmd)
         assert not (temp_output_dir / "Exp1" / "240101 A1 cond").exists()
         assert (temp_output_dir / "Exp2" / "240101 A1 cond").exists()
@@ -93,9 +91,7 @@ class TestDataCurationCommands:
         fake_gui.data_selection_widget.refresh()
 
         inv = CommandInvoker(fake_gui)
-        cmd = CopyDatasetCommand(
-            fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2"
-        )
+        cmd = CopyDatasetCommand(fake_gui, dataset_id="240101 A1 cond", dataset_name="240101 A1 cond", from_exp="Exp1", to_exp="Exp2")
         inv.execute(cmd)
 
         # A new folder should appear in Exp2; could be same name or suffixed with _copyN

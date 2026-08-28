@@ -39,7 +39,7 @@ class TestMmaxAlgorithmErrorHandling:
             # If it doesn't raise an error, it should be a reasonable value
             assert isinstance(result, (int, float))
             assert result >= 0
-        except (NoCalculableMmaxError, ValueError):
+        except NoCalculableMmaxError, ValueError:
             # This is acceptable - all zeros may not produce a valid M-max
             pass
 
@@ -51,7 +51,7 @@ class TestMmaxAlgorithmErrorHandling:
             # The algorithm may succeed using fallback methods
             assert isinstance(result, (int, float))
             assert result > 0
-        except (NoCalculableMmaxError, ValueError, IndexError):
+        except NoCalculableMmaxError, ValueError, IndexError:
             # It's also acceptable to fail with insufficient data
             pass
 
@@ -126,7 +126,7 @@ class TestMmaxAlgorithmErrorHandling:
             result = get_avg_mmax(single_val_stim, single_val_resp)
             assert isinstance(result, (int, float))
             assert result > 0
-        except (NoCalculableMmaxError, ValueError, IndexError):
+        except NoCalculableMmaxError, ValueError, IndexError:
             # Single point may not be sufficient for plateau detection
             pass
 
@@ -138,7 +138,7 @@ class TestMmaxAlgorithmErrorHandling:
             result = get_avg_mmax(two_point_stim, two_point_resp)
             assert isinstance(result, (int, float))
             assert result > 0
-        except (NoCalculableMmaxError, ValueError, IndexError):
+        except NoCalculableMmaxError, ValueError, IndexError:
             # Two points may not be sufficient for robust plateau detection
             pass
 
@@ -160,7 +160,7 @@ class TestMmaxAlgorithmErrorHandling:
                 assert isinstance(result, (int, float))
                 assert result > 0
 
-            except (NoCalculableMmaxError, ValueError, IndexError):
+            except NoCalculableMmaxError, ValueError, IndexError:
                 # It's acceptable for the algorithm to fail on difficult cases
                 # The important thing is that it fails gracefully
                 pass

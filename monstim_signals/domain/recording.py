@@ -1,5 +1,7 @@
 # monstim_signals/domain/recording.py
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import Any
 
 import h5py
@@ -10,12 +12,12 @@ from monstim_signals.core import RecordingAnnot, RecordingMeta, StimCluster
 
 class Recording:
     """
-    Pure‐Python object representing one recording (one stimulus amplitude).
+    Pure-Python object representing one recording (one stimulus amplitude).
     Holds:
       - meta: RecordingMeta (immutable facts, e.g. scan_rate, stim_v, etc.)
       - annot: RecordingAnnot (user edits, e.g. invert flags)
-      - raw: either an h5py.Dataset (lazy) or a 2D np.ndarray [samples × channels]
-      - repo: back‐pointer to its RecordingRepository
+      - raw: either an h5py.Dataset (lazy) or a 2D np.ndarray [samples * channels]
+      - repo: back-pointer to its RecordingRepository
     """
 
     def __init__(
@@ -24,7 +26,7 @@ class Recording:
         annot: RecordingAnnot,
         raw: h5py.Dataset | np.ndarray,
         repo: Any = None,
-        config: dict = None,
+        config: dict | None = None,
     ):
         self.meta = meta
         self.annot = annot
@@ -68,7 +70,7 @@ class Recording:
 
     @property
     def stim_amplitude(self) -> float:
-        # Assume the primary StimCluster’s stim_v is the amplitude for this recording
+        # Assume the primary StimCluster's stim_v is the amplitude for this recording
         return self.meta.primary_stim.stim_v
 
     # ──────────────────────────────────────────────────────────────────
@@ -85,12 +87,12 @@ class Recording:
         if self._raw is not None:
             return
         if self.repo is None:
-            logging.debug(f"Recording '{self.id}' has no repo to reopen raw data.")
+            logger.debug(f"Recording '{self.id}' has no repo to reopen raw data.")
             return
         try:
             raw_path = getattr(self.repo, "raw_h5", None)
             if raw_path is None:
-                logging.debug(f"Recording '{self.id}' repo has no raw_h5 attribute.")
+                logger.debug(f"Recording '{self.id}' repo has no raw_h5 attribute.")
                 return
             raw_path_str = str(raw_path)
             # Check file exists before attempting to open
@@ -98,7 +100,7 @@ class Recording:
                 from pathlib import Path
 
                 if not Path(raw_path_str).exists():
-                    logging.warning(f"Raw HDF5 not found for recording '{getattr(self, 'id', '<unknown>')}': {raw_path_str}")
+                    logger.warning(f"Raw HDF5 not found for recording '{getattr(self, 'id', '<unknown>')}': {raw_path_str}")
                     return
             except Exception:
                 pass
@@ -115,17 +117,17 @@ class Recording:
                 try:
                     h5file.close()
                 except Exception:
-                    logging.exception("Failed to close HDF5 file after dataset access failure.")
+                    logger.exception("Failed to close HDF5 file after dataset access failure.")
                     pass
                 raise
             # Update num_samples in metadata in case it changed
             try:
                 self.meta.num_samples = int(self._raw.shape[0])
             except Exception:
-                pass
-            logging.debug(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
+                logger.exception(f"Failed to update num_samples for recording '{getattr(self, 'id', '<unknown>')}' after reopening raw data.")
+            logger.debug(f"Reopened HDF5 for recording '{self.id}' from {raw_path_str}")
         except Exception as err:
-            logging.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
+            logger.exception(f"Failed to reopen HDF5 for recording '{getattr(self, 'id', '<unknown>')}': {err}")
 
     def raw_view(self, ch: int | slice | list[int] = slice(None), t: slice = slice(None)) -> np.ndarray:
         """
@@ -152,7 +154,7 @@ class Recording:
         self._config = config or {}
 
     # ──────────────────────────────────────────────────────────────────
-    # 4) Clean‐up (close HDF5 file when you’re done)
+    # 4) Clean-up (close HDF5 file when you're done)
     # ──────────────────────────────────────────────────────────────────
     def close(self) -> None:
         if isinstance(self._raw, h5py.Dataset):
@@ -160,15 +162,20 @@ class Recording:
                 # Close the underlying HDF5 file
                 self._raw.file.close()
             except Exception as exception:
-                logging.exception(f"Failed to close HDF5 file for recording '{self.id}': {exception}")
+                logger.exception(f"Failed to close HDF5 file for recording '{self.id}': {exception}")
                 pass
             finally:
                 # Release the reference so the h5py objects can be garbage collected
                 try:
                     self._raw = None
                 except Exception:
-                    # Ensure we don't raise while cleaning up
-                    pass
+                    logger.exception(f"Failed to release raw dataset reference for recording '{self.id}'")
+
+    def __enter__(self) -> Recording:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
     # ──────────────────────────────────────────────────────────────────
     # 5) Object representation

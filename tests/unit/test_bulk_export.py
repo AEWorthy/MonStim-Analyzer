@@ -344,7 +344,7 @@ class TestComputeAvgReflexCurves:
     def test_row_count(self):
         from monstim_gui.managers.bulk_export_manager import _compute_avg_reflex_curves
 
-        # 2 channels × 2 windows × 5 voltages = 20 rows
+        # 2 channels * 2 windows * 5 voltages = 20 rows
         obj = _MockObj(n_channels=2, n_voltages=5)
         config = _make_config(methods=["rms"], channel_indices=[0, 1])
         df = _compute_avg_reflex_curves(obj, config)
@@ -590,7 +590,7 @@ class TestComputeMaxH:
     def test_row_count(self):
         from monstim_gui.managers.bulk_export_manager import _compute_max_h
 
-        # 2 channels × 5 voltages = 10 rows
+        # 2 channels * 5 voltages = 10 rows
         obj = _MockObj(n_channels=2, n_voltages=5)
         config = _make_config(methods=["rms"], channel_indices=[0, 1])
         df = _compute_max_h(obj, config)
@@ -992,9 +992,7 @@ class TestNormalizeToMmax:
 
         obj = _MockObj(n_channels=1, n_voltages=3)
         # Override get_avg_m_max to return 0 so normalization is skipped
-        obj.get_avg_m_max = lambda method, ch, return_avg_mmax_thresholds=False: (
-            (0.0, 1.2) if return_avg_mmax_thresholds else 0.0
-        )
+        obj.get_avg_m_max = lambda method, ch, return_avg_mmax_thresholds=False: (0.0, 1.2) if return_avg_mmax_thresholds else 0.0
         config = _make_config(
             data_types=["avg_reflex_curves"],
             methods=["rms"],
@@ -1008,9 +1006,7 @@ class TestNormalizeToMmax:
         from monstim_gui.managers.bulk_export_manager import _compute_avg_reflex_curves
 
         obj = _MockObj(n_channels=1, n_voltages=3)
-        obj.get_avg_m_max = lambda method, ch, return_avg_mmax_thresholds=False: (
-            (None, None) if return_avg_mmax_thresholds else None
-        )
+        obj.get_avg_m_max = lambda method, ch, return_avg_mmax_thresholds=False: (None, None) if return_avg_mmax_thresholds else None
         config = _make_config(
             data_types=["avg_reflex_curves"],
             methods=["rms"],
@@ -1024,9 +1020,7 @@ class TestNormalizeToMmax:
         from monstim_gui.managers.bulk_export_manager import _compute_max_h
 
         obj = _MockObj(n_channels=1, n_voltages=3)
-        obj.get_avg_m_max = lambda method, ch, return_avg_mmax_thresholds=False: (
-            (0.0, 1.2) if return_avg_mmax_thresholds else 0.0
-        )
+        obj.get_avg_m_max = lambda method, ch, return_avg_mmax_thresholds=False: (0.0, 1.2) if return_avg_mmax_thresholds else 0.0
         config = _make_config(
             data_types=["max_h"],
             methods=["rms"],

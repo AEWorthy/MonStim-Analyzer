@@ -13,14 +13,23 @@ from monstim_gui.core.splash import SPLASH_INFO
 
 LOG_FILE = "app.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+APP_ORGANIZATION = "WorthyLab"
+APP_NAME = "MonStim Analyzer"
 IS_FROZEN = getattr(sys, "frozen", False)
 CONSOLE_DEBUG_MODE = False  # Only relevant if not frozen
+
+# TODO: Add keyboard shortcuts for things like the recording cycler, inclusion/exlcusion,
+#   marking complete, plot types/levels, and moving around the data at multiple levels.
+
+
+def get_logger() -> logging.Logger:
+    return logging.getLogger(__name__)
 
 
 def make_default_log_dir() -> str:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
-        base = os.getenv("APPDATA", r"C:\Users\%USERNAME%\AppData\Roaming")
+        raise RuntimeError("Qt application identity must be configured before resolving the log directory")
     log_dir = os.path.join(base, "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
@@ -64,7 +73,7 @@ def setup_logging(debug: bool, log_dir: str | None = None) -> str:
     logging.captureWarnings(True)  # Capture any Python warnings and log them too.
     logging.getLogger("PySide6").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    root.info(f"Logging to {log_path} (debug={debug})")
+    get_logger().info(f"Logging to {log_path} (debug={debug})")
     return target_dir
 
 
@@ -83,22 +92,23 @@ def exception_hook(exc_type, exc_value, exc_traceback):
         return
 
     # Log the exception with full details
-    logging.error("=" * 80)
-    logging.error("CRITICAL: Uncaught Python exception - Application will terminate")
-    logging.error("=" * 80)
-    logging.error(f"Exception type: {exc_type.__name__}")
-    logging.error(f"Exception value: {exc_value}")
-    logging.error(f"Exception module: {exc_type.__module__}")
+    logger = get_logger()
+    logger.error("=" * 80)
+    logger.error("CRITICAL: Uncaught Python exception - Application will terminate")
+    logger.error("=" * 80)
+    logger.error(f"Exception type: {exc_type.__name__}")
+    logger.error(f"Exception value: {exc_value}")
+    logger.error(f"Exception module: {exc_type.__module__}")
 
     # Log the full traceback
     tb_lines = traceback.format_tb(exc_traceback)
-    logging.error("Full traceback:")
+    logger.error("Full traceback:")
     for line in tb_lines:
-        logging.error(line.rstrip())
+        logger.error(line.rstrip())
 
     # Also log using exc_info for compatibility
-    logging.error("CRITICAL: Uncaught Python exception", exc_info=(exc_type, exc_value, exc_traceback))
-    logging.error("=" * 80)
+    logger.error("CRITICAL: Uncaught Python exception", exc_info=(exc_type, exc_value, exc_traceback))
+    logger.error("=" * 80)
 
     # Flush log handlers to ensure everything is written
     for handler in logging.getLogger().handlers:
@@ -109,41 +119,42 @@ def exception_hook(exc_type, exc_value, exc_traceback):
 
 def qt_message_handler(mode, context, message):
     """Handle Qt debug/warning/critical messages."""
+    logger = get_logger()
     if mode == 0:  # QtDebugMsg
-        logging.debug(f"Qt: {message}")
+        logger.debug(f"Qt: {message}")
     elif mode == 1:  # QtWarningMsg
-        logging.warning(f"Qt Warning: {message} (file: {context.file}, line: {context.line})")
+        logger.warning(f"Qt Warning: {message} (file: {context.file}, line: {context.line})")
     elif mode == 2:  # QtCriticalMsg
-        logging.error(f"Qt CRITICAL: {message} (file: {context.file}, line: {context.line})")
+        logger.error(f"Qt CRITICAL: {message} (file: {context.file}, line: {context.line})")
     elif mode == 3:  # QtFatalMsg
-        logging.critical(f"Qt FATAL: {message} (file: {context.file}, line: {context.line})")
-        logging.critical("Application will terminate due to Qt fatal error")
+        logger.critical(f"Qt FATAL: {message} (file: {context.file}, line: {context.line})")
+        logger.critical("Application will terminate due to Qt fatal error")
     elif mode == 4:  # QtInfoMsg
-        logging.info(f"Qt Info: {message}")
+        logger.info(f"Qt Info: {message}")
 
 
-def main(is_frozen: bool) -> int:
+def main(is_frozen: bool, app: QApplication | None = None) -> int:
     try:
-        from monstim_gui.core.ui_scaling import setup_dpi_awareness
+        if app is None:
+            from monstim_gui.core.ui_scaling import setup_dpi_awareness
 
-        setup_dpi_awareness()
-
-        app = QApplication(sys.argv)
-        app.setOrganizationName("WorthyLab")
-        app.setApplicationName("MonStim Analyzer")
-        app.setApplicationVersion(SPLASH_INFO["version"])
+            setup_dpi_awareness()
+            app = QApplication(sys.argv)
+            app.setOrganizationName(APP_ORGANIZATION)
+            app.setApplicationName(APP_NAME)
+            app.setApplicationVersion(SPLASH_INFO["version"])
 
         # Install Qt message handler to catch Qt internal errors
         from PySide6.QtCore import qInstallMessageHandler
 
         qInstallMessageHandler(qt_message_handler)
-        logging.debug("Qt message handler installed for comprehensive error logging")
+        get_logger().debug("Qt message handler installed for comprehensive error logging")
 
         # Reinitialize app_state after QApplication is configured
         from monstim_gui.core.application_state import app_state
 
         app_state.reinitialize_settings()
-        logging.info(f"QSettings initialized with org={app.organizationName()}, app={app.applicationName()}")
+        get_logger().info(f"QSettings initialized with org={app.organizationName()}, app={app.applicationName()}")
 
         if is_frozen:  # Display splash screen if running as a frozen executable.
             from monstim_gui.core.splash import SplashScreen
@@ -153,26 +164,36 @@ def main(is_frozen: bool) -> int:
             QTimer.singleShot(3000, splash.close)
         gui = MonstimGUI()
         gui.show()
-        logging.debug("Application launched successfully.")
+        gui.schedule_initial_load()
+        get_logger().debug("Application launched successfully.")
         return app.exec()
 
     except Exception as e:
-        logging.error(f"Error in main function: {str(e)}")
-        logging.error(traceback.format_exc())
+        logger = get_logger()
+        logger.error(f"Error in main function: {e!s}")
+        logger.error(traceback.format_exc())
         return 1
 
     finally:
-        logging.info("Application shutting down.")
+        get_logger().info("Application shutting down.")
 
 
 if __name__ == "__main__":
     args = parse_arguments()
+    from monstim_gui.core.ui_scaling import setup_dpi_awareness
+
+    setup_dpi_awareness()
+    app = QApplication(sys.argv)
+    app.setOrganizationName(APP_ORGANIZATION)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(SPLASH_INFO["version"])
+
     if IS_FROZEN:
         log_dir = setup_logging(debug=args.debug, log_dir=args.log_dir)
-        logging.info("Logger initialized. Running via frozen executable.")
+        get_logger().info("Logger initialized. Running via frozen executable.")
     else:
         log_dir = setup_logging(debug=True)
-        logging.info("Logger initialized. Running via IDE.")
+        get_logger().info("Logger initialized. Running via IDE.")
     os.environ["MONSTIM_LOG_DIR"] = log_dir
     sys.excepthook = exception_hook
 
@@ -181,5 +202,5 @@ if __name__ == "__main__":
 
     multiprocessing.freeze_support()
 
-    logging.info("Initialization complete. Starting application.")
-    sys.exit(main(IS_FROZEN))
+    get_logger().info("Initialization complete. Starting application.")
+    sys.exit(main(IS_FROZEN, app))

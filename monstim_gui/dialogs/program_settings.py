@@ -6,8 +6,9 @@ performance, and data tracking settings.
 
 import logging
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDialog,
     QDoubleSpinBox,
@@ -15,22 +16,37 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from monstim_gui.core.application_state import ApplicationState
+from monstim_gui.core.load_policy import WarmUpLevelPolicy
 from monstim_gui.core.ui_config import ui_config
 from monstim_gui.core.ui_scaling import ui_scaling
+from monstim_signals.core.configuration import CALCULATION_METHODS
+
+logger = logging.getLogger(__name__)
 
 
 class ProgramSettingsDialog(QDialog):
     settings_changed = Signal()  # Signal emitted when settings change
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, embedded: bool = False):
         super().__init__(parent)
+        self.embedded = embedded
+        if embedded:
+            # Settings Center hosts this reusable editor as an ordinary child
+            # widget.  Leaving it as a native QDialog prevents its parent's
+            # layout from assigning geometry, which produced a blank Program
+            # page on some Windows/PySide configurations.
+            self.setWindowFlags(Qt.WindowType.Widget)
+            self.setModal(False)
         self.app_state = ApplicationState()
         self._original_opengl_setting = None  # Track original OpenGL setting for restart warning
         self.setup_ui()
@@ -38,28 +54,41 @@ class ProgramSettingsDialog(QDialog):
 
     def setup_ui(self):
         """Set up the dialog UI."""
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("Program Settings")
         self.setModal(True)
-        self.resize(500, 600)
+        if not self.embedded:
+            self.resize(680, 900)
 
         # Main layout
         main_layout = QVBoxLayout(self)
 
-        # Create setting groups in logical order
-        main_layout.addWidget(self.create_display_group())
-        main_layout.addWidget(self.create_ui_scaling_group())
-        main_layout.addWidget(self.create_performance_group())
-        main_layout.addWidget(self.create_tracking_group())
-        main_layout.addWidget(self.create_data_management_group())
+        tabs = QTabWidget(self)
+        tabs.addTab(
+            self._tab_page(self.create_display_group(), self.create_ui_scaling_group()),
+            "Appearance",
+        )
+        tabs.addTab(
+            self._tab_page(self.create_performance_group(), self.create_cache_warmup_group()),
+            "Performance",
+        )
+        tabs.addTab(
+            self._tab_page(self.create_tracking_group(), self.create_data_management_group()),
+            "Privacy and data",
+        )
+        tabs.setTabToolTip(0, "Window appearance, sizing, and interface scaling.")
+        tabs.setTabToolTip(1, "Loading behavior and optional cache warm-up.")
+        tabs.setTabToolTip(2, "Remembered state, recent data, and recovery controls.")
+        main_layout.addWidget(tabs, 1)
+
+        if self.embedded:
+            return
 
         # Button layout
         button_layout = QHBoxLayout()
 
         # Reset to defaults button
         self.reset_button = QPushButton("Reset to Defaults")
-        self.reset_button.setToolTip(
-            "Reset all settings to their default values. " "This will not clear any saved data, only the settings themselves."
-        )
+        self.reset_button.setToolTip("Reset all settings to their default values. This will not clear any saved data, only the settings themselves.")
         self.reset_button.clicked.connect(self.reset_to_defaults)
         button_layout.addWidget(self.reset_button)
 
@@ -77,6 +106,16 @@ class ProgramSettingsDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         main_layout.addLayout(button_layout)
+
+    @staticmethod
+    def _tab_page(*groups: QGroupBox) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        for group in groups:
+            layout.addWidget(group)
+        layout.addStretch()
+        return page
 
     def create_tracking_group(self):
         """Create the data tracking settings group."""
@@ -190,17 +229,15 @@ class ProgramSettingsDialog(QDialog):
 
     def _on_parallel_toggled(self, checked: bool):
         """When parallel loading is enabled, ensure lazy-open is also enabled."""
-        if checked:
+        if checked and hasattr(self, "lazy_open_checkbox") and not self.lazy_open_checkbox.isChecked():
             # If user enables parallel loading, force lazy open on.
-            if hasattr(self, "lazy_open_checkbox") and not self.lazy_open_checkbox.isChecked():
-                self.lazy_open_checkbox.setChecked(True)
+            self.lazy_open_checkbox.setChecked(True)
 
     def _on_lazy_toggled(self, checked: bool):
         """If lazy-open is turned off, disable/turn off parallel loading to keep them consistent."""
-        if not checked:
-            if hasattr(self, "parallel_load_checkbox") and self.parallel_load_checkbox.isChecked():
-                # Turn off parallel loading if lazy open is disabled
-                self.parallel_load_checkbox.setChecked(False)
+        if not checked and hasattr(self, "parallel_load_checkbox") and self.parallel_load_checkbox.isChecked():
+            # Turn off parallel loading if lazy open is disabled
+            self.parallel_load_checkbox.setChecked(False)
 
     def create_performance_group(self):
         """Create the performance settings group."""
@@ -212,7 +249,8 @@ class ProgramSettingsDialog(QDialog):
         self.opengl_checkbox.setToolTip(
             "Use hardware-accelerated OpenGL for plot rendering to improve performance and responsiveness. "
             "(Requires restart; may not be supported on all systems.)\n"
-            "Warning: Enabling OpenGL may increase instability and trigger silent crashes, especially on Windows or with certain graphics drivers. Use at your own risk."
+            "Warning: Enabling OpenGL may increase instability and trigger silent crashes, "
+            "especially on Windows or with certain graphics drivers. Use at your own risk."
         )
         layout.addRow("Use OpenGL acceleration:", self.opengl_checkbox)
 
@@ -237,14 +275,42 @@ class ProgramSettingsDialog(QDialog):
         self.parallel_load_checkbox.toggled.connect(self._on_parallel_toggled)
         self.lazy_open_checkbox.toggled.connect(self._on_lazy_toggled)
 
-        # Build index during experiment load (new)
-        self.build_index_on_load_checkbox = QCheckBox()
-        self.build_index_on_load_checkbox.setToolTip(
-            "When enabled, the experiment index (.index.json) will be built/refreshed during load if missing or stale. "
-            "Disabling avoids extra work during load; repositories will fall back to filesystem discovery."
-        )
-        layout.addRow("Build index during load:", self.build_index_on_load_checkbox)
+        return group
 
+    def create_cache_warmup_group(self):
+        """Create independent, opt-in warm-up controls for each hierarchy level."""
+        group = QGroupBox("Plot Cache Warm-Up")
+        layout = QVBoxLayout(group)
+        info = QLabel("Disabled by default. Enable a level to trade a slower selection/load for faster repeated plotting and editing.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        self._warm_widgets = {}
+        aggregate_labels = {
+            "session": "Amplitude arrays and extrema details",
+            "dataset": "Dataset curves, M/H arrays, M-max, distributions",
+            "experiment": "Dataset results and experiment aggregates",
+        }
+        for level in ("session", "dataset", "experiment"):
+            box = QGroupBox(level.title())
+            form = QFormLayout(box)
+            enabled = QCheckBox("Warm when this level becomes current")
+            filtered = QCheckBox("Filtered signals")
+            methods = QListWidget()
+            methods.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+            methods.setMaximumHeight(72)
+            for method in sorted(CALCULATION_METHODS):
+                methods.addItem(method)
+            mmax = QCheckBox("Prepare M-max (default method if none selected)")
+            aggregates = QCheckBox(aggregate_labels[level])
+            form.addRow(enabled)
+            form.addRow(filtered)
+            form.addRow("Latency methods:", methods)
+            form.addRow(mmax)
+            form.addRow(aggregates)
+            controls = (filtered, methods, mmax, aggregates)
+            enabled.toggled.connect(lambda checked, items=controls: [item.setEnabled(checked) for item in items])
+            self._warm_widgets[level] = (enabled, filtered, methods, mmax, aggregates)
+            layout.addWidget(box)
         return group
 
     def create_display_group(self):
@@ -337,18 +403,25 @@ class ProgramSettingsDialog(QDialog):
         # New performance settings
         self.lazy_open_checkbox.setChecked(self.app_state.should_use_lazy_open_h5())
         self.parallel_load_checkbox.setChecked(self.app_state.should_use_parallel_loading())
-        try:
-            self.build_index_on_load_checkbox.setChecked(self.app_state.should_build_index_on_load())
-        except Exception:
-            self.build_index_on_load_checkbox.setChecked(True)
-
+        for level, widgets in self._warm_widgets.items():
+            policy = self.app_state.get_warm_up_policy(level)
+            enabled, filtered, methods, mmax, aggregates = widgets
+            enabled.setChecked(policy.enabled)
+            filtered.setChecked(policy.filtered_signals)
+            selected = set(policy.methods)
+            for index in range(methods.count()):
+                methods.item(index).setSelected(methods.item(index).text() in selected)
+            mmax.setChecked(policy.prepare_mmax)
+            aggregates.setChecked(policy.aggregates)
+            for control in (filtered, methods, mmax, aggregates):
+                control.setEnabled(policy.enabled)
         # Tracking settings
         self.session_tracking_checkbox.setChecked(self.app_state.should_track_session_restoration())
         self.profile_tracking_checkbox.setChecked(self.app_state.should_track_analysis_profiles())
         self.path_tracking_checkbox.setChecked(self.app_state.should_track_import_export_paths())
         self.recent_files_checkbox.setChecked(self.app_state.should_track_recent_files())
 
-    def save_settings(self):
+    def save_settings(self, *, notify: bool = True):
         """Save the current setting values."""
         # Save display settings
         ui_config.set("center_windows", self.center_windows_checkbox.isChecked())
@@ -366,11 +439,13 @@ class ProgramSettingsDialog(QDialog):
         self.app_state.set_setting("use_opengl_acceleration", self.opengl_checkbox.isChecked())
         self.app_state.set_setting("use_lazy_open_h5", self.lazy_open_checkbox.isChecked())
         self.app_state.set_setting("enable_parallel_loading", self.parallel_load_checkbox.isChecked())
-        try:
-            self.app_state.set_build_index_on_load(self.build_index_on_load_checkbox.isChecked())
-        except Exception:
-            logging.debug("Failed to save build_index_on_load setting", exc_info=True)
-
+        for level, widgets in self._warm_widgets.items():
+            enabled, filtered, methods, mmax, aggregates = widgets
+            selected_methods = tuple(item.text() for item in methods.selectedItems())
+            self.app_state.set_warm_up_policy(
+                level,
+                WarmUpLevelPolicy(enabled.isChecked(), filtered.isChecked(), selected_methods, mmax.isChecked(), aggregates.isChecked()),
+            )
         # Save tracking settings
         self.app_state.set_setting("track_session_restoration", self.session_tracking_checkbox.isChecked())
         self.app_state.set_setting("track_analysis_profiles", self.profile_tracking_checkbox.isChecked())
@@ -383,21 +458,20 @@ class ProgramSettingsDialog(QDialog):
         if self._original_opengl_setting != self.opengl_checkbox.isChecked():
             restart_required = True
 
-        if restart_required:
+        if restart_required and notify:
             QMessageBox.information(
                 self,
                 "Restart Required",
-                "Some settings have been changed that require a restart.\n\n"
-                "Please restart the application for all changes to take effect.",
+                "Some settings have been changed that require a restart.\n\nPlease restart the application for all changes to take effect.",
             )
-        else:
+        elif notify:
             QMessageBox.information(
                 self,
                 "Settings Saved",
                 "Settings have been saved successfully.",
             )
 
-        logging.info("Program settings saved")
+        logger.info("Program settings saved")
         self.settings_changed.emit()
 
     def reset_to_defaults(self):
@@ -405,7 +479,7 @@ class ProgramSettingsDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Reset Settings",
-            "Reset all program settings to their default values?\n\n" "This will not clear any saved data, only the settings.",
+            "Reset all program settings to their default values?\n\nThis will not clear any saved data, only the settings.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -430,16 +504,19 @@ class ProgramSettingsDialog(QDialog):
                 self.lazy_open_checkbox.setChecked(True)
             if hasattr(self, "parallel_load_checkbox"):
                 self.parallel_load_checkbox.setChecked(True)
-            if hasattr(self, "build_index_on_load_checkbox"):
-                self.build_index_on_load_checkbox.setChecked(True)
-
+            for enabled, filtered, methods, mmax, aggregates in self._warm_widgets.values():
+                enabled.setChecked(False)
+                filtered.setChecked(True)
+                methods.clearSelection()
+                mmax.setChecked(False)
+                aggregates.setChecked(False)
             # Reset tracking settings to defaults
             self.session_tracking_checkbox.setChecked(True)
             self.profile_tracking_checkbox.setChecked(True)
             self.path_tracking_checkbox.setChecked(True)
             self.recent_files_checkbox.setChecked(True)
 
-            logging.info("Program settings reset to defaults")
+            logger.info("Program settings reset to defaults")
 
     def clear_all_data(self):
         """Clear all saved tracking data."""
@@ -465,10 +542,10 @@ class ProgramSettingsDialog(QDialog):
                     "Data Cleared",
                     "All saved tracking data has been cleared successfully.",
                 )
-                logging.info("All tracked user data cleared via settings dialog")
+                logger.info("All tracked user data cleared via settings dialog")
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"An error occurred while clearing data:\n{str(e)}")
-                logging.error(f"Error clearing tracked data: {e}")
+                QMessageBox.critical(self, "Error", f"An error occurred while clearing data:\n{e!s}")
+                logger.error(f"Error clearing tracked data: {e}")
 
     def accept(self):
         """Accept the dialog and save settings."""

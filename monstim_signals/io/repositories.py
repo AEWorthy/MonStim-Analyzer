@@ -3,9 +3,11 @@ import concurrent.futures
 import datetime
 import json
 import logging
+
+logger = logging.getLogger(__name__)
+from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterator, Optional
 
 import h5py
 
@@ -24,9 +26,48 @@ from monstim_signals.io.data_migrations import (
     FutureVersionError,
     UnknownVersionError,
     migrate_annotation_dict,
+    migrate_meta_dict,
     scan_annotation_versions,
 )
-from monstim_signals.io.experiment_index import find_session_index
+from monstim_signals.io.experiment_catalog import (
+    CatalogRecording,
+    ExperimentCatalog,
+    ensure_catalog,
+    recording_stem,
+    refresh_dataset_annotation,
+    refresh_recording_annotation,
+    refresh_session_annotations,
+    relocate_catalog_paths,
+)
+
+
+def _close_loaded_objects(objects) -> None:
+    """Best-effort close for partially loaded domain objects."""
+    for obj in list(objects):
+        close = getattr(obj, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.debug("Failed to close partially loaded object %r", obj, exc_info=True)
+
+
+def _close_completed_futures(futures) -> None:
+    """Close objects produced by completed futures that will not be returned."""
+    for fut in list(futures):
+        if fut.cancelled() or not fut.done():
+            continue
+        try:
+            obj = fut.result()
+        except Exception:
+            logger.debug("Future raised exception; no object to close", exc_info=True)
+            continue
+        _close_loaded_objects([obj])
+
+
+def _path_name_sort_key(path: Path) -> tuple[str, str]:
+    """Sort paths by name consistently across platforms."""
+    return (path.name.casefold(), path.name)
 
 
 class RecordingRepository:
@@ -61,18 +102,33 @@ class RecordingRepository:
         self.annot_js = new_stem.with_suffix(".annot.json")
 
     def load(
-        self, config=None, *, strict_version: bool = False, lazy_open_h5: Optional[bool] = None, allow_write: bool = True
-    ) -> "Recording":
-        # 1) Load meta JSON (immutable, record‐time facts)
-        meta_dict = json.loads(self.meta_js.read_text())
+        self,
+        config=None,
+        *,
+        strict_version: bool = False,
+        lazy_open_h5: bool | None = None,
+        allow_write: bool = True,
+        catalog_record: CatalogRecording | None = None,
+    ) -> Recording:
+        # 1) Load meta JSON (immutable, record-time facts)
+        meta_dict = json.loads(catalog_record.meta_json) if catalog_record is not None else json.loads(self.meta_js.read_text())
+        try:
+            report = migrate_meta_dict(meta_dict, strict_version=strict_version)
+            if report.changed and allow_write and catalog_record is None:
+                self.meta_js.write_text(json.dumps(meta_dict, indent=2))
+        except FutureVersionError:
+            raise
         meta = RecordingMeta.from_dict(meta_dict)
 
         # 2) Load or create annot JSON (user edits)
         if self.annot_js.exists():
             try:
-                text = self.annot_js.read_text()
+                text = catalog_record.annot_json if catalog_record is not None else self.annot_js.read_text()
+                # A catalog created while the annotation was absent represents that
+                # condition as None; retain the existing repair/create behavior.
+                text = text if text is not None else ""
                 if not text.strip():
-                    logging.warning(f"Annotation file '{self.annot_js}' is empty. Recreating empty annotation.")
+                    logger.warning(f"Annotation file '{self.annot_js}' is empty. Recreating empty annotation.")
                     annot_dict = asdict(RecordingAnnot.create_empty())
                     if allow_write:
                         self.annot_js.write_text(json.dumps(annot_dict, indent=2))
@@ -84,18 +140,17 @@ class RecordingRepository:
                         try:
                             size = self.annot_js.stat().st_size
                         except Exception:
-                            logging.exception(f"Failed to get size of annotation file '{self.annot_js}'")
-                            pass
-                        logging.error(f"Failed to decode JSON in annotation file '{self.annot_js}' (size={size}): {e}")
+                            logger.exception(f"Failed to get size of annotation file '{self.annot_js}'")
+                        logger.error(f"Failed to decode JSON in annotation file '{self.annot_js}' (size={size}): {e}")
                         # Move corrupt file aside and create a fresh annotation file
-                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.annot_js.with_name(f"{self.annot_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
                                 self.annot_js.rename(corrupt_path)
-                                logging.warning(f"Moved corrupt annotation to {corrupt_path}. Creating new empty annotation.")
+                                logger.warning(f"Moved corrupt annotation to {corrupt_path}. Creating new empty annotation.")
                         except Exception:
-                            logging.exception(f"Failed to move corrupt annotation file {self.annot_js}")
+                            logger.exception(f"Failed to move corrupt annotation file {self.annot_js}")
                         annot_dict = asdict(RecordingAnnot.create_empty())
                         if allow_write:
                             self.annot_js.write_text(json.dumps(annot_dict, indent=2))
@@ -103,21 +158,19 @@ class RecordingRepository:
                 try:
                     report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
-                        logging.debug(
-                            f"Recording annotation migrated {report.original_version}->{report.final_version} for {self.annot_js.name}"
-                        )
+                        logger.debug(f"Recording annotation migrated {report.original_version}->{report.final_version} for {self.annot_js.name}")
                         self.annot_js.write_text(json.dumps(annot_dict, indent=2))
                 except FutureVersionError as e:
-                    logging.error(str(e))
+                    logger.error(str(e))
                     raise
                 except UnknownVersionError as e:
-                    logging.warning(f"Unknown version for {self.annot_js}: {e}. Proceeding without migration.")
+                    logger.warning(f"Unknown version for {self.annot_js}: {e}. Proceeding without migration.")
                 annot = RecordingAnnot.from_dict(annot_dict)
             except Exception:
-                logging.exception(f"Unexpected error while reading annotation file {self.annot_js}")
+                logger.exception(f"Unexpected error while reading annotation file {self.annot_js}")
                 raise
         else:
-            logging.warning(f"Annotation file '{self.annot_js}' not found. Using a new empty annotation in-memory.")
+            logger.warning(f"Annotation file '{self.annot_js}' not found. Using a new empty annotation in-memory.")
             annot = RecordingAnnot.create_empty()
             if allow_write:
                 self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
@@ -137,7 +190,7 @@ class RecordingRepository:
             h5file = h5py.File(self.raw_h5, "r")
             raw_dataset = h5file["raw"]  # type: ignore
             # Patch in num_samples from the raw array shape
-            meta.num_samples = int(raw_dataset.shape[0])  # (#samples × #channels)
+            meta.num_samples = int(raw_dataset.shape[0])  # (#samples * #channels)
         else:
             # If we choose laziness and the meta contains num_samples, rely on it.
             # Otherwise open the file temporarily to extract num_samples.
@@ -161,10 +214,11 @@ class RecordingRepository:
         This is called when the user edits the recording's annotation.
         """
         try:
-            recording.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+            recording.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
-            logging.debug("Failed to set date_modified on RecordingAnnot", exc_info=True)
+            logger.debug("Failed to set date_modified on RecordingAnnot", exc_info=True)
         self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
+        refresh_recording_annotation(self.stem)
 
     def rename(self, new_stem: Path, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename recording files to a new stem atomically with retries on Windows locks.
@@ -179,6 +233,7 @@ class RecordingRepository:
         if new_stem.exists():
             raise FileExistsError(f"Target recording stem already exists: {new_stem}")
 
+        old_stem = self.stem
         for attempt in range(attempts):
             try:
                 # Rename file-by-file if they exist
@@ -190,25 +245,23 @@ class RecordingRepository:
                     self.annot_js.rename(new_stem.with_suffix(".annot.json"))
                 # Update in-memory paths
                 self.update_path(new_stem)
-                # Refresh experiment index after recording rename
+                # Update only the renamed recording's catalog paths.
                 try:
                     exp_root = new_stem.parent.parent.parent  # experiment/dataset/session/recording-stem
-                    from .experiment_index import ensure_fresh_index
-
-                    ensure_fresh_index(exp_root.name, exp_root)
+                    relocate_catalog_paths(exp_root, old_stem, new_stem)
                 except Exception:
-                    logging.debug("Index refresh after recording rename failed (non-fatal).", exc_info=True)
+                    logger.debug("Catalog refresh after recording rename failed (non-fatal).", exc_info=True)
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
-                    logging.warning(f"Access denied renaming recording (attempt {attempt+1}), retrying...")
+                    logger.warning(f"Access denied renaming recording (attempt {attempt + 1}), retrying...")
                     time.sleep(wait)
                     gc.collect()
                     continue
                 raise
 
     @staticmethod
-    def discover_in_folder(folder: Path) -> Iterator["RecordingRepository"]:
+    def discover_in_folder(folder: Path) -> Iterator[RecordingRepository]:
         """
         Given a folder Path, yield a RecordingRepository for each *.raw.h5 found.
         E.g. if folder contains:
@@ -218,8 +271,8 @@ class RecordingRepository:
             RecordingRepository(Path("folder/AA00_0000"))
             RecordingRepository(Path("folder/AA00_0001"))
         """
-        for raw_h5 in folder.glob("*.raw.h5"):
-            stem = raw_h5.with_suffix("")  # drop ".raw.h5" → Path("folder/AA00_0000")
+        for raw_h5 in sorted(folder.glob("*.raw.h5"), key=_path_name_sort_key):
+            stem = recording_stem(raw_h5)
             yield RecordingRepository(stem=stem)
 
 
@@ -229,13 +282,14 @@ class SessionRepository:
     A session folder must contain multiple <stem>.raw.h5/.meta.json/.annot.json.
     """
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, catalog: ExperimentCatalog | None = None):
         """
-        `folder` is a Path to a session‐level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
+        `folder` is a Path to a session-level directory, e.g. Path("/data/ExperimentRoot/Dataset_01/AA00").
         """
         self.folder = folder
         self.session_id = folder.name  # e.g. "AA00"
         self.session_js = folder / "session.annot.json"
+        self.catalog = catalog
 
     def update_path(self, new_folder: Path) -> None:
         """
@@ -252,39 +306,20 @@ class SessionRepository:
         config=None,
         *,
         strict_version: bool = False,
-        lazy_open_h5: Optional[bool] = None,
+        lazy_open_h5: bool | None = None,
         allow_write: bool = True,
-    ) -> "Session":
+    ) -> Session:
         # Guard: folder must exist
         if not self.folder.exists():
             raise FileNotFoundError(f"Session folder not found: {self.folder}")
 
-        # 1) Discover all recordings in this folder
-        # Prefer index-based discovery to avoid heavy directory scans
-        recording_repos: list[RecordingRepository] = []
-        recording_sort_keys = {}  # Map repo stem to primary_stim_v for pre-sorting
-        try:
-            exp_root = self.folder.parent.parent  # Experiment/dataset/session
-            sess_idx = find_session_index(exp_root, self.folder)
-            if sess_idx is not None and sess_idx.recordings:
-                for r in sess_idx.recordings:
-                    p = Path(r.path)
-                    stem = p.with_suffix("") if p.is_file() else p  # tolerate file or folder style
-                    repo = RecordingRepository(stem=stem)
-                    recording_repos.append(repo)
-                    # Store primary_stim_v from index for efficient pre-sorting
-                    if r.primary_stim_v is not None:
-                        recording_sort_keys[str(stem)] = r.primary_stim_v
-            else:
-                recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-        except Exception:
-            logging.debug("Index-based discovery failed; falling back to folder scan.", exc_info=True)
+        # 1) Discover recordings from the catalog. Direct repository usage without
+        # an experiment catalog remains supported for isolated recording/session work.
+        catalog_records = self.catalog.recordings(self.folder) if self.catalog is not None else []
+        if catalog_records:
+            recording_repos = [RecordingRepository(record.stem) for record in catalog_records]
+        else:
             recording_repos = list(RecordingRepository.discover_in_folder(self.folder))
-
-        # Pre-sort recording repos using index metadata if available for all recordings
-        # This ordering optimization reduces post-load sorting overhead
-        if recording_repos and len(recording_sort_keys) == len(recording_repos):
-            recording_repos.sort(key=lambda repo: recording_sort_keys.get(str(repo.stem), float("inf")))
 
         # 2) Load all recordings
         # Pass through lazy_open_h5 from config if present; prefer explicit key in config
@@ -296,7 +331,13 @@ class SessionRepository:
             lazy_from_cfg = lazy_open_h5
 
         recordings = [
-            repo.load(config=config, lazy_open_h5=lazy_from_cfg, allow_write=allow_write) for repo in recording_repos
+            repo.load(
+                config=config,
+                lazy_open_h5=lazy_from_cfg,
+                allow_write=allow_write,
+                catalog_record=catalog_records[index] if catalog_records else None,
+            )
+            for index, repo in enumerate(recording_repos)
         ]
         # Sort by primary StimCluster's stim_v for correctness
         # (Index-based pre-sorting is an optimization but we verify correct ordering)
@@ -307,9 +348,7 @@ class SessionRepository:
             try:
                 text = self.session_js.read_text()
                 if not text.strip():
-                    logging.warning(
-                        f"Session annotation file '{self.session_js}' is empty. Creating empty session annotation."
-                    )
+                    logger.warning(f"Session annotation file '{self.session_js}' is empty. Creating empty session annotation.")
                     session_annot_dict = asdict(SessionAnnot.create_empty())
                     if allow_write:
                         self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
@@ -321,19 +360,17 @@ class SessionRepository:
                         try:
                             size = self.session_js.stat().st_size
                         except Exception:
-                            logging.exception(f"Failed to get size of session annotation file '{self.session_js}'")
+                            logger.exception(f"Failed to get size of session annotation file '{self.session_js}'")
                             pass
-                        logging.error(f"Failed to decode JSON in session annotation '{self.session_js}' (size={size}): {e}")
-                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        logger.error(f"Failed to decode JSON in session annotation '{self.session_js}' (size={size}): {e}")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.session_js.with_name(f"{self.session_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
                                 self.session_js.rename(corrupt_path)
-                                logging.warning(
-                                    f"Moved corrupt session annotation to {corrupt_path}. Creating new empty annotation."
-                                )
+                                logger.warning(f"Moved corrupt session annotation to {corrupt_path}. Creating new empty annotation.")
                         except Exception:
-                            logging.exception(f"Failed to move corrupt session annotation file {self.session_js}")
+                            logger.exception(f"Failed to move corrupt session annotation file {self.session_js}")
                         session_annot_dict = asdict(SessionAnnot.create_empty())
                         if allow_write:
                             self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
@@ -341,50 +378,76 @@ class SessionRepository:
                 try:
                     report = migrate_annotation_dict(session_annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
-                        logging.debug(
-                            f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}"
-                        )
+                        logger.debug(f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}")
                         self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
                 except FutureVersionError as e:
-                    logging.error(str(e))
+                    logger.error(e)
                     raise
                 except UnknownVersionError as e:
-                    logging.warning(f"Unknown version for {self.session_js}: {e}. Proceeding without migration.")
+                    logger.warning(f"Unknown version for {self.session_js}: {e}. Proceeding without migration.")
                 session_annot = SessionAnnot.from_dict(session_annot_dict)
             except Exception:
-                logging.exception(f"Unexpected error while reading session annotation {self.session_js}")
+                logger.exception(f"Unexpected error while reading session annotation {self.session_js}")
+                _close_loaded_objects(recordings)
                 raise
-        else:  # If no session.annot.json, initialize a brand‐new one
-            if recordings:
-                logging.debug(
-                    f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one."
-                )
-                session_annot = SessionAnnot.from_meta(recordings[0].meta)
-            else:
-                logging.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
-                session_annot = SessionAnnot.create_empty()
-            if allow_write:
-                self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
+        else:  # If no session.annot.json, initialize a brand-new one
+            try:
+                if recordings:
+                    logger.debug(f"Session annotation file '{self.session_js}' not found. Using first recording's meta to create a new one.")
+                    session_annot = SessionAnnot.from_meta(recordings[0].meta)
+                else:
+                    logger.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
+                    session_annot = SessionAnnot.create_empty()
+                if allow_write:
+                    self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
+            except Exception:
+                _close_loaded_objects(recordings)
+                raise
 
         # 4) Build a Session domain object
-        session = Session(
-            session_id=self.session_id,
-            recordings=recordings,
-            annot=session_annot,
-            repo=self,
-            config=config,
-        )
+        try:
+            session = Session(
+                session_id=self.session_id,
+                recordings=recordings,
+                annot=session_annot,
+                repo=self,
+                config=config,
+            )
+        except Exception:
+            _close_loaded_objects(recordings)
+            raise
         return session
 
     def save(self, session: Session) -> None:
-        try:
-            session.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
-        except Exception:
-            logging.debug("Failed to set date_modified on SessionAnnot", exc_info=True)
-        self.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
-        # Save ALL recordings including excluded ones to persist their state
-        for rec in session._all_recordings:
-            rec.repo.save(rec)
+        """Persist only session-level state.
+
+        Recording annotations are independently persisted by
+        :meth:`RecordingRepository.save`. Rewriting all of them here made a
+        latency-window edit perform one write and catalog transaction per
+        recording even though the edit only changes ``session.annot.json``.
+        """
+        self.save_many([session])
+
+    @staticmethod
+    def save_many(sessions: list[Session]) -> None:
+        """Persist several changed sessions and batch their catalog update.
+
+        Dataset/experiment latency-window commands intentionally change every
+        child session. The JSON files must each be written, but their SQLite
+        cache rows can be updated together in one transaction.
+        """
+        saved_paths: list[Path] = []
+        for session in sessions:
+            repository = session.repo
+            if repository is None:
+                continue
+            try:
+                session.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+            except Exception:
+                logger.exception("Failed to set date_modified on SessionAnnot", exc_info=True)
+            repository.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
+            saved_paths.append(repository.folder)
+        refresh_session_annotations(saved_paths)
 
     def rename(self, new_folder: Path, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename the session folder, retrying on transient Windows locks."""
@@ -395,29 +458,28 @@ class SessionRepository:
         if new_folder.exists():
             raise FileExistsError(f"Target session folder already exists: {new_folder}")
 
+        old_folder = self.folder
         for attempt in range(attempts):
             try:
                 self.folder.rename(new_folder)
                 self.update_path(new_folder)
-                # Refresh experiment index after session rename
+                # Update only the renamed session's catalog paths.
                 try:
                     exp_root = new_folder.parent.parent
-                    from .experiment_index import ensure_fresh_index
-
-                    ensure_fresh_index(exp_root.name, exp_root)
+                    relocate_catalog_paths(exp_root, old_folder, new_folder)
                 except Exception:
-                    logging.debug("Index refresh after session rename failed (non-fatal).", exc_info=True)
+                    logger.debug("Catalog refresh after session rename failed (non-fatal).", exc_info=True)
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
-                    logging.warning(f"Access denied renaming session (attempt {attempt+1}), retrying...")
+                    logger.warning(f"Access denied renaming session (attempt {attempt + 1}), retrying...")
                     time.sleep(wait)
                     gc.collect()
                     continue
                 raise
 
     @staticmethod
-    def discover_in_folder(folder: Path) -> Iterator["SessionRepository"]:
+    def discover_in_folder(folder: Path) -> Iterator[SessionRepository]:
         """
         Given a folder Path, yield a SessionRepository for each session subfolder.
         E.g. if folder contains:
@@ -427,7 +489,7 @@ class SessionRepository:
             SessionRepository(Path("folder/AA01"))
             SessionRepository(Path("folder/AA02"))
         """
-        for entry in folder.iterdir():
+        for entry in sorted(folder.iterdir(), key=_path_name_sort_key):
             # Only consider directories as session candidates; skip files like dataset.annot.json
             if not entry.is_dir():
                 continue
@@ -443,7 +505,7 @@ class SessionRepository:
                 continue
 
             # Directory present but no recognizable session contents; warn so users can fix layout
-            logging.warning(f"Invalid session directory (no session.annot.json nor *.raw.h5): {entry}")
+            logger.warning(f"Invalid session directory (no session.annot.json nor *.raw.h5): {entry}")
 
 
 class DatasetRepository:
@@ -452,13 +514,14 @@ class DatasetRepository:
     A dataset folder contains multiple subfolders, each a session.
     """
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, catalog: ExperimentCatalog | None = None):
         """
         `folder` might be Path("/data/ExperimentRoot/Dataset_01").
         """
         self.folder = folder
         self.dataset_id = folder.name  # e.g. "Dataset_01" or "240829 C328.1 post-dec mcurve_long-"
         self.dataset_js = folder / "dataset.annot.json"
+        self.catalog = catalog
 
     def update_path(self, new_folder: Path) -> None:
         """
@@ -473,11 +536,15 @@ class DatasetRepository:
         config=None,
         *,
         strict_version: bool = False,
-        lazy_open_h5: Optional[bool] = None,
+        lazy_open_h5: bool | None = None,
         allow_write: bool = True,
-    ) -> "Dataset":
+    ) -> Dataset:
         # 1) Discover valid session folders (those with annot or any *.raw.h5)
-        session_repos = list(SessionRepository.discover_in_folder(self.folder))
+        session_repos = (
+            [SessionRepository(path, catalog=self.catalog) for path in self.catalog.session_paths(self.folder)]
+            if self.catalog is not None
+            else list(SessionRepository.discover_in_folder(self.folder))
+        )
 
         # 2) Load each Session from discovered repos
         sessions = []
@@ -492,15 +559,15 @@ class DatasetRepository:
                 sessions.append(sess)
             except ValueError as e:
                 # Surface a clear message and continue loading other sessions
-                logging.error(
+                logger.error(
                     "Skipping session '%s' due to missing recordings or invalid contents: %s",
                     repo.session_id,
                     e,
                 )
-                logging.error("Session folder incomplete: %s", repo.folder)
+                logger.error("Session folder incomplete: %s", repo.folder)
                 continue
             except Exception:
-                logging.exception("Failed to load session '%s' at %s", repo.session_id, repo.folder)
+                logger.exception("Failed to load session '%s' at %s", repo.session_id, repo.folder)
                 continue
 
         # 3) Load or create dataset annotation JSON
@@ -508,9 +575,7 @@ class DatasetRepository:
             try:
                 text = self.dataset_js.read_text()
                 if not text.strip():
-                    logging.warning(
-                        f"Dataset annotation file '{self.dataset_js}' is empty. Creating empty dataset annotation."
-                    )
+                    logger.warning(f"Dataset annotation file '{self.dataset_js}' is empty. Creating empty dataset annotation.")
                     dataset_annot_dict = asdict(DatasetAnnot.from_ds_name(self.dataset_id))
                     if allow_write:
                         self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
@@ -522,19 +587,17 @@ class DatasetRepository:
                         try:
                             size = self.dataset_js.stat().st_size
                         except Exception:
-                            logging.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
+                            logger.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
                             pass
-                        logging.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
-                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        logger.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.dataset_js.with_name(f"{self.dataset_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
                                 self.dataset_js.rename(corrupt_path)
-                                logging.warning(
-                                    f"Moved corrupt dataset annotation to {corrupt_path}. Creating new empty annotation."
-                                )
+                                logger.warning(f"Moved corrupt dataset annotation to {corrupt_path}. Creating new empty annotation.")
                         except Exception:
-                            logging.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
+                            logger.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
                         dataset_annot_dict = asdict(DatasetAnnot.from_ds_name(self.dataset_id))
                         if allow_write:
                             self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
@@ -542,51 +605,54 @@ class DatasetRepository:
                 try:
                     report = migrate_annotation_dict(dataset_annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
-                        logging.debug(
-                            f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}"
-                        )
+                        logger.debug(f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}")
                         self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
                 except FutureVersionError as e:
-                    logging.error(str(e))
+                    logger.error(e)
                     raise
                 except UnknownVersionError as e:
-                    logging.warning(f"Unknown version for {self.dataset_js}: {e}. Proceeding without migration.")
+                    logger.exception(f"Unknown version for {self.dataset_js}: {e}. Proceeding without migration.")
                 dataset_annot = DatasetAnnot.from_dict(dataset_annot_dict)
             except Exception:
-                logging.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
+                logger.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
+                _close_loaded_objects(sessions)
                 raise
-        else:  # If no session.annot.json, initialize a brand‐new one
-            logging.info(
-                f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one (in-memory)."
-            )
-            dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
-            if allow_write:
-                self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
+        else:  # If no session.annot.json, initialize a brand-new one
+            try:
+                logger.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one (in-memory).")
+                dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
+                if allow_write:
+                    self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
+            except Exception:
+                _close_loaded_objects(sessions)
+                raise
 
         # 4) Build a Dataset domain object
-        dataset = Dataset(
-            dataset_id=self.dataset_id,
-            sessions=sessions,
-            annot=dataset_annot,
-            repo=self,
-            config=config,
-        )
+        try:
+            dataset = Dataset(
+                dataset_id=self.dataset_id,
+                sessions=sessions,
+                annot=dataset_annot,
+                repo=self,
+                config=config,
+            )
+        except Exception:
+            _close_loaded_objects(sessions)
+            raise
         return dataset
 
     def save(self, dataset: Dataset) -> None:
-        """
-        Save all sessions in this dataset.
-        (If I want dataset‐level annotations in the future, write them here.)
-        This is called when the user edits any session's recordings.
+        """Persist only dataset-level state.
+
+        Session and recording mutations save their own annotation files. This
+        avoids turning a dataset-only change into a full recursive write.
         """
         try:
-            dataset.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+            dataset.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
-            logging.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
+            logger.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
         self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
-        # Save ALL sessions including excluded ones to persist their state
-        for session in dataset._all_sessions:
-            session.repo.save(session)
+        refresh_dataset_annotation(self.folder)
 
     def rename(self, new_folder: Path, dataset=None, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename the dataset folder, retrying on transient Windows locks.
@@ -601,6 +667,7 @@ class DatasetRepository:
         if new_folder.exists():
             raise FileExistsError(f"Target dataset folder already exists: {new_folder}")
 
+        old_folder = self.folder
         for attempt in range(attempts):
             try:
                 self.folder.rename(new_folder)
@@ -629,21 +696,19 @@ class DatasetRepository:
                                         recording.repo.update_path(new_stem)
                     except Exception:
                         # If in-memory updates fail, log but do not prevent the rename (filesystem succeeded)
-                        logging.exception("Failed to update in-memory child repo objects after dataset rename.")
+                        logger.exception("Failed to update in-memory child repo objects after dataset rename.")
 
-                # Refresh experiment index after dataset rename
+                # Update only the renamed dataset's catalog paths.
                 try:
                     exp_root = new_folder.parent
-                    from .experiment_index import ensure_fresh_index
-
-                    ensure_fresh_index(exp_root.name, exp_root)
+                    relocate_catalog_paths(exp_root, old_folder, new_folder)
                 except Exception:
-                    logging.debug("Index refresh after dataset rename failed (non-fatal).", exc_info=True)
+                    logger.debug("Catalog refresh after dataset rename failed (non-fatal).", exc_info=True)
 
                 return
             except OSError as e:
                 if getattr(e, "errno", None) == errno.EACCES and attempt < attempts - 1:
-                    logging.warning(f"Access denied renaming dataset (attempt {attempt+1}), retrying...")
+                    logger.warning(f"Access denied renaming dataset (attempt {attempt + 1}), retrying...")
                     time.sleep(wait)
                     gc.collect()
                     continue
@@ -660,7 +725,7 @@ class DatasetRepository:
                 try:
                     text = self.dataset_js.read_text()
                     if not text.strip():
-                        logging.warning(f"Dataset annotation file '{self.dataset_js}' is empty. Using defaults.")
+                        logger.warning(f"Dataset annotation file '{self.dataset_js}' is empty. Using defaults.")
                         dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
                     else:
                         try:
@@ -671,27 +736,25 @@ class DatasetRepository:
                             try:
                                 size = self.dataset_js.stat().st_size
                             except Exception:
-                                logging.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
+                                logger.exception(f"Failed to get size of dataset annotation file '{self.dataset_js}'")
                                 pass
-                            logging.error(
-                                f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}"
-                            )
-                            ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                            logger.error(f"Failed to decode JSON in dataset annotation '{self.dataset_js}' (size={size}): {e}")
+                            ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                             corrupt_path = self.dataset_js.with_name(f"{self.dataset_js.name}.corrupt-{ts}")
                             try:
                                 self.dataset_js.rename(corrupt_path)
-                                logging.warning(f"Moved corrupt dataset annotation to {corrupt_path}. Using defaults.")
+                                logger.warning(f"Moved corrupt dataset annotation to {corrupt_path}. Using defaults.")
                             except Exception:
-                                logging.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
+                                logger.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
                             dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
                 except Exception:
-                    logging.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
+                    logger.exception(f"Unexpected error while reading dataset annotation {self.dataset_js}")
                     dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
             else:
                 dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
 
             # Get session folders without loading them
-            session_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            session_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
             session_names = [folder.name for folder in session_folders]
 
             # Construct formatted name like the Dataset domain object does
@@ -717,7 +780,7 @@ class DatasetRepository:
             }
 
         except Exception as e:
-            logging.error(f"Failed to get metadata for dataset {self.dataset_id}: {e}")
+            logger.error(f"Failed to get metadata for dataset {self.dataset_id}: {e}")
             return {
                 "id": self.dataset_id,
                 "path": str(self.folder),
@@ -762,10 +825,10 @@ class ExperimentRepository:
         strict_version: bool = False,
         preflight_scan: bool = False,
         progress_callback=None,
-        lazy_open_h5: Optional[bool] = None,
-        load_workers: Optional[int] = None,
+        lazy_open_h5: bool | None = None,
+        load_workers: int | None = None,
         allow_write: bool = True,
-    ) -> "Experiment":
+    ) -> Experiment:
         """Load the full experiment.
 
         Args:
@@ -778,19 +841,10 @@ class ExperimentRepository:
                 The callback is invoked BEFORE the dataset is actually loaded so the UI can
                 display a responsive progress bar even for very large datasets.
         """
-        # Prefer index-based discovery to avoid repeated filesystem scans
-        try:
-            # Only read an existing index; do not trigger rebuilds here.
-            from .experiment_index import is_index_stale, load_experiment_index
-
-            lazy_idx = load_experiment_index(self.folder)
-            if lazy_idx is not None and not is_index_stale(lazy_idx):
-                dataset_folders = [Path(ds.path) for ds in lazy_idx.datasets]
-            else:
-                raise RuntimeError("Index missing or stale")
-        except Exception:
-            logging.debug("Falling back to filesystem discovery for datasets.", exc_info=True)
-            dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+        # The SQLite catalog is the only large-experiment discovery path. It is
+        # rebuilt atomically on first open and contains exact recording stems.
+        catalog = ensure_catalog(self.folder, progress_callback=progress_callback)
+        dataset_folders = catalog.dataset_paths()
         if preflight_scan:
             try:
                 scan_results = scan_annotation_versions(
@@ -799,24 +853,28 @@ class ExperimentRepository:
                 )
                 outdated = [r for r in scan_results if r.get("needs_migration")]
                 if outdated:
-                    logging.info(
+                    logger.info(
                         "Preflight migration scan: %d annotation files need migration (example: %s -> %s)",
                         len(outdated),
                         outdated[0]["path"],
                         outdated[0]["planned_steps"],
                     )
                 else:
-                    logging.info("Preflight migration scan: all annotation files current.")
+                    logger.info("Preflight migration scan: all annotation files current.")
             except Exception as e:  # pragma: no cover
-                logging.warning(f"Preflight scan failed (non-fatal): {e}")
+                logger.warning(f"Preflight scan failed (non-fatal): {e}")
         datasets = []
         total_datasets = len(dataset_folders)
 
-        # Read concurrency settings from explicit function args. We do not
-        # treat lazy_open_h5/load_workers as config-file keys here; they should
-        # be passed explicitly by the caller (e.g. the GUI using QSettings).
-        max_workers = int(load_workers) if load_workers is not None else 1
-        parallel_allowed = max_workers > 1 and bool(lazy_open_h5)
+        # Explicit arguments take precedence, while direct API callers can use
+        # the same config keys as the GUI. Parallel loading is valid only when
+        # raw HDF5 payloads stay lazy.
+        effective_lazy_open = lazy_open_h5
+        if effective_lazy_open is None and config is not None:
+            effective_lazy_open = config.get("lazy_open_h5")
+        configured_workers = config.get("load_workers", 1) if config is not None else 1
+        max_workers = int(load_workers) if load_workers is not None else int(configured_workers)
+        parallel_allowed = max_workers > 1 and bool(effective_lazy_open)
 
         if parallel_allowed:
             # Use a ThreadPoolExecutor to load datasets concurrently; limit
@@ -832,25 +890,26 @@ class ExperimentRepository:
                             progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
                         except InterruptedError:
                             # User canceled - propagate immediately
-                            logging.info(f"Dataset loading interrupted at {idx}/{total_datasets} (parallel mode)")
+                            logger.info(f"Dataset loading interrupted at {idx}/{total_datasets} (parallel mode)")
                             # Cancel remaining futures
-                            for fut in future_map.keys():
+                            for fut in future_map:
                                 fut.cancel()
-                            ex.shutdown(wait=False)
+                            concurrent.futures.wait(list(future_map.keys()))
+                            _close_completed_futures(future_map.keys())
                             raise
                         except Exception:  # pragma: no cover - defensive
-                            logging.debug("Progress callback errored (ignored)", exc_info=True)
+                            logger.debug("Progress callback errored (ignored)", exc_info=True)
                     future = ex.submit(
-                        DatasetRepository(ds_folder).load,
+                        DatasetRepository(ds_folder, catalog=catalog).load,
                         config=config,
                         strict_version=strict_version,
-                        lazy_open_h5=lazy_open_h5,
+                        lazy_open_h5=effective_lazy_open,
                         allow_write=allow_write,
                     )
                     future_map[future] = ds_folder
 
                 # Collect results in original order for deterministic behavior
-                for idx, ds_folder in enumerate(dataset_folders, start=1):
+                for _, ds_folder in enumerate(dataset_folders, start=1):
                     # Wait for the specific future to complete
                     for f in list(future_map.keys()):
                         if future_map[f] == ds_folder:
@@ -861,15 +920,15 @@ class ExperimentRepository:
                                 # Handle data validation errors (e.g., inconsistent channels) gracefully
                                 if "Inconsistent" in str(e):
                                     # Note: Update regex in experiment_loader.py if this message changes
-                                    logging.warning(
+                                    logger.warning(
                                         f"Dataset '{ds_folder.name}' skipped due to validation error: {e}\n"
                                         f"This dataset has inconsistent data and cannot be loaded. "
                                         f"Please check the recording files in this dataset."
                                     )
                                 else:
-                                    logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                                    logger.exception("Dataset load failed (ignored): %s", ds_folder)
                             except Exception:
-                                logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                                logger.exception("Dataset load failed (ignored): %s", ds_folder)
                                 # Skip/continue on failure; caller should handle missing datasets.
                             finally:
                                 del future_map[f]
@@ -881,15 +940,15 @@ class ExperimentRepository:
                         progress_callback(level="dataset", index=idx, total=total_datasets, name=ds_folder.name)
                     except InterruptedError:
                         # User canceled - propagate immediately
-                        logging.info(f"Dataset loading interrupted at {idx}/{total_datasets}")
+                        logger.info(f"Dataset loading interrupted at {idx}/{total_datasets}")
                         raise
                     except Exception:  # pragma: no cover - defensive
-                        logging.debug("Progress callback errored (ignored)", exc_info=True)
+                        logger.debug("Progress callback errored (ignored)", exc_info=True)
                 try:
-                    ds_obj = DatasetRepository(ds_folder).load(
+                    ds_obj = DatasetRepository(ds_folder, catalog=catalog).load(
                         config=config,
                         strict_version=strict_version,
-                        lazy_open_h5=lazy_open_h5,
+                        lazy_open_h5=effective_lazy_open,
                         allow_write=allow_write,
                     )
                     datasets.append(ds_obj)
@@ -897,15 +956,15 @@ class ExperimentRepository:
                     # Handle data validation errors (e.g., inconsistent channels) gracefully
                     # Note: Update regex in experiment_loader.py if this message changes
                     if "Inconsistent" in str(e):
-                        logging.warning(
+                        logger.warning(
                             f"Dataset '{ds_folder.name}' skipped due to validation error: {e}\n"
                             f"This dataset has inconsistent data and cannot be loaded. "
                             f"Please check the recording files in this dataset."
                         )
                     else:
-                        logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                        logger.exception("Dataset load failed (ignored): %s", ds_folder)
                 except Exception:
-                    logging.exception("Dataset load failed (ignored): %s", ds_folder)
+                    logger.exception("Dataset load failed (ignored): %s", ds_folder)
                     # Skip/continue on failure; caller should handle missing datasets.
 
         # Log summary of loaded datasets
@@ -914,21 +973,21 @@ class ExperimentRepository:
             total_count = len(dataset_folders)
             if loaded_count < total_count:
                 skipped = total_count - loaded_count
-                logging.warning(
+                logger.warning(
                     f"Experiment '{self.folder.name}' loaded with {loaded_count}/{total_count} datasets. "
                     f"{skipped} dataset(s) were skipped due to errors (see warnings above)."
                 )
             else:
-                logging.info(f"Experiment '{self.folder.name}' loaded successfully with {loaded_count} dataset(s).")
+                logger.info(f"Experiment '{self.folder.name}' loaded successfully with {loaded_count} dataset(s).")
         else:
-            logging.error(f"No datasets could be loaded from experiment '{self.folder.name}'.")
+            logger.error(f"No datasets could be loaded from experiment '{self.folder.name}'.")
 
         expt_id = self.folder.name  # e.g. "ExperimentRoot"
         if self.expt_js.exists():
             try:
                 text = self.expt_js.read_text()
                 if not text.strip():
-                    logging.warning(f"Experiment annotation file '{self.expt_js}' is empty. Creating a new one.")
+                    logger.warning(f"Experiment annotation file '{self.expt_js}' is empty. Creating a new one.")
                     annot_dict = asdict(ExperimentAnnot.create_empty())
                     if allow_write:
                         self.expt_js.write_text(json.dumps(annot_dict, indent=2))
@@ -940,17 +999,17 @@ class ExperimentRepository:
                         try:
                             size = self.expt_js.stat().st_size
                         except Exception:
-                            logging.exception(f"Failed to get size of experiment annotation file '{self.expt_js}'")
+                            logger.exception(f"Failed to get size of experiment annotation file '{self.expt_js}'")
                             pass
-                        logging.error(f"Failed to decode JSON in experiment annotation '{self.expt_js}' (size={size}): {e}")
-                        ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+                        logger.error(f"Failed to decode JSON in experiment annotation '{self.expt_js}' (size={size}): {e}")
+                        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
                         corrupt_path = self.expt_js.with_name(f"{self.expt_js.name}.corrupt-{ts}")
                         try:
                             if allow_write:
                                 self.expt_js.rename(corrupt_path)
-                                logging.warning(f"Moved corrupt experiment annotation to {corrupt_path}. Creating new one.")
+                                logger.warning(f"Moved corrupt experiment annotation to {corrupt_path}. Creating new one.")
                         except Exception:
-                            logging.exception(f"Failed to move corrupt experiment annotation file {self.expt_js}")
+                            logger.exception(f"Failed to move corrupt experiment annotation file {self.expt_js}")
                         annot_dict = asdict(ExperimentAnnot.create_empty())
                         if allow_write:
                             self.expt_js.write_text(json.dumps(annot_dict, indent=2))
@@ -958,25 +1017,32 @@ class ExperimentRepository:
                 try:
                     report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
-                        logging.debug(
-                            f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}"
-                        )
+                        logger.debug(f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}")
                         self.expt_js.write_text(json.dumps(annot_dict, indent=2))
                 except FutureVersionError as e:
-                    logging.error(str(e))
+                    logger.error(str(e))
                     raise
                 except UnknownVersionError as e:
-                    logging.warning(f"Unknown version for {self.expt_js}: {e}. Proceeding without migration.")
+                    logger.warning(f"Unknown version for {self.expt_js}: {e}. Proceeding without migration.")
                 annot = ExperimentAnnot.from_dict(annot_dict)
             except Exception:
-                logging.exception(f"Unexpected error while reading experiment annotation {self.expt_js}")
+                logger.exception(f"Unexpected error while reading experiment annotation {self.expt_js}")
+                _close_loaded_objects(datasets)
                 raise
         else:
-            logging.info(f"Experiment annotation file '{self.expt_js}' not found. Using a new empty annotation in-memory.")
-            annot = ExperimentAnnot.create_empty()
-            if allow_write:
-                self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
-        expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
+            try:
+                logger.info(f"Experiment annotation file '{self.expt_js}' not found. Using a new empty annotation in-memory.")
+                annot = ExperimentAnnot.create_empty()
+                if allow_write:
+                    self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
+            except Exception:
+                _close_loaded_objects(datasets)
+                raise
+        try:
+            expt = Experiment(expt_id, datasets=datasets, annot=annot, repo=self, config=config)
+        except Exception:
+            _close_loaded_objects(datasets)
+            raise
         return expt
 
     def get_metadata(self) -> dict:
@@ -993,7 +1059,7 @@ class ExperimentRepository:
                 annot = ExperimentAnnot.create_empty()
 
             # Get dataset folders without loading them
-            dataset_folders = [p for p in self.folder.iterdir() if p.is_dir()]
+            dataset_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
             dataset_metadata = []
 
             for ds_folder in dataset_folders:
@@ -1015,7 +1081,7 @@ class ExperimentRepository:
             }
 
         except Exception as e:
-            logging.error(f"Failed to get metadata for experiment {self.folder.name}: {e}")
+            logger.error(f"Failed to get metadata for experiment {self.folder.name}: {e}")
             return {
                 "id": self.folder.name,
                 "path": str(self.folder),
@@ -1028,16 +1094,13 @@ class ExperimentRepository:
             }
 
     def save(self, expt: Experiment) -> None:
-        """
-        Save all datasets in this experiment.
-        If I want experiment‐level annotations in the future, write them here.
-        This is called when the user edits any dataset's sessions.
+        """Persist only experiment-level state.
+
+        Child objects persist themselves when changed, so experiment exclusion
+        and metadata edits must not rewrite the complete experiment tree.
         """
         try:
-            expt.annot.date_modified = datetime.datetime.now().isoformat(timespec="seconds")
+            expt.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         except Exception:
-            logging.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
+            logger.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
         self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))
-        # Save ALL datasets including excluded ones to persist their state
-        for ds in expt._all_datasets:
-            ds.repo.save(ds)

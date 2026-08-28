@@ -1,6 +1,6 @@
 # monstim_gui/dialogs/bulk_export_dialog.py
 """
-BulkExportDialog – wizard-style dialog for the Bulk Data Export feature.
+BulkExportDialog - wizard-style dialog for the Bulk Data Export feature.
 
 The dialog collects:
   - Data level    : Dataset or Experiment
@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -55,6 +55,8 @@ from monstim_gui.managers.bulk_export_manager import (
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -93,7 +95,7 @@ class BulkExportWorker(QThread):
             )
             self.finished_export.emit(written)
         except Exception as exc:
-            logging.exception("BulkExportWorker encountered an unexpected error.")
+            logger.exception("BulkExportWorker encountered an unexpected error.")
             self.error.emit(str(exc))
 
 
@@ -113,7 +115,7 @@ class BulkExportProgressWindow(QDialog):
 
     def __init__(self, total: int, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Bulk Export – In Progress")
+        self.setWindowTitle("Bulk Export - In Progress")
         self.setMinimumSize(500, 340)
         self._total = total
         self._done = False
@@ -152,7 +154,7 @@ class BulkExportProgressWindow(QDialog):
 
     def update_progress(self, cur: int, tot: int, msg: str) -> None:
         """Append *msg* to the log and advance the progress bar."""
-        ts = datetime.now().strftime("%H:%M:%S")
+        ts = datetime.now(UTC).astimezone().strftime("%H:%M:%S")
         self._bar.setMaximum(max(tot, 1))
         self._bar.setValue(cur)
         self._status_lbl.setText(f"Progress: {cur} / {tot}")
@@ -168,7 +170,7 @@ class BulkExportProgressWindow(QDialog):
         try:
             self._cancel_btn.clicked.disconnect()
         except RuntimeError:
-            pass
+            logger.warning("Could not disconnect cancel button clicked signal; it may have already been disconnected.")
         self._cancel_btn.clicked.connect(self.accept)
 
     # ── cancel / close ────────────────────────────────────────────────────
@@ -179,11 +181,11 @@ class BulkExportProgressWindow(QDialog):
             return
         self._cancel_btn.setEnabled(False)
         self._cancel_btn.setText("Canceling\u2026")
-        ts = datetime.now().strftime("%H:%M:%S")
+        ts = datetime.now(UTC).astimezone().strftime("%H:%M:%S")
         self._log.appendPlainText(f"[{ts}]  Cancellation requested\u2026")
         self.canceled.emit()
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:
         if self._done:
             event.accept()
         else:
@@ -223,16 +225,7 @@ def _completion_label_text(is_completed: bool | None) -> str:
 
 
 def _completion_label_stylesheet(is_completed: bool | None) -> str:
-    base = (
-        "QLabel {"
-        " border: 1px solid %s;"
-        " border-radius: 7px;"
-        " padding: 1px 7px;"
-        " font-weight: 600;"
-        " color: %s;"
-        " background: %s;"
-        "}"
-    )
+    base = "QLabel { border: 1px solid %s; border-radius: 7px; padding: 1px 7px; font-weight: 600; color: %s; background: %s;}"
     if is_completed is True:
         return base % ("#8fd19e", "#176b2c", "#e7f6ea")
     if is_completed is False:
@@ -338,9 +331,7 @@ class _ExperimentGroup(QWidget):
                 excluded_lbl = QLabel("Excluded")
                 excluded_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 excluded_lbl.setMinimumWidth(70)
-                excluded_lbl.setStyleSheet(
-                    "QLabel { border: 1px solid #c7c7c7; border-radius: 7px; padding: 1px 7px; color: #555555; }"
-                )
+                excluded_lbl.setStyleSheet("QLabel { border: 1px solid #c7c7c7; border-radius: 7px; padding: 1px 7px; color: #555555; }")
                 excluded_lbl.setToolTip("This dataset is marked as excluded in the experiment metadata")
                 row_layout.addWidget(excluded_lbl)
 
@@ -441,7 +432,7 @@ class _ExperimentGroup(QWidget):
 class BulkExportDialog(QDialog):
     """Multi-section configuration dialog for bulk data export."""
 
-    def __init__(self, gui: "MonstimGUI", parent: QWidget | None = None):
+    def __init__(self, gui: MonstimGUI, parent: QWidget | None = None):
         super().__init__(parent or gui)
         self.gui = gui
         self.setWindowTitle("Bulk Data Export")
@@ -498,8 +489,7 @@ class BulkExportDialog(QDialog):
         sel_layout.addWidget(sel_btn_none)
         self._cb_completed_only = QCheckBox("Completed datasets only")
         self._cb_completed_only.setToolTip(
-            "Hide incomplete or unknown datasets in the dataset-level selector. "
-            "Experiment-level exports still export the whole selected experiment."
+            "Hide incomplete or unknown datasets in the dataset-level selector. Experiment-level exports still export the whole selected experiment."
         )
         self._cb_completed_only.toggled.connect(self._on_completed_only_changed)
         sel_layout.addWidget(self._cb_completed_only)
@@ -636,25 +626,20 @@ class BulkExportDialog(QDialog):
 
             if not dataset_statuses:
                 dataset_statuses = [
-                    _DatasetStatus(dataset_id=p.name, display_name=p.name, is_completed=None)
-                    for p in sorted(folder.iterdir())
-                    if p.is_dir()
+                    _DatasetStatus(dataset_id=p.name, display_name=p.name, is_completed=None) for p in sorted(folder.iterdir()) if p.is_dir()
                 ]
 
             return _ExperimentStatus(
                 is_completed=bool(metadata.get("is_completed", False)),
                 datasets=sorted(dataset_statuses, key=lambda ds: ds.display_name.casefold()),
             )
-        except Exception as exc:
-            logging.warning("Could not read completion status for experiment path %s: %s", expt_path_str, exc)
+        except Exception:
+            logger.exception("Could not read completion status for experiment path %s", expt_path_str)
             try:
                 folder = Path(expt_path_str)
-                datasets = [
-                    _DatasetStatus(dataset_id=p.name, display_name=p.name, is_completed=None)
-                    for p in sorted(folder.iterdir())
-                    if p.is_dir()
-                ]
+                datasets = [_DatasetStatus(dataset_id=p.name, display_name=p.name, is_completed=None) for p in sorted(folder.iterdir()) if p.is_dir()]
             except Exception:
+                logger.exception("Could not read datasets for experiment path %s", expt_path_str)
                 datasets = []
             return _ExperimentStatus(is_completed=None, datasets=datasets)
 
@@ -674,7 +659,7 @@ class BulkExportDialog(QDialog):
             if ch:
                 channel_names = list(ch)
         except Exception:
-            pass
+            logger.exception("Could not read channel names from GUI; falling back to config.")
 
         if not channel_names:
             try:
@@ -683,6 +668,7 @@ class BulkExportDialog(QDialog):
                 channel_names = load_config().get("default_channel_names", [])
             except Exception:
                 channel_names = []
+                logger.exception("Could not read default channel names from config; falling back to Ch0.")
 
         if not channel_names:
             channel_names = ["Ch0"]
@@ -708,7 +694,7 @@ class BulkExportDialog(QDialog):
                 # Ensure the default is checked; leave all others as-is
                 self._method_cbs[default].setChecked(True)
         except Exception:
-            pass
+            logger.exception("Could not determine default method from GUI; leaving all methods unchecked.")
 
     # ─────────────────────────────────────────────────────────────────────
     # Slots
@@ -760,7 +746,7 @@ class BulkExportDialog(QDialog):
                 QMessageBox.warning(
                     progress_win,
                     "Bulk Export",
-                    "Export completed but no files were written.\n" "Check the application log for details.",
+                    "Export completed but no files were written.\nCheck the application log for details.",
                 )
             else:
                 msg = f"Export complete.\n\nWritten {len(written)} file(s) to:\n{config.output_path}"
@@ -853,6 +839,7 @@ class BulkExportDialog(QDialog):
                 try:
                     os.makedirs(output_path, exist_ok=True)
                 except Exception as exc:
+                    logger.exception("Could not create directory")
                     QMessageBox.critical(self, "Error", f"Could not create directory:\n{exc}")
                     return None
             else:

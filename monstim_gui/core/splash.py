@@ -12,7 +12,6 @@ if __name__ == "__main__":
 
     top_level_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if top_level_dir not in sys.path:
-        print(f"Adding {top_level_dir} to sys.path.")
         sys.path.insert(0, top_level_dir)
 
 from monstim_gui.version import VERSION
@@ -25,10 +24,12 @@ SPLASH_INFO = {
     "copyright": "© 2024 Andrew Worthy",
 }
 
+logger = logging.getLogger(__name__)
+
 
 class SplashScreen(QSplashScreen):
     def __init__(self):
-        logging.debug("Creating splash screen.")
+        logger.debug("Creating splash screen.")
         pixmap = QPixmap(400, 300)
         offwhite = QColor(245, 245, 240)
         pixmap.fill(offwhite)

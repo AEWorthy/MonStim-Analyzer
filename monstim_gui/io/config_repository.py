@@ -1,6 +1,10 @@
 import os
+from collections.abc import Mapping
 
 import yaml
+
+from monstim_signals.core.configuration import ConfigResolver, ResolvedConfig
+from monstim_signals.core.utils import clear_config_cache
 
 
 class ConfigRepository:
@@ -8,37 +12,59 @@ class ConfigRepository:
     Handles reading and writing of configuration files for the GUI.
     """
 
-    def __init__(self, default_config_file: str, user_config_file: str = None):
+    def __init__(self, default_config_file: str, user_config_file: str | None = None):
         self.default_config_file = default_config_file
         self.user_config_file = user_config_file or self._get_user_config_path()
+        self.resolver = ConfigResolver(self.default_config_file, self.user_config_file)
 
     def _get_user_config_path(self) -> str:
         config_dir = os.path.dirname(self.default_config_file)
         return os.path.join(config_dir, "config-user.yml")
 
     def read_config(self) -> dict:
-        with open(self.default_config_file, "r") as file:
-            config = yaml.safe_load(file)
-        if os.path.exists(self.user_config_file):
-            with open(self.user_config_file, "r") as file:
-                user_config = yaml.safe_load(file)
-            if user_config:
-                # Coerce user config types to match default config
-                coerced_user = self.coerce_types(user_config, config)
-                self._update_nested_dict(config, coerced_user)
-        return config
+        # ``read_config`` is the storage/UI API and may contain application
+        # keys or deliberately partial configs.  Domain consumers call
+        # ``resolve_config`` when they need the validated typed sections.
+        return self.resolver.load_raw()
+
+    def read_default_config(self) -> dict:
+        """Return the shipped configuration before any user override is merged."""
+        with open(self.default_config_file, encoding="utf-8") as file:
+            return yaml.safe_load(file) or {}
+
+    def resolve_config(self, profile: dict | None = None) -> ResolvedConfig:
+        return self.resolver.resolve(profile)
+
+    def refresh(self) -> None:
+        self.resolver.invalidate()
+        clear_config_cache()
 
     def write_config(self, config: dict) -> None:
+        """Persist only values that differ from the shipped configuration.
+
+        The UI works with the resolved configuration, but writing that complete
+        mapping made every shipped default a permanent user override.  Keeping
+        the file sparse lets new application defaults take effect naturally.
+        """
+        config = self._user_overrides(config, self.read_default_config())
         with open(self.user_config_file, "w") as file:
             yaml.safe_dump(config, file)
+        self.refresh()
 
-    def _update_nested_dict(self, d: dict, u: dict) -> dict:
-        for k, v in u.items():
-            if isinstance(v, dict):
-                d[k] = self._update_nested_dict(d.get(k, {}), v)
-            else:
-                d[k] = v
-        return d
+    @classmethod
+    def _user_overrides(cls, values, defaults):
+        """Return the recursive subset of ``values`` differing from defaults."""
+        if isinstance(values, Mapping) and isinstance(defaults, Mapping):
+            result = {}
+            for key, value in values.items():
+                if key not in defaults:
+                    result[key] = value
+                    continue
+                override = cls._user_overrides(value, defaults[key])
+                if override != {}:
+                    result[key] = override
+            return result
+        return {} if values == defaults else values
 
     @staticmethod
     def coerce_types(user_data, reference_data):

@@ -1,8 +1,11 @@
-import copy
 import logging
+from html import escape
+
+logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -10,16 +13,17 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +31,7 @@ from PySide6.QtWidgets import (
 from monstim_gui.commands import InsertSingleLatencyWindowCommand, SetLatencyWindowsCommand
 from monstim_gui.core.clipboard import LatencyWindowClipboard
 from monstim_gui.io.config_repository import ConfigRepository
+from monstim_gui.widgets.latency_window_editor import LatencyWindowEditor
 from monstim_signals.core import LatencyWindow, get_config_path
 from monstim_signals.domain.dataset import Dataset
 from monstim_signals.domain.experiment import Experiment
@@ -57,26 +62,146 @@ class NoScrollDoubleSpinBox(QDoubleSpinBox):
 
 
 class LatencyWindowsDialog(QDialog):
-    """Dialog for editing multiple latency windows."""
+    """Live, non-modal editor for latency windows in the active data context."""
 
     def __init__(self, data: Experiment | Dataset | Session, parent=None, config_repo=None):
         super().__init__(parent)
         self.data = data
         self.gui: MonstimGUI = parent
+        self._draft_dirty = False
         self.setModal(False)  # Allow interaction with main window
-        self.setWindowFlags(
-            Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint
-        )  # Make it a standalone window that stays on top
+        # Keep Qt's normal parented QDialog flags.  Custom top-level/tool flags
+        # can make the dialog compete with the main window's popup windows.
         self.setWindowTitle("Manage Latency Windows")
-        self.window_entries = (
-            []
-        )  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, list[QDoubleSpinBox]]]
+        self.window_entries = []  # type: list[tuple[QGroupBox, LatencyWindow, QLineEdit, QDoubleSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, list[QDoubleSpinBox]]]
+        self._move_buttons: dict[QGroupBox, tuple[QPushButton, QPushButton]] = {}
         self.config_repo = config_repo or ConfigRepository(get_config_path())
         self.init_ui()
-        self._reposition_to_left_middle_of_parent()
+        self.set_apply_level(self._level_for_data(data), reload=True)
 
-    def _reposition_to_left_middle_of_parent(self):
-        # Get screen geometry
+    @staticmethod
+    def _level_for_data(data: Experiment | Dataset | Session) -> str:
+        if isinstance(data, Experiment):
+            return "experiment"
+        if isinstance(data, Dataset):
+            return "dataset"
+        return "session"
+
+    def _target_for_level(self, level: str) -> Experiment | Dataset | Session | None:
+        """Resolve a target from the current selection, with constructor fallback."""
+        target = getattr(self.gui, f"current_{level}", None) if self.gui else None
+        if target is not None:
+            return target
+        return self.data if self._level_for_data(self.data) == level else None
+
+    def _representative_source_markup(self, target: Experiment | Dataset | Session) -> str:
+        """Return a concise, structured description of the draft source."""
+        if isinstance(target, Session):
+            return f"<b>Values from:</b> <b>Representative:</b> Session annotation  |  <b>Session:</b> {escape(target.id, quote=False)}"
+        if isinstance(target, Dataset):
+            sessions = target.sessions
+            return (
+                f"<b>Values from:</b> <b>Representative:</b> Dataset  |  <b>Session:</b> {escape(sessions[0].id, quote=False)}"
+                if sessions
+                else "<b>Values from:</b> no active session is available"
+            )
+        datasets = target.datasets
+        if not datasets:
+            return "<b>Values from:</b> no active dataset is available"
+        representative = max(datasets, key=lambda dataset: len(dataset.latency_windows))
+        sessions = representative.sessions
+        child = f"  |  <b>Session:</b> {escape(sessions[0].id, quote=False)}" if sessions else ""
+        return f"<b>Values from:</b> <b>Representative:</b> Experiment  |  <b>Dataset:</b> {escape(representative.id, quote=False)}{child}"
+
+    @staticmethod
+    def _session_count(target: Experiment | Dataset | Session) -> int:
+        if isinstance(target, Session):
+            return 1
+        if isinstance(target, Dataset):
+            return len(target.sessions)
+        return sum(len(dataset.sessions) for dataset in target.datasets)
+
+    def _update_context_summary(self, target: Experiment | Dataset | Session | None) -> None:
+        active = []
+        for level in ("experiment", "dataset", "session"):
+            item = getattr(self.gui, f"current_{level}", None) if self.gui else None
+            if item is not None:
+                active.append(f"<b>{level.title()}:</b> {escape(item.id, quote=False)}")
+        self.active_context_label.setText("<b>Active:</b> " + "  |  ".join(active) if active else "<b>Active:</b> No active data selection")
+        if target is None:
+            self.value_source_label.setText("<b>Values from:</b> unavailable for this apply level")
+            self.apply_summary_label.setText("<b>Apply target:</b> unavailable")
+            self.heterogeneity_label.setText("")
+            self.heterogeneity_label.setVisible(False)
+            return
+        level = self.apply_level_combo.currentData()
+        self.value_source_label.setText(self._representative_source_markup(target))
+        self.apply_summary_label.setText(
+            f"<b>Apply target:</b> <b>Level:</b> {level.title()}  |  <b>ID:</b> {escape(target.id, quote=False)}  "
+            f"|  <b>Updates:</b> {self._session_count(target)} session annotation(s)"
+        )
+        if not isinstance(target, Session) and target.has_heterogeneous_latency_windows:
+            self.heterogeneity_label.setText(
+                f"<b>Warning:</b> Child window sets differ; Apply replaces all {self._session_count(target)} affected session annotation(s)."
+            )
+            self.heterogeneity_label.setVisible(True)
+        else:
+            self.heterogeneity_label.setText("")
+            self.heterogeneity_label.setVisible(False)
+
+    def set_apply_level(self, level: str, *, reload: bool = True) -> None:
+        """Select an apply scope and load that scope's current representative values."""
+        index = self.apply_level_combo.findData(level)
+        if index < 0:
+            raise ValueError(f"Invalid latency-window apply level: {level}")
+        self.apply_level_combo.blockSignals(True)
+        self.apply_level_combo.setCurrentIndex(index)
+        self.apply_level_combo.blockSignals(False)
+        if reload:
+            self.refresh_from_current_selection()
+
+    def refresh_from_current_selection(self) -> None:
+        """Refresh the draft after a main-window selection change or scope change."""
+        level = self.apply_level_combo.currentData()
+        target = self._target_for_level(level)
+        replaced_unsaved_draft = self._draft_dirty
+        self._update_context_summary(target)
+        enabled = target is not None
+        self.editor.setEnabled(enabled)
+        self.apply_button.setEnabled(enabled)
+        self.ok_button.setEnabled(enabled)
+        if not enabled:
+            self.draft_notice_label.setText("")
+            self.draft_notice_label.setVisible(False)
+            return
+        self.data = target
+        self.editor.set_channel_names(target.channel_names)
+        self.editor.set_windows(target.latency_windows)
+        self._draft_dirty = False
+        self.draft_notice_label.setText(
+            "Unsaved draft edits were discarded because the active selection or apply level changed." if replaced_unsaved_draft else ""
+        )
+        self.draft_notice_label.setVisible(replaced_unsaved_draft)
+
+    def _on_apply_level_changed(self) -> None:
+        self.refresh_from_current_selection()
+
+    def showEvent(self, event: QEvent) -> None:
+        """Place the dialog once Qt has assigned its real display screen."""
+        super().showEvent(event)
+        QTimer.singleShot(0, self._reposition_to_left_middle_of_parent)
+
+    def _reposition_to_left_middle_of_parent(self) -> None:
+        """Move a shown desktop dialog to the left edge of its screen.
+
+        An unshown dialog has no stable native window or screen association.
+        Querying ``self.screen()`` in that state can corrupt Qt's Windows
+        platform state during headless test runs.  Offscreen Qt has no desktop
+        placement semantics, so there is deliberately nothing to do there.
+        """
+        if QGuiApplication.platformName().casefold() == "offscreen":
+            return
+
         screen = self.screen()
         if not screen:
             return
@@ -99,101 +224,94 @@ class LatencyWindowsDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout(self)
 
-        # Set minimum size but allow user to resize larger
-        self.setMinimumSize(450, 200)  # Minimum size to ensure usability
-        self.resize(550, 450)  # Default size that's comfortable but can be adjusted
+        # Keep the editor small enough that users can inspect the plots behind it.
+        self.setMinimumSize(650, 400)
+        self.resize(820, 520)
 
         cfg = self.config_repo.read_config()
         self.presets = cfg.get("latency_window_presets", {})
 
-        if self.presets:
-            preset_row = QHBoxLayout()
-            preset_row.setSpacing(5)  # Tight spacing between elements
-            preset_label = QLabel("Preset:")
-            self.preset_combo = NoScrollComboBox()
-            self.preset_combo.setToolTip("Select a preset configuration to quickly apply predefined latency windows")
-            self.preset_combo.setMinimumWidth(200)  # Make combo box wider for longer preset names
-            for name in self.presets.keys():
-                self.preset_combo.addItem(name)
-            apply_btn = QPushButton("Apply Preset")
-            apply_btn.setToolTip("Replace all current windows with the selected preset configuration")
-            apply_btn.clicked.connect(self._apply_preset)
-            preset_row.addStretch()  # Push everything to the right
-            preset_row.addWidget(preset_label)
-            preset_row.addWidget(self.preset_combo)
-            preset_row.addWidget(apply_btn)
-            layout.addLayout(preset_row)
+        context_layout = QVBoxLayout()
+        context_layout.setContentsMargins(0, 0, 0, 0)
+        context_layout.setSpacing(1)
+        scope_row = QHBoxLayout()
+        self.apply_level_combo = QComboBox()
+        for level in ("session", "dataset", "experiment"):
+            self.apply_level_combo.addItem(level.title(), level)
+        self.apply_level_combo.setToolTip("Choose the scope that receives changes and supplies the draft values.")
+        self.active_context_label = QLabel()
+        self.active_context_label.setWordWrap(True)
+        self.value_source_label = QLabel()
+        self.value_source_label.setWordWrap(True)
+        self.apply_summary_label = QLabel()
+        self.apply_summary_label.setWordWrap(True)
+        self.heterogeneity_label = QLabel()
+        self.heterogeneity_label.setWordWrap(True)
+        self.heterogeneity_label.setStyleSheet("color: #b26a00;")
+        self.draft_notice_label = QLabel()
+        self.draft_notice_label.setWordWrap(True)
+        self.draft_notice_label.setStyleSheet("color: #b26a00;")
+        self.heterogeneity_label.setVisible(False)
+        self.draft_notice_label.setVisible(False)
+        scope_row.addWidget(QLabel("<b>Apply changes to</b>"))
+        scope_row.addWidget(self.apply_level_combo)
+        scope_row.addWidget(self.active_context_label, 1)
+        context_layout.addLayout(scope_row)
+        context_layout.addWidget(self.value_source_label)
+        context_layout.addWidget(self.apply_summary_label)
+        context_layout.addWidget(self.heterogeneity_label)
+        context_layout.addWidget(self.draft_notice_label)
+        layout.addLayout(context_layout)
 
-        self.scroll: QScrollArea = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.preset_button = QToolButton(self)
+        self.preset_button.setText("Presets")
+        self.preset_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.preset_button.setToolTip("Replace the draft with a saved latency-window preset")
+        self.preset_button.setMinimumWidth(88)
+        preset_menu = QMenu(self.preset_button)
+        for name in self.presets:
+            preset_menu.addAction(name, lambda checked=False, preset_name=name: self._apply_preset(preset_name))
+        self.preset_button.setMenu(preset_menu)
+        self.preset_button.setEnabled(bool(self.presets))
+        if not self.presets:
+            self.preset_button.setToolTip("No latency-window presets are configured")
 
-        self.scroll_widget = QWidget()
-        self.scroll_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        self.scroll_layout = QGridLayout(self.scroll_widget)
-        self.scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        # Set equal column stretch so both columns expand equally
-        self.scroll_layout.setColumnStretch(0, 1)
-        self.scroll_layout.setColumnStretch(1, 1)
-        # Add spacing between columns and rows
-        self.scroll_layout.setHorizontalSpacing(15)
-        self.scroll_layout.setVerticalSpacing(10)
-        # Ensure the layout has a minimum column width
-        self.scroll_layout.setColumnMinimumWidth(0, COL_MIN_WIDTH)
-        self.scroll_layout.setColumnMinimumWidth(1, COL_MIN_WIDTH)
-
-        self.scroll.setWidget(self.scroll_widget)
-        layout.addWidget(self.scroll, 1)  # Give the scroll area stretch factor of 1 to take up available space
-
-        for window in self.data.latency_windows:
-            self._add_window_group(window)
-
-        # --- Action Row (Add / Copy / Paste) ---
-        action_row = QHBoxLayout()
-        add_button = QPushButton("Add Window")
-        add_button.setToolTip("Create a new latency window with default settings")
-        add_button.clicked.connect(lambda: self._add_window_group())
-        action_row.addWidget(add_button)
-
-        copy_button = QPushButton("Copy All")
-        copy_button.setToolTip("Copy the current latency windows to a transient clipboard (not saved to disk)")
-        copy_button.clicked.connect(self._copy_windows_to_clipboard)
-        action_row.addWidget(copy_button)
-
-        paste_button = QPushButton("Paste")
-        paste_button.setToolTip("Paste from clipboard (handles both single and multiple windows)")
-        paste_button.clicked.connect(self._paste_windows_from_clipboard)
-        paste_button.setEnabled(LatencyWindowClipboard.has_any())
-        self._paste_button = paste_button  # store for state updates
-        action_row.addWidget(paste_button)
-
-        action_row.addStretch()
-        layout.addLayout(action_row)
+        m_wave_window_names = self.config_repo.read_config().get("m_wave_window_names", [])
+        self.editor = LatencyWindowEditor(
+            self.data.channel_names,
+            self,
+            minimal_toolbar=True,
+            toolbar_extra=self.preset_button,
+            m_wave_window_names=m_wave_window_names,
+        )
+        self.editor.changed.connect(self._mark_draft_dirty)
+        layout.addWidget(self.editor, 1)
 
         button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel
-            | QDialogButtonBox.StandardButton.Apply,
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Apply,
             self,
         )
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setToolTip("Save all changes and close the dialog")
+        self.ok_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+        self.apply_button = button_box.button(QDialogButtonBox.StandardButton.Apply)
+        self.ok_button.setToolTip("Save all changes and close the dialog")
         button_box.button(QDialogButtonBox.StandardButton.Cancel).setToolTip("Discard all changes and close the dialog")
-        button_box.button(QDialogButtonBox.StandardButton.Apply).setToolTip(
-            "Save changes and update plots, but keep dialog open"
-        )
+        self.apply_button.setToolTip("Save changes and update plots, but keep dialog open")
+        self.ok_button.setDefault(False)
+        self.apply_button.setDefault(True)
         button_box.accepted.connect(self.save_windows)
         button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_changes)
+        self.apply_button.clicked.connect(self.apply_changes)
+        self.apply_level_combo.currentIndexChanged.connect(self._on_apply_level_changed)
         layout.addWidget(button_box, 0)  # No stretch for the button box
+
+    def _mark_draft_dirty(self) -> None:
+        self._draft_dirty = True
 
     def _add_window_group(self, window: LatencyWindow | None = None):
         num_channels = len(self.data.channel_names)
         if window is None:
             window = LatencyWindow(
-                name=f"Window {len(self.window_entries)+1}",
+                name=f"Window {len(self.window_entries) + 1}",
                 start_times=[0.0] * num_channels,
                 durations=[1.0] * num_channels,
                 color="black",
@@ -203,18 +321,12 @@ class LatencyWindowsDialog(QDialog):
         # Ensure window data matches current channel count
         if len(window.start_times) != num_channels:
             # Extend or truncate start_times to match current channels
-            if len(window.start_times) > 0:
-                default_start = window.start_times[0]
-            else:
-                default_start = 0.0
+            default_start = window.start_times[0] if len(window.start_times) > 0 else 0.0
             window.start_times = [default_start] * num_channels
 
         if len(window.durations) != num_channels:
             # Extend or truncate durations to match current channels
-            if len(window.durations) > 0:
-                default_duration = window.durations[0]
-            else:
-                default_duration = 1.0
+            default_duration = window.durations[0] if len(window.durations) > 0 else 1.0
             window.durations = [default_duration] * num_channels
         group = QGroupBox(window.name)
         group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
@@ -307,7 +419,7 @@ class LatencyWindowsDialog(QDialog):
 
         per_channel_spins = []
 
-        for i, (channel_name, start_time) in enumerate(zip(self.data.channel_names, window.start_times)):
+        for _i, (channel_name, start_time) in enumerate(zip(self.data.channel_names, window.start_times, strict=True)):
             row_layout = QHBoxLayout()
             row_layout.addWidget(QLabel(f"{channel_name}:"))
             spin = NoScrollDoubleSpinBox()
@@ -346,12 +458,27 @@ class LatencyWindowsDialog(QDialog):
         copy_btn.setToolTip("Copy this latency window to clipboard for inserting elsewhere")
         copy_btn.clicked.connect(lambda: self._copy_single_window(group))
         button_layout.addWidget(copy_btn)
+
+        move_up_btn = QPushButton("↑")
+        move_up_btn.setAccessibleName("Move window up")
+        move_up_btn.setToolTip("Move this latency window earlier in the list")
+        move_up_btn.clicked.connect(lambda: self._move_window_group(group, -1))
+        button_layout.addWidget(move_up_btn)
+
+        move_down_btn = QPushButton("↓")
+        move_down_btn.setAccessibleName("Move window down")
+        move_down_btn.setToolTip("Move this latency window later in the list")
+        move_down_btn.clicked.connect(lambda: self._move_window_group(group, 1))
+        button_layout.addWidget(move_down_btn)
+
         remove_btn = QPushButton("Remove")
         remove_btn.setToolTip("Delete this latency window permanently")
         remove_btn.clicked.connect(lambda: self._remove_window_group(group))
         button_layout.addWidget(remove_btn)
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+        self._move_buttons[group] = (move_up_btn, move_down_btn)
 
         # Connect signals for mode switching
         def on_mode_changed():
@@ -436,12 +563,15 @@ class LatencyWindowsDialog(QDialog):
                 per_channel_spins,
             )
         )
+        self._reorganize_grid_layout()
 
     def _remove_window_group(self, group: QGroupBox):
         for i, (grp, *_) in enumerate(self.window_entries):
             if grp is group:
                 self.window_entries.pop(i)
                 break
+
+        self._move_buttons.pop(group, None)
 
         # Remove from layout and delete
         self.scroll_layout.removeWidget(group)
@@ -464,30 +594,46 @@ class LatencyWindowsDialog(QDialog):
             col = i % 2
             self.scroll_layout.addWidget(group, row, col)
 
-    def _apply_preset(self):
-        name = self.preset_combo.currentText()
+            move_buttons = self._move_buttons.get(group)
+            if move_buttons:
+                move_buttons[0].setEnabled(i > 0)
+                move_buttons[1].setEnabled(i < len(self.window_entries) - 1)
+
+    def _move_window_group(self, group: QGroupBox, direction: int):
+        """Move a window one position earlier or later in the editor."""
+        current_index = next((i for i, (grp, *_) in enumerate(self.window_entries) if grp is group), None)
+        if current_index is None:
+            return
+
+        new_index = current_index + direction
+        if not 0 <= new_index < len(self.window_entries):
+            return
+
+        self.window_entries[current_index], self.window_entries[new_index] = (
+            self.window_entries[new_index],
+            self.window_entries[current_index],
+        )
+        self._reorganize_grid_layout()
+
+    def _apply_preset(self, name: str | None = None):
+        if name is None:
+            return
         if name not in self.presets:
             return
 
-        # Clear existing entries
-        for group, *_ in self.window_entries:
-            group.setParent(None)
-            group.deleteLater()
-        self.window_entries.clear()
-
         num_channels = len(self.data.channel_names)
+        windows = []
         for win in self.presets[name]:
-            window = LatencyWindow(
-                name=win.get("name", "Window"),
-                start_times=[float(win.get("start", 0.0))] * num_channels,
-                durations=[float(win.get("duration", 1.0))] * num_channels,
-                color=win.get("color", "black"),
-                linestyle=win.get("linestyle", ":"),
+            windows.append(
+                LatencyWindow(
+                    name=win.get("name", "Window"),
+                    start_times=[float(win.get("start", 0.0))] * num_channels,
+                    durations=[float(win.get("duration", 1.0))] * num_channels,
+                    color=win.get("color", "black"),
+                    linestyle=win.get("linestyle", ":"),
+                )
             )
-            self._add_window_group(window)
-        # After applying preset, any future paste is still valid
-        self._update_paste_enabled()
-        self._reorganize_grid_layout()
+        self.editor.set_windows(windows)
 
     # ---------------- Clipboard Support -----------------
     def _copy_windows_to_clipboard(self):
@@ -495,7 +641,7 @@ class LatencyWindowsDialog(QDialog):
         windows = []
         num_channels = len(self.data.channel_names)
         for (
-            group,
+            _group,
             window,
             name_edit,
             global_start_spin,
@@ -505,10 +651,7 @@ class LatencyWindowsDialog(QDialog):
             per_channel_spins,
         ) in self.window_entries:
             # Build a fresh LatencyWindow snapshot (respecting global/per-channel state)
-            if global_radio.isChecked():
-                start_times = [global_start_spin.value()] * num_channels
-            else:
-                start_times = [spin.value() for spin in per_channel_spins]
+            start_times = [global_start_spin.value()] * num_channels if global_radio.isChecked() else [spin.value() for spin in per_channel_spins]
             durations = [dur_spin.value()] * num_channels
             win_copy = LatencyWindow(
                 name=name_edit.text().strip() or "Window",
@@ -560,6 +703,7 @@ class LatencyWindowsDialog(QDialog):
             group.setParent(None)
             group.deleteLater()
         self.window_entries.clear()
+        self._move_buttons.clear()
 
         # Add new ones (ensure channel counts are reconciled automatically by _add_window_group)
         for w in windows:
@@ -593,7 +737,7 @@ class LatencyWindowsDialog(QDialog):
                 return
             elif clicked == replace_btn:
                 # Find and remove the existing window with that name
-                for i, (grp, _, name_edit, *_) in enumerate(self.window_entries):
+                for _i, (grp, _, name_edit, *_) in enumerate(self.window_entries):
                     if name_edit.text().strip() == window.name:
                         self._remove_window_group(grp)
                         break
@@ -633,10 +777,7 @@ class LatencyWindowsDialog(QDialog):
             if grp is group:
                 # Build a fresh LatencyWindow snapshot
                 num_channels = len(self.data.channel_names)
-                if global_radio.isChecked():
-                    start_times = [global_start_spin.value()] * num_channels
-                else:
-                    start_times = [spin.value() for spin in per_channel_spins]
+                start_times = [global_start_spin.value()] * num_channels if global_radio.isChecked() else [spin.value() for spin in per_channel_spins]
                 durations = [dur_spin.value()] * num_channels
 
                 win_copy = LatencyWindow(
@@ -654,42 +795,12 @@ class LatencyWindowsDialog(QDialog):
                 return
 
     def save_windows(self):
-        new_windows = []
-        num_channels = len(self.data.channel_names)
-        for (
-            group,
-            window,
-            name_edit,
-            global_start_spin,
-            dur_spin,
-            color_combo,
-            global_radio,
-            per_channel_spins,
-        ) in self.window_entries:
-            window.name = name_edit.text().strip() or "Window"
-
-            # Handle start times based on radio button selection
-            if global_radio.isChecked():
-                # Apply start time globally to all channels
-                window.start_times = [global_start_spin.value()] * num_channels
-            else:
-                # Use per-channel start times from individual spin boxes
-                window.start_times = [spin.value() for spin in per_channel_spins]
-
-            # Duration is ALWAYS applied globally - this is a requirement
-            window.durations = [dur_spin.value()] * num_channels
-
-            window.color = color_combo.currentData()
-            new_windows.append(copy.deepcopy(window))
-
-        if isinstance(self.data, Experiment):
-            level = "experiment"
-        elif isinstance(self.data, Dataset):
-            level = "dataset"
-        else:
-            level = "session"
-
-        logging.info(f"Setting latency windows for {level}: {self.data.id}")
+        level = self.apply_level_combo.currentData()
+        target = self._target_for_level(level)
+        if target is None:
+            return
+        new_windows = self.editor.windows()
+        logger.info("Setting latency windows for %s: %s", level, target.id)
         command = SetLatencyWindowsCommand(self.gui, level, new_windows)
         self.gui.command_invoker.execute(command)
 
@@ -698,7 +809,7 @@ class LatencyWindowsDialog(QDialog):
             self.gui.status_bar.showMessage("Latency windows updated successfully.", 5000)
 
         # Clean up reference in parent
-        if hasattr(self.gui, "_latency_dialog"):
+        if getattr(self.gui, "_latency_dialog", None) is self:
             self.gui._latency_dialog = None
 
         self.accept()
@@ -706,58 +817,29 @@ class LatencyWindowsDialog(QDialog):
     def reject(self):
         """Override reject to clean up parent reference."""
         # Clean up reference in parent
-        if hasattr(self.gui, "_latency_dialog"):
+        if getattr(self.gui, "_latency_dialog", None) is self:
             self.gui._latency_dialog = None
         super().reject()
 
     def closeEvent(self, event):
         """Override close event to clean up parent reference."""
         # Clean up reference in parent
-        if hasattr(self.gui, "_latency_dialog"):
+        if getattr(self.gui, "_latency_dialog", None) is self:
             self.gui._latency_dialog = None
         super().closeEvent(event)
 
     def apply_changes(self):
         """Apply current window settings and replot, but keep dialog open."""
-        num_channels = len(self.data.channel_names)
-        new_windows = []
-
-        for (
-            group,
-            window,
-            name_edit,
-            global_start_spin,
-            dur_spin,
-            color_combo,
-            global_radio,
-            per_channel_spins,
-        ) in self.window_entries:
-            window.name = name_edit.text().strip() or "Window"
-
-            # Handle start times based on radio button selection
-            if global_radio.isChecked():
-                # Apply start time globally to all channels
-                window.start_times = [global_start_spin.value()] * num_channels
-            else:
-                # Use per-channel start times from individual spin boxes
-                window.start_times = [spin.value() for spin in per_channel_spins]
-
-            # Duration is ALWAYS applied globally - this is a requirement
-            window.durations = [dur_spin.value()] * num_channels
-
-            window.color = color_combo.currentData()
-            new_windows.append(copy.deepcopy(window))
-
-        if isinstance(self.data, Experiment):
-            level = "experiment"
-        elif isinstance(self.data, Dataset):
-            level = "dataset"
-        else:
-            level = "session"
-
-        logging.info(f"Setting latency windows for {level}: {self.data.id}")
+        level = self.apply_level_combo.currentData()
+        target = self._target_for_level(level)
+        if target is None:
+            return
+        new_windows = self.editor.windows()
+        logger.info("Setting latency windows for %s: %s", level, target.id)
         command = SetLatencyWindowsCommand(self.gui, level, new_windows)
         self.gui.command_invoker.execute(command)
+        self._draft_dirty = False
+        self._update_context_summary(target)
 
         # Trigger replot to show changes
         if self.gui:

@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,8 @@ from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_signals.domain.experiment import Experiment
+
+logger = logging.getLogger(__name__)
 
 
 class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
@@ -25,13 +27,13 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
     union of latency window names across all sessions of all datasets.
     """
 
-    def __init__(self, experiment: "Experiment"):
+    def __init__(self, experiment: Experiment):
         super().__init__(experiment)
-        self.emg_object: "Experiment" = experiment
+        self.emg_object: Experiment = experiment
 
     def plot_averageReflexCurves(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] | None = None,
         method: str | None = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
@@ -67,7 +69,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
             total_sessions = sum(len(ds.sessions) for ds in self.emg_object.datasets)
 
-            for plot_item, channel_idx in zip(plot_items, channel_indices):
+            for plot_item, channel_idx in zip(plot_items, channel_indices, strict=True):
                 self.set_labels(
                     plot_item=plot_item,
                     title=f"Channel {channel_idx + 1}",
@@ -79,9 +81,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                     plot_item.addLegend()
 
                 for window_name in window_names:
-                    curve = self.emg_object.get_average_lw_reflex_curve(
-                        method=method, channel_index=channel_idx, window=window_name
-                    )
+                    curve = self.emg_object.get_average_lw_reflex_curve(method=method, channel_index=channel_idx, window=window_name)
                     voltages = curve.get("voltages")
                     means = curve.get("means")
                     stdevs = curve.get("stdevs")
@@ -96,7 +96,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                             else:
                                 mmax = self._resolve_to_scalar(manual_mmax)
                         except ValueError as ve:
-                            raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
+                            raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}") from ve
 
                         if mmax is not None and mmax != 0:
                             means = means / mmax
@@ -116,7 +116,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                             if found:
                                 break
                     except Exception:
-                        logging.exception("Failed to retrieve latency window color for plotting.")
+                        logger.exception("Failed to retrieve latency window color for plotting.")
                         pass
 
                     color = self._convert_matplotlib_color(color_hex)
@@ -153,7 +153,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                         name=label,
                     )
 
-                    for v, m, s in zip(voltages, means, stdevs):
+                    for v, m, s in zip(voltages, means, stdevs, strict=True):
                         raw_data_dict["channel_index"].append(channel_idx)
                         raw_data_dict["window_name"].append(window_name)
                         raw_data_dict["voltage"].append(v)
@@ -169,11 +169,11 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
         except UnableToPlotError:
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting reflex curves: {e}")
+            raise UnableToPlotError(f"Error plotting reflex curves: {e}") from e
 
     def plot_maxH(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] | None = None,
         method=None,
         relative_to_mmax=False,
         manual_mmax=None,
@@ -194,7 +194,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             if channel_indices is None:
                 channel_indices = list(range(self.emg_object.num_channels))
 
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
             # Raw data collection
             raw_data_dict = {
@@ -204,7 +204,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 "avg_h_wave_amplitudes": [],
             }
 
-            for plot_item, channel_idx in zip(plot_items, channel_indices):
+            for plot_item, channel_idx in zip(plot_items, channel_indices, strict=True):
                 plot_item.showGrid(True, True)
 
                 # Plot max H data and collect raw data
@@ -231,7 +231,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting max H-reflex: {str(e)}")
+            raise UnableToPlotError(f"Error plotting max H-reflex: {e!s}") from e
 
     def _plot_max_h_data(
         self,
@@ -285,7 +285,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                         else:
                             m_max_amplitude = self._resolve_to_scalar(self.emg_object.get_avg_m_max(method, channel_idx))
                     except ValueError as ve:
-                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}") from ve
 
                     if m_max_amplitude is not None and m_max_amplitude > 0:
                         m_wave_amplitudes = m_wave_amplitudes / m_max_amplitude
@@ -427,12 +427,13 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             plot_item.setXRange(m_x - 1, h_x + 1)
 
         except Exception as e:
-            print(f"Warning: Could not plot max H data for channel {channel_idx}: {e}")
+            logger.exception(f"Could not plot max H data for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting max H-reflex data for channel {channel_idx}: {e!s}") from e
 
     def plot_mmax(
         self,
-        channel_indices: List[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         interactive_cursor: bool = False,
         canvas=None,
     ):
@@ -449,7 +450,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             if channel_indices is None:
                 channel_indices = list(range(self.emg_object.num_channels))
 
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
             # Raw data collection
             raw_data_dict = {
@@ -459,7 +460,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
                 "avg_m_max_amplitude": [],
             }
 
-            for plot_item, channel_idx in zip(plot_items, channel_indices):
+            for plot_item, channel_idx in zip(plot_items, channel_indices, strict=True):
                 plot_item.showGrid(True, True)
 
                 # Plot M-max data and collect raw data
@@ -481,7 +482,7 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting M-max: {str(e)}")
+            raise UnableToPlotError(f"Error plotting M-max: {e!s}") from e
 
     def _plot_mmax_data(self, plot_item, channel_idx, method, raw_data_dict):
         """Plot M-max data for a specific channel."""
@@ -569,4 +570,5 @@ class ExperimentPlotterPyQtGraph(BasePlotterPyQtGraph):
             plot_item.setXRange(m_x - 1, m_x + 1.5)
 
         except Exception as e:
-            print(f"Warning: Could not plot M-max data for channel {channel_idx}: {e}")
+            logger.exception(f"Could not plot M-max data for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting M-max data for channel {channel_idx}: {e!s}") from e

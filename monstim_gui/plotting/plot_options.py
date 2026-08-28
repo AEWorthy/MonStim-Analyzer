@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIntValidator
@@ -20,18 +20,21 @@ from monstim_gui.core.utils.custom_gui_elements import FloatLineEdit
 
 from .plotting_cycler import RecordingCyclerWidget
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
 
     from .plotting_widget import PlotWidget
 
-CALCULATION_METHODS = ["peak_to_trough", "rms", "average_rectified", "average_unrectified", "auc"]
+CALCULATION_METHODS = ["peak_to_trough", "extrema_ptt", "exclusive_extrema_ptt", "rms", "average_rectified", "average_unrectified", "auc"]
+EXTREMA_METHODS = ["extrema_ptt", "exclusive_extrema_ptt"]
 DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
 
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
-    def __init__(self, parent: "PlotWidget"):
+    def __init__(self, parent: PlotWidget):
         super().__init__(parent)
         self.gui_main = parent.parent
         self.layout: QVBoxLayout = QVBoxLayout(self)
@@ -66,7 +69,7 @@ class BasePlotOptions(QWidget):
 
 
 class ChannelSelectorWidget(QGroupBox):
-    def __init__(self, gui_main: "MonstimGUI", parent=None):
+    def __init__(self, gui_main: MonstimGUI, parent=None):
         super().__init__("Channel Selector", parent)
 
         # Figure out how many channels we should allow for the current view
@@ -87,10 +90,12 @@ class ChannelSelectorWidget(QGroupBox):
         grid.setSpacing(2)  # Minimal spacing between checkboxes
         grid.setContentsMargins(2, 2, 2, 2)  # Minimal padding to minimize space
 
-        # Set size policy to make it as compact as possible
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # Keep the selector at its natural width instead of stretching it across
+        # the options panel.  This leaves only the intended spacing between the
+        # channel checkboxes when the panel is wider than the selector.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
-        self.checkboxes: List[QCheckBox] = []
+        self.checkboxes: list[QCheckBox] = []
 
         # Hide the widget if there are no channels to avoid taking up space
         if max_ch == 0:
@@ -100,6 +105,7 @@ class ChannelSelectorWidget(QGroupBox):
         total = (max_ch + 5) // 6 * 6  # Round up to the nearest multiple of 6
         for idx in range(total):
             cb = QCheckBox(f"{idx}")
+            cb.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             # Only enable the ones your data actually has
             cb.setEnabled(idx < max_ch)
             cb.setChecked(idx < max_ch)
@@ -110,10 +116,10 @@ class ChannelSelectorWidget(QGroupBox):
 
         self.setLayout(grid)
 
-    def get_selected_channels(self) -> List[int]:
+    def get_selected_channels(self) -> list[int]:
         return [i for i, cb in enumerate(self.checkboxes) if cb.isChecked()]
 
-    def set_selected_channels(self, selected: List[int]):
+    def set_selected_channels(self, selected: list[int]):
         for i, cb in enumerate(self.checkboxes):
             if cb.isEnabled():
                 cb.setChecked(i in selected)
@@ -148,6 +154,7 @@ class EMGOptions(BasePlotOptions):
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
         self.interactive_cursor_checkbox.setChecked(False)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self._add_extrema_controls(form)
 
         # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
@@ -166,6 +173,24 @@ class EMGOptions(BasePlotOptions):
         self.latency_legend_checkbox.setChecked(enabled)
         self.latency_legend_checkbox.setEnabled(enabled)
 
+    def _add_extrema_controls(self, form):
+        self.show_extrema_labels_checkbox = QCheckBox()
+        self.show_extrema_labels_checkbox.setToolTip("Selected extrema are available only on filtered, unrectified EMG traces.")
+        self.extrema_method_combo = ResponsiveComboBox()
+        self.extrema_method_combo.addItems(EXTREMA_METHODS)
+        form.addRow("Show PTT Extrema:", self.show_extrema_labels_checkbox)
+        form.addRow("Extrema Method:", self.extrema_method_combo)
+        self.show_extrema_labels_checkbox.toggled.connect(self._update_extrema_controls)
+        self.data_type_combo.currentTextChanged.connect(self._update_extrema_controls)
+        self._update_extrema_controls()
+
+    def _update_extrema_controls(self):
+        supported = self.data_type_combo.currentText() == "filtered"
+        self.show_extrema_labels_checkbox.setEnabled(supported)
+        if not supported:
+            self.show_extrema_labels_checkbox.setChecked(False)
+        self.extrema_method_combo.setEnabled(supported and self.show_extrema_labels_checkbox.isChecked())
+
     def get_options(self):
         return {
             "channel_indices": self.channel_selector.get_selected_channels(),
@@ -174,6 +199,8 @@ class EMGOptions(BasePlotOptions):
             "plot_legend": self.latency_legend_checkbox.isChecked(),
             "plot_colormap": self.plot_colormap_checkbox.isChecked(),
             "interactive_cursor": self.interactive_cursor_checkbox.isChecked(),
+            "show_extrema_labels": self.show_extrema_labels_checkbox.isChecked(),
+            "extrema_label_method": self.extrema_method_combo.currentText(),
         }
 
     def set_options(self, options):
@@ -191,6 +218,13 @@ class EMGOptions(BasePlotOptions):
             self.plot_colormap_checkbox.setChecked(options["plot_colormap"])
         if "interactive_cursor" in options:
             self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
+        if "show_extrema_labels" in options:
+            self.show_extrema_labels_checkbox.setChecked(options["show_extrema_labels"])
+        if "extrema_label_method" in options:
+            index = self.extrema_method_combo.findText(options["extrema_label_method"])
+            if index >= 0:
+                self.extrema_method_combo.setCurrentIndex(index)
+        self._update_extrema_controls()
 
 
 class SingleEMGRecordingOptions(BasePlotOptions):
@@ -231,6 +265,7 @@ class SingleEMGRecordingOptions(BasePlotOptions):
 
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self.interactive_cursor_checkbox.setChecked(False)
+        self._add_extrema_controls(form)
 
         # Create the recording cycler widget and add it to the form
         self.recording_cycler = RecordingCyclerWidget(self)
@@ -253,6 +288,9 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         self.latency_legend_checkbox.setChecked(enabled)
         self.latency_legend_checkbox.setEnabled(enabled)
 
+    _add_extrema_controls = EMGOptions._add_extrema_controls
+    _update_extrema_controls = EMGOptions._update_extrema_controls
+
     def get_options(self):
         return {
             "channel_indices": self.channel_selector.get_selected_channels(),
@@ -263,6 +301,8 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             "fixed_y_axis": self.fixed_y_axis_checkbox.isChecked(),
             "plot_colormap": self.plot_colormap_checkbox.isChecked(),
             "interactive_cursor": self.interactive_cursor_checkbox.isChecked(),
+            "show_extrema_labels": self.show_extrema_labels_checkbox.isChecked(),
+            "extrema_label_method": self.extrema_method_combo.currentText(),
         }
 
     def set_options(self, options):
@@ -284,6 +324,13 @@ class SingleEMGRecordingOptions(BasePlotOptions):
             self.plot_colormap_checkbox.setChecked(options["plot_colormap"])
         if "interactive_cursor" in options:
             self.interactive_cursor_checkbox.setChecked(options["interactive_cursor"])
+        if "show_extrema_labels" in options:
+            self.show_extrema_labels_checkbox.setChecked(options["show_extrema_labels"])
+        if "extrema_label_method" in options:
+            index = self.extrema_method_combo.findText(options["extrema_label_method"])
+            if index >= 0:
+                self.extrema_method_combo.setCurrentIndex(index)
+        self._update_extrema_controls()
 
 
 class SessionReflexCurvesOptions(BasePlotOptions):
@@ -298,11 +345,9 @@ class SessionReflexCurvesOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(True)
+        self.relative_to_mmax_checkbox.setChecked(False)
 
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
@@ -361,13 +406,11 @@ class AverageReflexCurvesOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(True)
+        self.relative_to_mmax_checkbox.setChecked(False)
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
 
@@ -464,7 +507,7 @@ class LatencyWindowDistributionOptions(BasePlotOptions):
                 self.bins_spin.setValue(int(options["bins"]))
             except Exception as e:
                 # If bins value is invalid, log the error and set to default (30)
-                logging.warning(f"Invalid bins value in set_options: {options.get('bins')!r} ({e}) - using default 30")
+                logger.warning(f"Invalid bins value in set_options: {options.get('bins')!r} ({e}) - using default 30")
                 self.bins_spin.setValue(30)
         if "density" in options:
             self.density_checkbox.setChecked(bool(options["density"]))
@@ -484,16 +527,14 @@ class AverageSessionReflexOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         self.show_legend_checkbox = QCheckBox()
         self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
         self.interactive_cursor_checkbox = QCheckBox()
         self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
 
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
-        self.relative_to_mmax_checkbox.setChecked(True)  # Default to True
+        self.relative_to_mmax_checkbox.setChecked(False)
         form.addRow("Show Plot Legend:", self.show_legend_checkbox)
         self.show_legend_checkbox.setChecked(True)
         form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
@@ -591,17 +632,13 @@ class MaxHReflexOptions(BasePlotOptions):
 
         # Checkboxes
         self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip(
-            "If checked, the reflex amplitudes will be calculated relative to the M-max value."
-        )
+        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
         form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
         self.relative_to_mmax_checkbox.setChecked(False)
 
         self.max_stim_value = FloatLineEdit(default_value=10.0)
         self.max_stim_value.setPlaceholderText("(float)")
-        self.max_stim_value.setToolTip(
-            "Maximum value of the stimulus (in V) that will be used to calculate the average reflex amplitudes."
-        )
+        self.max_stim_value.setToolTip("Maximum value of the stimulus (in V) that will be used to calculate the average reflex amplitudes.")
         self.max_stim_value.setMaximumWidth(80)
         form.addRow("Max Stimulus Value:", self.max_stim_value)
 

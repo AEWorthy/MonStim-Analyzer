@@ -3,12 +3,11 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Tuple
 
 """
-Revert annotations under a folder to data_version '2.0.0' and remove index files.
+Revert annotations under a folder to data_version '2.0.0' and remove catalog files.
 
-- Deletes files named '.index.json' or ending with '.index.json'
+- Deletes SQLite catalog sidecars named '.monstim-cache.sqlite'
 - Sets/overwrites 'data_version' to '2.0.0' in any '*.annot.json' (experiment/dataset/session/recording)
 
 Usage (PowerShell):
@@ -16,7 +15,7 @@ Usage (PowerShell):
     python tools/revert_to_v200.py --root PATH-TO/TEST_MIGR [--dry-run]
 """
 
-log = logging.getLogger("revert_v200")
+logger = logging.getLogger(__name__)
 
 
 def configure_logging(verbose: bool):
@@ -24,9 +23,8 @@ def configure_logging(verbose: bool):
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
 
-def is_index_file(p: Path) -> bool:
-    name = p.name.lower()
-    return name == ".index.json" or name.endswith(".index.json")
+def is_catalog_file(p: Path) -> bool:
+    return p.name == ".monstim-cache.sqlite"
 
 
 def is_annotation_file(p: Path) -> bool:
@@ -37,8 +35,8 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
     try:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
-    except Exception as e:
-        log.warning(f"Skipping unreadable JSON: {path} ({e})")
+    except Exception:
+        logger.exception(f"Skipping unreadable JSON: {path}")
         return False
 
     changed = False
@@ -56,7 +54,7 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
                 del data[k]
                 changed = True
             except Exception:
-                logging.debug(f"Failed to remove {k} from annotation: {path}", exc_info=True)
+                logger.debug(f"Failed to remove {k} from annotation: {path}", exc_info=True)
 
     if changed and not dry_run:
         try:
@@ -65,39 +63,40 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
                 json.dump(data, f, indent=2)
                 f.write("\n")
             tmp.replace(path)
-        except Exception as e:
-            log.error(f"Failed to write updated annotation: {path} ({e})")
+        except Exception:
+            logger.exception(f"Failed to write updated annotation: {path}")
             return False
     return True
 
 
-def remove_index_file(path: Path, dry_run: bool) -> bool:
+def remove_catalog_file(path: Path, dry_run: bool) -> bool:
     if dry_run:
         return True
     try:
         path.unlink(missing_ok=True)
         return True
-    except Exception as e:
-        log.error(f"Failed to delete index file: {path} ({e})")
+    except Exception:
+        logger.exception(f"Failed to delete index file: {path}")
         return False
 
 
-def process_root(root: Path, dry_run: bool) -> Tuple[int, int, int, int]:
+def process_root(root: Path, dry_run: bool) -> tuple[int, int, int, int]:
     ann_total = ann_ok = idx_total = idx_ok = 0
     for p in root.rglob("*.json"):
-        if is_index_file(p):
-            idx_total += 1
-            if remove_index_file(p, dry_run):
-                idx_ok += 1
-        elif is_annotation_file(p):
+        if is_annotation_file(p):
             ann_total += 1
             if rewrite_annotation_version(p, dry_run):
                 ann_ok += 1
+    for p in root.rglob(".monstim-cache.sqlite"):
+        if is_catalog_file(p):
+            idx_total += 1
+            if remove_catalog_file(p, dry_run):
+                idx_ok += 1
     return ann_total, ann_ok, idx_total, idx_ok
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Revert annotations to data_version 2.0.0 and remove index files")
+    parser = argparse.ArgumentParser(description="Revert annotations to data_version 2.0.0 and remove catalog files")
     parser.add_argument(
         "--root",
         type=Path,
@@ -112,18 +111,18 @@ def main(argv=None) -> int:
 
     root: Path = args.root
     if not root.exists() or not root.is_dir():
-        log.error(f"Root path does not exist or is not a directory: {root}")
+        logger.error(f"Root path does not exist or is not a directory: {root}")
         return 2
 
-    log.info(f"Processing root: {root}")
+    logger.info(f"Processing root: {root}")
     if args.dry_run:
-        log.info("Dry-run enabled; no files will be changed.")
+        logger.info("Dry-run enabled; no files will be changed.")
 
     ann_total, ann_ok, idx_total, idx_ok = process_root(root, args.dry_run)
 
-    log.info(f"Annotations processed: {ann_ok}/{ann_total}; Index files removed: {idx_ok}/{idx_total}")
+    logger.info(f"Annotations processed: {ann_ok}/{ann_total}; Catalog files removed: {idx_ok}/{idx_total}")
     if args.dry_run and (ann_total or idx_total):
-        log.info("Run again without --dry-run to apply changes.")
+        logger.info("Run again without --dry-run to apply changes.")
     return 0
 
 

@@ -1,14 +1,17 @@
 import logging
+
+logger = logging.getLogger(__name__)
 import re
 from datetime import datetime
 
 
-def parse_date(date_string: str, preferred_format: str = None):
+def parse_date(date_string: str, preferred_format: str | None = None):
     """
     Parses a date string and returns a datetime object and its format.
     Args:
         date_string (str): The date string to parse. Must be 6 or 8 characters long.
-        preferred_format (str, optional): The preferred format to return. Options are 'YYMMDD', 'DDMMYY', 'MMDDYY', 'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY'.
+        preferred_format (str, optional): The preferred format to return. Options are
+        'YYMMDD', 'DDMMYY', 'MMDDYY', 'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY'.
     Returns:
         tuple: A tuple containing the parsed datetime object and its format name, or None if the date string is invalid.
     Raises:
@@ -60,19 +63,20 @@ def parse_date(date_string: str, preferred_format: str = None):
                 return parsed_date, format_name
 
     # If we reach here, we have multiple valid formats and no preferred format
-    logging.warning(
+    logger.warning(
         f"Ambiguous date. Please specify preferred format: {[f for _, f in valid_formats]}. Returning first valid format: {valid_formats[0][1]}."
     )
     return valid_formats[0]
 
 
-def parse_dataset_name(dataset_name: str, preferred_date_format: str = None) -> tuple:
+def parse_dataset_name(dataset_name: str, preferred_date_format: str | None = None) -> tuple:
     """
     Extracts information from a dataset' directory name.
 
     Args:
         dataset_name (str): The name of the dataset in the format '[YYMMDD] [AnimalID] [Condition]'.
-        preferred_date_format (str, optional): The preferred date format to return. Options are 'YYMMDD', 'DDMMYY', 'MMDDYY', 'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY'.
+        preferred_date_format (str, optional): The preferred date format to return. Options are
+            'YYMMDD', 'DDMMYY', 'MMDDYY', 'YYYYMMDD', 'DDMMYYYY', 'MMDDYYYY'.
 
     Returns:
         tuple: A tuple containing the extracted information in the following order: (date, animal_id, condition).
@@ -99,16 +103,10 @@ def parse_dataset_name(dataset_name: str, preferred_date_format: str = None) -> 
             formatted_date = parsed_date.strftime("%Y-%m-%d")
             return formatted_date, animal_id, condition
         else:
-            logging.error(
-                f"Error: {format_info}\n\n Make the neccessary changes to the dataset name, re-import your data, and try again."
-            )
+            logger.error(f"Error: {format_info}\n\n Make the neccessary changes to the dataset name, re-import your data, and try again.")
             # return 'DATE_ERROR', animal_id, condition
             raise ValueError(f"Error: {format_info}")
 
     else:
-        logging.error(
-            f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'."
-        )
-        raise ValueError(
-            f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'."
-        )
+        logger.error(f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")
+        raise ValueError(f"Error: Dataset ID '{dataset_name}' does not match the expected format: '[YYMMDD] [AnimalID] [Condition]'.")

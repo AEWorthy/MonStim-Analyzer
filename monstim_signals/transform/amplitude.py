@@ -3,12 +3,25 @@
 import numpy as np
 
 
-def rectify_emg(emg_array):
-    """Rectify EMG data by taking the absolute value."""
+def _latency_window_samples(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float) -> np.ndarray:
+    """Return the closed sample interval covered by a latency window."""
+    start_index = int(start_ms * scan_rate / 1000)
+    end_index = int(end_ms * scan_rate / 1000)
+    return emg_data[start_index : end_index + 1]
+
+
+def rectify_emg(emg_array: np.ndarray):
+    """Rectify EMG data by taking the absolute value.
+
+    Args:
+        emg_array (array): The EMG signal to be rectified.
+    Returns:
+        array: The rectified EMG signal.
+    """
     return np.abs(emg_array)
 
 
-def _calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_average_amplitude_rectified(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate the average amplitude of rectified EMG signal.
 
     Rectifies the EMG signal (absolute value) and returns the mean amplitude.
@@ -22,16 +35,14 @@ def _calculate_average_amplitude_rectified(emg_data, start_ms, end_ms, scan_rate
     Returns:
         float: Mean of rectified signal, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     rectified_emg_window = rectify_emg(emg_window)
     return np.mean(rectified_emg_window)
 
 
-def _calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_peak_to_trough_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate peak-to-trough amplitude of EMG signal.
 
     Returns the difference between maximum and minimum values in the window.
@@ -45,15 +56,13 @@ def _calculate_peak_to_trough_amplitude(emg_data, start_ms, end_ms, scan_rate):
     Returns:
         float: Maximum minus minimum value, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     return np.max(emg_window) - np.min(emg_window)
 
 
-def _calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_rms_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate root mean square (RMS) amplitude of EMG signal.
 
     Computes the square root of the mean of squared signal values.
@@ -67,9 +76,7 @@ def _calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
     Returns:
         float: RMS amplitude, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     squared_emg_window = np.square(emg_window)
@@ -77,7 +84,7 @@ def _calculate_rms_amplitude(emg_data, start_ms, end_ms, scan_rate):
     return np.sqrt(mean_squared_value)
 
 
-def _calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_average_amplitude_unrectified(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate the average amplitude of unrectified EMG signal.
 
     Returns the mean of the raw signal without rectification.
@@ -91,15 +98,13 @@ def _calculate_average_amplitude_unrectified(emg_data, start_ms, end_ms, scan_ra
     Returns:
         float: Mean of raw signal, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     return np.mean(emg_window)
 
 
-def _calculate_auc_rectified(emg_data, start_ms, end_ms, scan_rate):
+def _calculate_auc_rectified(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float):
     """Calculate area under the curve (AUC) of rectified EMG signal.
 
     Rectifies the signal and computes the area under the curve by summing
@@ -114,9 +119,7 @@ def _calculate_auc_rectified(emg_data, start_ms, end_ms, scan_rate):
     Returns:
         float: Area under rectified curve in V·s, or np.nan if window is empty
     """
-    start_index = int(start_ms * scan_rate / 1000)
-    end_index = int(end_ms * scan_rate / 1000)
-    emg_window = emg_data[start_index:end_index]
+    emg_window = _latency_window_samples(emg_data, start_ms, end_ms, scan_rate)
     if emg_window.size == 0:
         return np.nan
     rectified_emg_window = rectify_emg(emg_window)
@@ -126,8 +129,10 @@ def _calculate_auc_rectified(emg_data, start_ms, end_ms, scan_rate):
     return np.sum(rectified_emg_window) * dt
 
 
-def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
+def calculate_emg_amplitude(emg_data: np.ndarray, start_ms: float, end_ms: float, scan_rate: float, method: str):
     """Calculate the EMG amplitude using the specified method.
+
+    Matches the method string to the corresponding calculation function and returns the result.
 
     Args:
         emg_data: EMG signal array
@@ -147,6 +152,12 @@ def calculate_emg_amplitude(emg_data, start_ms, end_ms, scan_rate, method):
     Raises:
         ValueError: If method is not recognized
     """
+    if method == "exclusive_extrema_ptt":
+        raise ValueError("exclusive_extrema_ptt requires the all-window/session API")
+    if method == "extrema_ptt":
+        from .extrema import calculate_extrema_ptt_result, make_window_span
+
+        return calculate_extrema_ptt_result(emg_data, make_window_span(0, "window", start_ms, end_ms, scan_rate), scan_rate).amplitude
     methods = {
         "average_rectified": _calculate_average_amplitude_rectified,
         "peak_to_trough": _calculate_peak_to_trough_amplitude,

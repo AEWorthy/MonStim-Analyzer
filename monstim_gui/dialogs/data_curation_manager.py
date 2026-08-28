@@ -4,35 +4,32 @@ Allows users to manage experiments and datasets with create/import/delete/rename
 and drag-and-drop dataset organization between experiments.
 """
 
-# TODOs: Data Curation Manager feature roadmap
-# - Thumbnail / quick-preview column: show a small sparkline or thumbnail per-dataset
-#   (representative session trace) to help visually triage datasets before moving/deleting.
-# - Search / filter box: add a text input above the tree to filter experiments/datasets by
-#   name, date, animal_id, condition, or tags.
-# - Dry-run / preview modal for batch move/copy/delete: show affected items, conflicts,
-#   and allow skip/overwrite/rename decisions before executing changes.
-# - Multi-select drag & drop ghosting: when dragging multiple checked datasets, show a
-#   drag ghost with count and optionally a preview to make multi-drag operations clear.
-# - Batch rename tooling: pattern-based renaming (tokens or regex) with a preview before applying.
+# TODO: Data Curation Manager feature roadmap
 # - Recycle bin / safe-delete: move datasets to a hidden .trash instead of immediate permanent deletion,
 #   add restore & purge UI, and schedule automatic purge after configurable retention.
-# - Inline / bulk metadata editor: allow editing dataset metadata (date/animal/condition) from the tree
-#   or an edit pane; support bulk edits and preview.
-# - Validation & consistency checker: validate selected datasets for missing files, mismatched channels,
-#   missing latency windows, etc., and provide quick-fix suggestions.
 # - Background workers and progress/cancellation: run long operations (move/copy/import) in background
 #   threads with progress dialogs and per-item error reporting.
+# - Dry-run / preview modal for batch move/copy/delete: show affected items, conflicts,
+#   and allow skip/overwrite/rename decisions before executing changes.
+# - Validation & consistency checker: validate selected datasets for missing files, mismatched channels,
+#   missing latency windows, etc., and provide quick-fix suggestions.
+# - Add a Trim operation to remove 0-indexed recording numbers from all sessions in the selected data.
+#   Make sure it can handle negative indexing to trim from the ends. Useful for trimming known bad recordings like the first/second ones.
+# - Inline / bulk metadata editor: allow editing dataset metadata (date/animal/condition) from the tree
+#   or an edit pane; support bulk edits and preview.
+# - Batch rename tooling: pattern-based renaming (tokens or regex) with a preview before applying.
 # - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
 # - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
 
 import logging
-import re
+import shlex
 from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -46,6 +43,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -54,6 +52,8 @@ from PySide6.QtWidgets import (
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
+
+logger = logging.getLogger(__name__)
 
 
 def auto_refresh(method):
@@ -87,7 +87,7 @@ def auto_refresh(method):
                 if not getattr(self, "_suppress_autorefresh", False):
                     self.load_data()
             except Exception as refresh_error:
-                logging.error(f"Failed to refresh data after error in {method.__name__}: {refresh_error}")
+                logger.error(f"Failed to refresh data after error in {method.__name__}: {refresh_error}")
             # Re-raise the original exception
             raise e
 
@@ -115,7 +115,7 @@ class DatasetTreeWidget(QTreeWidget):
                 self.setAutoScrollMargin(self._auto_scroll_margin)
             except Exception:
                 # Non-fatal: setAutoScrollMargin may not be available on all platforms/PyQt versions
-                pass
+                logger.warning("setAutoScrollMargin not available; using default margin for autoscroll.")
         except Exception:
             # Non-fatal if attributes aren't present on the platform
             self._auto_scroll_margin = 30
@@ -141,13 +141,9 @@ class DatasetTreeWidget(QTreeWidget):
                 except Exception:
                     # Some items may not support checkState (e.g., corrupted or custom widgets).
                     # Safe to ignore and skip these items for drag selection.
-                    pass
+                    logger.warning("Failed to check state of item; skipping.")
 
-        if checked_items:
-            items = checked_items
-        else:
-            # Use selection as a fallback
-            items = [it for it in self.selectedItems() if it and it.parent()]
+        items = checked_items or [it for it in self.selectedItems() if it and it.parent()]
 
         # If still nothing, fallback to default behavior
         if not items:
@@ -178,11 +174,11 @@ class DatasetTreeWidget(QTreeWidget):
         except Exception:
             # Fall back to widget-selected indexes if building mime from items fails
             try:
-                mime = self.model().mimeData([idx for idx in self.selectedIndexes()])
+                mime = self.model().mimeData(list(self.selectedIndexes()))
                 drag.setMimeData(mime)
             except Exception as e:
                 # Safe to ignore: drag will proceed without mime data if this fails.
-                logging.debug("Failed to set mime data from selected indexes: %r", e)
+                logger.debug("Failed to set mime data from selected indexes: %r", e)
 
         if not pix.isNull():
             drag.setPixmap(pix)
@@ -190,7 +186,7 @@ class DatasetTreeWidget(QTreeWidget):
                 # Place the pixmap's top-left corner at the cursor click point
                 drag.setHotSpot(pix.rect().topLeft())
             except Exception as e:
-                logging.debug("Failed to set drag hotspot for pixmap: %r", e)
+                logger.debug("Failed to set drag hotspot for pixmap: %r", e)
                 # Safe to ignore: drag will proceed without custom hotspot
 
         # Execute the drag using the supported actions passed in
@@ -221,13 +217,13 @@ class DatasetTreeWidget(QTreeWidget):
                     vsb.setValue(vsb.value() - scroll_amount_v)
                 except Exception as e:
                     # Safe to ignore: vertical auto-scroll is a convenience feature.
-                    logging.debug("Failed to auto-scroll up: %r", e)
+                    logger.debug("Failed to auto-scroll up: %r", e)
             elif pos.y() > vp_rect.bottom() - margin:
                 try:
                     vsb.setValue(vsb.value() + scroll_amount_v)
                 except Exception as e:
                     # Safe to ignore: vertical auto-scroll is a convenience feature.
-                    logging.debug("Failed to auto-scroll down: %r", e)
+                    logger.debug("Failed to auto-scroll down: %r", e)
 
             # Horizontal scrolling (if needed)
             if pos.x() < vp_rect.left() + margin:
@@ -235,13 +231,13 @@ class DatasetTreeWidget(QTreeWidget):
                     hsb.setValue(hsb.value() - scroll_amount_h)
                 except Exception as e:
                     # Safe to ignore: horizontal auto-scroll is a convenience feature.
-                    logging.debug("Failed to auto-scroll left: %r", e)
+                    logger.debug("Failed to auto-scroll left: %r", e)
             elif pos.x() > vp_rect.right() - margin:
                 try:
                     hsb.setValue(hsb.value() + scroll_amount_h)
                 except Exception as e:
                     # Safe to ignore: horizontal auto-scroll is a convenience feature.
-                    logging.debug("Failed to auto-scroll right: %r", e)
+                    logger.debug("Failed to auto-scroll right: %r", e)
         except Exception:
             # Don't let autoscroll failures block drag
             pass
@@ -340,10 +336,7 @@ class DatasetTreeWidget(QTreeWidget):
             return
 
         # Get the target experiment (either the dropped-on item or its parent)
-        if drop_item.parent():  # Dropped on a dataset
-            target_exp_item = drop_item.parent()
-        else:  # Dropped on an experiment
-            target_exp_item = drop_item
+        target_exp_item = drop_item.parent() if drop_item.parent() else drop_item
 
         target_exp_data = target_exp_item.data(0, Qt.ItemDataRole.UserRole)
         if not target_exp_data or target_exp_data.get("type") != "experiment":
@@ -364,7 +357,7 @@ class DatasetTreeWidget(QTreeWidget):
             self.dataset_move_batch_start.emit()
         except Exception:
             # If anything goes wrong emitting the signal, continue gracefully
-            pass
+            logger.warning("Failed to emit dataset_move_batch_start signal; proceeding with move.")
 
         # Collect checked dataset children across all experiments
         for i in range(self.topLevelItemCount()):
@@ -376,9 +369,7 @@ class DatasetTreeWidget(QTreeWidget):
                         data = ds_item.data(0, Qt.ItemDataRole.UserRole)
                         if data and data.get("type") == "dataset":
                             ds_meta = data.get("metadata", {})
-                            items_info.append(
-                                (ds_meta.get("id", ""), ds_meta.get("formatted_name", ""), data.get("experiment_id"))
-                            )
+                            items_info.append((ds_meta.get("id", ""), ds_meta.get("formatted_name", ""), data.get("experiment_id")))
                 except Exception:
                     # skip items that don't support check state
                     pass
@@ -417,7 +408,7 @@ class DataCurationManager(QDialog):
 
     data_structure_changed = Signal()  # Signal emitted when data structure changes
 
-    def __init__(self, parent: "MonstimGUI"):
+    def __init__(self, parent: MonstimGUI):
         super().__init__(parent)
         try:
             self.gui = parent
@@ -437,15 +428,18 @@ class DataCurationManager(QDialog):
             self.load_data()
 
         except Exception as e:
-            logging.error(f"Failed to initialize Data Curation Manager: {e}")
-            QMessageBox.critical(self, "Initialization Error", f"Failed to initialize dialog:\n{str(e)}")
+            logger.error(f"Failed to initialize Data Curation Manager: {e}")
+            QMessageBox.critical(self, "Initialization Error", f"Failed to initialize dialog:\n{e!s}")
             raise
 
     def setup_ui(self):
         """Set up the dialog UI with tabbed interface."""
         self.setWindowTitle("Data Curation Manager")
         self.setModal(True)
-        self.resize(1000, 700)
+        # Match the working footprint of the Recording Exclusion Editor.  The
+        # data tree is the primary task surface, so it needs room rather than
+        # being squeezed beneath a wall of batch-operation buttons.
+        self.resize(1000, 600)
 
         # Main layout with reduced margins
         main_layout = QVBoxLayout(self)
@@ -491,71 +485,153 @@ class DataCurationManager(QDialog):
         try:
             header_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         except Exception:
-            pass
+            logger.warning("Failed to set size policy for header label; using default.")
         layout.addWidget(header_label)
 
         # Instructions
         instructions = QLabel(
-            "Right-click to access context menus. Drag datasets between experiments to reorganize your data structure. Use checkboxes for batch operations."
+            "Right-click to access context menus. Drag datasets between experiments to reorganize your data structure. "
+            "Use checkboxes for batch operations."
         )
         instructions.setWordWrap(True)
         instructions.setStyleSheet("color: #666; margin-bottom: 10px;")
         try:
             instructions.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         except Exception:
-            pass
+            logger.warning("Failed to set size policy for instructions label; using default.")
         layout.addWidget(instructions)
 
-        # Batch operations
-        batch_layout = QHBoxLayout()
+        # Keep commands close to the data they operate on without letting them
+        # dominate the dialog.  Less-common batch commands live in two compact
+        # menus; their QAction instances retain the same enabled-state logic as
+        # the former buttons.
+        command_layout = QHBoxLayout()
+        command_layout.setSpacing(6)
 
-        # Quick experiment creation
-        self.create_blank_experiment_button = QPushButton("Create Blank Experiment")
+        self.create_blank_experiment_button = QToolButton()
+        self.create_blank_experiment_button.setText("New Experiment")
         self.create_blank_experiment_button.clicked.connect(self.create_experiment)
         self.create_blank_experiment_button.setToolTip("Create a new empty experiment for organizing datasets")
-        batch_layout.addWidget(self.create_blank_experiment_button)
+        command_layout.addWidget(self.create_blank_experiment_button)
 
-        # Import new experiment button (to the right of Create Blank Experiment)
-        self.import_new_experiment_button = QPushButton("Import New Experiment")
+        self.import_new_experiment_button = QToolButton()
+        self.import_new_experiment_button.setText("Import…")
         self.import_new_experiment_button.clicked.connect(self.import_experiment)
         self.import_new_experiment_button.setToolTip("Import a new experiment using the standard import workflow")
-        self.import_new_experiment_button.setMaximumHeight(self.create_blank_experiment_button.maximumHeight())
-        batch_layout.addWidget(self.import_new_experiment_button)
+        command_layout.addWidget(self.import_new_experiment_button)
 
-        # TODO: Batch operations - add buttons for additional curation tools
-        # - Batch Rename
-        # - Validate Selected
-        # - Move to Trash / Restore (Trash view)
-        # These should be inserted here aligned with the existing batch controls.
+        self.rebuild_catalogs_button = QToolButton()
+        self.rebuild_catalogs_button.setText("Rebuild Catalog")
+        self.rebuild_catalogs_button.setToolTip("Re-scan all files in the currently selected experiment to recover data missing from the catalog")
+        self.rebuild_catalogs_button.clicked.connect(self.force_rebuild_catalogs)
+        command_layout.addWidget(self.rebuild_catalogs_button)
 
-        batch_layout.addStretch()
-
-        self.select_all_button = QPushButton("Select All")
+        self.select_all_button = QToolButton()
+        self.select_all_button.setText("Select All")
         self.select_all_button.clicked.connect(self.select_all_datasets)
-        batch_layout.addWidget(self.select_all_button)
+        command_layout.addWidget(self.select_all_button)
 
-        self.clear_selection_button = QPushButton("Clear Selection")
+        self.clear_selection_button = QToolButton()
+        self.clear_selection_button.setText("Clear")
         self.clear_selection_button.clicked.connect(self.clear_dataset_selection)
-        batch_layout.addWidget(self.clear_selection_button)
+        self.clear_selection_button.setToolTip("Clear checked datasets")
+        command_layout.addWidget(self.clear_selection_button)
 
-        batch_layout.addStretch()
+        def add_selected_action(label, callback, tooltip):
+            action = QAction(label, self)
+            action.setToolTip(tooltip)
+            action.triggered.connect(callback)
+            action.setEnabled(False)
+            return action
 
-        self.move_selected_button = QPushButton("Move Selected To...")
-        self.move_selected_button.clicked.connect(self.move_selected_datasets)
-        self.move_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.move_selected_button)
+        self.validate_selected_button = add_selected_action(
+            "Validate Selected",
+            self.validate_selected_datasets,
+            "Check checked datasets for readable metadata and session folders.",
+        )
+        self.exclude_selected_button = add_selected_action(
+            "Exclude Selected",
+            lambda: self.set_selected_datasets_included(False),
+            "Hide checked datasets from analysis without deleting their files.",
+        )
+        self.restore_selected_button = add_selected_action(
+            "Restore Selected",
+            lambda: self.set_selected_datasets_included(True),
+            "Return checked excluded datasets to analysis.",
+        )
+        self.mark_complete_button = add_selected_action(
+            "Mark Complete",
+            lambda: self.set_selected_datasets_completion(True),
+            "Mark checked datasets complete without changing any sessions.",
+        )
+        self.mark_incomplete_button = add_selected_action(
+            "Mark Incomplete",
+            lambda: self.set_selected_datasets_completion(False),
+            "Mark checked datasets incomplete without changing any sessions.",
+        )
+        self.move_selected_button = add_selected_action(
+            "Move Selected To…",
+            self.move_selected_datasets,
+            "Move checked datasets to another experiment.",
+        )
+        self.copy_selected_button = add_selected_action(
+            "Copy Selected To…",
+            self.copy_selected_datasets,
+            "Copy checked datasets to another experiment.",
+        )
+        self.delete_selected_button = add_selected_action(
+            "Delete Selected",
+            self.delete_selected_datasets,
+            "Delete checked datasets.",
+        )
 
-        self.copy_selected_button = QPushButton("Copy Selected To...")
-        self.copy_selected_button.clicked.connect(self.copy_selected_datasets)
-        self.copy_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.copy_selected_button)
+        selected_menu = QMenu(self)
+        selected_menu.addActions(
+            [
+                self.validate_selected_button,
+                self.exclude_selected_button,
+                self.restore_selected_button,
+                self.mark_complete_button,
+                self.mark_incomplete_button,
+            ]
+        )
+        selected_commands_button = QToolButton()
+        selected_commands_button.setText("Selected Actions")
+        selected_commands_button.setToolTip("Actions for checked datasets")
+        selected_commands_button.setMenu(selected_menu)
+        selected_commands_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        command_layout.addWidget(selected_commands_button)
 
-        self.delete_selected_button = QPushButton("Delete Selected")
-        self.delete_selected_button.clicked.connect(self.delete_selected_datasets)
-        self.delete_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.delete_selected_button)
+        organize_menu = QMenu(self)
+        organize_menu.addActions(
+            [
+                self.move_selected_button,
+                self.copy_selected_button,
+                self.delete_selected_button,
+            ]
+        )
+        organize_button = QToolButton()
+        organize_button.setText("Organize")
+        organize_button.setToolTip("Move, copy, or delete checked datasets")
+        organize_button.setMenu(organize_menu)
+        organize_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        command_layout.addWidget(organize_button)
 
-        layout.addLayout(batch_layout)
+        # QToolButton's native minimum can be disproportionately wide on
+        # high-DPI Windows styles.  Deliberate compact widths keep this command
+        # row below the 800 px working width while preserving readable labels.
+        for button, width in (
+            (self.create_blank_experiment_button, 110),
+            (self.import_new_experiment_button, 75),
+            (self.rebuild_catalogs_button, 110),
+            (self.select_all_button, 70),
+            (self.clear_selection_button, 60),
+            (selected_commands_button, 125),
+            (organize_button, 80),
+        ):
+            button.setFixedWidth(width)
+        command_layout.addStretch()
+        layout.addLayout(command_layout)
 
         # Search/filter box for quick filtering of datasets
         search_layout = QHBoxLayout()
@@ -564,15 +640,12 @@ class DataCurationManager(QDialog):
         self.search_box.setPlaceholderText("Search by name, id, animal, condition, date, date_added...")
         self.search_box.setClearButtonEnabled(True)
         self.search_box.textChanged.connect(self.on_search_text_changed)
-        # Make search box expand enough to fit its placeholder text
-        try:
-            fm = self.search_box.fontMetrics()
-            ph = self.search_box.placeholderText()
-            w = fm.horizontalAdvance(ph) + 24  # padding for icon/clear button
-            self.search_box.setMinimumWidth(w)
-            self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        except Exception:
-            pass
+        # The search field should be comfortably usable, but its placeholder is
+        # intentionally descriptive and must not dictate the dialog width.
+        # A 260 px minimum keeps this manager usable on laptop displays; the
+        # field still grows with the window through its expanding size policy.
+        self.search_box.setMinimumWidth(260)
+        self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # Filter builder button opens advanced filter dialog
         self.filter_button = QPushButton("Filter")
@@ -612,23 +685,16 @@ class DataCurationManager(QDialog):
         # Let the first column stretch to take remaining space and keep date columns compact
         try:
             # Allow user to drag-resize the first column interactively
-            header.setSectionResizeMode(0, header.ResizeMode.Interactive)
-            header.setSectionResizeMode(1, header.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(2, header.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(3, header.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(4, header.ResizeMode.ResizeToContents)
-            # Set an initial width for the Name column for readability
-            try:
-                header.resizeSection(0, 420)
-            except Exception:
-                pass
+            header.setMinimumSectionSize(40)
+            for column, width in enumerate((150, 70, 70, 80, 80)):
+                header.setSectionResizeMode(column, header.ResizeMode.Interactive)
+                header.resizeSection(column, width)
         except Exception:
             # Fallback for older Qt versions
-            header.setSectionResizeMode(0, header.Interactive)
-            header.setSectionResizeMode(1, header.ResizeToContents)
-            header.setSectionResizeMode(2, header.ResizeToContents)
-            header.setSectionResizeMode(3, header.ResizeToContents)
-            header.setSectionResizeMode(4, header.ResizeToContents)
+            header.setMinimumSectionSize(40)
+            for column, width in enumerate((150, 70, 70, 80, 80)):
+                header.setSectionResizeMode(column, header.Interactive)
+                header.resizeSection(column, width)
 
         # Place tree and details pane side-by-side using a splitter for resizable/minimizable behavior
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -642,7 +708,7 @@ class DataCurationManager(QDialog):
         try:
             self.details_pane.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for details pane; using default.")
         # Favor the tree horizontally, but let both panes expand
         try:
             splitter.setStretchFactor(0, 3)
@@ -652,7 +718,7 @@ class DataCurationManager(QDialog):
         # Set initial sizes: favor tree and set details pane to its minimum collapse width
         try:
             min_w = self.details_pane.minimumWidth()
-            splitter.setSizes([max(700, 2 * min_w), min_w])
+            splitter.setSizes([360, min_w])
         except Exception:
             pass
         # Make the splitter region dictate vertical growth; remove excess blank space above
@@ -662,7 +728,7 @@ class DataCurationManager(QDialog):
         try:
             self.dataset_tree.itemSelectionChanged.connect(self.on_tree_selection_changed)
         except Exception:
-            logging.debug("Failed to connect selection change handler for dataset_tree", exc_info=True)
+            logger.debug("Failed to connect selection change handler for dataset_tree", exc_info=True)
 
         # Summary area
         self.dataset_summary = QLabel("No pending changes")
@@ -672,12 +738,16 @@ class DataCurationManager(QDialog):
         try:
             self.dataset_summary.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for dataset summary; using default.")
 
         # TODO: Consider adding a small 'Views' / 'Saved Filters' pane here in the future
         # to let users save common filter criteria or tag-based views for fast access.
 
         return tab_widget
+
+    def force_rebuild_catalogs(self):
+        """Rebuild the active experiment catalog with visible progress."""
+        self.gui.data_manager.rebuild_current_catalog()
 
     def on_dataset_drag_start(self):
         """Called before a batch of dataset moves begins."""
@@ -695,7 +765,7 @@ class DataCurationManager(QDialog):
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         except Exception as e:
             # Setting the busy cursor is cosmetic; ignore failures but log for debugging.
-            logging.debug(f"Failed to set busy cursor during batch move: {e}")
+            logger.debug(f"Failed to set busy cursor during batch move: {e}")
 
     def on_dataset_dragged_batch(self, moved_count: int, target_exp_id: str):
         """Called after a batch of dataset moves completes.
@@ -728,8 +798,8 @@ class DataCurationManager(QDialog):
                     self.session_commands.append(cmd)
                     self._changes_made = True
                 except Exception as e:
-                    logging.error(f"Batched move command failed: {e}")
-                    QMessageBox.critical(self, "Move Failed", f"Failed to move datasets:\n{str(e)}")
+                    logger.error(f"Batched move command failed: {e}")
+                    QMessageBox.critical(self, "Move Failed", f"Failed to move datasets:\n{e!s}")
 
                 # Determine how many moves were successful
                 succeeded = getattr(cmd, "_succeeded", None)
@@ -764,14 +834,14 @@ class DataCurationManager(QDialog):
                 self.update_dataset_tree()
             except Exception as e:
                 # Fallback failed; log the error but do not raise, as this is a non-critical UI update
-                logging.error(f"Failed to update dataset tree in Data Curation Manager fallback: {e}")
+                logger.error(f"Failed to update dataset tree in Data Curation Manager fallback: {e}")
 
     def load_data(self):
         """Load current experiment and dataset data."""
         try:
-            logging.debug("Data Curation Manager: Loading data...")
-            logging.debug(f"Available experiments: {list(self.gui.expts_dict_keys)}")
-            logging.debug(f"Experiment paths: {dict(self.gui.expts_dict)}")
+            logger.debug("Data Curation Manager: Loading data...")
+            logger.debug(f"Available experiments: {list(self.gui.expts_dict_keys)}")
+            logger.debug(f"Experiment paths: {dict(self.gui.expts_dict)}")
 
             # Store original state
             self.original_experiments = dict(self.gui.expts_dict)
@@ -780,21 +850,21 @@ class DataCurationManager(QDialog):
             try:
                 self.update_dataset_tree()
             except Exception as tree_error:
-                logging.error(f"Failed to update dataset tree: {tree_error}", exc_info=True)
+                logger.error(f"Failed to update dataset tree: {tree_error}", exc_info=True)
                 raise
 
             # Initialize button states
             try:
                 self._update_button_states()
             except Exception as button_error:
-                logging.error(f"Failed to update button states: {button_error}", exc_info=True)
+                logger.error(f"Failed to update button states: {button_error}", exc_info=True)
                 # Non-critical, continue
 
-            logging.debug("Data Curation Manager: Data loaded successfully")
+            logger.debug("Data Curation Manager: Data loaded successfully")
 
         except Exception as e:
-            logging.error(f"Failed to load data in Data Curation Manager: {e}", exc_info=True)
-            QMessageBox.critical(self, "Data Loading Error", f"Failed to load experiment data:\n{str(e)}")
+            logger.error(f"Failed to load data in Data Curation Manager: {e}", exc_info=True)
+            QMessageBox.critical(self, "Data Loading Error", f"Failed to load experiment data:\n{e!s}")
             raise  # Re-raise to propagate the error
 
     def _save_tree_expansion_state(self):
@@ -846,7 +916,7 @@ class DataCurationManager(QDialog):
     def update_dataset_tree(self):
         """Update the dataset tree widget using lightweight metadata scanning."""
         try:
-            logging.debug("Updating dataset tree...")
+            logger.debug("Updating dataset tree...")
 
             # Save current state before clearing
             expansion_state, selected_datasets = self._save_tree_expansion_state()
@@ -856,15 +926,15 @@ class DataCurationManager(QDialog):
             tree_items = 0
             for exp_id in self.gui.expts_dict_keys:
                 try:
-                    logging.debug(f"Processing experiment: {exp_id}")
+                    logger.debug(f"Processing experiment: {exp_id}")
                     exp_path = Path(self.gui.expts_dict[exp_id])
 
                     # Get experiment metadata using repository method
                     try:
                         exp_metadata = self._get_experiment_metadata(exp_path)
-                        logging.debug(f"Retrieved metadata for {exp_id}: {exp_metadata.get('dataset_count', 0)} datasets")
+                        logger.debug(f"Retrieved metadata for {exp_id}: {exp_metadata.get('dataset_count', 0)} datasets")
                     except Exception as metadata_error:
-                        logging.error(f"Failed to get metadata for '{exp_id}': {metadata_error}", exc_info=True)
+                        logger.error(f"Failed to get metadata for '{exp_id}': {metadata_error}", exc_info=True)
                         raise
 
                     # Create experiment node with status and dates
@@ -882,9 +952,7 @@ class DataCurationManager(QDialog):
                             self._format_date(exp_date_modified),
                         ]
                     )
-                    exp_item.setData(
-                        0, Qt.ItemDataRole.UserRole, {"type": "experiment", "id": exp_id, "metadata": exp_metadata}
-                    )
+                    exp_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "experiment", "id": exp_id, "metadata": exp_metadata})
                     exp_item.setFlags(exp_item.flags() | Qt.ItemFlag.ItemIsDropEnabled)
                     # Bold experiment row to differentiate from datasets
                     try:
@@ -898,7 +966,7 @@ class DataCurationManager(QDialog):
                     try:
                         exp_item.setData(0, Qt.ItemDataRole.ToolTipRole, exp_id)
                     except Exception:
-                        pass
+                        logger.warning(f"Failed to set tooltip for experiment '{exp_id}'", exc_info=True)
 
                     # Add dataset children using metadata
                     for ds_metadata in exp_metadata.get("datasets", []):
@@ -921,21 +989,16 @@ class DataCurationManager(QDialog):
                                 self._format_date(date_modified),
                             ]
                         )
-                        ds_item.setData(
-                            0, Qt.ItemDataRole.UserRole, {"type": "dataset", "experiment_id": exp_id, "metadata": ds_metadata}
-                        )
+                        ds_item.setData(0, Qt.ItemDataRole.UserRole, {"type": "dataset", "experiment_id": exp_id, "metadata": ds_metadata})
                         ds_item.setFlags(
-                            ds_item.flags()
-                            | Qt.ItemFlag.ItemIsUserCheckable
-                            | Qt.ItemFlag.ItemIsDragEnabled
-                            | Qt.ItemFlag.ItemIsSelectable
+                            ds_item.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsSelectable
                         )
                         ds_item.setCheckState(0, Qt.CheckState.Unchecked)
                         # Tooltip shows full dataset name
                         try:
                             ds_item.setData(0, Qt.ItemDataRole.ToolTipRole, ds_name)
                         except Exception:
-                            pass
+                            logger.warning(f"Failed to set tooltip for dataset '{ds_name}'", exc_info=True)
 
                         # Light styling for excluded datasets: italic + gray text
                         if is_excluded:
@@ -950,10 +1013,10 @@ class DataCurationManager(QDialog):
 
                     self.dataset_tree.addTopLevelItem(exp_item)
                     tree_items += 1
-                    logging.debug(f"Added experiment to tree: {exp_id} with {len(exp_metadata.get('datasets', []))} datasets")
+                    logger.debug(f"Added experiment to tree: {exp_id} with {len(exp_metadata.get('datasets', []))} datasets")
 
                 except Exception as e:
-                    logging.error(f"Failed to scan experiment '{exp_id}' metadata: {e}", exc_info=True)
+                    logger.error(f"Failed to scan experiment '{exp_id}' metadata: {e}", exc_info=True)
                     # Add a placeholder item for the failed experiment
                     try:
                         exp_item = QTreeWidgetItem([exp_id, "Error loading", "Failed"])
@@ -961,9 +1024,7 @@ class DataCurationManager(QDialog):
                         self.dataset_tree.addTopLevelItem(exp_item)
                         tree_items += 1
                     except Exception as placeholder_error:
-                        logging.error(
-                            f"Failed to add placeholder for failed experiment '{exp_id}': {placeholder_error}", exc_info=True
-                        )
+                        logger.error(f"Failed to add placeholder for failed experiment '{exp_id}': {placeholder_error}", exc_info=True)
 
             # Restore expansion state and selections after all items are added
             self._restore_tree_expansion_state(expansion_state, selected_datasets)
@@ -979,31 +1040,26 @@ class DataCurationManager(QDialog):
             # Update button states after restoring selections (without triggering signals)
             self._update_button_states()
 
-            logging.debug(f"Dataset tree updated with {tree_items} experiments")
+            logger.debug(f"Dataset tree updated with {tree_items} experiments")
 
             # Resize the Name column based on the longest experiment title up to a reasonable max
             try:
                 header = self.dataset_tree.header()
-                fm = (
-                    self.dataset_tree.fontMetrics()
-                    if hasattr(self.dataset_tree, "fontMetrics")
-                    else QFontMetrics(self.dataset_tree.font())
-                )
+                fm = self.dataset_tree.fontMetrics() if hasattr(self.dataset_tree, "fontMetrics") else QFontMetrics(self.dataset_tree.font())
                 max_text = ""
                 for i in range(self.dataset_tree.topLevelItemCount()):
                     t = self.dataset_tree.topLevelItem(i).text(0)
                     if len(t) > len(max_text):
                         max_text = t
                 width = fm.horizontalAdvance(max_text) + 40  # padding for icon/checkbox
-                # cap to a reasonable maximum
                 width = min(max(300, width), 600)
                 header.resizeSection(0, width)
             except Exception:
                 pass
 
         except Exception as e:
-            logging.error(f"Failed to update dataset tree: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load dataset information:\n{str(e)}")
+            logger.error(f"Failed to update dataset tree: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load dataset information:\n{e!s}")
 
     def _collect_filter_terms(self) -> dict:
         """Collect unique values WITH counts for filter dialog from current experiments/datasets.
@@ -1069,11 +1125,11 @@ class DataCurationManager(QDialog):
         try:
             from monstim_gui.dialogs.filter_dialog import FilterDialog
         except Exception as e:
-            logging.error(f"Failed to import FilterDialog: {e}")
+            logger.error(f"Failed to import FilterDialog: {e}")
             return
 
         qualifiers = [
-            # Name and ID excluded
+            ("id", "Dataset ID"),
             ("animal", "Animal"),
             ("condition", "Condition"),
             ("date", "Date (dataset)"),
@@ -1114,15 +1170,15 @@ class DataCurationManager(QDialog):
         try:
             from monstim_signals.io.repositories import ExperimentRepository
 
-            logging.debug(f"Creating ExperimentRepository for {exp_path}")
+            logger.debug(f"Creating ExperimentRepository for {exp_path}")
             exp_repo = ExperimentRepository(exp_path)
-            logging.debug(f"Getting metadata for {exp_path.name}")
+            logger.debug(f"Getting metadata for {exp_path.name}")
             metadata = exp_repo.get_metadata()
-            logging.debug(f"Successfully retrieved metadata for {exp_path.name}")
+            logger.debug(f"Successfully retrieved metadata for {exp_path.name}")
             return metadata
 
         except Exception as e:
-            logging.error(f"Failed to get experiment metadata for {exp_path.name}: {e}", exc_info=True)
+            logger.error(f"Failed to get experiment metadata for {exp_path.name}: {e}", exc_info=True)
             return {
                 "id": exp_path.name,
                 "path": str(exp_path),
@@ -1152,7 +1208,7 @@ class DataCurationManager(QDialog):
         try:
             scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for details scroll area; using default.")
 
         # Inner content: wrap form in vertical and horizontal layouts
         content = QWidget()
@@ -1182,7 +1238,7 @@ class DataCurationManager(QDialog):
             try:
                 lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             except Exception:
-                pass
+                logger.warning("Failed to set text interaction flags for label; using default.")
             return lbl
 
         self.detail_type = _mk_label()
@@ -1235,7 +1291,7 @@ class DataCurationManager(QDialog):
         try:
             self.detail_path.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
         except Exception:
-            pass
+            logger.debug("Failed to set size policy for path label; using default.")
 
         # Helper: build right-aligned, fixed-width label
         def _mk_title(text: str) -> QLabel:
@@ -1299,14 +1355,14 @@ class DataCurationManager(QDialog):
                 QLabel { padding-left: 0px; margin-left: 0px; }
                 """)
         except Exception:
-            pass
+            logger.debug("Failed to set stylesheet for details pane; using default.")
 
         # Constrain width so long text doesn't expand the splitter/window
         try:
-            box.setMinimumWidth(260)
-            box.setMaximumWidth(380)
+            box.setMinimumWidth(200)
+            box.setMaximumWidth(300)
         except Exception:
-            pass
+            logger.debug("Failed to set width constraints for details pane; using default.")
 
         return box
 
@@ -1375,7 +1431,7 @@ class DataCurationManager(QDialog):
                 self.detail_date_modified.setText("")
 
         except Exception as e:
-            logging.error(f"Failed to populate details pane: {e}")
+            logger.error(f"Failed to populate details pane: {e}")
 
     def on_search_text_changed(self, text: str):
         """Filter tree items by search text with intelligent token matching.
@@ -1383,13 +1439,20 @@ class DataCurationManager(QDialog):
         Supports:
         - plain tokens across name/id/animal/condition/date/added/modified
         - quoted phrases: "rev light"
-        - field qualifiers: animal:WT, cond:rev-light, id:123, date:2025, added:2024-12, modified:2025
-        Tokens are ANDed. Matching is case-insensitive and substring-based.
+        - field qualifiers: animal:WT, condition:"rev light", id:123, date:2025,
+          added:2024-12, modified:2025, status:Complete, experiment:exp-1
+        - alternatives within one qualifier: animal:(WT|KO)
+        Tokens and qualifier groups are ANDed. Matching is case-insensitive and substring-based.
         """
         try:
             q = (text or "").strip()
-            token_pattern = r"\w+:[^\s\"]+|\"[^\"]+\"|[^\s]+"
-            tokens = re.findall(token_pattern, q)
+            try:
+                # shlex keeps qualified quoted values (animal:"rev light") and
+                # grouped alternatives as one token while accepting ordinary text.
+                tokens = shlex.split(q, posix=True)
+            except ValueError:
+                # Keep filtering responsive while the user is typing an unfinished quote.
+                tokens = q.split()
 
             def norm(s):
                 return str(s or "").strip().lower()
@@ -1411,6 +1474,12 @@ class DataCurationManager(QDialog):
                 "status": "status",
             }
 
+            def qualifier_values(value: str) -> list[str]:
+                """Return the OR alternatives encoded by the filter dialog."""
+                if value.startswith("(") and value.endswith(")"):
+                    return [part for part in value[1:-1].split("|") if part]
+                return [value]
+
             # Token match helper includes status based on metadata or column text
             def token_matches(meta: dict, name_text: str, token: str, ds_data: dict, status_text: str) -> bool:
                 t = token.strip()
@@ -1419,8 +1488,7 @@ class DataCurationManager(QDialog):
                 if t.startswith('"') and t.endswith('"'):
                     phrase = norm(t[1:-1])
                     fields = [norm(name_text)] + [
-                        norm(meta.get(k))
-                        for k in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
+                        norm(meta.get(k)) for k in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
                     ]
                     # include status column text and experiment id for phrase matching
                     fields.append(norm(status_text))
@@ -1433,25 +1501,26 @@ class DataCurationManager(QDialog):
                     if not fkey:
                         tt = norm(t)
                         fields = [norm(name_text)] + [
-                            norm(meta.get(x))
-                            for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
+                            norm(meta.get(x)) for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
                         ]
                         fields.append(norm(status_text))
                         fields.append(norm(ds_data.get("experiment_id")))
                         return any(tt in f for f in fields)
+                    values = [norm(value) for value in qualifier_values(v)]
                     # experiment qualifier matches against dataset's experiment_id
                     if fkey == "experiment_id":
-                        return norm(v) in norm(ds_data.get("experiment_id"))
+                        field_value = norm(ds_data.get("experiment_id"))
+                        return any(value in field_value for value in values)
                     # status qualifier should match meta status or column text
                     if fkey == "status":
                         mv = norm(meta.get("status"))
                         sv = norm(status_text)
-                        return norm(v) in mv or norm(v) in sv
-                    return norm(v) in norm(meta.get(fkey))
+                        return any(value in mv or value in sv for value in values)
+                    field_value = norm(meta.get(fkey))
+                    return any(value in field_value for value in values)
                 tt = norm(t)
                 fields = [norm(name_text)] + [
-                    norm(meta.get(x))
-                    for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
+                    norm(meta.get(x)) for x in ("id", "formatted_name", "animal_id", "condition", "date", "date_added", "date_modified")
                 ]
                 fields.append(norm(status_text))
                 fields.append(norm(ds_data.get("experiment_id")))
@@ -1473,7 +1542,7 @@ class DataCurationManager(QDialog):
                     exp_item.text(4) or "",
                 ]
 
-                def exp_token_matches(token: str) -> bool:
+                def exp_token_matches(token: str, exp_meta: dict, exp_name: str) -> bool:
                     t = token.strip()
                     if not t:
                         return True
@@ -1492,35 +1561,31 @@ class DataCurationManager(QDialog):
                             "modified": "date_modified",
                             "date_modified": "date_modified",
                         }
+                        if key == "status":
+                            return "Complete" if exp_meta.get("is_completed") else "Incomplete"
                         fk = kmap.get(key)
                         return exp_meta.get(fk) if fk else None
 
                     if t.startswith('"') and t.endswith('"'):
                         phrase = norm(t[1:-1])
-                        fields = [norm(exp_name)] + [
-                            norm(exp_meta.get(k)) for k in ("id", "path", "date", "date_added", "date_modified")
-                        ]
+                        fields = [norm(exp_name)] + [norm(exp_meta.get(k)) for k in ("id", "path", "date", "date_added", "date_modified")]
                         return any(phrase in v for v in fields)
                     if ":" in t:
                         k, v = t.split(":", 1)
-                        val = norm(v)
+                        values = [norm(value) for value in qualifier_values(v)]
                         fv = norm(get_exp_field(k.lower()))
                         if fv:
-                            return val in fv
+                            return any(value in fv for value in values)
                         # Unknown qualifier: treat as plain token
                         tt = norm(t)
-                        fields = [norm(exp_name)] + [
-                            norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")
-                        ]
+                        fields = [norm(exp_name)] + [norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")]
                         return any(tt in f for f in fields)
                     # Plain token
                     tt = norm(t)
-                    fields = [norm(exp_name)] + [
-                        norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")
-                    ]
+                    fields = [norm(exp_name)] + [norm(exp_meta.get(x)) for x in ("id", "path", "date", "date_added", "date_modified")]
                     return any(tt in f for f in fields)
 
-                exp_visible = True if not tokens else all(exp_token_matches(t) for t in tokens)
+                exp_visible = True if not tokens else all(exp_token_matches(t, exp_meta, exp_name) for t in tokens)
                 # Build highlighted HTML per column for experiment
                 if q:
                     exp_html_cols = self._build_highlight_html(exp_cols, tokens)
@@ -1541,9 +1606,7 @@ class DataCurationManager(QDialog):
                     if not meta.get("status") and status_text:
                         meta = dict(meta)
                         meta["status"] = status_text
-                    visible = (
-                        True if not tokens else all(token_matches(meta, name_text, t, ds_data, status_text) for t in tokens)
-                    )
+                    visible = True if not tokens else all(token_matches(meta, name_text, t, ds_data, status_text) for t in tokens)
                     ds_item.setHidden(not visible)
                     # Highlighting removed; no HTML injection
                     if visible:
@@ -1585,7 +1648,7 @@ class DataCurationManager(QDialog):
                     self.dataset_summary.setText(f"Filter active: {visible_count} dataset(s) visible")
 
         except Exception as e:
-            logging.error(f"Failed to filter dataset tree: {e}")
+            logger.error(f"Failed to filter dataset tree: {e}")
 
     def _build_highlight_html(self, texts, tokens):
         """Return a list of HTML strings with matched substrings highlighted.
@@ -1679,6 +1742,11 @@ class DataCurationManager(QDialog):
         self.move_selected_button.setEnabled(has_selection)
         self.copy_selected_button.setEnabled(has_selection)
         self.delete_selected_button.setEnabled(has_selection)
+        self.validate_selected_button.setEnabled(has_selection)
+        self.exclude_selected_button.setEnabled(has_selection)
+        self.restore_selected_button.setEnabled(has_selection)
+        self.mark_complete_button.setEnabled(has_selection)
+        self.mark_incomplete_button.setEnabled(has_selection)
 
         # Update summary
         if has_selection:
@@ -1691,7 +1759,7 @@ class DataCurationManager(QDialog):
             self._refresh_undo_last_button()
         except Exception:
             # Non-fatal; ensure UI still updates
-            pass
+            logger.warning("Failed to refresh Undo Last button state; continuing without update.")
 
     def _refresh_undo_last_button(self):
         """Enable/disable the Undo Last button and set its tooltip to the last command name."""
@@ -1712,7 +1780,7 @@ class DataCurationManager(QDialog):
             btn.setEnabled(True)
             btn.setToolTip(f"Undo last: {cmd_name}")
         except Exception as e:
-            logging.error(f"Failed to refresh Undo Last button: {e}")
+            logger.error(f"Failed to refresh Undo Last button: {e}")
 
     @auto_refresh
     def on_dataset_dragged(self, dataset_id, formatted_name, source_exp_id, target_exp_id):
@@ -1727,7 +1795,7 @@ class DataCurationManager(QDialog):
                 except Exception:
                     self._batch_processed_moves = 1
             except Exception as e:
-                logging.error(f"Failed to buffer pending dataset move: {e}")
+                logger.error(f"Failed to buffer pending dataset move: {e}")
             return
 
         # Execute the move command but do not announce success here; announcements occur after the full batch.
@@ -1748,13 +1816,13 @@ class DataCurationManager(QDialog):
                 self._batch_successful_moves = 1
 
         except Exception as e:
-            logging.error(f"Failed to move dataset via drag-and-drop: {e}")
+            logger.error(f"Failed to move dataset via drag-and-drop: {e}")
             # Track processed move even on failure for accurate batch reporting
             try:
                 self._batch_processed_moves += 1
             except Exception:
                 self._batch_processed_moves = 1
-            QMessageBox.critical(self, "Move Failed", f"Failed to move dataset '{formatted_name}':\n{str(e)}")
+            QMessageBox.critical(self, "Move Failed", f"Failed to move dataset '{formatted_name}':\n{e!s}")
 
     @auto_refresh
     def create_experiment(self):
@@ -1779,16 +1847,14 @@ class DataCurationManager(QDialog):
                     command.execute()
                     self.session_commands.append(command)
                     self._changes_made = True  # Mark that changes were made
-                    QMessageBox.information(
-                        self, "Experiment Created", f"Empty experiment '{name}' has been created successfully."
-                    )
+                    QMessageBox.information(self, "Experiment Created", f"Empty experiment '{name}' has been created successfully.")
                 except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to create experiment:\n{str(e)}")
+                    QMessageBox.critical(self, "Error", f"Failed to create experiment:\n{e!s}")
                     raise  # Let decorator handle the refresh
 
         except Exception as e:
-            logging.error(f"Error in create_experiment: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to create experiment:\n{str(e)}")
+            logger.error(f"Error in create_experiment: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to create experiment:\n{e!s}")
             raise  # Let decorator handle the refresh
 
     @auto_refresh
@@ -1805,11 +1871,16 @@ class DataCurationManager(QDialog):
                 self.dataset_tree.setEnabled(enabled)
             except Exception:
                 # Ignore errors if the widget is missing or in a transient state; safe to skip in UI enable/disable.
-                pass
+                logger.warning("Failed to set dataset_tree enabled state; widget may be missing or deleted.")
 
             for btn_name in (
                 "create_blank_experiment_button",
                 "import_new_experiment_button",
+                "validate_selected_button",
+                "exclude_selected_button",
+                "restore_selected_button",
+                "mark_complete_button",
+                "mark_incomplete_button",
                 "select_all_button",
                 "clear_selection_button",
                 "move_selected_button",
@@ -1823,7 +1894,7 @@ class DataCurationManager(QDialog):
                     except Exception as e:
                         # It is safe to ignore errors here (e.g., widget may be deleted during teardown),
                         # but log them for debugging purposes.
-                        logging.error(f"Failed to set enabled state for {btn_name}: {e}")
+                        logger.error(f"Failed to set enabled state for {btn_name}: {e}")
 
         # Disable dataset UI to 'pause' dataset management while importing
         _set_dataset_ui_enabled(False)
@@ -1840,13 +1911,13 @@ class DataCurationManager(QDialog):
         try:
             self.gui.data_manager.import_expt_data()
         except Exception as e:
-            logging.error(f"Failed to start import: {e}")
-            QMessageBox.critical(self, "Import Error", f"Failed to start import:\n{str(e)}")
+            logger.error(f"Failed to start import: {e}")
+            QMessageBox.critical(self, "Import Error", f"Failed to start import:\n{e!s}")
             # Restore UI and cursor
             try:
                 QApplication.restoreOverrideCursor()
             except Exception as e:
-                logging.error(f"Failed to restore cursor after import error: {e}")
+                logger.error(f"Failed to restore cursor after import error: {e}")
             _set_dataset_ui_enabled(True)
             self._suppress_autorefresh = False
             raise
@@ -1860,12 +1931,12 @@ class DataCurationManager(QDialog):
                 QApplication.restoreOverrideCursor()
             except Exception:
                 # Ignore errors restoring cursor; not critical if cursor was not set
-                pass
+                logger.warning("Failed to restore cursor after import; cursor state may be inconsistent.")
             try:
                 _set_dataset_ui_enabled(True)
             except Exception as e:
                 # Non-critical: UI may already be disabled or window closed. Log for debugging.
-                logging.error("Failed to re-enable dataset UI: %s", e)
+                logger.error("Failed to re-enable dataset UI: %s", e)
             # clear suppression and perform a single refresh
             self._suppress_autorefresh = False
             try:
@@ -1875,7 +1946,7 @@ class DataCurationManager(QDialog):
                     self.update_dataset_tree()
                 except Exception as e:
                     # Suppress all errors here to avoid crashing the UI; log for diagnostics.
-                    logging.warning(f"Failed to update dataset tree after import: {e}")
+                    logger.warning(f"Failed to update dataset tree after import: {e}")
 
         if thread is not None and getattr(thread, "isRunning", lambda: False)():
             # Connect finish handlers
@@ -1905,12 +1976,107 @@ class DataCurationManager(QDialog):
                 ds_item = exp_item.child(j)
                 ds_item.setCheckState(0, Qt.CheckState.Unchecked)
 
+    def _selected_dataset_data(self):
+        """Return metadata for checked dataset rows."""
+        selected = []
+        for i in range(self.dataset_tree.topLevelItemCount()):
+            exp_item = self.dataset_tree.topLevelItem(i)
+            for j in range(exp_item.childCount()):
+                ds_item = exp_item.child(j)
+                if ds_item.checkState(0) == Qt.CheckState.Checked:
+                    data = ds_item.data(0, Qt.ItemDataRole.UserRole)
+                    if data and data.get("type") == "dataset":
+                        selected.append(data)
+        return selected
+
+    def validate_selected_datasets(self):
+        """Check selected datasets without loading their recordings into the GUI."""
+        selected = self._selected_dataset_data()
+        if not selected:
+            return
+
+        from monstim_signals.io.repositories import DatasetRepository
+
+        failures = []
+        for data in selected:
+            metadata = data["metadata"]
+            path = Path(metadata["path"])
+            try:
+                if not path.is_dir():
+                    raise FileNotFoundError("dataset folder is missing")
+                DatasetRepository(path).get_metadata()
+                if not any(child.is_dir() for child in path.iterdir()):
+                    raise ValueError("no session folders found")
+            except Exception as exc:
+                failures.append(f"{metadata.get('formatted_name', path.name)}: {exc!s}")
+
+        if failures:
+            QMessageBox.warning(
+                self,
+                "Validation Found Issues",
+                f"{len(failures)} of {len(selected)} dataset(s) need attention:\n\n" + "\n".join(failures),
+            )
+        else:
+            QMessageBox.information(self, "Validation Complete", f"All {len(selected)} selected dataset(s) passed validation.")
+
+    @auto_refresh
+    def set_selected_datasets_included(self, include):
+        """Batch include or exclude checked datasets using undoable commands."""
+        from monstim_gui.commands import BatchCommand, ToggleDatasetInclusionCommand
+
+        selected = self._selected_dataset_data()
+        commands = []
+        for data in selected:
+            metadata = data["metadata"]
+            commands.append(
+                ToggleDatasetInclusionCommand(
+                    self.gui,
+                    data["experiment_id"],
+                    metadata["id"],
+                    exclude=not include,
+                )
+            )
+        if commands:
+            action = "Restore" if include else "Exclude"
+            command = BatchCommand(f"{action} {len(commands)} dataset(s)", commands)
+            command.execute()
+            self.session_commands.append(command)
+            self._changes_made = True
+
+    @auto_refresh
+    def set_selected_datasets_completion(self, completed):
+        """Set completion on checked datasets without changing child-session annotations."""
+        from monstim_gui.commands import BatchCommand, ToggleCompletionStatusCommand
+
+        commands = []
+        for data in self._selected_dataset_data():
+            metadata = data["metadata"]
+            if bool(metadata.get("is_completed")) == completed:
+                continue
+            target = SimpleNamespace(id=metadata["id"], is_completed=metadata.get("is_completed", False))
+            command = ToggleCompletionStatusCommand(
+                self.gui,
+                "dataset",
+                target,
+                experiment_id=data["experiment_id"],
+                new_status=completed,
+                dataset_path=Path(metadata["path"]),
+            )
+            commands.append(command)
+
+        if commands:
+            action = "Mark Complete" if completed else "Mark Incomplete"
+            command = BatchCommand(f"{action} for {len(commands)} dataset(s)", commands)
+            command.execute()
+            self.session_commands.append(command)
+            self._changes_made = True
+
     @auto_refresh
     def move_selected_datasets(self):
         """Move selected datasets to another experiment immediately."""
         from PySide6.QtWidgets import QInputDialog
 
-        from monstim_gui.commands import MoveDatasetCommand
+        from monstim_gui.commands import MoveDatasetsCommand
 
         # Get selected datasets
         selected_datasets = []
@@ -1926,28 +2092,21 @@ class DataCurationManager(QDialog):
             return
 
         # Show target experiment selection dialog
-        available_experiments = [exp_id for exp_id in self.gui.expts_dict_keys]
+        available_experiments = list(self.gui.expts_dict_keys)
 
-        target_exp, ok = QInputDialog.getItem(
-            self, "Move Datasets", "Select target experiment:", available_experiments, 0, False
-        )
+        target_exp, ok = QInputDialog.getItem(self, "Move Datasets", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
-            # Execute move commands immediately
-            successful_moves = 0
-            for ds_data in selected_datasets:
-                ds_metadata = ds_data["metadata"]
-                command = MoveDatasetCommand(
-                    self.gui, ds_metadata["id"], ds_metadata["formatted_name"], ds_data["experiment_id"], target_exp
-                )
-                try:
-                    command.execute()
-                    self.session_commands.append(command)
-                    successful_moves += 1
-                except Exception as e:
-                    QMessageBox.warning(self, "Move Failed", f"Failed to move '{ds_metadata['formatted_name']}':\n{str(e)}")
-
-            if successful_moves > 0:
+            moves = [(data["metadata"]["id"], data["metadata"]["formatted_name"], data["experiment_id"], target_exp) for data in selected_datasets]
+            command = MoveDatasetsCommand(self.gui, moves)
+            try:
+                command.execute()
+                successful_moves = len(command._succeeded)
+            except Exception as exc:
+                QMessageBox.critical(self, "Move Failed", f"Failed to move selected datasets:\n{exc!s}")
+                raise
+            if successful_moves:
+                self.session_commands.append(command)
                 self._changes_made = True  # Mark that changes were made
                 QMessageBox.information(
                     self,
@@ -1960,7 +2119,7 @@ class DataCurationManager(QDialog):
         """Copy selected datasets to another experiment immediately."""
         from PySide6.QtWidgets import QInputDialog
 
-        from monstim_gui.commands import CopyDatasetCommand
+        from monstim_gui.commands import BatchCommand, CopyDatasetCommand
 
         # Get selected datasets
         selected_datasets = []
@@ -1976,33 +2135,34 @@ class DataCurationManager(QDialog):
             return
 
         # Show target experiment selection dialog
-        available_experiments = [exp_id for exp_id in self.gui.expts_dict_keys]
+        available_experiments = list(self.gui.expts_dict_keys)
 
-        target_exp, ok = QInputDialog.getItem(
-            self, "Copy Datasets", "Select target experiment:", available_experiments, 0, False
-        )
+        target_exp, ok = QInputDialog.getItem(self, "Copy Datasets", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
-            # Execute copy commands immediately
-            successful_copies = 0
-            for ds_data in selected_datasets:
-                ds_metadata = ds_data["metadata"]
-                command = CopyDatasetCommand(
-                    self.gui, ds_metadata["id"], ds_metadata["formatted_name"], ds_data["experiment_id"], target_exp
+            commands = [
+                CopyDatasetCommand(
+                    self.gui,
+                    data["metadata"]["id"],
+                    data["metadata"]["formatted_name"],
+                    data["experiment_id"],
+                    target_exp,
                 )
-                try:
-                    command.execute()
-                    self.session_commands.append(command)
-                    successful_copies += 1
-                except Exception as e:
-                    QMessageBox.warning(self, "Copy Failed", f"Failed to copy '{ds_metadata['formatted_name']}':\n{str(e)}")
-
-            if successful_copies > 0:
+                for data in selected_datasets
+            ]
+            command = BatchCommand(f"Copy {len(commands)} dataset(s) to '{target_exp}'", commands)
+            try:
+                command.execute()
+            except Exception as exc:
+                QMessageBox.critical(self, "Copy Failed", f"Failed to copy selected datasets:\n{exc!s}")
+                raise
+            if commands:
+                self.session_commands.append(command)
                 self._changes_made = True  # Mark that changes were made
                 QMessageBox.information(
                     self,
                     "Datasets Copied",
-                    f"{successful_copies} dataset(s) copied to '{target_exp}' successfully.",
+                    f"{len(commands)} dataset(s) copied to '{target_exp}' successfully.",
                 )
 
     @auto_refresh
@@ -2025,8 +2185,7 @@ class DataCurationManager(QDialog):
         reply = QMessageBox.question(
             self,
             "Confirm Dataset Deletion",
-            f"Are you sure you want to delete {len(selected_datasets)} dataset(s)?\n\n"
-            "This will permanently remove the dataset files from disk.",
+            f"Are you sure you want to delete {len(selected_datasets)} dataset(s)?\n\nThis will permanently remove the dataset files from disk.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -2050,7 +2209,7 @@ class DataCurationManager(QDialog):
                     self.session_commands.append(cmd)
                     successful_deletions += 1
                 except Exception as e:
-                    errors.append(f"Failed to delete '{ds_metadata['formatted_name']}': {str(e)}")
+                    errors.append(f"Failed to delete '{ds_metadata['formatted_name']}': {e!s}")
 
             if successful_deletions > 0:
                 self._changes_made = True  # Mark that changes were made
@@ -2093,6 +2252,10 @@ class DataCurationManager(QDialog):
                 copy_action.triggered.connect(lambda: self.context_copy_dataset(data))
 
                 menu.addSeparator()
+
+                edit_metadata_action = menu.addAction("Edit Dataset Metadata...")
+                edit_metadata_action.setStatusTip("Edit this dataset's date, animal ID, and condition")
+                edit_metadata_action.triggered.connect(lambda: self.context_edit_dataset_metadata(data))
 
                 duplicate_action = menu.addAction("Duplicate in Same Experiment")
                 duplicate_action.triggered.connect(lambda: self.context_duplicate_dataset(data))
@@ -2138,17 +2301,13 @@ class DataCurationManager(QDialog):
 
         from monstim_gui.commands import MoveDatasetCommand
 
-        available_experiments = [exp_id for exp_id in self.gui.expts_dict_keys]
+        available_experiments = list(self.gui.expts_dict_keys)
 
-        target_exp, ok = QInputDialog.getItem(
-            self, "Move Dataset", "Select target experiment:", available_experiments, 0, False
-        )
+        target_exp, ok = QInputDialog.getItem(self, "Move Dataset", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
             ds_metadata = dataset_data["metadata"]
-            command = MoveDatasetCommand(
-                self.gui, ds_metadata["id"], ds_metadata["formatted_name"], dataset_data["experiment_id"], target_exp
-            )
+            command = MoveDatasetCommand(self.gui, ds_metadata["id"], ds_metadata["formatted_name"], dataset_data["experiment_id"], target_exp)
 
             try:
                 command.execute()
@@ -2160,7 +2319,7 @@ class DataCurationManager(QDialog):
                     f"Dataset '{ds_metadata['formatted_name']}' has been moved to '{target_exp}'.",
                 )
             except Exception as e:
-                QMessageBox.critical(self, "Move Failed", f"Failed to move dataset:\n{str(e)}")
+                QMessageBox.critical(self, "Move Failed", f"Failed to move dataset:\n{e!s}")
                 raise  # Let decorator handle the refresh
 
     @auto_refresh
@@ -2170,17 +2329,13 @@ class DataCurationManager(QDialog):
 
         from monstim_gui.commands import CopyDatasetCommand
 
-        available_experiments = [exp_id for exp_id in self.gui.expts_dict_keys]
+        available_experiments = list(self.gui.expts_dict_keys)
 
-        target_exp, ok = QInputDialog.getItem(
-            self, "Copy Dataset", "Select target experiment:", available_experiments, 0, False
-        )
+        target_exp, ok = QInputDialog.getItem(self, "Copy Dataset", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
             ds_metadata = dataset_data["metadata"]
-            command = CopyDatasetCommand(
-                self.gui, ds_metadata["id"], ds_metadata["formatted_name"], dataset_data["experiment_id"], target_exp
-            )
+            command = CopyDatasetCommand(self.gui, ds_metadata["id"], ds_metadata["formatted_name"], dataset_data["experiment_id"], target_exp)
 
             try:
                 command.execute()
@@ -2192,46 +2347,87 @@ class DataCurationManager(QDialog):
                     f"Dataset '{ds_metadata['formatted_name']}' has been copied to '{target_exp}'.",
                 )
             except Exception as e:
-                QMessageBox.critical(self, "Copy Failed", f"Failed to copy dataset:\n{str(e)}")
+                QMessageBox.critical(self, "Copy Failed", f"Failed to copy dataset:\n{e!s}")
                 raise  # Let decorator handle the refresh
 
     @auto_refresh
-    def context_duplicate_dataset(self, dataset_data):
-        """Duplicate a dataset within the same experiment immediately."""
-        from PySide6.QtWidgets import QInputDialog
+    def context_edit_dataset_metadata(self, dataset_data):
+        """Edit one dataset's identity metadata through the standard undoable editor."""
+        from monstim_gui.commands import EditDatasetMetadataCommand
+        from monstim_gui.dialogs.dataset_metadata_editor import DatasetMetadataEditor
+        from monstim_signals.io.repositories import DatasetRepository
 
+        metadata = dataset_data["metadata"]
+        try:
+            dataset = DatasetRepository(Path(metadata["path"])).load(lazy_open_h5=True)
+            dialog = DatasetMetadataEditor(dataset, parent=self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            command = EditDatasetMetadataCommand(
+                gui=self.gui,
+                dataset=dataset,
+                old_date=dialog.old_date,
+                new_date=dialog.new_date,
+                old_animal_id=dialog.old_animal_id,
+                new_animal_id=dialog.new_animal_id,
+                old_condition=dialog.old_condition,
+                new_condition=dialog.new_condition,
+                old_folder_name=dialog.old_folder_name,
+                new_folder_name=dialog.new_folder_name,
+            )
+            command.execute()
+            self.session_commands.append(command)
+            self._changes_made = True
+        except Exception as exc:
+            logger.exception("Failed to edit metadata for dataset '%s'", metadata.get("id"))
+            QMessageBox.critical(self, "Metadata Update Failed", f"Failed to edit dataset metadata:\n{exc!s}")
+            raise
+
+    def context_duplicate_dataset(self, dataset_data):
+        """Duplicate a dataset within the same experiment asynchronously."""
         from monstim_gui.commands import CopyDatasetCommand
 
         ds_metadata = dataset_data["metadata"]
         original_name = ds_metadata["formatted_name"]
 
-        new_name, ok = QInputDialog.getText(
-            self, "Duplicate Dataset", f"Enter name for duplicate of '{original_name}':", text=f"{original_name}_copy"
+        experiment_id = dataset_data["experiment_id"]
+        command = CopyDatasetCommand(
+            self.gui,
+            ds_metadata["id"],
+            ds_metadata["formatted_name"],
+            experiment_id,
+            experiment_id,
         )
 
-        if ok and new_name.strip():
-            experiment_id = dataset_data["experiment_id"]
-            command = CopyDatasetCommand(
-                self.gui,
-                ds_metadata["id"],
-                ds_metadata["formatted_name"],
-                experiment_id,
-                experiment_id,
-                new_name=new_name.strip(),
-            )
+        experiment_path = Path(self.gui.expts_dict[experiment_id])
+        original_datasets = {item.name for item in experiment_path.iterdir() if item.is_dir()}
 
+        def completed():
             try:
-                command.execute()
+                command.finalize_copy(original_datasets)
                 self.session_commands.append(command)
-                self._changes_made = True  # Mark that changes were made
+                self._changes_made = True
                 QMessageBox.information(
                     self,
                     "Dataset Duplicated",
-                    f"Dataset has been duplicated as '{new_name.strip()}'.",
+                    f"Dataset '{original_name}' was duplicated as '{command.copied_folder_name}'.",
                 )
-            except Exception as e:
-                QMessageBox.critical(self, "Duplication Failed", f"Failed to duplicate dataset:\n{str(e)}")
-                raise  # Let decorator handle the refresh
+            except Exception as exc:
+                QMessageBox.critical(self, "Duplication Failed", f"Failed to finalize dataset duplication:\n{exc!s}")
+
+        def failed(message):
+            QMessageBox.critical(self, "Duplication Failed", f"Failed to duplicate dataset:\n{message}")
+
+        self.gui.data_manager.copy_dataset_async(
+            ds_metadata["id"],
+            ds_metadata["formatted_name"],
+            experiment_id,
+            experiment_id,
+            None,
+            completed,
+            failed,
+        )
 
     @auto_refresh
     def context_toggle_dataset_inclusion(self, dataset_data, include):
@@ -2250,7 +2446,7 @@ class DataCurationManager(QDialog):
             self.session_commands.append(cmd)
             self._changes_made = True
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to update dataset state:\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to update dataset state:\n{e!s}")
             raise  # Let decorator handle the refresh
 
     @auto_refresh
@@ -2287,7 +2483,7 @@ class DataCurationManager(QDialog):
                     f"Dataset '{ds_metadata['formatted_name']}' has been permanently deleted.",
                 )
             except Exception as e:
-                QMessageBox.critical(self, "Deletion Failed", f"Failed to delete dataset:\n{str(e)}")
+                QMessageBox.critical(self, "Deletion Failed", f"Failed to delete dataset:\n{e!s}")
                 raise  # Let decorator handle the refresh
 
     @auto_refresh
@@ -2297,9 +2493,7 @@ class DataCurationManager(QDialog):
 
         from monstim_gui.commands import RenameExperimentCommand
 
-        new_name, ok = QInputDialog.getText(
-            self, "Rename Experiment", f"Enter new name for experiment '{exp_name}':", text=exp_name
-        )
+        new_name, ok = QInputDialog.getText(self, "Rename Experiment", f"Enter new name for experiment '{exp_name}':", text=exp_name)
 
         if ok and new_name.strip() and new_name.strip() != exp_name:
             new_name = new_name.strip()
@@ -2329,11 +2523,9 @@ class DataCurationManager(QDialog):
                 command.execute()
                 self.session_commands.append(command)
                 self._changes_made = True  # Mark that changes were made
-                QMessageBox.information(
-                    self, "Experiment Renamed", f"Experiment '{exp_name}' has been renamed to '{new_name}'."
-                )
+                QMessageBox.information(self, "Experiment Renamed", f"Experiment '{exp_name}' has been renamed to '{new_name}'.")
             except Exception as e:
-                QMessageBox.critical(self, "Rename Error", f"Failed to rename experiment:\n{str(e)}")
+                QMessageBox.critical(self, "Rename Error", f"Failed to rename experiment:\n{e!s}")
                 raise  # Let decorator handle the refresh
 
     @auto_refresh
@@ -2359,7 +2551,7 @@ class DataCurationManager(QDialog):
                 self._changes_made = True  # Mark that changes were made
                 QMessageBox.information(self, "Experiment Deleted", f"Experiment '{exp_name}' has been permanently deleted.")
             except Exception as e:
-                QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{str(e)}")
+                QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{e!s}")
                 raise  # Let decorator handle the refresh
 
     @auto_refresh
@@ -2385,8 +2577,8 @@ class DataCurationManager(QDialog):
                 self.session_commands.append(cmd)
             except Exception as append_error:
                 # Failed to re-insert command into history; log and continue.
-                logging.error(f"Failed to re-insert command into session_commands after undo failure: {append_error}")
-            QMessageBox.critical(self, "Undo Failed", f"Failed to undo last change '{cmd_name}':\n{str(e)}")
+                logger.error(f"Failed to re-insert command into session_commands after undo failure: {append_error}")
+            QMessageBox.critical(self, "Undo Failed", f"Failed to undo last change '{cmd_name}':\n{e!s}")
             # Re-raise to let auto_refresh ensure a refresh and to surface the error
             raise
 
@@ -2400,8 +2592,7 @@ class DataCurationManager(QDialog):
         reply = QMessageBox.question(
             self,
             "Undo All Changes",
-            f"This will undo {len(self.session_commands)} operation(s) performed in this session.\n\n"
-            "Are you sure you want to undo all changes?",
+            f"This will undo {len(self.session_commands)} operation(s) performed in this session.\n\nAre you sure you want to undo all changes?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -2413,11 +2604,9 @@ class DataCurationManager(QDialog):
                     try:
                         command.undo()
                     except Exception as e:
-                        logging.exception("Undo failed for a command during Undo All: %s", e)
+                        logger.exception("Undo failed for a command during Undo All: %s", e)
 
-                QMessageBox.information(
-                    self, "Changes Undone", f"All {len(self.session_commands)} operation(s) have been successfully undone."
-                )
+                QMessageBox.information(self, "Changes Undone", f"All {len(self.session_commands)} operation(s) have been successfully undone.")
 
                 # Clear command history so there are no duplicate undos later
                 self.session_commands.clear()
@@ -2425,13 +2614,13 @@ class DataCurationManager(QDialog):
                 try:
                     self._refresh_undo_last_button()
                 except Exception as e:
-                    logging.exception("Failed to refresh undo/last button after undoing all changes: %s", e)
+                    logger.exception("Failed to refresh undo/last button after undoing all changes: %s", e)
 
             except Exception as e:
                 QMessageBox.critical(
                     self,
                     "Error Undoing Changes",
-                    f"An error occurred while undoing changes:\n{str(e)}\n\nSome changes may not have been fully reversed.",
+                    f"An error occurred while undoing changes:\n{e!s}\n\nSome changes may not have been fully reversed.",
                 )
         # Keep dialog open for user to resolve
 
@@ -2448,13 +2637,13 @@ class DataCurationManager(QDialog):
                         try:
                             cmd.undo()
                         except Exception as e:
-                            logging.exception("Undo failed during close: %s", e)
+                            logger.exception("Undo failed during close: %s", e)
                     self.session_commands.clear()
                     self._changes_made = False
                 except Exception as e:
                     # Suppress unexpected errors during undo to avoid crashing the dialog,
                     # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
-                    logging.exception("Unexpected error during undo-all in accept(): %s", e)
+                    logger.exception("Unexpected error during undo-all in accept(): %s", e)
 
         # Emit change signal if there were changes this session
         if getattr(self, "_changes_made", False):
@@ -2474,13 +2663,13 @@ class DataCurationManager(QDialog):
                         try:
                             cmd.undo()
                         except Exception as e:
-                            logging.exception("Undo failed during close: %s", e)
+                            logger.exception("Undo failed during close: %s", e)
                     self.session_commands.clear()
                     self._changes_made = False
                 except Exception:
                     # Suppress unexpected errors during undo to avoid crashing the dialog,
                     # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
-                    logging.exception("Unexpected error during undo-all in reject()")
+                    logger.exception("Unexpected error during undo-all in reject()")
 
         if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()

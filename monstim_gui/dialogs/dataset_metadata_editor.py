@@ -26,9 +26,9 @@ if TYPE_CHECKING:
 class DatasetMetadataEditor(QDialog):
     """Dialog for editing dataset metadata (date, animal ID, condition)."""
 
-    def __init__(self, dataset: "Dataset", parent=None):
+    def __init__(self, dataset: Dataset, parent=None):
         super().__init__(parent)
-        self.dataset: "Dataset" = dataset
+        self.dataset: Dataset = dataset
         self.setWindowTitle("Edit Dataset Metadata")
         self.setModal(True)
         self.resize(500, 300)
@@ -78,10 +78,7 @@ class DatasetMetadataEditor(QDialog):
         self.date_edit = QLineEdit()
         self.date_edit.setPlaceholderText("YYYY-MM-DD or YYMMDD or YYYYMMDD")
         self.date_edit.setToolTip(
-            "Enter date in one of these formats:\n"
-            "• YYYY-MM-DD (e.g., 2024-08-15)\n"
-            "• YYMMDD (e.g., 240815)\n"
-            "• YYYYMMDD (e.g., 20240815)"
+            "Enter date in one of these formats:\n• YYYY-MM-DD (e.g., 2024-08-15)\n• YYMMDD (e.g., 240815)\n• YYYYMMDD (e.g., 20240815)"
         )
         form_layout.addRow("Date:", self.date_edit)
 
@@ -190,10 +187,7 @@ class DatasetMetadataEditor(QDialog):
         if len(clean_input) == 6 and clean_input.isdigit():
             yy = int(clean_input[:2])
             # Pivot year logic: years 00-69 -> 2000-2069, 70-99 -> 1970-1999
-            if yy <= 69:
-                year = 2000 + yy
-            else:
-                year = 1900 + yy
+            year = 2000 + yy if yy <= 69 else 1900 + yy
             month = int(clean_input[2:4])
             day = int(clean_input[4:6])
             if 1 <= month <= 12 and 1 <= day <= 31:

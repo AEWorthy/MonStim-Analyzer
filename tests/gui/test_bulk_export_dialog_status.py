@@ -1,20 +1,12 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QApplication, QGroupBox, QSpinBox, QWidget
+from PySide6.QtWidgets import QGroupBox, QSpinBox, QWidget
 
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
-def qt_app():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
-
-
-def test_experiment_group_displays_status_and_exports_dataset_ids(qt_app):
+def test_experiment_group_displays_status_and_exports_dataset_ids():
     from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
 
     group = _ExperimentGroup(
@@ -37,7 +29,7 @@ def test_experiment_group_displays_status_and_exports_dataset_ids(qt_app):
     assert group.selected_dataset_ids == ["DS_FOLDER_ID"]
 
 
-def test_completed_only_filter_limits_experiment_checkbox_selection(qt_app):
+def test_completed_only_filter_limits_experiment_checkbox_selection():
     from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
 
     group = _ExperimentGroup(
@@ -97,7 +89,7 @@ def test_discover_experiment_status_reads_completion_metadata(monkeypatch, tmp_p
     assert status.datasets[1].is_excluded is True
 
 
-def test_bulk_export_dialog_does_not_expose_worker_count(qt_app):
+def test_bulk_export_dialog_does_not_expose_worker_count():
     from monstim_gui.dialogs.bulk_export_dialog import BulkExportDialog
 
     gui = QWidget()
@@ -115,3 +107,98 @@ def test_bulk_export_dialog_does_not_expose_worker_count(qt_app):
     assert "Plot Options" not in group_titles
     assert not hasattr(dialog, "_sb_workers")
     assert dialog.findChildren(QSpinBox) == []
+
+
+def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled():
+    from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+
+    class DummyRecording:
+        def __init__(self):
+            self.id = "rec-1"
+            self.stim_amplitude = 7.5
+            self.num_channels = 1
+            self.channel_types = ["emg"]
+
+    class DummySession:
+        def __init__(self):
+            self.id = "sess-1"
+            self.excluded_recordings = set()
+
+        def get_all_recordings(self, include_excluded=True):
+            return [DummyRecording()]
+
+    parent_widget = QWidget()
+    parent_widget.current_session = DummySession()
+    parent_widget.current_dataset = None
+    parent_widget.current_experiment = None
+    parent_widget.status_bar = None
+
+    dialog = RecordingExclusionEditor(parent_widget)
+    recording = DummyRecording()
+
+    dialog.stimulus_group.setChecked(False)
+
+    evaluation = dialog._evaluation_for_recording(recording, parent_widget.current_session, {}, set())
+    assert evaluation["flagged"] is False
+
+
+def test_recording_exclusion_preview_is_explicit_and_skips_quality_work_for_stimulus_rules(monkeypatch):
+    from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+
+    class DummyRecording:
+        def __init__(self):
+            self.id = "rec-1"
+            self.stim_amplitude = 7.5
+            self.num_channels = 1
+            self.channel_types = ["emg"]
+
+    class DummySession:
+        def __init__(self):
+            self.id = "sess-1"
+            self.excluded_recordings = set()
+
+        def get_all_recordings(self, include_excluded=True):
+            return [DummyRecording()]
+
+    parent_widget = QWidget()
+    parent_widget.current_session = DummySession()
+    parent_widget.current_dataset = None
+    parent_widget.current_experiment = None
+    parent_widget.status_bar = None
+
+    dialog = RecordingExclusionEditor(parent_widget)
+    quality_calls = 0
+
+    assert dialog.threshold2_spinbox.isHidden()
+    assert dialog.threshold2_label.isHidden()
+    dialog.threshold_type_combo.setCurrentIndex(dialog.threshold_type_combo.findData("outside"))
+    assert not dialog.threshold2_spinbox.isHidden()
+    assert not dialog.threshold2_label.isHidden()
+    dialog.threshold_type_combo.setCurrentIndex(dialog.threshold_type_combo.findData("above"))
+
+    def unexpected_quality_work(*_args, **_kwargs):
+        nonlocal quality_calls
+        quality_calls += 1
+        raise AssertionError("stimulus-only preview must not calculate quality metrics")
+
+    monkeypatch.setattr(dialog, "compute_quality_metrics", unexpected_quality_work)
+    dialog.stimulus_group.setChecked(True)
+
+    assert dialog._preview_is_stale
+    assert not dialog.apply_button.isEnabled()
+    assert not dialog.threshold_spinbox.keyboardTracking()
+
+    dialog.update_preview()
+
+    assert quality_calls == 0
+    assert not dialog._preview_is_stale
+
+    dialog.recordings_table.selectRow(0)
+    assert dialog.recordings_table.selectionModel().selectedRows()
+    dialog._clear_table_selection()
+    assert not dialog.recordings_table.selectionModel().selectedRows()
+
+    dialog.threshold_spinbox.editingFinished.emit()
+
+    assert not dialog._preview_is_stale
+    assert not dialog.apply_button.isEnabled()

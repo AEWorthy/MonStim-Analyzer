@@ -11,7 +11,6 @@ from .plot_options import (
 
 PLOT_NAME_DICT = {
     "EMG": "emg",
-    "Suspected H-reflexes": "suspectedH",
     "Reflex:Stimulus Curves": "reflexCurves",
     "M-max": "mmax",
     "Max H-reflex": "maxH",
@@ -29,7 +28,6 @@ PLOT_OPTIONS_DICT = {
         "Reflex:Stimulus Curves": SessionReflexCurvesOptions,
         "Average Reflex:Stimulus Curves": AverageSessionReflexOptions,
         "Latency Window Distribution": LatencyWindowDistributionOptions,
-        "M-max": MMaxOptions,
     },
     "dataset": {
         "Average Reflex:Stimulus Curves": AverageReflexCurvesOptions,

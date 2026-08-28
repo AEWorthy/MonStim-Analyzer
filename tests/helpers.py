@@ -5,7 +5,6 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import h5py
 import numpy as np
@@ -42,8 +41,8 @@ def make_experiment_and_dataset_with_nested_content(
     root: Path,
     exp_name: str,
     ds_name: str,
-    sessions: List[str] | None = None,
-) -> Tuple[Path, Path, Dict]:
+    sessions: list[str] | None = None,
+) -> tuple[Path, Path, dict]:
     """Create an experiment/dataset with nested files for integrity tests.
 
     Returns: (experiment_path, dataset_path, dataset_metadata_dict)
@@ -88,9 +87,9 @@ def make_experiment_and_dataset_with_nested_content(
     return exp_path, ds_path, ds_meta
 
 
-def list_files_with_hashes(root: Path) -> Dict[str, Tuple[int, str]]:
+def list_files_with_hashes(root: Path) -> dict[str, tuple[int, str]]:
     """Return mapping of relative file path -> (size, md5) for all files under root."""
-    result: Dict[str, Tuple[int, str]] = {}
+    result: dict[str, tuple[int, str]] = {}
     for dirpath, _dirnames, filenames in os.walk(root):
         for fname in filenames:
             fpath = Path(dirpath) / fname

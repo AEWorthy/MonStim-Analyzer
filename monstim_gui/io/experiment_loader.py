@@ -8,10 +8,14 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from monstim_gui.core.application_state import app_state
+from monstim_signals.core import ResolvedConfig, load_config
+from monstim_signals.core.configuration import deep_merge
 
 # Note: skip preflight migration scans during load for performance.
 # Post-load migrations can be initiated separately in a background task.
 from monstim_signals.io.repositories import ExperimentRepository
+
+logger = logging.getLogger(__name__)
 
 
 class DatasetSkipLogHandler(logging.Handler):
@@ -32,6 +36,119 @@ class DatasetSkipLogHandler(logging.Handler):
                 self.skipped_datasets.append((dataset_name, error_detail))
 
 
+class CatalogRebuildThread(QThread):
+    """Rebuild one experiment catalog without blocking the GUI."""
+
+    completed = Signal(object)
+    error = Signal(str)
+    progress = Signal(int)
+    status_update = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, experiment_path: str):
+        super().__init__()
+        self.experiment_path = Path(experiment_path)
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            from monstim_signals.io.experiment_catalog import build_catalog
+
+            self.status_update.emit(f"Rebuilding catalog: '{self.experiment_path.name}'")
+
+            def progress_callback(level: str, index: int, total: int, name: str):
+                if self._cancel_requested:
+                    raise InterruptedError("Catalog rebuild canceled by user")
+                if total > 0:
+                    self.progress.emit(int(100 * index / total))
+                    self.status_update.emit(f"Scanning dataset {index}/{total}:\n'{name}'")
+
+            catalog = build_catalog(self.experiment_path, progress_callback=progress_callback)
+            if self._cancel_requested:
+                self.canceled.emit()
+            else:
+                self.progress.emit(100)
+                self.completed.emit(catalog)
+        except InterruptedError:
+            self.status_update.emit("Catalog rebuild canceled by user...")
+            self.canceled.emit()
+        except Exception as exc:
+            logger.exception("Catalog rebuild failed for %s", self.experiment_path)
+            self.error.emit(str(exc))
+
+
+class AllCatalogsRebuildThread(QThread):
+    """Rebuild every experiment catalog while reporting aggregate progress."""
+
+    progress = Signal(int, int, str)
+    completed = Signal(int)
+    error = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, experiment_paths: list[Path]):
+        super().__init__()
+        self.experiment_paths = experiment_paths
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            from monstim_signals.io.experiment_catalog import build_catalog
+
+            dataset_totals = [sum(1 for path in experiment.iterdir() if path.is_dir()) for experiment in self.experiment_paths]
+            total_datasets = max(sum(dataset_totals), 1)
+            completed_datasets = 0
+            rebuilt_experiments = 0
+
+            for experiment_index, (experiment_path, dataset_total) in enumerate(zip(self.experiment_paths, dataset_totals, strict=True), start=1):
+                if self._cancel_requested:
+                    self.canceled.emit()
+                    return
+
+                def progress_callback(
+                    level: str,
+                    index: int,
+                    total: int,
+                    name: str,
+                    completed_before_experiment: int = completed_datasets,
+                    current_experiment: int = experiment_index,
+                ):
+                    if self._cancel_requested:
+                        raise InterruptedError("All-catalog rebuild canceled by user")
+                    current = completed_before_experiment + index
+                    self.progress.emit(
+                        current,
+                        total_datasets,
+                        f"Experiment {current_experiment}/{len(self.experiment_paths)}: dataset {index}/{total}: '{name}'",
+                    )
+
+                self.progress.emit(
+                    completed_datasets,
+                    total_datasets,
+                    f"Starting experiment {experiment_index}/{len(self.experiment_paths)}: '{experiment_path.name}'",
+                )
+                build_catalog(experiment_path, progress_callback=progress_callback)
+                completed_datasets += dataset_total
+                rebuilt_experiments += 1
+                self.progress.emit(
+                    completed_datasets,
+                    total_datasets,
+                    f"Finished experiment {experiment_index}/{len(self.experiment_paths)}: '{experiment_path.name}'",
+                )
+
+            self.completed.emit(rebuilt_experiments)
+        except InterruptedError:
+            self.canceled.emit()
+        except Exception as exc:
+            logger.exception("All-catalog rebuild failed")
+            self.error.emit(str(exc))
+
+
 class ExperimentLoadingThread(QThread):
     """Thread for loading experiments asynchronously."""
 
@@ -47,79 +164,13 @@ class ExperimentLoadingThread(QThread):
         self.experiment_path = experiment_path
         self.config = config
         self.experiment_name = Path(experiment_path).name
-        self._is_first_load = None  # Will be determined during analysis
         self._skipped_datasets = []  # Track skipped datasets
-        self._estimated_time = None
         self._cancel_requested = False  # Flag for safe cancellation
 
     def request_cancel(self):
         """Request graceful cancellation of the loading operation."""
-        logging.info("Cancellation requested for experiment loading thread")
+        logger.info("Cancellation requested for experiment loading thread")
         self._cancel_requested = True
-
-    def _analyze_load_requirements(self, exp_path: Path) -> tuple[bool, int, int]:
-        """
-        Analyze the experiment to determine if this is a first-time load.
-        Returns (is_first_load, total_files, missing_annotations).
-        """
-        try:
-            expected_annotations = 1  # Count the experiment itself
-            missing_annotations = 0
-
-            # Check experiment level annotation
-            exp_annot = exp_path / "experiment.annot.json"
-            if not exp_annot.exists():
-                missing_annotations += 1
-
-            # Check each dataset
-            for dataset_dir in exp_path.iterdir():
-                expected_annotations += 1  # Count each dataset
-
-                if not dataset_dir.is_dir():
-                    continue
-
-                # Check dataset annotation
-                ds_annot = dataset_dir / "dataset.annot.json"
-                if not ds_annot.exists():
-                    missing_annotations += 1
-
-                # Check each session in the dataset
-                for session_dir in dataset_dir.iterdir():
-                    expected_annotations += 1  # Count each session
-                    if not session_dir.is_dir():
-                        continue
-
-                    # Check session annotation
-                    sess_annot = session_dir / "session.annot.json"
-                    if not sess_annot.exists():
-                        missing_annotations += 1
-
-                    # Do not count recording annotations since they are not required for first load.
-
-            # Consider it a first load if more than 25% of dataset/session/experiment annotations are missing
-            is_first_load = missing_annotations > (expected_annotations * 0.25)
-            return is_first_load, expected_annotations, missing_annotations
-
-        except Exception as e:
-            logging.warning(f"Error analyzing load requirements: {e}")
-            return True, 0, 0  # Assume first load if analysis fails
-
-    def _count_files_to_load(self, exp_path: Path) -> int:
-        """Count the approximate number of files that will need to be loaded."""
-        try:
-            file_count = 0
-            # Count meta.json files (recordings)
-            for meta_file in exp_path.rglob("*.meta.json"):
-                file_count += 1
-            # Count annotation files
-            for annot_file in exp_path.rglob("*.annot.json"):
-                file_count += 1
-
-            return file_count
-
-        except Exception as e:
-            logging.debug(f"Error counting files: {e}")
-            return 0
 
     def run(self):
         """Load the experiment in a separate thread."""
@@ -130,7 +181,7 @@ class ExperimentLoadingThread(QThread):
         root_logger.addHandler(skip_handler)
 
         try:
-            logging.debug(f"Starting async load of experiment: '{self.experiment_name}'")
+            logger.debug(f"Starting async load of experiment: '{self.experiment_name}'")
             self.status_update.emit(f"Loading experiment: '{self.experiment_name}'")
 
             # Check if path exists
@@ -143,52 +194,22 @@ class ExperimentLoadingThread(QThread):
 
             # Check for cancellation early
             if self._cancel_requested:
-                logging.info("Loading canceled before analysis")
+                logger.info("Loading canceled before analysis")
                 return
 
             self.progress.emit(10)
-            self.status_update.emit("Analyzing experiment structure...")
-
-            # Analyze if this is a first-time load
-            is_first_load, annotations_required, missing_annotations = self._analyze_load_requirements(exp_path)
-            self._is_first_load = is_first_load
-
-            files_to_load = self._count_files_to_load(exp_path)
-
-            logging.debug(
-                f"First load: {is_first_load}, Total files: {files_to_load}, Total Annotations Required: {annotations_required}, Missing annotations: {missing_annotations}"
-            )
-
-            # Provide appropriate time estimates in logging
-            if is_first_load:
-                estimated_time = int(missing_annotations / 100 * 60)  # Rough estimate: 100 files per minute
-                self._estimated_time = estimated_time
-                time_msg = f"First-time load detected: {missing_annotations} annotation files need to be created. Estimated time: {estimated_time} seconds for {annotations_required} annotations."
-                logging.info(time_msg)
-            elif files_to_load > 5000:
-                time_msg = f"Large experiment detected: {files_to_load} recordings. Loading may take several seconds."
-                logging.info(time_msg)
+            self.status_update.emit("Opening experiment catalog...")
 
             # Check for cancellation before repository creation
             if self._cancel_requested:
-                logging.info("Loading canceled before repository creation")
+                logger.info("Loading canceled before repository creation")
                 return
 
             # Create repository
             repo = ExperimentRepository(exp_path)
             self.progress.emit(15)
 
-            # This is the slow part - the actual repo.load() call
-            if is_first_load:
-                self.status_update.emit(
-                    f"First-time load detected for '{self.experiment_name}'.\n\nCreating {missing_annotations} annotation files and building indexes.\nEstimated time: {estimated_time} seconds."
-                )
-            elif files_to_load > 5000:
-                self.status_update.emit(
-                    f"Loading '{self.experiment_name}'...\n\nLarge experiment detected:\n{files_to_load} recordings found."
-                )
-            else:
-                self.status_update.emit(f"Loading '{self.experiment_name}'...")
+            self.status_update.emit(f"Loading '{self.experiment_name}'...")
             self.progress.emit(20)
 
             # Load experiment - this can take a long time for large experiments
@@ -202,7 +223,7 @@ class ExperimentLoadingThread(QThread):
 
                 # Check cancellation in callback - do this FIRST before any processing
                 if self._cancel_requested:
-                    logging.info("Progress callback detected cancellation flag")
+                    logger.info("Progress callback detected cancellation flag")
                     raise InterruptedError("Loading canceled by user")
 
                 if level == "dataset" and total > 0:
@@ -215,85 +236,63 @@ class ExperimentLoadingThread(QThread):
                     frac = index / total
                     pct = base + int(span * frac)
                     # Truncate very long dataset names to keep dialog width stable
-                    if len(name) > 48:
-                        name_display = f"{name[:22]}…{name[-22:]}"
-                    else:
-                        name_display = name
+                    name_display = f"{name[:22]}…{name[-22:]}" if len(name) > 48 else name
                     self.progress.emit(pct)
                     self.status_update.emit(f"Loading dataset {index}/{total}:\n'{name_display}'")
                     _last_emit_ts = now
-                elif level == "index" and total > 0:
-                    # Map index progress into 20-30% range before dataset load
+                elif level == "catalog" and total > 0:
+                    # Map catalog construction into 20-30% before domain loading.
                     try:
                         pct = 20 + int(10 * (index / total))
                         self.progress.emit(pct)
-                        self.status_update.emit(f"Building index {index}/{total}:\n'{name}'")
+                        self.status_update.emit(f"Building experiment catalog {index}/{total}:\n'{name}'")
                     except Exception as exc:
                         # Progress UI failures must not abort experiment loading; log for diagnostics.
-                        logging.debug("Non-fatal error while updating index progress: %s", exc)
+                        logger.debug("Non-fatal error while updating catalog progress: %s", exc)
 
-            # Show a distinct "Indexing..." step only when needed and requested
-            needs_index = False
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index, is_index_stale, load_experiment_index
+            # Overlay immutable application loading policy (kept separate from
+            # the resolved domain-analysis configuration).
+            config_values = dict(self.config or {})
+            load_policy = app_state.get_load_policy()
+            # Accept legacy explicit values at the boundary, but never propagate
+            # application loading preferences into the domain config.
+            lazy_open_h5 = config_values.pop("lazy_open_h5", load_policy.lazy_open_h5)
+            load_workers = config_values.pop("load_workers", load_policy.load_workers)
+            domain_config = (
+                self.config
+                if isinstance(self.config, ResolvedConfig) and len(config_values) == len(self.config)
+                else ResolvedConfig(deep_merge(load_config(), config_values))
+            )
 
-                idx = load_experiment_index(exp_path)
-                needs_index = idx is None or is_index_stale(idx)
-            except Exception:
-                needs_index = False
-
-            from monstim_gui.core.application_state import app_state as _app
-
-            build_index_pref = _app.should_build_index_on_load()
-
-            if needs_index and build_index_pref:
-                self.status_update.emit("Indexing experiment folders...")
-                self.progress.emit(25)
-                try:
-                    ensure_fresh_index(self.experiment_name, exp_path, progress_cb=_progress_cb)
-                except Exception as exc:
-                    logging.warning("Index build failed before load; continuing without index: %s", exc)
-
-            # Overlay application preferences (QSettings) for loading:
-            cfg = dict(self.config or {})
-            # If config doesn't explicitly set lazy_open_h5, use QSettings default
-            if "lazy_open_h5" not in cfg:
-                cfg["lazy_open_h5"] = app_state.should_use_lazy_open_h5()
-
-            # Determine load_workers: prefer explicit config value, else use QSettings auto behavior
-            if "load_workers" not in cfg:
-                if app_state.should_use_parallel_loading():
-                    cfg["load_workers"] = app_state.get_parallel_load_workers()
-                else:
-                    cfg["load_workers"] = 1
-
-            # For first-time loads (missing annotations), we must allow writing
-            # to persist newly created annotation files. For subsequent loads,
-            # we can use read-only mode to avoid accidental modifications during load.
-            # Ensure sessions have recordings during load to avoid
-            # "no recordings" errors from strict domain checks. Lazy HDF5
-            # handle behavior is controlled via `lazy_open_h5` in config.
+            # Initial loads may need to create missing annotations. The catalog is
+            # non-authoritative and is rebuilt from those source files when needed.
 
             # Check for cancellation before starting the actual load
             if self._cancel_requested:
-                logging.info("Loading canceled before repo.load()")
+                logger.info("Loading canceled before repo.load()")
                 return
 
             try:
                 experiment = repo.load(
-                    config=cfg,
+                    config=domain_config,
                     progress_callback=_progress_cb,
-                    allow_write=is_first_load,
+                    allow_write=True,
+                    lazy_open_h5=lazy_open_h5,
+                    load_workers=load_workers,
                 )
             except InterruptedError as e:
                 # Graceful cancellation from progress callback
-                logging.info(f"Loading interrupted: {e}")
+                logger.info(f"Loading interrupted: {e}")
                 self.status_update.emit("Loading canceled by user...")
                 return
 
             # Check for cancellation after load completes
             if self._cancel_requested:
-                logging.info("Loading canceled after repo.load()")
+                logger.info("Loading canceled after repo.load()")
+                try:
+                    experiment.close()
+                except Exception:
+                    logger.debug("Failed to close experiment after canceled load", exc_info=True)
                 return
 
             self.progress.emit(90)
@@ -305,7 +304,7 @@ class ExperimentLoadingThread(QThread):
 
             if loaded_datasets < expected_datasets:
                 skipped = expected_datasets - loaded_datasets
-                logging.warning(
+                logger.warning(
                     f"{skipped} dataset(s) could not be loaded from '{self.experiment_name}'. "
                     f"Check the log for details about validation errors or data inconsistencies."
                 )
@@ -315,24 +314,25 @@ class ExperimentLoadingThread(QThread):
                     self.datasets_skipped.emit(self._skipped_datasets)
 
             self.progress.emit(100)
-            logging.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
+            logger.debug(f"Experiment '{self.experiment_name}' loaded successfully in thread.")
             self.finished.emit(experiment)
 
         except OSError as e:
             if "Too many open files" in str(e):
-                error_msg = f"Too many files open while loading experiment '{self.experiment_name}'. This experiment may be too large or have corrupted files. Try closing other applications and retry."
+                error_msg = f"Too many files open while loading experiment '{self.experiment_name}'. "
+                error_msg += "This experiment may be too large or have corrupted files. Try closing other applications and retry."
             else:
                 error_msg = f"File system error while loading experiment '{self.experiment_name}': {e}"
-            logging.error(error_msg)
+            logger.error(error_msg)
             self.error.emit(error_msg)
         except FileNotFoundError as e:
             error_msg = f"Experiment file not found or corrupted: {e}"
-            logging.error(error_msg)
+            logger.error(error_msg)
             self.error.emit(error_msg)
         except Exception as e:
             error_msg = f"An error occurred while loading experiment '{self.experiment_name}': {e}"
-            logging.error(error_msg)
-            logging.error(traceback.format_exc())
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
             self.error.emit(error_msg)
         finally:
             # Clean up logging handler
@@ -340,12 +340,12 @@ class ExperimentLoadingThread(QThread):
 
             # If cancellation was requested, ensure cleanup
             if self._cancel_requested:
-                logging.debug("Performing cleanup after canceled load")
+                logger.debug("Performing cleanup after canceled load")
                 try:
                     # Force garbage collection to clean up any partially loaded objects
                     import gc
 
                     collected = gc.collect()
-                    logging.debug(f"Post-cancellation cleanup: collected {collected} objects")
+                    logger.debug(f"Post-cancellation cleanup: collected {collected} objects")
                 except Exception as cleanup_error:
-                    logging.warning(f"Error during post-cancellation cleanup: {cleanup_error}")
+                    logger.warning(f"Error during post-cancellation cleanup: {cleanup_error}")

@@ -51,23 +51,28 @@ class ResponsiveComboBox(QComboBox):
 
     def showPopup(self):
         """Override to ensure popup is wide enough for content."""
+        # Set the view's minimum width before opening it.  Applying it only
+        # after showPopup() allows Qt to briefly paint a default-size popup.
+        view = self.view()
+        if view:
+            view.setMinimumWidth(self._popup_width())
+
         super().showPopup()
 
-        # Make popup at least as wide as the longest item
-        if self.view():
-            max_width = 0
-            font_metrics = QFontMetrics(self.font())
+        # Some styles recalculate the view during showPopup(); retain the
+        # second update for those styles without relying on it for first paint.
+        if view:
+            view.setMinimumWidth(self._popup_width())
 
-            for i in range(self.count()):
-                text = self.itemText(i)
-                text_width = font_metrics.horizontalAdvance(text)
-                max_width = max(max_width, text_width)
-
-            # Add padding and ensure minimum size
-            popup_width = max(max_width + ui_scaling.scale_size(40), self.width())
-            popup_width = min(popup_width, ui_scaling.scale_size(400))  # Cap maximum width
-
-            self.view().setMinimumWidth(popup_width)
+    def _popup_width(self) -> int:
+        """Return a bounded width that accommodates the combo's item text."""
+        font_metrics = QFontMetrics(self.font())
+        max_width = max(
+            (font_metrics.horizontalAdvance(self.itemText(i)) for i in range(self.count())),
+            default=0,
+        )
+        popup_width = max(max_width + ui_scaling.scale_size(40), self.width())
+        return min(popup_width, ui_scaling.scale_size(400))
 
 
 class ResponsiveScrollArea(QScrollArea):

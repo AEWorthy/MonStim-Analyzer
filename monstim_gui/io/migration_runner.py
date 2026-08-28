@@ -5,11 +5,15 @@ Runs scan + migrations in a QThread and emits progress/status updates.
 
 import logging
 from pathlib import Path
-from typing import List
 
 from PySide6.QtCore import QThread, Signal
 
-from monstim_signals.io.data_migrations import migrate_annotation_dict, scan_annotation_versions
+from monstim_signals.io.data_migrations import (
+    migrate_annotation_dict,
+    scan_annotation_versions,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class MigrationRunner(QThread):
@@ -26,7 +30,7 @@ class MigrationRunner(QThread):
 
     def request_cancel(self):
         """Request graceful cancellation of migration."""
-        logging.info("Cancellation requested for migration runner")
+        logger.info("Cancellation requested for migration runner")
         self._cancel_requested = True
 
     def run(self) -> None:
@@ -35,7 +39,7 @@ class MigrationRunner(QThread):
             self.status_update.emit("Scanning annotations for migrations...")
 
             results = scan_annotation_versions(exp_path)
-            to_migrate: List[dict] = [r for r in results if r.get("needs_migration")]
+            to_migrate: list[dict] = [r for r in results if r.get("needs_migration")]
             total = len(to_migrate)
             if not total:
                 self.progress.emit(100)
@@ -50,7 +54,7 @@ class MigrationRunner(QThread):
             for i, item in enumerate(to_migrate, start=1):
                 # Check for cancellation
                 if self._cancel_requested:
-                    logging.info(f"Migration canceled after {migrated}/{total} files")
+                    logger.info(f"Migration canceled after {migrated}/{total} files")
                     self.canceled.emit()
                     return
 
@@ -63,7 +67,7 @@ class MigrationRunner(QThread):
                     try:
                         data = json.loads(path.read_text())
                     except Exception:
-                        logging.exception("Failed to read annotation: %s", path)
+                        logger.exception("Failed to read annotation: %s", path)
                         continue
 
                     report = migrate_annotation_dict(data, in_place=True, strict_version=False)
@@ -72,11 +76,11 @@ class MigrationRunner(QThread):
                             path.write_text(json.dumps(data, indent=2))
                             migrated += 1
                         except Exception:
-                            logging.exception("Failed to write migrated annotation: %s", path)
+                            logger.exception("Failed to write migrated annotation: %s", path)
                     pct = 10 + int(90 * (i / total))
                     self.progress.emit(pct)
                 except Exception:
-                    logging.exception("Migration failed for item: %s", item.get("path"))
+                    logger.exception("Migration failed for item: %s", item.get("path"))
                     # Continue migrating others
                     continue
 
@@ -84,7 +88,7 @@ class MigrationRunner(QThread):
             self.status_update.emit(f"Migrations complete: {migrated}/{total} files updated.")
             self.finished.emit(migrated)
         except Exception as e:
-            logging.error(f"Migration runner failed: {e}")
+            logger.exception(f"Migration runner failed: {e!s}")
             self.error.emit(str(e))
 
 
@@ -99,7 +103,7 @@ class MigrationScanThread(QThread):
 
     def request_cancel(self):
         """Request graceful cancellation of migration scan."""
-        logging.debug("Cancellation requested for migration scan")
+        logger.debug("Cancellation requested for migration scan")
         self._cancel_requested = True
 
     def run(self) -> None:
@@ -112,4 +116,5 @@ class MigrationScanThread(QThread):
             to_migrate = [r for r in results if r.get("needs_migration")]
             self.has_work.emit(bool(to_migrate), len(to_migrate))
         except Exception as e:
+            logger.exception(f"Migration scan failed: {e!s}")
             self.error.emit(str(e))

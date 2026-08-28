@@ -2,7 +2,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
+from threading import RLock
 
 import yaml
 from PySide6.QtCore import QStandardPaths
@@ -25,7 +25,7 @@ def to_camel_case(text: str) -> str:
     return camel_case_text
 
 
-def format_report(report: List[str]) -> str:
+def format_report(report: list[str]) -> str:
     """Join a list of strings into a single newline-separated string."""
     formatted_report = ""
     for line in report:
@@ -52,10 +52,7 @@ def get_base_path() -> Path:
 
 def get_bundle_path() -> str:
     """Return the path to the bundled resources when running a frozen build."""
-    if getattr(sys, "frozen", False):
-        bundle_path = sys._MEIPASS
-    else:
-        bundle_path = os.path.dirname(os.path.abspath(__file__))
+    bundle_path = os.path.dirname(os.path.abspath(__file__)) if not getattr(sys, "frozen", False) else sys._MEIPASS
 
     return bundle_path
 
@@ -77,26 +74,20 @@ def get_export_path() -> str:
 
 
 def get_source_path() -> str:
-    """Return the path to the ``src`` folder containing resource files."""
-    if getattr(sys, "frozen", False):
-        source_path = os.path.join(get_bundle_path(), "src")
-    else:
-        source_path = os.path.join(get_base_path(), "src")
+    """Return the path to the ``assets`` folder containing resource files."""
+    source_path = os.path.join(get_base_path(), "assets") if not getattr(sys, "frozen", False) else os.path.join(get_bundle_path(), "assets")
     return source_path
 
 
 def get_docs_path() -> str:
     """Return the path to bundled documentation files."""
-    if getattr(sys, "frozen", False):
-        docs_path = os.path.join(get_bundle_path(), "docs")
-    else:
-        docs_path = os.path.join(get_base_path(), "docs")
+    docs_path = os.path.join(get_base_path(), "docs") if not getattr(sys, "frozen", False) else os.path.join(get_bundle_path(), "docs")
     return docs_path
 
 
 def get_config_path() -> str:
     """Return the location of ``config.yml``."""
-    return os.path.join(get_docs_path(), "config.yml")
+    return os.path.join(get_docs_path(), "resources", "config.yml")
 
 
 def get_output_bin_path() -> str:
@@ -125,7 +116,7 @@ def get_log_dir() -> str:
 
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
-        base = os.getenv("APPDATA", r"C:\\Users\\%USERNAME%\\AppData\\Roaming")
+        raise RuntimeError("Qt application identity must be configured before resolving the log directory")
     log_dir = os.path.join(base, "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
@@ -155,8 +146,20 @@ def deep_equal(val1, val2) -> bool:
     if isinstance(val1, list) and isinstance(val2, list):
         if len(val1) != len(val2):
             return False
-        return all(deep_equal(v1, v2) for v1, v2 in zip(val1, val2))
+        return all(deep_equal(v1, v2) for v1, v2 in zip(val1, val2, strict=True))
     return val1 == val2
+
+
+_CONFIG_RESOLVERS = {}
+_CONFIG_RESOLVER_LOCK = RLock()
+
+
+def clear_config_cache() -> None:
+    """Force subsequent configuration loads to re-read YAML files."""
+    with _CONFIG_RESOLVER_LOCK:
+        for resolver in _CONFIG_RESOLVERS.values():
+            resolver.invalidate()
+        _CONFIG_RESOLVERS.clear()
 
 
 def load_config(config_file=None):
@@ -166,17 +169,17 @@ def load_config(config_file=None):
     Args:
         config_file (str): location of the 'config.yml' file.
     """
-    if config_file is None:
-        default_config_file = get_config_path()
-        user_config_file = os.path.join(os.path.dirname(default_config_file), "config-user.yml")
-        # if it exists, get user config file
-        if os.path.exists(user_config_file):
-            config_file = user_config_file
-        else:
-            config_file = default_config_file
-    with open(config_file, "r") as file:
-        config = yaml.safe_load(file)
-    return config
+    from monstim_signals.core.configuration import ConfigResolver
+
+    default_config_file = str(config_file or get_config_path())
+    user_config_file = os.path.join(os.path.dirname(default_config_file), "config-user.yml") if config_file is None else None
+    key = (default_config_file, user_config_file)
+    with _CONFIG_RESOLVER_LOCK:
+        resolver = _CONFIG_RESOLVERS.get(key)
+        if resolver is None:
+            resolver = ConfigResolver(default_config_file, user_config_file)
+            _CONFIG_RESOLVERS[key] = resolver
+        return resolver.resolve().to_dict()
 
 
 # Custom YAML loader to handle tuples
@@ -186,3 +189,13 @@ class CustomYAMLLoader(yaml.SafeLoader):
 
 
 CustomYAMLLoader.add_constructor("tag:yaml.org,2002:python/tuple", CustomYAMLLoader.construct_python_tuple)
+
+
+class LatencyWindowNotFoundError(Exception):
+    """Exception raised when a specified latency window is not found in an EMG data object."""
+
+    def __init__(self, window_name: str, object_type: str = "[EMG_DATA_OBJECT]", object_id: str = "[ID_UNKNOWN]"):
+        self.window_name = window_name
+        self.object_type = object_type
+        self.object_id = object_id
+        super().__init__(f"Latency window '{window_name}' not found in {object_type} {object_id}.")

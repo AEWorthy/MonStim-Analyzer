@@ -13,11 +13,22 @@ import yaml
 
 DEV_EXCLUDE = {"pytest", "setuptools", "flake8", "black", "isort", "bandit", "safety", "pytest-qt"}
 
-# Known name equivalences between pip and conda naming
-NAME_MAP = {
-    "PySide6": "pyqt",
-    "pyqt": "PySide6",
+# Known name equivalences between pip and conda naming.
+#
+# `requirements.txt` is consumed by pip-only workflows, so it must use the PyPI
+# package name `matplotlib`. Conda environments should keep using
+# `matplotlib-base` to avoid pulling in the larger GUI metapackage.
+NAME_EQUIVALENTS = {
+    "matplotlib": ("matplotlib-base",),
+    "matplotlib-base": ("matplotlib",),
+    "pyside6": ("pyqt",),
+    "pyqt": ("pyside6",),
 }
+
+
+def normalize_name(name):
+    """Normalize package names for cross-file comparisons."""
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def parse_requirements(path="requirements.txt"):
@@ -29,7 +40,7 @@ def parse_requirements(path="requirements.txt"):
         ln = line.strip()
         if not ln or ln.startswith("#"):
             continue
-        name = re.split(r"[=<>!~\[]", ln, maxsplit=1)[0].strip().lower()
+        name = normalize_name(re.split(r"[=<>!~\[]", ln, maxsplit=1)[0].strip())
         if name in DEV_EXCLUDE:
             continue
         reqs[name] = ln
@@ -47,7 +58,7 @@ def parse_environment(path="environment.yml"):
     for item in deps:
         if isinstance(item, str):
             parts = item.split("=")
-            name = parts[0].strip().lower()
+            name = normalize_name(parts[0].strip())
             ver = parts[1].strip() if len(parts) > 1 else None
             conda_map[name] = (item, ver)
         elif isinstance(item, dict) and "pip" in item:
@@ -55,7 +66,7 @@ def parse_environment(path="environment.yml"):
                 pip_list.append(p.strip())
     pip_map = {}
     for p in pip_list:
-        name = re.split(r"[=<>!~\[]", p, maxsplit=1)[0].strip().lower()
+        name = normalize_name(re.split(r"[=<>!~\[]", p, maxsplit=1)[0].strip())
         pip_map[name] = p
     return conda_map, pip_map
 
@@ -63,8 +74,7 @@ def parse_environment(path="environment.yml"):
 def equivalents(name):
     """Yield name and any mapped equivalents for matching."""
     yield name
-    if name in NAME_MAP:
-        yield NAME_MAP[name]
+    yield from NAME_EQUIVALENTS.get(name, ())
 
 
 def main():

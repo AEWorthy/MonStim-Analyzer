@@ -38,68 +38,74 @@ def temp_copied_session(tmp_path: Path) -> Path:
 class TestSessionAnnotationOverlay:
     def test_exclude_and_restore_recording(self, temp_copied_session: Path):
         session = SessionRepository(temp_copied_session).load()
+        try:
+            # Precondition: at least one recording
+            assert session.num_recordings > 0
+            all_recs = session.get_all_recordings(include_excluded=True)
+            first_id = all_recs[0].id
 
-        # Precondition: at least one recording
-        assert session.num_recordings > 0
-        all_recs = session.get_all_recordings(include_excluded=True)
-        first_id = all_recs[0].id
+            # Count before
+            before_filtered = len(session.recordings_filtered)
 
-        # Count before
-        before_filtered = len(session.recordings_filtered)
+            # Exclude one recording via annot overlay and reset caches
+            session.annot.excluded_recordings.append(first_id)
+            session.invalidate_selection_results()
+            after_filtered = len(session.recordings_filtered)
 
-        # Exclude one recording via annot overlay and reset caches
-        session.annot.excluded_recordings.append(first_id)
-        session.reset_all_caches()
-        after_filtered = len(session.recordings_filtered)
+            assert after_filtered == max(0, before_filtered - 1)
+            assert first_id in session.excluded_recordings
 
-        assert after_filtered == max(0, before_filtered - 1)
-        assert first_id in session.excluded_recordings
-
-        # Restore and verify back to original count
-        session.restore_recording(first_id)
-        session.reset_all_caches()
-        assert len(session.recordings_filtered) == before_filtered
-        assert first_id not in session.excluded_recordings
+            # Restore and verify back to original count
+            session.restore_recording(first_id)
+            session.invalidate_selection_results()
+            assert len(session.recordings_filtered) == before_filtered
+            assert first_id not in session.excluded_recordings
+        finally:
+            session.close()
 
     def test_channel_rename_persists_in_overlay(self, temp_copied_session: Path):
         session = SessionRepository(temp_copied_session).load()
+        try:
+            orig_names = list(session.channel_names)
+            # Map each name to name+'_x'
+            mapping = {name: f"{name}_x" for name in orig_names}
+            session.rename_channels(mapping)
 
-        orig_names = list(session.channel_names)
-        # Map each name to name+'_x'
-        mapping = {name: f"{name}_x" for name in orig_names}
-        session.rename_channels(mapping)
+            # Session should reflect new names
+            got = session.channel_names
+            assert all(name.endswith("_x") for name in got)
 
-        # Session should reflect new names
-        got = session.channel_names
-        assert all(name.endswith("_x") for name in got)
-
-        # Overlay file should exist and include channel names
-        annot_path = temp_copied_session / "session.annot.json"
-        assert annot_path.exists()
-        data = json.loads(annot_path.read_text())
-        # Channels may be saved as list of dicts; verify presence of renamed names
-        channel_names_from_file = [ch.get("name") for ch in data.get("channels", [])]
-        if channel_names_from_file:
-            assert channel_names_from_file == got
+            # Overlay file should exist and include channel names
+            annot_path = temp_copied_session / "session.annot.json"
+            assert annot_path.exists()
+            data = json.loads(annot_path.read_text())
+            # Channels may be saved as list of dicts; verify presence of renamed names
+            channel_names_from_file = [ch.get("name") for ch in data.get("channels", [])]
+            if channel_names_from_file:
+                assert channel_names_from_file == got
+        finally:
+            session.close()
 
     def test_add_and_remove_latency_window(self, temp_copied_session: Path):
         session = SessionRepository(temp_copied_session).load()
+        try:
+            n_channels = session.num_channels
+            assert n_channels > 0
 
-        n_channels = session.num_channels
-        assert n_channels > 0
+            # Add a synthetic latency window and verify
+            session.add_latency_window(
+                name="TestWindow",
+                start_times=[5.0] * n_channels,
+                durations=[10.0] * n_channels,
+                color="orange",
+            )
+            assert session.get_latency_window("TestWindow") is not None
 
-        # Add a synthetic latency window and verify
-        session.add_latency_window(
-            name="TestWindow",
-            start_times=[5.0] * n_channels,
-            durations=[10.0] * n_channels,
-            color="orange",
-        )
-        assert session.get_latency_window("TestWindow") is not None
-
-        # Removing should update overlays & cache
-        session.remove_latency_window("TestWindow")
-        assert session.get_latency_window("TestWindow") is None
+            # Removing should update overlays & cache
+            session.remove_latency_window("TestWindow")
+            assert session.get_latency_window("TestWindow") is None
+        finally:
+            session.close()
 
     def test_excluding_all_recordings_does_not_auto_exclude_session(self, temp_copied_session: Path):
         """Test that excluding all recordings in a session does NOT auto-exclude the session itself.
@@ -115,33 +121,43 @@ class TestSessionAnnotationOverlay:
         dataset_path = temp_copied_session.parent
         dataset = DatasetRepository(dataset_path).load()
 
-        session_id = session.id
+        try:
+            session_id = session.id
 
-        # Verify session starts in the dataset's active sessions list (by ID, not object identity)
-        session_ids_in_dataset = [s.id for s in dataset.sessions]
-        assert session_id in session_ids_in_dataset, "Session should be in dataset's active sessions initially"
-        assert session_id not in dataset.annot.excluded_sessions, "Session should not be excluded initially"
+            # Verify session starts in the dataset's active sessions list (by ID, not object identity)
+            session_ids_in_dataset = [s.id for s in dataset.sessions]
+            assert session_id in session_ids_in_dataset, "Session should be in dataset's active sessions initially"
+            assert session_id not in dataset.annot.excluded_sessions, "Session should not be excluded initially"
+        finally:
+            dataset.close()
 
-        # Get all recording IDs
-        all_recordings = session.get_all_recordings(include_excluded=True)
-        recording_ids = [rec.id for rec in all_recordings]
+        try:
+            # Get all recording IDs
+            all_recordings = session.get_all_recordings(include_excluded=True)
+            recording_ids = [rec.id for rec in all_recordings]
 
-        # Exclude all recordings one by one
-        for rec_id in recording_ids:
-            session.exclude_recording(rec_id)
+            # Exclude all recordings one by one
+            for rec_id in recording_ids:
+                session.exclude_recording(rec_id)
 
-        # Verify all recordings are excluded
-        assert len(session.recordings) == 0, "All recordings should be excluded"
-        assert len(session.excluded_recordings) == len(recording_ids), "All recordings should be in excluded list"
+            # Verify all recordings are excluded
+            assert len(session.recordings) == 0, "All recordings should be excluded"
+            assert len(session.excluded_recordings) == len(recording_ids), "All recordings should be in excluded list"
+        finally:
+            session.close()
 
         # CRITICAL: Session should still be in dataset's active sessions
         # (This would fail before the fix, when auto-exclusion was happening)
         dataset = DatasetRepository(dataset_path).load()  # Reload to get fresh state
-        assert (
-            session_id not in dataset.annot.excluded_sessions
-        ), "Session should NOT be auto-excluded when all recordings are excluded"
+        try:
+            assert session_id not in dataset.annot.excluded_sessions, "Session should NOT be auto-excluded when all recordings are excluded"
+        finally:
+            dataset.close()
 
         # The session object itself remains valid even with no active recordings
         session = SessionRepository(temp_copied_session).load()
-        assert len(session.all_recordings) == len(recording_ids), "Session should still have all recordings (just excluded)"
-        assert len(session.recordings) == 0, "But no active recordings should remain"
+        try:
+            assert len(session.all_recordings) == len(recording_ids), "Session should still have all recordings (just excluded)"
+            assert len(session.recordings) == 0, "But no active recordings should remain"
+        finally:
+            session.close()

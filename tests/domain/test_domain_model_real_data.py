@@ -56,17 +56,20 @@ class TestDomainModelWithRealData:
 
         session = SessionRepository(imported_session_path).load()
 
-        # Add M-response latency window for M-max calculations
-        m_window = LatencyWindow(
-            name="M-response",
-            color="blue",
-            start_times=[5.0] * session.num_channels,  # 5ms after stimulus
-            durations=[10.0] * session.num_channels,  # 10ms duration
-        )
-        session.annot.latency_windows = [m_window]
-        session.update_latency_window_parameters()
+        try:
+            # Add M-response latency window for M-max calculations
+            m_window = LatencyWindow(
+                name="M-response",
+                color="blue",
+                start_times=[5.0] * session.num_channels,  # 5ms after stimulus
+                durations=[10.0] * session.num_channels,  # 10ms duration
+            )
+            session.annot.latency_windows = [m_window]
+            session.update_latency_window_parameters()
 
-        return session
+            yield session
+        finally:
+            session.close()
 
     def test_session_basic_properties(self, session_with_mwave):
         """Test basic session properties and hierarchy."""
@@ -101,10 +104,11 @@ class TestDomainModelWithRealData:
         assert filtered1 is not filtered2
         assert filtered1[0] is filtered2[0]
 
-        # all_recordings_* properties SHOULD be cached (same list object)
+        # Containers are copied while the per-recording arrays are cached.
         all_raw1 = session.all_recordings_raw
         all_raw2 = session.all_recordings_raw
-        assert all_raw1 is all_raw2
+        assert all_raw1 is not all_raw2
+        assert all_raw1[0] is all_raw2[0]
 
         # Different property types should be different objects
         assert raw1[0] is not filtered1[0]
@@ -122,7 +126,7 @@ class TestDomainModelWithRealData:
             session.annot.excluded_recordings.append(first_recording.id)
 
             # Reset cache to see changes
-            session.reset_all_caches()
+            session.invalidate_selection_results()
 
             # Should have one fewer recording
             assert len(session.recordings_filtered) == original_count - 1
@@ -160,7 +164,7 @@ class TestDomainModelWithRealData:
         # Add some exclusions
         if len(original_recordings) > 1:
             session.annot.excluded_recordings = [original_recordings[0].id]
-            session.reset_all_caches()
+            session.invalidate_selection_results()
 
             # Original recordings should be unchanged
             assert len(session._all_recordings) == len(original_recordings)
@@ -176,22 +180,25 @@ class TestDomainModelWithRealData:
             pytest.fail(f"Imported dataset not found at {imported_dataset_path}")
 
         dataset = DatasetRepository(imported_dataset_path).load()
-        # Ensure sessions are not excluded from previous test runs
-        if dataset.annot.excluded_sessions:
-            dataset.annot.excluded_sessions = []
-            if dataset.repo is not None:
-                dataset.repo.save(dataset)
+        try:
+            # Ensure sessions are not excluded from previous test runs
+            if dataset.annot.excluded_sessions:
+                dataset.annot.excluded_sessions = []
+                if dataset.repo is not None:
+                    dataset.repo.save(dataset)
 
-        # Should have at least one session
-        assert len(dataset.sessions) > 0
+            # Should have at least one session
+            assert len(dataset.sessions) > 0
 
-        # Each session should reference back to dataset
-        for session in dataset.sessions:
-            assert session.parent_dataset is dataset
+            # Each session should reference back to dataset
+            for session in dataset.sessions:
+                assert session.parent_dataset is dataset
 
-        # Dataset should have valid properties
-        assert dataset.id is not None
-        assert dataset.num_channels > 0
+            # Dataset should have valid properties
+            assert dataset.id is not None
+            assert dataset.num_channels > 0
+        finally:
+            dataset.close()
 
     def test_session_repository_save_load_cycle(self, imported_session_path, tmp_path):
         """Test that session annotations can be saved and loaded."""
@@ -201,33 +208,36 @@ class TestDomainModelWithRealData:
         # Load original session
         original_session = SessionRepository(imported_session_path).load()
 
-        # Modify annotations
-        original_session.annot.excluded_recordings = ["test_recording_id"]
-        original_session.annot.is_completed = True
+        try:
+            # Modify annotations
+            original_session.annot.excluded_recordings = ["test_recording_id"]
+            original_session.annot.is_completed = True
 
-        # Save to temporary location (we'll mock the save path)
-        temp_session_path = tmp_path / "test_session"
-        temp_session_path.mkdir(parents=True)
+            # Save to temporary location (we'll mock the save path)
+            temp_session_path = tmp_path / "test_session"
+            temp_session_path.mkdir(parents=True)
 
-        # Create a temporary repository
-        temp_repo = SessionRepository(temp_session_path)
-        temp_repo.session_js = temp_session_path / "session.annot.json"
+            # Create a temporary repository
+            temp_repo = SessionRepository(temp_session_path)
+            temp_repo.session_js = temp_session_path / "session.annot.json"
 
-        # Save annotations directly to test file (simplified test)
-        import json
-        from dataclasses import asdict
+            # Save annotations directly to test file (simplified test)
+            import json
+            from dataclasses import asdict
 
-        temp_repo.session_js.write_text(json.dumps(asdict(original_session.annot), indent=2))
+            temp_repo.session_js.write_text(json.dumps(asdict(original_session.annot), indent=2))
 
-        # Verify file was created
-        assert temp_repo.session_js.exists()
+            # Verify file was created
+            assert temp_repo.session_js.exists()
 
-        # The content should be valid JSON
-        with open(temp_repo.session_js) as f:
-            saved_data = json.load(f)
+            # The content should be valid JSON
+            with open(temp_repo.session_js) as f:
+                saved_data = json.load(f)
 
-        assert saved_data["excluded_recordings"] == ["test_recording_id"]
-        assert saved_data["is_completed"]
+            assert saved_data["excluded_recordings"] == ["test_recording_id"]
+            assert saved_data["is_completed"]
+        finally:
+            original_session.close()
 
     def test_domain_model_string_representations(self, session_with_mwave):
         """Test that domain objects have useful string representations."""
@@ -296,10 +306,13 @@ class TestDomainModelIntegration:
 
         sess_dir = create_minimal_session_folder(tmp_path, num_channels=3)
         session = SessionRepository(sess_dir).load()
-        original = session.channel_names
-        # Map two different originals to the same new name
-        mapping = {original[0]: "dup", original[1]: "dup"}
-        with pytest.raises(ValueError):
-            session.rename_channels(mapping)
-        # No change should have been applied
-        assert session.channel_names == original
+        try:
+            original = session.channel_names
+            # Map two different originals to the same new name
+            mapping = {original[0]: "dup", original[1]: "dup"}
+            with pytest.raises(ValueError):
+                session.rename_channels(mapping)
+            # No change should have been applied
+            assert session.channel_names == original
+        finally:
+            session.close()

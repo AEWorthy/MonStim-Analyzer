@@ -13,16 +13,16 @@ from .plotting_cycler import RecordingCyclerWidget
 from .plotting_widget import PlotWidget
 
 __all__ = [
-    "PlotWidget",
     "PLOT_NAME_DICT",
     "PLOT_OPTIONS_DICT",
-    "PlotPane",
+    "AverageReflexCurvesOptions",
     "BasePlotOptions",
     "EMGOptions",
+    "MMaxOptions",
+    "MaxHReflexOptions",
+    "PlotPane",
+    "PlotWidget",
+    "RecordingCyclerWidget",
     "SessionReflexCurvesOptions",
     "SingleEMGRecordingOptions",
-    "MMaxOptions",
-    "AverageReflexCurvesOptions",
-    "MaxHReflexOptions",
-    "RecordingCyclerWidget",
 ]

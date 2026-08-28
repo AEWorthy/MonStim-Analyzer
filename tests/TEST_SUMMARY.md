@@ -56,7 +56,7 @@ Common runs:
 - Specific class/test: standard pytest selectors still apply, e.g. `pytest tests/test_signal_processing.py::test_butter_filter`
 
 ## Legacy quarantine (to be refactored)
-The following drifted module is quarantined under the `legacy` marker so the default run remains green. It’ll be split and updated incrementally.
+The following drifted module is quarantined under the `legacy` marker so the default run remains green. It'll be split and updated incrementally.
 - `tests/test_domain_business_logic.py` (monolithic; being split by concern)
 
 Recently modernized (now part of default suite):
@@ -71,7 +71,7 @@ Status: All non-legacy tests pass locally in prior runs; new domain tests added.
 ## Test Files and Coverage (non-legacy focus)
 
 ### Commands and inclusion/exclusion tests
-These are aligned with the current command APIs and run by default. Real-data subtests are skipped automatically when golden paths aren’t present.
+These are aligned with the current command APIs and run by default. Real-data subtests are skipped automatically when golden paths aren't present.
 
 ### Dataset inclusion/exclusion and deletion
 Note: Currently marked `legacy`; will be updated to the current `Command` and repository APIs.

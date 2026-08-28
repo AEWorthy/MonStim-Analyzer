@@ -53,7 +53,7 @@ def make_session_with_synth_data(levels=(0.5, 1.0, 2.0), num_channels=1) -> Sess
         data = np.zeros((n, num_channels))
         burst = (t > 0.005) & (t < 0.015)
         data[burst, 0] = np.sin(2 * np.pi * 1000 * t[burst]) * (v * 100.0)
-    recs.append(Recording(meta=meta, annot=RecordingAnnot.create_empty(), raw=data))
+        recs.append(Recording(meta=meta, annot=RecordingAnnot.create_empty(), raw=data))
 
     annot = SessionAnnot.create_empty(num_channels)
     sess = Session(session_id="S-synth", recordings=recs, annot=annot)
@@ -77,3 +77,5 @@ def test_get_m_max_with_latency_window():
     except NoCalculableMmaxError:
         # Acceptable for synthetic shapes; the algorithm may decide it's not reliable
         pytest.skip("No calculable M-max for synthetic data in this environment")
+    finally:
+        sess.close()

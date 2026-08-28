@@ -818,13 +818,19 @@ def golden_session(tmp_path):
 
     # Add M-response latency window for testing
     session = SessionRepository(session_path).load()
-    m_window = LatencyWindow(
-        name="M-response", color="blue", start_times=[5.0] * session.num_channels, durations=[10.0] * session.num_channels
-    )
-    session.annot.latency_windows = [m_window]
-    session.update_latency_window_parameters()
+    try:
+        m_window = LatencyWindow(
+            name="M-response",
+            color="blue",
+            start_times=[5.0] * session.num_channels,
+            durations=[10.0] * session.num_channels,
+        )
+        session.annot.latency_windows = [m_window]
+        session.update_latency_window_parameters()
 
-    return session
+        yield session
+    finally:
+        session.close()
 
 
 @pytest.fixture
@@ -841,12 +847,15 @@ def golden_dataset(tmp_path):
     dataset_path = ds_dirs[0]
 
     ds = DatasetRepository(dataset_path).load()
-    # Ensure no sessions are pre-excluded
-    if ds.annot.excluded_sessions:
-        ds.annot.excluded_sessions = []
-        if ds.repo is not None:
-            ds.repo.save(ds)
-    return ds
+    try:
+        # Ensure no sessions are pre-excluded
+        if ds.annot.excluded_sessions:
+            ds.annot.excluded_sessions = []
+            if ds.repo is not None:
+                ds.repo.save(ds)
+        yield ds
+    finally:
+        ds.close()
 
 
 @pytest.fixture

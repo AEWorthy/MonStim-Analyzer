@@ -1,129 +1,88 @@
-# MonStim Analyzer - Quick Start Guide
+# MonStim Analyzer 0.6.0 — Quick Start Guide
 
-Get up and running with MonStim EMG Analyzer in minutes!
+This guide gets a new user from an installed copy of MonStim Analyzer to a first reviewed plot. For the complete workflow and feature reference, open **Help > Show Help** in the application or read [Using MonStim Analyzer](docs/user/using_monstim.md).
 
-## 📥 Installation
+## Install and launch
 
-1. **Download** the latest release from [GitHub Releases](https://github.com/AEWorthy/MonStim-Analyzer/releases)
-   - Windows: `MonStim-Analyzer-v0.5.1-WIN.zip`
-   - Mac: Currently unavailable
+1. Download the release archive from [GitHub Releases](https://github.com/AEWorthy/MonStim-Analyzer/releases).
+2. Extract the complete archive to a location where you can keep the application data.
+3. Launch the MonStim Analyzer executable in the extracted folder. Keep the files in that folder together; do not move only the executable.
 
-2. **Extract** the zip file to your desired location
+The first launch may take longer than later launches and Windows may show a warning because the release is not code-signed. The application currently reports itself as **v0.6.0 (beta)**. macOS distribution is not currently available.
 
-3. **Run** `MonStim Analyzer v0.5.1.exe` from the extracted folder
-   - ⚠️ Keep all files in the extracted directory
-   - ⚠️ First launch may take longer and trigger security warnings (unsigned software)
+## First analysis
 
-## 🚀 Quick Start (5 Steps)
+### 1. Import an experiment
 
-### 1. Import Your Data
-- **File** → **Import an Experiment** (single) or **Import Multiple Experiments** (batch)
-- Select your experiment directory
-- Wait for processing to complete
+Choose **File > Import an Experiment** for one experiment, or **File > Import Multiple Experiments** when a parent folder contains several experiment folders. MonStim copies imported recordings into its managed data store; retain the original acquisition files as your archive.
 
-### 2. Structure Your CSV Data
+The expected structure is:
+
+```text
+Experiment name/
+  Dataset name/
+    SessionA-1.csv
+    SessionA-2.csv
+    SessionB-1.csv
 ```
-Experiment Folder/
-├── Dataset 1/
-│   ├── XX001-1.CSV  # Session XX001 recordings
-│   ├── XX001-2.CSV
-│   └── XX002-1.CSV  # Session XX002 recordings
-└── Dataset 2/
-    └── session files...
-```
-- Dataset names: `[YYMMDD] [AnimalID] [Condition]`
-- Only CSV files are imported (STM files ignored)
 
-### 3. Select Your Data
-- Choose **Analysis Profile** (or use "default")
-- Select **Experiment** → **Dataset** → **Session**
+Files with the same session identifier form a session. Other file types in a dataset folder are ignored. Keep the hierarchy meaningful: **experiment > dataset > session > recording**.
 
-### 4. Generate Reports
-Click any report button:
-- **Show M-max Report**
-- **Show Session Report** 
-- **Show Dataset Report**
+### 2. Select and inspect data
 
-### 5. Plot Your Data
-- Choose plot scope: **Single Session** / **Entire Dataset** / **Experiment**
-- Select **Plot Type** from dropdown
-- Click **Plot** button
-- Use **Plot & Extract Data** to export plot data to CSV
+Choose an **Analysis Profile** in the main window, then select an **Experiment**, **Dataset**, and **Session**. Inspect a raw and filtered trace before changing settings or interpreting a summary. Check channel identity, polarity, sampling rate, stimulus alignment, and response timing.
 
-## 📊 Key Plot Types
+### 3. Check latency windows
 
-| Level | Plot Type | Description |
-|-------|-----------|-------------|
-| **Session** | EMG Overlay | All recordings overlaid |
-| | Reflex Curves | M-response & H-reflex vs stimulus |
-| | Single EMG Recordings | Individual stimulus responses |
-| **Dataset** | Average Reflex Curves | Averaged across sessions |
-| | Longform Reflex Amplitudes | One row per active recording for mixed-effects exports |
-| | Max H-Reflex | Peak H-reflex response |
-| **Experiment** | Average Reflex Curves | Biological replicates averaged |
+Open **Edit > Session > Manage Latency Windows**. Start at Session scope while checking or developing timing. Dataset and Experiment scopes are bulk actions that copy the displayed window set to every included child session, so use them only when standardization is intentional.
 
-## ⚙️ Essential Settings
+Use a consistent name such as `M-wave` for the M-response window. M-max recognizes names listed in **File > Settings Center > Global Analysis > Latency windows > M-wave Recognition Names**. An empty recognition-name list disables automatic M-wave recognition.
 
-### Analysis Profiles
-- **File** → **Preferences** to create custom analysis configurations
-- Save different settings for different experimental conditions
+### 4. Choose the analysis settings
 
-### Display Scaling
-- **File** → **Display Preferences** for UI scaling
-- Auto-detect or manual scaling (0.5x - 3.0x)
+Use **File > Settings Center** to review global defaults and manage reusable profiles. A profile can override eligible analysis settings, but it does not replace latency-window annotations already applied to sessions. Choose the amplitude method required by your analysis plan and keep the method, profile, bin size, windows, and M-max choices with your results.
 
-### Data Management
-- **Right-click** experiments/datasets/sessions for context menus
-- **Ctrl+Z/Ctrl+Y** for undo/redo
-- **Edit** menu for channel names, latency windows, exclusions
+### 5. Plot and review
 
-## 🔧 Data Definitions
+1. Select **Session**, **Dataset**, or **Experiment** in the plot controls.
+2. Choose a plot type and its options.
+3. Click **Plot**.
+4. Inspect the traces, contribution counts, missing values, and diagnostic notices before interpreting the result.
 
-- **EMG Experiment**: Multiple datasets (biological replicates)
-- **EMG Dataset**: Multiple sessions from one animal
-- **EMG Session**: Multiple recordings at different stimulus intensities
-- **EMG Recording**: Single stimulus-response pair
+The **Reports** panel provides Session, Dataset, Experiment, and M-max reports. Use **Plot & Extract Data** for data represented by the current plot.
 
-## 📁 File Locations
+### 6. Export and save
 
-- **Processed Data**: `/data` folder (same directory as .exe)
-- **Logs**: `%APPDATA%\WorthyLab\MonStimAnalyzer\logs` (Windows)
-- Use **Help** → **Open Log Folder** for quick access
+- Use **File > Bulk Export Data…** for aggregated output across datasets or experiments.
+- Use **File > Save Current Experiment** to save the selected experiment after reviewing changes.
+- Record the active profile, amplitude method, latency windows, exclusions, bin size, and any M-max plateau or fallback result with the export.
 
-## 🆘 Need Help?
+## Common maintenance actions
 
-- 📖 **Full Documentation**: [README.md](README.md)
-- 🐛 **Report Issues**: [GitHub Issues](https://github.com/AEWorthy/MonStim-Analyzer/issues)
-- 📧 **Direct Support**: aeworthy@emory.edu
-- 📋 **Error Reports**: **Help** → **Save Error Report**
+- Use **Edit > Data Curation > Recording Exclusion Editor** to preview and review recording exclusions. Click **Preview** after changing criteria; **Apply** commits one undoable bulk action.
+- Use **Edit > Data Curation > Manage Data…** to organize experiments and datasets.
+- Use **File > Force Rebuild Data Catalog** when the active experiment listing is stale or incomplete.
+- Use **Tools > Force Rebuild All Data Catalogs…** only for an expensive all-experiment rebuild.
+- Use **Edit > Undo** and **Edit > Redo** for supported edits.
 
-## 🔗 Related Tools
+## Help and support
 
-- **[MonStim Plotter](https://github.com/AEWorthy/MonStim-Plotter/)**: Publication-ready figures from exported data
+- **Help > Show Help** opens the in-app help library.
+- **Help > Open Log Folder** opens the application logs.
+- **Help > Save Error Report** creates a report for troubleshooting.
 
----
+When reporting a problem, include the MonStim version, operating system, active profile, data level, exact steps, and any error message. Do not include identifiable data unless appropriate.
 
+For detailed topics, see the [Help Library](docs/user/index.md), especially [Getting started](docs/user/getting_started.md), [Experiment import](docs/user/importing_experiments.md), [Latency windows](docs/user/latency_windows.md), [Settings Center](docs/user/settings_center.md), and [Troubleshooting](docs/user/troubleshooting.md).
 
-## 🛠 Developer / Running from Source
+## Running from source
 
-- **Activate the development Conda environment first:** this repository expects the `monstim` environment for running tests and development tools.
+Development commands must use the `monstim` Conda environment:
 
 ```pwsh
 conda activate monstim
-```
-
-- **Run the application from source (development):**
-
-```pwsh
 python main.py --debug
+python -m pytest -q
 ```
 
-- **Run tests:** make sure `monstim` is active, then run:
-
-```pwsh
-pytest -q
-```
-
-- **Plotting backend:** The GUI uses `PyQtGraph` for interactive plotting. Matplotlib-based plotters were removed in earlier releases; do not rely on matplotlib for GUI plotting.
-
-**License**: BSD 2-Clause | **© 2024 Andrew Worthy**
+The source application uses PySide6 and PyQtGraph for its GUI and interactive plots.

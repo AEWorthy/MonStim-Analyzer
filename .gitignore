@@ -6,9 +6,15 @@
 /.OLD_DATA
 /.pytest-tmp-golden-check
 TEST_MIGR
+.monstim-cache.sqlite
+.monstim-cache.sqlite.building
+.monstim-cache.sqlite-*
+.monstim-cache.sqlite-wal
+.monstim-cache.sqlite-shm
+AGENTS.md
 
 /old_environment.yml
-docs/config-user.yml
+*\config-user.yml
 
 # Obtained from https://github.com/github/gitignore/blob/main/Python.gitignore
 
@@ -16,6 +22,7 @@ docs/config-user.yml
 __pycache__/
 *.py[cod]
 *$py.class
+.ruff_cache/
 
 # C extensions
 *.so

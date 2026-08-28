@@ -68,8 +68,11 @@ def test_lazy_reopen_after_close(tmp_path: Path):
     rec.close()
     assert rec._raw is None
 
-    sl = rec.raw_view(t=slice(10, 15), ch=slice(None))
+    try:
+        sl = rec.raw_view(t=slice(10, 15), ch=slice(None))
 
-    # Assert: slice matches original data and metadata updated
-    np.testing.assert_allclose(sl, data[10:15, :])
-    assert rec.meta.num_samples == n
+        # Assert: slice matches original data and metadata updated
+        np.testing.assert_allclose(sl, data[10:15, :])
+        assert rec.meta.num_samples == n
+    finally:
+        rec.close()

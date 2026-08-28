@@ -22,7 +22,7 @@ class ChangeChannelNamesDialog(QDialog):
 
         self.channel_inputs = {}
         for i, channel_name in enumerate(channel_names):
-            layout.addWidget(QLabel(f"Channel {i+1}:"), i, 0)
+            layout.addWidget(QLabel(f"Channel {i + 1}:"), i, 0)
             self.channel_inputs[channel_name] = QLineEdit(channel_name)
             layout.addWidget(self.channel_inputs[channel_name], i, 1)
 

@@ -1,0 +1,5 @@
+name: EMG + Force (Vibration)
+description: M-response/H-reflex EMG analysis with vibration conditioning.
+analysis_parameters:
+  time_window: 800.0
+  pre_stim_time: 400.0

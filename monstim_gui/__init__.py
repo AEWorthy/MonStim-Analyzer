@@ -17,10 +17,12 @@ def __getattr__(name):
         from .core.splash import SplashScreen
 
         return SplashScreen
+
     elif name == "MonstimGUI":
         from .gui_main import MonstimGUI
 
         return MonstimGUI
+
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 

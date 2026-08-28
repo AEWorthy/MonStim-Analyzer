@@ -12,7 +12,7 @@ def test_decimate_minmax_reduces_points_and_preserves_extrema():
     y[12345] = 5.0
     y[23456] = -6.0
 
-    xd, yd = decimate_series(x, y, max_points=2000, strategy="minmax")
+    _, yd = decimate_series(x, y, max_points=2000, strategy="minmax")
 
     assert len(yd) <= 2 * 2000 + 2  # minmax returns ~2 points per bin
     # Check that spike extrema are still represented (approximate envelope preservation)

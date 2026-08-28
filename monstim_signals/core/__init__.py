@@ -1,33 +1,37 @@
 __all__ = [
-    # data_models
-    "LatencyWindow",
-    "StimCluster",
-    "SignalChannel",
-    "RecordingMeta",
-    "RecordingAnnot",
-    "SessionAnnot",
+    "ConfigChange",
+    "ConfigResolver",
+    "CustomYAMLLoader",
     "DatasetAnnot",
     "ExperimentAnnot",
-    # utils
-    "to_camel_case",
+    "LatencyWindow",
+    "LatencyWindowNotFoundError",
+    "RecordingAnnot",
+    "RecordingMeta",
+    "ResolvedConfig",
+    "SessionAnnot",
+    "SignalChannel",
+    "StimCluster",
+    "clear_config_cache",
+    "deep_equal",
     "format_report",
     "get_base_path",
     "get_bundle_path",
-    "get_output_path",
-    "get_export_path",
-    "get_source_path",
-    "get_docs_path",
     "get_config_path",
-    "get_output_bin_path",
     "get_data_path",
+    "get_docs_path",
+    "get_export_path",
     "get_log_dir",
     "get_main_window",
-    "deep_equal",
+    "get_output_bin_path",
+    "get_output_path",
+    "get_source_path",
     "load_config",
-    "CustomYAMLLoader",
+    "to_camel_case",
 ]
 
-from .data_models import (  # Factory and utility methods; (from grep: create_empty, from_dict, from_meta, from_ds_name, get_legend_element, end_times)
+from .configuration import ConfigChange, ConfigResolver, ResolvedConfig
+from .data_models import (  # Factory and utility methods
     DatasetAnnot,
     ExperimentAnnot,
     LatencyWindow,
@@ -39,6 +43,8 @@ from .data_models import (  # Factory and utility methods; (from grep: create_em
 )
 from .utils import (
     CustomYAMLLoader,
+    LatencyWindowNotFoundError,
+    clear_config_cache,
     deep_equal,
     format_report,
     get_base_path,

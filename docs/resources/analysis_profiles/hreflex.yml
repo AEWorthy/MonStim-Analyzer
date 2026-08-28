@@ -1,0 +1,4 @@
+name: H-reflex
+description: Standard M-response/H-reflex EMG analysis with a single-pulse electrical stimulation.
+analysis_parameters:
+  time_window: 10.0

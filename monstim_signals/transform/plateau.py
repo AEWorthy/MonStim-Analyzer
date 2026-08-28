@@ -2,33 +2,69 @@
 
 import logging
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
-from scipy import signal
+from scipy.signal import savgol_filter
 
 
-def savgol_filter_y(y, polyorder=3):
-    """Smooth data using a Savitzky-Golay filter."""
-    window_length = int((len(y) / 100) * 25)
+def savgol_filter_y(
+    y: np.ndarray,
+    polyorder: int = 3,
+    window_length: int | None = None,
+    window_ratio: float = 0.25,
+):
+    """Smooth data using a Savitzky-Golay filter.
+
+    Args:
+        y (np.ndarray): The input signal array.
+        polyorder (int): The order of the polynomial used to fit the samples. Must be less than window_length.
+        window_length (int or None): Explicit Savitzky-Golay window length. If omitted,
+            it is calculated from ``window_ratio`` and the signal length.
+        window_ratio (float): Fraction of the signal length used to calculate the
+            window when ``window_length`` is omitted.
+    Returns:
+        np.ndarray: The smoothed signal.
+    """
+    if window_length is None:
+        if window_ratio <= 0:
+            raise ValueError("window_ratio must be greater than zero")
+        window_length = int(len(y) * window_ratio)
+    else:
+        window_length = int(window_length)
     window_length = max(window_length, polyorder + 2)  # Ensure minimum size
     if window_length % 2 == 0:  # Ensure oddness
         window_length += 1
-    return signal.savgol_filter(y, window_length, min(polyorder, window_length - 1))
+    return savgol_filter(y, window_length, min(polyorder, window_length - 1))
 
 
-# TODO: UX / Visualization
-# - Provide a GUI hook or small helper to visualize the detected plateau region
-#   and the candidate M-max approaches (mean_corrected, 95th percentile,
-#   maximum, top-20%). This will make it much easier to inspect algorithm
-#   decisions interactively and to allow users to pick an approach.
-# - Expose the Savitzky-Golay window length calculation via configuration so
-#   users can tune smoothing in the GUI or via analysis profiles.
+def detect_plateau(
+    y: np.ndarray,
+    max_window_size: int,
+    min_window_size: int,
+    threshold: float,
+    savgol_window_length: int | None = None,
+    savgol_window_ratio: float = 0.25,
+):
+    """Detect a plateau region in a reflex curve.
 
+    A plateau is defined as a region where the standard deviation of the signal
+    is below a certain threshold for a specified window size. The function
+    recursively reduces the window size if no plateau is found, down to a minimum
+    window size. If no plateau is detected, it returns None.
 
-def detect_plateau(y, max_window_size, min_window_size, threshold):
-    """Detect a plateau region in a reflex curve."""
+    Args:
+        y (np.ndarray): The input signal array.
+        max_window_size (int): The maximum size of the sliding window to check for a plateau.
+        min_window_size (int): The minimum size of the sliding window to check for a plateau.
+        threshold (float): The threshold for standard deviation to consider a region as a plateau.
+
+    Returns:
+        tuple: (start_index, end_index) of the detected plateau region, or (None, None) if no plateau is found.
+    """
     plateau_start_idx = None
     plateau_end_idx = None
-    y_filtered = savgol_filter_y(y)
+    y_filtered = savgol_filter_y(y, window_length=savgol_window_length, window_ratio=savgol_window_ratio)
     for i in range(len(y_filtered) - max_window_size):
         window = y_filtered[i : i + max_window_size]
         if np.std(window) < threshold:
@@ -39,42 +75,78 @@ def detect_plateau(y, max_window_size, min_window_size, threshold):
             plateau_start_idx = None
             plateau_end_idx = None
     if plateau_start_idx is not None and plateau_end_idx is not None:
-        logging.debug(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
+        logger.debug(f"Plateau region detected with window size {max_window_size}. Threshold: {threshold} times SD.")
         return plateau_start_idx, plateau_end_idx
     elif max_window_size > min_window_size:
-        return detect_plateau(y, max_window_size - 1, min_window_size, threshold)
+        return detect_plateau(
+            y,
+            max_window_size - 1,
+            min_window_size,
+            threshold,
+            savgol_window_length=savgol_window_length,
+            savgol_window_ratio=savgol_window_ratio,
+        )
     else:
-        logging.warning("No plateau region detected.")
+        logger.warning("No plateau region detected.")
         return None, None
 
 
 def get_avg_mmax(
-    stimulus_voltages,
-    m_wave_amplitudes,
+    stimulus_voltages: list | np.ndarray,
+    m_wave_amplitudes: list | np.ndarray,
     max_window_size=20,
     min_window_size=3,
     threshold=0.3,
     validation_tolerance=1.05,
+    savgol_window_length=None,
+    savgol_window_ratio=0.25,
     return_mmax_stim_range=False,
 ):
     """
-    Return the M-max amplitude and optionally its stimulus range.
+    Return the average M-max amplitude of the given M-wave amplitudes and optionally return the stimulus range of the detected M-max plateau.
 
-    Uses an improved algorithm that tries multiple calculation approaches:
+    Uses an algorithm that tries multiple calculation approaches:
     1. Maximum value in the plateau (stable, high-stimulus) region
     2. High-percentile approach in the plateau region
     3. Mean of top 20% values in the plateau region
     4. Traditional plateau detection with averaging
+
+    If no plateau is detected, it falls back to analyzing the high-stimulus region.
+
+    Args:
+        stimulus_voltages (list or np.ndarray): Stimulus voltages corresponding to M-wave amplitudes.
+        m_wave_amplitudes (list or np.ndarray): M-wave amplitudes corresponding to stimulus voltages.
+        max_window_size (int): Maximum window size for plateau detection.
+        min_window_size (int): Minimum window size for plateau detection.
+        threshold (float): Threshold for standard deviation to consider a region as a plateau.
+        validation_tolerance (float): Tolerance factor for validating M-max against plateau mean.
+        savgol_window_length (int or None): Explicit smoothing window length.
+        savgol_window_ratio (float): Fraction of the signal length used for the smoothing window
+            when ``savgol_window_length`` is omitted.
+        return_mmax_stim_range (bool): If True, return the stimulus range corresponding to the detected M-max.
+
+    Returns:
+        float or tuple: M-max amplitude, and optionally the stimulus range (start, end)
+
+    Raises:
+        NoCalculableMmaxError: If no calculable M-max can be determined.
     """
     m_wave_amplitudes = np.array(m_wave_amplitudes)
     stimulus_voltages = np.array(stimulus_voltages)
 
     try:
-        plateau_start_idx, plateau_end_idx = detect_plateau(m_wave_amplitudes, max_window_size, min_window_size, threshold)
+        plateau_start_idx, plateau_end_idx = detect_plateau(
+            m_wave_amplitudes,
+            max_window_size,
+            min_window_size,
+            threshold,
+            savgol_window_length=savgol_window_length,
+            savgol_window_ratio=savgol_window_ratio,
+        )
 
     except Exception as e:
-        logging.exception(f"Exception during plateau detection: {e}")
-        logging.exception("Exception during plateau detection. Proceeding to fallback methods.")
+        logger.exception(f"Exception during plateau detection: {e}")
+        logger.exception("Exception during plateau detection. Proceeding to fallback methods.")
         plateau_start_idx, plateau_end_idx = None, None
 
     if plateau_start_idx is not None and plateau_end_idx is not None:
@@ -133,22 +205,22 @@ def get_avg_mmax(
             selected_approach = "mean_corrected"
             validation_note = "fallback - other approaches exceeded tolerance"
 
-        logging.debug(f"\tM-max calculation: selected '{selected_approach}' approach, value: {m_max}")
-        logging.debug(f"\t  Validation: {validation_note}")
+        logger.debug(f"\tM-max calculation: selected '{selected_approach}' approach, value: {m_max}")
+        logger.debug(f"\t  Validation: {validation_note}")
 
         # Log all approaches for debugging
         for name, val in approaches:
-            logging.debug(f"\t  {name}: {val:.6f}")
-        logging.debug(f"\t  plateau_mean: {plateau_mean:.6f}")
-        logging.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
+            logger.debug(f"\t  {name}: {val:.6f}")
+        logger.debug(f"\t  plateau_mean: {plateau_mean:.6f}")
+        logger.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
 
         # Final validation: ensure M-max is reasonable compared to global maximum
         max_overall = np.max(m_wave_amplitudes)
         if m_max > max_overall:
-            logging.warning(f"\tM-max ({m_max}) > max amplitude ({max_overall}), capping at max")
+            logger.warning(f"\tM-max ({m_max}) > max amplitude ({max_overall}), capping at max")
             m_max = max_overall
 
-        logging.debug(f"\tFinal M-max amplitude: {m_max}")
+        logger.debug(f"\tFinal M-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return (
                 m_max,
@@ -159,7 +231,7 @@ def get_avg_mmax(
 
     # Fallback: if no plateau detected, apply multi-approach method to high-stimulus region
     # Look for the best estimate in the top 25% of stimulus intensities
-    logging.warning("No plateau detected, using fallback multi-approach detection in high-stimulus region")
+    logger.warning("No plateau detected, using fallback multi-approach detection in high-stimulus region")
 
     # Sort by stimulus voltage and take top 25%
     sorted_indices = np.argsort(stimulus_voltages)
@@ -202,16 +274,16 @@ def get_avg_mmax(
             selected_approach = "mean"
             validation_note = "fallback to mean - other approaches exceeded tolerance"
 
-        logging.debug(f"\tFallback M-max calculation: selected '{selected_approach}' approach, value: {m_max}")
-        logging.debug(f"\t  Validation: {validation_note}")
+        logger.debug(f"\tFallback M-max calculation: selected '{selected_approach}' approach, value: {m_max}")
+        logger.debug(f"\t  Validation: {validation_note}")
 
         # Log all approaches for debugging
         for name, val in approaches:
-            logging.debug(f"\t  {name}: {val:.6f}")
-        logging.debug(f"\t  high_stim_region_mean: {region_mean:.6f}")
-        logging.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
+            logger.debug(f"\t  {name}: {val:.6f}")
+        logger.debug(f"\t  high_stim_region_mean: {region_mean:.6f}")
+        logger.debug(f"\t  validation_tolerance: {validation_tolerance:.3f}")
 
-        logging.debug(f"\tFallback M-max amplitude: {m_max}")
+        logger.debug(f"\tFallback M-max amplitude: {m_max}")
         if return_mmax_stim_range:
             return (
                 m_max,
@@ -224,5 +296,7 @@ def get_avg_mmax(
 
 
 class NoCalculableMmaxError(Exception):
+    """Custom exception raised when no calculable M-max can be determined."""
+
     def __init__(self, message="No calculable M-max. Try adjusting the threshold values."):
         super().__init__(message)

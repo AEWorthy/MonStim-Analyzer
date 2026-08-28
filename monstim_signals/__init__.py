@@ -4,7 +4,7 @@
 from .version import DATA_VERSION
 
 # Package version
-__package_version__ = "0.5.2"
+__package_version__ = "0.6.0"
 
 # Metadata
 __title__ = "monstim_signals"
@@ -17,4 +17,4 @@ __email__ = "aeworth@emory.edu"
 from .domain import Dataset, Experiment, Session
 
 # Define __all__ for module
-__all__ = ["Session", "Dataset", "Experiment"]
+__all__ = ["Dataset", "Experiment", "Session"]

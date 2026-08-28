@@ -1,7 +1,7 @@
 
 # MonStim Analyzer - EMG Analysis and Visualization Tool
 
-**Version:** 0.5.2 (Full Release)
+**Version:** 0.6.0 (beta)
 
 This repository contains the source code for the MonStim EMG Analyzer GUI
 application and the supporting signal processing library. The tool provides
@@ -10,19 +10,18 @@ collected with the custom 'MonStim-V3' LabView program created by William Goolsb
 
 ## Documentation
 
-- **[User Guide](docs/readme.md)** - Complete usage instructions and installation details
+- **[User Guide](docs/user/using_monstim.md)** - Complete usage workflow and feature reference
 - **[Quickstart Guide](QUICKSTART.md)** - Express installation and overview
-- **[Testing Guide](docs/testing.md)** - How to run the test suite (markers, golden fixtures, CI tips)
 - **[Changelog](CHANGELOG.md)** - Version history and release notes
-- **[EMG Processing](docs/Transform_EMG.md)** - Signal processing algorithms and analysis methods
-- **[M-max Algorithm](docs/mmax_algorithm.md)** - Detailed technical documentation of M-max detection
-- **[Recording Exclusion](docs/recording_exclusion_editor.md)** - Managing data quality and exclusions
-- **[Multi-Experiment Import](docs/multi_experiment_import.md)** - Batch import workflows
-- **[UI Scaling Guide](docs/ui_scaling_guide.md)** - Display configuration for different screen sizes
+- **[EMG Processing](docs/science/emg_processing.md)** - Signal processing and transformations
+- **[M-max Algorithm](docs/science/mmax_estimation.md)** - M-max detection and review
+- **[Recording Exclusion](docs/user/recording_exclusion_editor.md)** - Managing data quality and exclusions
+- **[Multi-Experiment Import](docs/user/importing_experiments.md)** - Batch import workflows
+- **[UI Scaling Guide](docs/user/ui_scaling_guide.md)** - Display configuration for different screen sizes
 
 ## Quick Start
 
-See the **[Quickstart Guide](/QUICKSTART.md)** for express installation instructions and a brief program overview. For full installation and usage instructions, see the **[User Guide](docs/readme.md)**.
+See the **[Quickstart Guide](QUICKSTART.md)** for express installation instructions and a brief program overview. For full usage instructions, see the **[User Guide](docs/user/using_monstim.md)** and the in-app **Help > Show Help** library.
 
 ## Developer Quick Note
 
@@ -32,7 +31,7 @@ See the **[Quickstart Guide](/QUICKSTART.md)** for express installation instruct
 conda activate monstim
 ```
 
-See `QUICKSTART.md` and `docs/readme.md` for full developer instructions.
+See `QUICKSTART.md` and the [Help Library](docs/user/index.md) for user documentation. Developer setup and testing instructions are maintained in the repository documentation.
 
 ## Conda vs Pip and PyQt pinning
 

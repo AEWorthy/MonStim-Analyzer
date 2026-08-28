@@ -6,17 +6,19 @@ from .latency import LatencyWindowsDialog
 from .preferences import PreferencesDialog
 from .program_settings import ProgramSettingsDialog
 from .reporting import CopyableReportDialog
+from .settings_center import SettingsCenter
 
 __all__ = [
+    "AboutDialog",
     "BulkExportDialog",
     "ChangeChannelNamesDialog",
-    "DatasetMetadataEditor",
-    "InvertChannelPolarityDialog",
     "CopyableReportDialog",
-    "PreferencesDialog",
+    "DatasetMetadataEditor",
     "HelpWindow",
-    "AboutDialog",
-    "clear_math_cache",
+    "InvertChannelPolarityDialog",
     "LatencyWindowsDialog",
+    "PreferencesDialog",
     "ProgramSettingsDialog",
+    "SettingsCenter",
+    "clear_math_cache",
 ]

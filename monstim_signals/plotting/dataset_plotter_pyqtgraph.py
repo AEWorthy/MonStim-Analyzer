@@ -1,16 +1,21 @@
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
+from pyqtgraph.graphicsItems.PlotItem import PlotItem
 from pyqtgraph.Qt import QtCore
+
+from monstim_signals.core import LatencyWindowNotFoundError
 
 from .base_plotter_pyqtgraph import BasePlotterPyQtGraph, UnableToPlotError
 
 if TYPE_CHECKING:
     from monstim_gui.plotting import PlotPane
     from monstim_signals.domain.dataset import Dataset
+
+logger = logging.getLogger(__name__)
 
 
 class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
@@ -24,19 +29,19 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
     - Multi-channel plotting support
     """
 
-    def __init__(self, dataset: "Dataset"):
+    def __init__(self, dataset: Dataset):
         super().__init__(dataset)
-        self.emg_object: "Dataset" = dataset
+        self.emg_object: Dataset = dataset
 
     def plot_averageReflexCurves(
         self,
-        channel_indices: List[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         plot_legend: bool = True,
         relative_to_mmax: bool = False,
-        manual_mmax: float | int | None = None,
+        manual_mmax: float | None = None,
         interactive_cursor: bool = False,
-        canvas: "PlotPane" = None,
+        canvas: PlotPane = None,
     ):
         """Plot average reflex curves for the dataset with interactive features, using domain Dataset object API."""
         try:
@@ -47,7 +52,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             if channel_indices is None:
                 channel_indices = list(range(self.emg_object.num_channels))
 
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
             # Raw data collection
             raw_data_dict = {
@@ -58,14 +63,14 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 "stdev_amplitude": [],
             }
 
-            for plot_item, channel_idx in zip(plot_items, channel_indices):
-                plot_item: "pg.PlotItem"
+            for plot_item, channel_idx in zip(plot_items, channel_indices, strict=True):
+                plot_item: PlotItem
 
                 # Create plot item
                 self.set_labels(
                     plot_item=plot_item,
                     title=f"{self.emg_object.channel_names[channel_idx]}",
-                    y_label=f'Average Reflex Ampl. (mV{", rel. to M-max" if relative_to_mmax else ""})',
+                    y_label=f"Average Reflex Ampl. (mV{', rel. to M-max' if relative_to_mmax else ''})",
                     x_label="Stimulus Intensity (V)",
                 )
                 plot_item.showGrid(True, True)
@@ -96,11 +101,11 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting reflex curves: {str(e)}")
+            raise UnableToPlotError(f"Error plotting reflex curves: {e!s}") from e
 
     def _plot_reflex_curves_data(
         self,
-        plot_item: pg.PlotItem,
+        plot_item: PlotItem,
         channel_idx,
         method,
         relative_to_mmax,
@@ -112,14 +117,12 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
         try:
             # Get the data from the domain Dataset object
             # Iterate over union of window names (heterogeneity-aware)
-            window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
-            presence_map = getattr(self.emg_object, "window_presence_map", lambda: {})()
+            window_names = getattr(self.emg_object, "unique_latency_window_names", list)()
+            presence_map = getattr(self.emg_object, "window_presence_map", dict)()
             total_sessions = len(self.emg_object.sessions)
 
             for window_name in window_names:
-                window_reflex_data = self.emg_object.get_average_lw_reflex_curve(
-                    method=method, channel_index=channel_idx, window=window_name
-                )
+                window_reflex_data = self.emg_object.get_average_lw_reflex_curve(method=method, channel_index=channel_idx, window=window_name)
                 means = window_reflex_data.get("means")
                 stdevs = window_reflex_data.get("stdevs")
                 voltages = window_reflex_data.get("voltages")
@@ -138,7 +141,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                             color_hex = w.color
                             break
                 except Exception:
-                    pass
+                    logger.exception(f"Could not fetch color for window '{window_name}' in channel {channel_idx}. Using default color.")
                 if color_hex is None:
                     color_hex = "white"
 
@@ -147,20 +150,20 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     # Resolve potential array-like mmax to a scalar safely
                     try:
                         if manual_mmax is None:
-                            mmax_val = self._resolve_to_scalar(
-                                self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method)
-                            )
+                            mmax_val = self._resolve_to_scalar(self.emg_object.get_avg_m_max(channel_index=channel_idx, method=method))
                         else:
                             mmax_val = self._resolve_to_scalar(manual_mmax)
                     except ValueError as ve:
                         # Ambiguous multi-element mmax value
-                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}")
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_idx}: {ve}") from ve
+                    except LatencyWindowNotFoundError as le:
+                        raise UnableToPlotError(f"M-max could not be calculated for channel {channel_idx}: {le}") from le
 
                     if mmax_val is not None and mmax_val != 0:
                         means = means / mmax_val
                         stdevs = stdevs / mmax_val
 
-                for v, m, s in zip(voltages, means, stdevs):
+                for v, m, s in zip(voltages, means, stdevs, strict=True):
                     raw_data_dict["channel_index"].append(channel_idx)
                     raw_data_dict["window_name"].append(window_name)
                     raw_data_dict["voltage"].append(v)
@@ -189,7 +192,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     if window_name in presence_map:
                         contrib = len(presence_map[window_name])
                 except Exception:
-                    pass
+                    logger.exception(f"Could not determine contribution count for window '{window_name}' in channel {channel_idx}.")
                 label = f"{window_name} [n={contrib}(/{total_sessions})]"
                 plot_item.plot(
                     voltages,
@@ -202,11 +205,12 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 )
 
         except Exception as e:
-            print(f"Warning: Could not plot reflex curves for channel {channel_idx}: {e}")
+            logger.exception(f"Could not plot reflex curves for channel {channel_idx}: {e}")
+            raise UnableToPlotError(f"Error plotting reflex curves for channel {channel_idx}: {e!s}") from e
 
     def plot_maxH(
         self,
-        channel_indices: List[int] = None,
+        channel_indices: list[int] | None = None,
         method=None,
         relative_to_mmax=False,
         manual_mmax=None,
@@ -229,7 +233,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 channel_indices = list(range(self.emg_object.num_channels))
 
             # Create plot layout
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
             # Raw data collection
             raw_data_dict = {
@@ -284,15 +288,11 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 if relative_to_mmax:
                     try:
                         if manual_mmax is not None:
-                            m_max = self._resolve_to_scalar(
-                                manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax
-                            )
+                            m_max = self._resolve_to_scalar(manual_mmax[channel_index] if isinstance(manual_mmax, list) else manual_mmax)
                         else:
-                            m_max = self._resolve_to_scalar(
-                                self.emg_object.get_avg_m_max(method=method, channel_index=channel_index)
-                            )
+                            m_max = self._resolve_to_scalar(self.emg_object.get_avg_m_max(method=method, channel_index=channel_index))
                     except ValueError as ve:
-                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_index}: {ve}")
+                        raise UnableToPlotError(f"M-max returned multiple values for channel {channel_index}: {ve}") from ve
 
                     if m_max is not None and m_max != 0:
                         m_wave_amplitudes = m_wave_amplitudes / m_max
@@ -452,12 +452,12 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting max H-reflex: {str(e)}")
+            raise UnableToPlotError(f"Error plotting max H-reflex: {e!s}") from e
 
     def plot_mmax(
         self,
-        channel_indices: List[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         interactive_cursor: bool = False,
         canvas=None,
     ):
@@ -475,7 +475,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 channel_indices = list(range(self.emg_object.num_channels))
 
             # Create plot layout
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
             # Raw data collection
             raw_data_dict = {
@@ -506,7 +506,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                             channel_index=channel_index,
                             return_mmax_stim_range=True,
                         )
-                    except (ValueError, AttributeError):
+                    except ValueError, AttributeError:
                         m_max = np.nan
                         mmax_low_stim = np.nan
 
@@ -566,7 +566,8 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
 
                     # Add annotation text
                     text = pg.TextItem(
-                        f"n={len(valid_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV\nStdev. M-Max: {std_amp:.2f}mV\nAvg. Stim.: above {mean_thresh:.2f} mV",
+                        f"n={len(valid_amplitudes)}\nAvg. M-max: {mean_amp:.2f}mV"
+                        f"\nStdev. M-Max: {std_amp:.2f}mV\nAvg. Stim.: above {mean_thresh:.2f} mV",
                         anchor=(0, 0.5),
                         color="black",
                         border=pg.mkPen("w"),
@@ -614,12 +615,12 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             # Re-raise UnableToPlotError without wrapping to preserve the original error
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting M-max: {str(e)}")
+            raise UnableToPlotError(f"Error plotting M-max: {e!s}") from e
 
     def plot_latency_window_distribution(
         self,
-        channel_indices: List[int] = None,
-        method: str = None,
+        channel_indices: list[int] | None = None,
+        method: str | None = None,
         bins: int | np.ndarray = 30,
         density: bool = False,
         plot_legend: bool = True,
@@ -646,7 +647,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
             if channel_indices is None:
                 channel_indices = list(range(self.emg_object.num_channels))
 
-            plot_items, layout = self.create_plot_layout(canvas, channel_indices)
+            plot_items, _ = self.create_plot_layout(canvas, channel_indices)
 
             # Unlink X-axes for this plot type so each channel shows its full distribution
             # (create_plot_layout links X axes by default for multi-channel layouts).
@@ -655,7 +656,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     _pi.setXLink(None)
                 except Exception:
                     # If unlinking fails for any backend reason, ignore and continue
-                    pass
+                    logger.warning("Could not unlink X-axis for a plot item; continuing with linked axes.")
 
             raw_data_dict = {
                 "channel_index": [],
@@ -668,29 +669,15 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
 
             # For each channel compute a common binning across all windows so lines are comparable
             # Iterate using zip to ensure plot_items and channel_indices are paired correctly
-            for plot_item, channel_index in zip(plot_items, channel_indices):
+            for plot_item, channel_index in zip(plot_items, channel_indices, strict=True):
                 if channel_index >= self.emg_object.num_channels:
                     continue
 
-                # Gather window names available in the dataset
-                window_names = getattr(self.emg_object, "unique_latency_window_names", lambda: [])()
-
-                # Collect amplitudes across all windows to determine common bin edges
-                all_amps_for_channel = []
-                window_to_amps: dict[str, np.ndarray] = {}
-                for window_name in window_names:
-                    per_session_amps = self.emg_object.get_lw_reflex_amplitudes(method, channel_index, window_name)
-                    # per_session_amps is a dict session_id -> np.ndarray
-                    amps_concat = np.concatenate([a for a in per_session_amps.values()]) if per_session_amps else np.array([])
-                    # Filter NaN
-                    amps_concat = amps_concat[~np.isnan(amps_concat)] if amps_concat.size > 0 else np.array([])
-                    window_to_amps[window_name] = amps_concat
-                    if amps_concat.size > 0:
-                        all_amps_for_channel.extend(amps_concat.tolist())
-
-                # (no debug logging here; keep function output clean)
-
-                if len(all_amps_for_channel) == 0:
+                distribution = self.emg_object.get_lw_distribution(method, channel_index, bins, density)
+                bin_edges = distribution["bin_edges"]
+                bin_centers = distribution["bin_centers"]
+                window_values = distribution["values"]
+                if bin_edges.size == 0:
                     # Nothing to plot for this channel
                     self.set_labels(
                         plot_item,
@@ -701,39 +688,21 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                     plot_item.showGrid(True, True)
                     continue
 
-                all_amps_for_channel = np.array(all_amps_for_channel)
-
-                # Determine bin edges (common for all windows)
-                if isinstance(bins, int):
-                    bin_edges = np.histogram_bin_edges(all_amps_for_channel, bins=bins)
-                else:
-                    bin_edges = np.asarray(bins)
-
-                bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
-
                 # Plot each window's distribution
                 # Add legend container if requested (one per plot_item)
                 if plot_legend:
                     try:
                         plot_item.addLegend()
                     except Exception:
-                        pass
+                        logger.warning("Could not add legend to plot item; continuing without legend.")
 
-                for window_name, amps in window_to_amps.items():
-                    if amps.size == 0:
+                for window_name, counts in window_values.items():
+                    if counts.size == 0:
                         continue
 
                     try:
-                        # Compute counts or probability density (properly normalized)
-                        if density:
-                            # np.histogram with density=True returns values such that
-                            # integral(density * bin_width) == 1
-                            counts, _ = np.histogram(amps, bins=bin_edges, density=True)
-                        else:
-                            counts, _ = np.histogram(amps, bins=bin_edges)
-
                         # record raw data
-                        for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts):
+                        for left, right, center, freq in zip(bin_edges[:-1], bin_edges[1:], bin_centers, counts, strict=True):
                             raw_data_dict["channel_index"].append(channel_index)
                             raw_data_dict["window_name"].append(window_name)
                             raw_data_dict["bin_left"].append(float(left))
@@ -750,7 +719,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                                     color_hex = w.color
                                     break
                         except Exception:
-                            pass
+                            logger.exception(f"Could not fetch color for window '{window_name}' in channel {channel_index}. Using default color.")
                         if color_hex is None:
                             color_hex = "white"
 
@@ -767,7 +736,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                             name=window_name if plot_legend else None,
                         )
                     except Exception:
-                        logging.error(f"Could not plot latency window '{window_name}' for channel {channel_index}.")
+                        logger.error(f"Could not plot latency window '{window_name}' for channel {channel_index}.")
                         continue
 
                 # Labels and formatting per channel
@@ -783,8 +752,7 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
                 try:
                     plot_item.enableAutoRange(axis="x", enable=True)
                 except Exception:
-                    # Fall back silently if the backend does not support this call
-                    pass
+                    logger.exception("Could not enable auto-range for X-axis; continuing with manual range.")
 
                 plot_item.showGrid(True, True)
 
@@ -799,4 +767,4 @@ class DatasetPlotterPyQtGraph(BasePlotterPyQtGraph):
         except UnableToPlotError:
             raise
         except Exception as e:
-            raise UnableToPlotError(f"Error plotting latency-window distribution: {str(e)}")
+            raise UnableToPlotError(f"Error plotting latency-window distribution: {e!s}") from e

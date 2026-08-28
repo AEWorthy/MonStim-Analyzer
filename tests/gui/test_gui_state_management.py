@@ -14,7 +14,7 @@ import pytest
 
 # Import Qt before other imports to ensure proper initialization
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QComboBox, QWidget
+from PySide6.QtWidgets import QComboBox, QWidget
 
 from monstim_gui.core.application_state import ApplicationState
 from monstim_gui.core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
@@ -33,9 +33,8 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def temp_settings_file():
     """Create a temporary settings file for testing."""
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".ini")
-    temp_file.close()
-    yield temp_file.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".ini") as temp_file:
+        yield temp_file.name
     # Cleanup
     Path(temp_file.name).unlink(missing_ok=True)
 
@@ -112,7 +111,7 @@ def clean_app_state():
                 del stored_values[key]
             else:
                 # Handle group removal - remove all keys starting with "key/"
-                keys_to_remove = [k for k in stored_values.keys() if k.startswith(f"{key}/")]
+                keys_to_remove = [k for k in stored_values if k.startswith(f"{key}/")]
                 for k in keys_to_remove:
                     del stored_values[k]
 
@@ -257,9 +256,7 @@ class TestApplicationStateBasics:
 
         # Test that saves are skipped during restoration
         # We can test the actual save_current_session_state method
-        clean_app_state.save_current_session_state(
-            experiment_id="test_exp", dataset_id="test_dataset", session_id="test_session"
-        )
+        clean_app_state.save_current_session_state(experiment_id="test_exp", dataset_id="test_dataset", session_id="test_session")
 
         # During restoration, setValue should not be called
         clean_app_state._mock_settings.setValue.assert_not_called()
@@ -289,9 +286,7 @@ class TestSessionStateManagement:
         # Reset restoration flag for this test
         clean_app_state._is_restoring_session = False
 
-        clean_app_state.save_current_session_state(
-            experiment_id="exp123", dataset_id="ds456", session_id="sess789", profile_name="test_profile"
-        )
+        clean_app_state.save_current_session_state(experiment_id="exp123", dataset_id="ds456", session_id="sess789", profile_name="test_profile")
 
         # Verify values were saved
         assert saved_values.get("SessionRestore/experiment") == "exp123"
@@ -370,9 +365,8 @@ class TestSessionStateManagement:
 
         # Test: tracking disabled
         def mock_get_value_disabled(key, default="", type=str):
-            if key == "Preferences/track_session_restoration":
-                if type is bool:
-                    return False
+            if key == "Preferences/track_session_restoration" and type is bool:
+                return False
             return default
 
         mock_settings.value.side_effect = mock_get_value_disabled
@@ -380,9 +374,8 @@ class TestSessionStateManagement:
 
         # Test: tracking enabled but no experiment
         def mock_get_value_no_exp(key, default="", type=str):
-            if key == "Preferences/track_session_restoration":
-                if type is bool:
-                    return True
+            if key == "Preferences/track_session_restoration" and type is bool:
+                return True
             return default  # Empty experiment
 
         mock_settings.value.side_effect = mock_get_value_no_exp
@@ -390,9 +383,8 @@ class TestSessionStateManagement:
 
         # Test: tracking enabled and experiment exists
         def mock_get_value_with_exp(key, default="", type=str):
-            if key == "Preferences/track_session_restoration":
-                if type is bool:
-                    return True
+            if key == "Preferences/track_session_restoration" and type is bool:
+                return True
             if key == "SessionRestore/experiment":
                 return "test_exp"
             return default
@@ -527,6 +519,22 @@ class TestSessionRestoration:
         assert clean_app_state._pending_experiment_id is None
         assert clean_app_state._pending_dataset_id is None
         assert clean_app_state._pending_session_id is None
+
+    def test_migrate_renamed_selection_scopes_nested_ids(self, clean_app_state):
+        """Renames update persisted selections without touching unrelated parents."""
+        clean_app_state.settings.setValue("SessionRestore/experiment", "exp")
+        clean_app_state.settings.setValue("SessionRestore/dataset", "old_ds")
+        clean_app_state.settings.setValue("SessionRestore/session", "sess")
+        clean_app_state.settings.setValue("LastSelection/experiment", "other_exp")
+        clean_app_state.settings.setValue("LastSelection/dataset", "old_ds")
+
+        clean_app_state.migrate_renamed_selection("dataset", "old_ds", "new_ds", experiment_id="exp")
+
+        assert clean_app_state.get_last_session_state()["dataset"] == "new_ds"
+        assert clean_app_state.get_last_selection()["dataset"] == "old_ds"
+
+        clean_app_state.migrate_renamed_selection("experiment", "exp", "new_exp")
+        assert clean_app_state.get_last_session_state()["experiment"] == "new_exp"
 
 
 class TestPreferencesManagement:
@@ -793,16 +801,7 @@ class TestUIConfigManagement:
 class TestResponsiveWidgets:
     """Test responsive widget behavior and scaling."""
 
-    @pytest.fixture
-    def qt_app(self):
-        """Create QApplication for widget testing."""
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication([])
-        yield app
-        # Don't quit the app as it might be used by other tests
-
-    def test_responsive_combo_box_initialization(self, qt_app):
+    def test_responsive_combo_box_initialization(self):
         """Test ResponsiveComboBox initialization."""
         combo = ResponsiveComboBox()
 
@@ -811,7 +810,7 @@ class TestResponsiveWidgets:
         assert combo.minimumWidth() > 0
         assert combo.minimumContentsLength() == 15
 
-    def test_responsive_combo_box_add_item(self, qt_app):
+    def test_responsive_combo_box_add_item(self):
         """Test ResponsiveComboBox addItem with tooltip."""
         combo = ResponsiveComboBox()
 
@@ -829,7 +828,7 @@ class TestResponsiveWidgets:
         # Tooltip might be set based on actual width calculation
         assert tooltip is None or tooltip == long_text
 
-    def test_responsive_combo_box_show_popup(self, qt_app):
+    def test_responsive_combo_box_show_popup(self):
         """Test ResponsiveComboBox popup sizing."""
         combo = ResponsiveComboBox()
         combo.addItem("Short")
@@ -846,7 +845,7 @@ class TestResponsiveWidgets:
         # Verify view width was set (exact value depends on font metrics)
         mock_view.setMinimumWidth.assert_called()
 
-    def test_responsive_scroll_area_initialization(self, qt_app):
+    def test_responsive_scroll_area_initialization(self):
         """Test ResponsiveScrollArea initialization."""
         scroll_area = ResponsiveScrollArea()
 
@@ -855,7 +854,7 @@ class TestResponsiveWidgets:
         assert scroll_area.minimumSize().width() > 0
         assert scroll_area.minimumSize().height() > 0
 
-    def test_responsive_scroll_area_set_widget(self, qt_app):
+    def test_responsive_scroll_area_set_widget(self):
         """Test ResponsiveScrollArea setWidget method."""
         scroll_area = ResponsiveScrollArea()
 

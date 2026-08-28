@@ -121,15 +121,29 @@ class TestAmplitudeCalculations:
             assert not np.isnan(result), f"Method {method} returned NaN"
             assert result >= 0 or method == "average_unrectified", f"Method {method} returned negative value: {result}"
 
-    def test_empty_window_handling(self):
-        """Test behavior with empty or invalid time windows."""
-        # Empty window (start == end)
+    def test_closed_window_and_invalid_window_handling(self):
+        """Latency windows include both flags; reversed windows remain invalid."""
+        # A zero-duration closed interval contains its one boundary sample.
         result = _calculate_rms_amplitude(self.sine_signal, 5, 5, self.scan_rate)
-        assert np.isnan(result), "Empty window should return NaN"
+        sample_index = int(5 * self.scan_rate / 1000)
+        assert result == abs(self.sine_signal[sample_index])
 
         # Invalid window (start > end)
         result = _calculate_rms_amplitude(self.sine_signal, 8, 2, self.scan_rate)
         assert np.isnan(result), "Invalid window should return NaN"
+
+    def test_all_scalar_methods_include_the_end_flag_sample(self):
+        signal = np.array([1.0, -2.0, 100.0])
+        expected = {
+            "average_rectified": 1.5,
+            "peak_to_trough": 3.0,
+            "rms": np.sqrt(2.5),
+            "average_unrectified": -0.5,
+            "auc": 0.003,
+        }
+
+        for method, value in expected.items():
+            assert calculate_emg_amplitude(signal, 0, 1, 1000, method) == pytest.approx(value)
 
 
 class TestFiltering:
@@ -274,9 +288,7 @@ class TestPlateauDetection:
     def test_detect_plateau_success(self):
         """Test successful plateau detection."""
         # Use clean amplitudes for reliable plateau detection
-        plateau_start, plateau_end = detect_plateau(
-            self.clean_amplitudes, max_window_size=15, min_window_size=3, threshold=0.3
-        )
+        plateau_start, plateau_end = detect_plateau(self.clean_amplitudes, max_window_size=15, min_window_size=3, threshold=0.3)
 
         assert plateau_start is not None, "Should detect plateau in clean sigmoidal data"
         assert plateau_end is not None, "Should detect plateau in clean sigmoidal data"
@@ -296,7 +308,10 @@ class TestPlateauDetection:
         noisy_linear = linear_base + 0.5 * np.random.normal(0, 1, 50)  # High noise
 
         plateau_start, plateau_end = detect_plateau(
-            noisy_linear, max_window_size=8, min_window_size=3, threshold=0.1  # Smaller window  # Stricter threshold
+            noisy_linear,
+            max_window_size=8,
+            min_window_size=3,
+            threshold=0.1,  # Smaller window  # Stricter threshold
         )
 
         # Should not find a plateau in very noisy linear data with strict threshold
@@ -327,9 +342,7 @@ class TestPlateauDetection:
         linear_voltages = np.linspace(0, 10, 30)
         linear_amplitudes = np.linspace(0, 2, 30)  # No plateau
 
-        mmax = get_avg_mmax(
-            linear_voltages, linear_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, validation_tolerance=1.05
-        )
+        mmax = get_avg_mmax(linear_voltages, linear_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, validation_tolerance=1.05)
 
         assert mmax is not None, "Should calculate M-max using fallback method"
         assert isinstance(mmax, (int, float)), "M-max should be numeric"
@@ -381,7 +394,9 @@ class TestPlateauDetection:
 
         # Test with lenient tolerance
         mmax_lenient = get_avg_mmax(
-            self.stimulus_voltages, self.noisy_amplitudes, validation_tolerance=1.20  # Lenient (20% tolerance)
+            self.stimulus_voltages,
+            self.noisy_amplitudes,
+            validation_tolerance=1.20,  # Lenient (20% tolerance)
         )
 
         assert mmax_strict is not None, "Should calculate M-max with strict tolerance"

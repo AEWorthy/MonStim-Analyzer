@@ -1,21 +1,126 @@
-[tool.isort]
-profile = "black"
-line_length = 127
+# ============================================================
+# MonStim Analyzer
+# Project configuration
+# ============================================================
 
-[tool.black]
-line-length = 127
-target-version = ['py310', 'py311', 'py312']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+
+# ============================================================
+# Project metadata
+# ============================================================
+
+[project]
+name = "monstim-analyzer"
+dynamic = ["version"]
+description = "GUI application for analyzing MonStim electrophysiology data."
+readme = "README.md"
+requires-python = ">=3.12"
+
+authors = [
+    {name = "Andrew Worthy"}
+]
+
+license = {text = "Proprietary"}
+
+
+# ============================================================
+# setuptools
+# ============================================================
+
+[tool.setuptools.dynamic]
+version = {attr = "monstim_gui.__version__"}
+
+[tool.setuptools]
+packages = ["monstim_gui", "monstim_signals"]
+
+# ============================================================
+# pytest
+# ============================================================
+
+[tool.pytest.ini_options]
+
+testpaths = [
+    "tests",
+]
+
+pythonpath = [
+    ".",
+]
+
+norecursedirs = [
+    "build",
+    "dist",
+    ".git",
+    ".venv",
+    "tests/legacy",
+]
+
+addopts = [
+    "-q",
+    "-m",
+    "not legacy",
+]
+
+markers = [
+    "unit: Fast, isolated unit tests",
+    "integration: Cross-module/integration tests",
+    "slow: Slow tests (performance, large data)",
+    "legacy: Out-of-date tests kept for reference; excluded from default runs",
+]
+
+
+# ============================================================
+# Ruff
+# ============================================================
+
+[tool.ruff]
+
+target-version = "py314"
+line-length = 150
+
+exclude = [
+    ".git",
+    ".github",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "dist",
+    "docs",
+    "data",
+    "export",
+]
+
+[tool.ruff.lint]
+
+select = [
+    "E",
+    "F",
+    "I",
+    "C",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
+]
+
+ignore = [
+    "E402",   # module level import not at top
+    "C901",   # McCabe complexity
+]
+
+[tool.ruff.lint.isort]
+
+known-first-party = [
+    "monstim_gui",
+    "monstim_signals",
+]
+
+[tool.ruff.format]
+
+quote-style = "double"

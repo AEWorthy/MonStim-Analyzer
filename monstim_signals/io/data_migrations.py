@@ -48,20 +48,22 @@ Developer Checklist for Each Migration:
 * Tested
 """
 
-# TODO: Implement migrations for meta JSONs as well. Add a schema validation step.
-
 from __future__ import annotations
 
+import datetime
 import logging
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple
+from typing import Any
 
 from monstim_signals.version import DATA_VERSION as CURRENT_DATA_VERSION
 
 # Type alias
 MigrationFunc = Callable[[dict], dict]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,11 +77,11 @@ class MigrationStep:
 class MigrationReport:
     original_version: str
     final_version: str
-    steps_applied: List[str]
+    steps_applied: list[str]
     changed: bool
     dry_run: bool = False
-    field_changes: Dict[str, Tuple[Any, Any]] = field(default_factory=dict)
-    errors: List[str] = field(default_factory=list)
+    field_changes: dict[str, tuple[Any, Any]] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
 
 
 class InvalidVersionStringError(RuntimeError):
@@ -96,18 +98,18 @@ class UnknownVersionError(RuntimeError):
 
 # Registry: ordered list of steps.
 # You will append new steps at the *end* as versions advance.
-MIGRATIONS: List[MigrationStep] = []
+MIGRATIONS: list[MigrationStep] = []
 
 
-def parse_version_tuple(v: str) -> Tuple[int, int, int]:
+def parse_version_tuple(v: str) -> tuple[int, int, int]:
     """Parse a semantic version string into a (major, minor, patch) tuple.
 
     Supported forms (most to least strict):
-    * MAJOR.MINOR.PATCH  (e.g. 2.0.1) – canonical
+    * MAJOR.MINOR.PATCH  (e.g. 2.0.1) - canonical
     * MAJOR.MINOR        (e.g. 2.1) → interpreted as (MAJOR, MINOR, 0) with warning
-    * Date-like YYYY.MM-suffix (e.g. 2025.09-test) – treated as legacy (1,0,0) with warning
+    * Date-like YYYY.MM-suffix (e.g. 2025.09-test) - treated as legacy (1,0,0) with warning
 
-    The relaxed MAJOR.MINOR form exists to tolerate hand‑edited files or early
+    The relaxed MAJOR.MINOR form exists to tolerate hand-edited files or early
     prototype exports. A structured warning is emitted so calling code / users
     can normalize their annotation files over time.
     """
@@ -120,11 +122,11 @@ def parse_version_tuple(v: str) -> Tuple[int, int, int]:
     # Relaxed MAJOR.MINOR form
     if re.fullmatch(r"\d+\.\d+", v):
         major, minor = v.split(".")
-        logging.warning("Annotation data_version '%s' missing patch component; assuming '%s.0'.", v, v)
+        logger.warning("Annotation data_version '%s' missing patch component; assuming '%s.0'.", v, v)
         return int(major), int(minor), 0
     # Date-like pattern: YYYY.MM-anything
     if re.fullmatch(r"\d{4}\.\d{2}[-_A-Za-z0-9]+", v):
-        logging.warning(
+        logger.warning(
             "Non-semver annotation data_version '%s' encountered; treating as legacy '1.0.0' for migration.",
             v,
         )
@@ -191,11 +193,7 @@ def migrate_1_0_0_to_2_0_0(data: dict) -> dict:
                     type_override = ch.get("type_override")
                     invert = ch.get("invert")
                     preserved_channels.append(
-                        {
-                            k: v
-                            for k, v in {"name": name, "unit": unit, "type_override": type_override, "invert": invert}.items()
-                            if v is not None
-                        }
+                        {k: v for k, v in {"name": name, "unit": unit, "type_override": type_override, "invert": invert}.items() if v is not None}
                     )
         elif isinstance(raw_channels, str):
             # Legacy comma-separated or whitespace string; split into names
@@ -231,17 +229,16 @@ def migrate_2_0_1_to_2_1_0(data: dict) -> dict:
     """Add date_added/date_modified fields and bump version to 2.1.0.
 
     Applies to all annotation levels (recording/session/dataset/experiment).
-    - Preserve existing date_added if present; otherwise set to now (ISO, seconds).
-    - Always set/refresh date_modified to now (ISO, seconds).
+    - Preserve existing date_added if present; otherwise set to now in UTC (ISO, seconds).
+    - Always set/refresh date_modified to now in UTC (ISO, seconds).
     - Set data_version to 2.1.0.
 
     Idempotence: This step only runs when starting at 2.0.1; once at 2.1.0 it
     will not run again. Within a single run, repeated application would simply
     refresh date_modified.
     """
-    import datetime as _dt
 
-    now = _dt.datetime.now().isoformat(timespec="seconds")
+    now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
     if not data.get("date_added"):
         data["date_added"] = now
     # Always update modified to reflect migration time
@@ -259,8 +256,8 @@ if parse_version_tuple(CURRENT_DATA_VERSION) >= (2, 1, 0):
     MIGRATIONS.append(MigrationStep("2.0.1", "2.1.0", migrate_2_0_1_to_2_1_0))
 
 
-def _build_step_map(migrations: List[MigrationStep]) -> Dict[str, MigrationStep]:
-    step_map: Dict[str, MigrationStep] = {}
+def _build_step_map(migrations: list[MigrationStep]) -> dict[str, MigrationStep]:
+    step_map: dict[str, MigrationStep] = {}
     for m in migrations:
         if m.from_version in step_map:
             raise RuntimeError(f"Duplicate migration registration for from_version={m.from_version}")
@@ -269,7 +266,7 @@ def _build_step_map(migrations: List[MigrationStep]) -> Dict[str, MigrationStep]
 
 
 # Build fast lookup from from_version to step (guard duplicates)
-_STEP_MAP: Dict[str, MigrationStep] = _build_step_map(MIGRATIONS)
+_STEP_MAP: dict[str, MigrationStep] = _build_step_map(MIGRATIONS)
 
 
 def needs_migration(stored_version: str) -> bool:
@@ -287,8 +284,105 @@ def validate_annotation_schema(data: dict) -> None:
         raise RuntimeError("Annotation missing valid 'data_version' after migration.")
 
 
-def _compute_field_changes(before: dict, after: dict) -> Dict[str, Tuple[Any, Any]]:
-    changes: Dict[str, Tuple[Any, Any]] = {}
+def validate_meta_schema(data: dict) -> None:
+    """Validate the persisted recording metadata shape.
+
+    Metadata is consumed by :class:`RecordingMeta`, whose required constructor
+    fields form the on-disk schema.  Extra keys remain allowed for forward
+    compatibility, but required fields and nested stimulus clusters must have
+    the expected JSON-compatible types.
+    """
+    required = {
+        "recording_id": str,
+        "num_channels": int,
+        "scan_rate": (int, float),
+        "pre_stim_acquired": (int, float),
+        "post_stim_acquired": (int, float),
+        "recording_interval": (int, float),
+        "channel_types": list,
+        "emg_amp_gains": (list, type(None)),
+        "stim_clusters": list,
+    }
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise RuntimeError(f"Metadata missing required fields: {', '.join(missing)}")
+    invalid = [key for key, expected in required.items() if not isinstance(data[key], expected)]
+    if invalid:
+        raise RuntimeError(f"Metadata has invalid field types: {', '.join(invalid)}")
+    if not all(isinstance(cluster, dict) for cluster in data["stim_clusters"]):
+        raise RuntimeError("Metadata 'stim_clusters' must contain objects.")
+    if "data_version" not in data or not isinstance(data["data_version"], str) or not data["data_version"]:
+        raise RuntimeError("Metadata missing valid 'data_version' after migration.")
+
+
+def migrate_meta_dict(
+    raw: dict,
+    *,
+    dry_run: bool = False,
+    in_place: bool = False,
+    validate: bool = True,
+    strict_version: bool = False,
+) -> MigrationReport:
+    """Migrate a recording ``.meta.json`` dictionary to the current schema."""
+    if not isinstance(raw, dict):
+        raise TypeError("Metadata must be a JSON object.")
+
+    original = raw.get("data_version") or "0.0.0"
+    m, n, p = parse_version_tuple(original)
+    original = f"{m}.{n}.{p}"
+    current_tuple = parse_version_tuple(CURRENT_DATA_VERSION)
+    if (m, n, p) > current_tuple:
+        message = f"Stored metadata data_version {original} is newer than supported {CURRENT_DATA_VERSION}."
+        if strict_version:
+            raise FutureVersionError(message)
+        logger.warning("%s Proceeding without migration.", message)
+        return MigrationReport(original, original, [], changed=False, dry_run=dry_run)
+
+    if (m, n, p) >= current_tuple:
+        if validate:
+            validate_meta_schema(raw)
+        return MigrationReport(original, original, [], changed=False, dry_run=dry_run)
+
+    steps = [f"{original}->{CURRENT_DATA_VERSION}"]
+    if dry_run:
+        return MigrationReport(original, CURRENT_DATA_VERSION, steps, changed=True, dry_run=True)
+
+    before_snapshot = dict(raw)
+    working = raw if in_place else dict(raw)
+    # Older metadata used the same fields but did not carry a version.  Fill
+    # only constructor defaults so all recorded facts and forward-compatible
+    # keys are retained.
+    defaults = {
+        "recording_id": "",
+        "num_channels": 0,
+        "scan_rate": 0,
+        "pre_stim_acquired": 0,
+        "post_stim_acquired": 0,
+        "recording_interval": 0.0,
+        "channel_types": [],
+        "emg_amp_gains": None,
+        "stim_clusters": [],
+        "primary_stim": None,
+        "num_samples": None,
+    }
+    for key, value in defaults.items():
+        working.setdefault(key, value)
+    working["data_version"] = CURRENT_DATA_VERSION
+    if validate:
+        validate_meta_schema(working)
+    if not in_place:
+        raw.update(working)
+    return MigrationReport(
+        original,
+        CURRENT_DATA_VERSION,
+        steps,
+        changed=True,
+        field_changes=_compute_field_changes(before_snapshot, working),
+    )
+
+
+def _compute_field_changes(before: dict, after: dict) -> dict[str, tuple[Any, Any]]:
+    changes: dict[str, tuple[Any, Any]] = {}
     for k in set(before.keys()).union(after.keys()):
         b = before.get(k, object())
         a = after.get(k, object())
@@ -326,7 +420,7 @@ def migrate_annotation_dict(
     """
     # Determine initial version (bootstrap if missing)
     if "data_version" not in raw or not raw["data_version"]:
-        logging.warning("Annotation missing data_version; assuming legacy '1.0.0'.")
+        logger.warning("Annotation missing data_version; assuming legacy '1.0.0'.")
         bootstrap_version = "1.0.0"
     else:
         bootstrap_version = raw["data_version"]
@@ -336,36 +430,32 @@ def migrate_annotation_dict(
         m, n, p = parse_version_tuple(bootstrap_version)
         canonical = f"{m}.{n}.{p}"
         if canonical != bootstrap_version:
-            logging.debug("Canonicalizing annotation data_version '%s' -> '%s'", bootstrap_version, canonical)
+            logger.debug("Canonicalizing annotation data_version '%s' -> '%s'", bootstrap_version, canonical)
             bootstrap_version = canonical
     except InvalidVersionStringError:
         # Will be raised again below consistently; let existing tests capture.
-        raise
+        logger.exception("Invalid data_version string '%s' encountered; treating as legacy '1.0.0'.", bootstrap_version)
 
     # Future version guard. In strict mode raise immediately. In non-strict
     # mode we downgrade to a warning so that users with newer annotations can
-    # still *attempt* to open them (best‑effort forward compatibility) but are
+    # still *attempt* to open them (best-effort forward compatibility) but are
     # encouraged to upgrade.
     if parse_version_tuple(bootstrap_version) > parse_version_tuple(CURRENT_DATA_VERSION):
-        msg = (
-            f"Stored data_version {bootstrap_version} is newer than supported {CURRENT_DATA_VERSION}. "
-            "Please upgrade package."
-        )
+        msg = f"Stored data_version {bootstrap_version} is newer than supported {CURRENT_DATA_VERSION}. Please upgrade package."
         if strict_version:
             raise FutureVersionError(msg)
-        logging.warning("%s (non-strict mode - proceeding without migration)", msg)
+        logger.warning("%s (non-strict mode - proceeding without migration)", msg)
         # Nothing else to do; we cannot migrate forward. Return a dry style report.
         return MigrationReport(bootstrap_version, bootstrap_version, [], changed=False, dry_run=dry_run)
 
     if not needs_migration(bootstrap_version):
         # Ensure version key exists when missing but no migration needed (e.g., already current but absent)
-        if "data_version" not in raw or not raw["data_version"]:
-            if not dry_run:
-                raw["data_version"] = CURRENT_DATA_VERSION
+        if "data_version" not in raw or (not raw["data_version"] and not dry_run):
+            raw["data_version"] = CURRENT_DATA_VERSION
         return MigrationReport(bootstrap_version, bootstrap_version, [], changed=False, dry_run=dry_run)
 
     # Plan steps
-    planned_steps: List[MigrationStep] = []
+    planned_steps: list[MigrationStep] = []
     current = bootstrap_version
     safety_counter = 0
     while current != CURRENT_DATA_VERSION:
@@ -374,9 +464,7 @@ def migrate_annotation_dict(
             raise RuntimeError("Excessive migration steps; possible cycle.")
         step = _STEP_MAP.get(current)
         if not step:
-            raise UnknownVersionError(
-                f"No migration path from {current} to {CURRENT_DATA_VERSION}. Missing step in MIGRATIONS."
-            )
+            raise UnknownVersionError(f"No migration path from {current} to {CURRENT_DATA_VERSION}. Missing step in MIGRATIONS.")
         planned_steps.append(step)
         current = step.to_version
 
@@ -393,9 +481,9 @@ def migrate_annotation_dict(
     working = raw if in_place else dict(raw)
     before_snapshot = dict(working)
 
-    executed_steps: List[str] = []
+    executed_steps: list[str] = []
     for step in planned_steps:
-        logging.debug(f"Migrating annotation {step.from_version} -> {step.to_version}")
+        logger.debug(f"Migrating annotation {step.from_version} -> {step.to_version}")
         result = step.func(working)
         # If the migration function returned a *different* dict object while in_place=True,
         # we must sync changes back to the original object so callers observing `raw` see updates.
@@ -428,22 +516,22 @@ def migrate_annotation_dict(
 
 
 __all__ = [
-    "MigrationStep",
-    "MigrationReport",
+    "MIGRATIONS",
     "FutureVersionError",
     "InvalidVersionStringError",
+    "MigrationReport",
+    "MigrationStep",
     "UnknownVersionError",
     "migrate_annotation_dict",
+    "migrate_meta_dict",
     "needs_migration",
-    "MIGRATIONS",
     "validate_annotation_schema",
+    "validate_meta_schema",
 ]
 
 
 # ---- High-level scan utility -------------------------------------------------
-def scan_annotation_versions(
-    root: "Path | str", *, include_levels: Iterable[str] = ("experiment", "dataset", "session", "recording")
-) -> List[dict]:
+def scan_annotation_versions(root: Path | str, *, include_levels: Iterable[str] = ("experiment", "dataset", "session", "recording")) -> list[dict]:
     """Scan an experiment root for annotation files and summarize migration needs.
 
     Parameters
@@ -457,18 +545,18 @@ def scan_annotation_versions(
     Returns
     -------
     list of dict with keys:
-        path: str – file path
-        level: str – annotation level
-        version: str – discovered version (or 'missing')
+        path: str - file path
+        level: str - annotation level
+        version: str - discovered version (or 'missing')
         needs_migration: bool
-        planned_steps: list[str] – empty if none or unknown path
+        planned_steps: list[str] - empty if none or unknown path
     """
     from pathlib import Path  # local import to avoid circulars in some contexts
 
     root_path = Path(root)
-    results: List[dict] = []
+    results: list[dict] = []
 
-    def _plan(v: str) -> List[str]:
+    def _plan(v: str) -> list[str]:
         try:
             # Canonicalize for planning
             m, n, p = parse_version_tuple(v)
@@ -511,6 +599,7 @@ def scan_annotation_versions(
                     version = version_raw
             except Exception:
                 version = "unreadable"
+                logger.exception("Failed to read experiment annotation file %s", expt_file)
             results.append(
                 {
                     "path": str(expt_file),
@@ -543,6 +632,7 @@ def scan_annotation_versions(
                         version = version_raw
                 except Exception:
                     version = "unreadable"
+                    logger.exception("Failed to read dataset annotation file %s", ds_annot)
                 results.append(
                     {
                         "path": str(ds_annot),
@@ -574,6 +664,7 @@ def scan_annotation_versions(
                             version = version_raw
                     except Exception:
                         version = "unreadable"
+                        logger.exception("Failed to read session annotation file %s", sess_annot)
                     results.append(
                         {
                             "path": str(sess_annot),
@@ -603,6 +694,7 @@ def scan_annotation_versions(
                             else:
                                 version = version_raw
                         except Exception:
+                            logger.exception("Failed to read recording annotation file %s", rec_annot)
                             version = "unreadable"
                         results.append(
                             {

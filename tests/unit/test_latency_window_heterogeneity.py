@@ -1,3 +1,5 @@
+from threading import RLock
+
 import numpy as np
 
 from monstim_signals.core import DatasetAnnot, LatencyWindow, SessionAnnot
@@ -37,7 +39,7 @@ def _make_session(session_id: str, scan_rate=1000, stim_start=0.0, windows=None,
     session.m_max_args = {"validation_tolerance": 1.05}
     # Provide minimal properties used downstream
     session.num_channels = n_channels
-    session.channel_names = [f"Ch{i+1}" for i in range(n_channels)]
+    session.channel_names = [f"Ch{i + 1}" for i in range(n_channels)]
     session.primary_stim = type("Stim", (), {"stim_type": "square"})()
 
     # Minimal dummy recordings so Session.stimulus_voltages property works
@@ -61,18 +63,22 @@ def _make_session(session_id: str, scan_rate=1000, stim_start=0.0, windows=None,
     # Provide fake filtered recordings for amplitude calculations
     rng = np.random.default_rng(0)
     filtered = [rng.normal(0, 0.1, size=(1000, n_channels)) for _ in range(n_recordings)]
-    # We monkey-patch the internal cached storage or property logic
-    # Since recordings_filtered is now a dynamic property filtering all_recordings_filtered
-    # we patch all_recordings_filtered instead.
-    session.all_recordings_filtered = filtered
+    session._cache_lock = RLock()
+    session._signal_revision = session._window_revision = session._selection_revision = session._analysis_revision = 0
+    session._signal_caches = {"raw": {}, "filtered": {}, "rectified_raw": {}, "rectified_filtered": {}}
+    session._signal_list_cache = {"filtered": filtered}
+    session._signal_inflight = {}
+    session._window_result_cache = {}
+    session._latency_window_amplitude_cache = {}
+    session._mmax_cache = {}
     # Ensure excluded_recordings is empty so all are returned
     session.annot.excluded_recordings = []
 
     # Methods required by dataset aggregation
-    def reset_all_caches():
+    def invalidate_window_results():
         pass
 
-    session.reset_all_caches = reset_all_caches
+    session.invalidate_window_results = invalidate_window_results
 
     def update_latency_window_parameters():
         # Derive m/h arrays based on window names
@@ -97,10 +103,8 @@ def _make_session(session_id: str, scan_rate=1000, stim_start=0.0, windows=None,
         [
             calculate_emg_amplitude(
                 rec[:, channel_index],
-                (next(w for w in session.annot.latency_windows if w.name == window).start_times[channel_index])
-                + session.stim_start,
-                (next(w for w in session.annot.latency_windows if w.name == window).end_times[channel_index])
-                + session.stim_start,
+                (next(w for w in session.annot.latency_windows if w.name == window).start_times[channel_index]) + session.stim_start,
+                (next(w for w in session.annot.latency_windows if w.name == window).end_times[channel_index]) + session.stim_start,
                 session.scan_rate,
                 method=method,
             )

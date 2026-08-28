@@ -8,6 +8,8 @@ patterns, repository failures, data corruption scenarios, and recovery mechanism
 
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 import shutil
 import tempfile
 from pathlib import Path
@@ -89,14 +91,14 @@ class TestUnableToPlotErrorHandling:
 
         # Test different error scenarios
         test_cases = [
-            ("No channels to plot", "No Channels Selected"),
-            ("Canvas must be provided", "Plot Error"),
-            ("Invalid data format", "Plot Error"),
-            ("Insufficient data points", "Plot Error"),
+            ("No channels to plot", "no_channels", "No Channels Selected"),
+            ("Canvas must be provided", None, "Plot Error"),
+            ("Invalid data format", None, "Plot Error"),
+            ("Insufficient data points", None, "Plot Error"),
         ]
 
-        for error_msg, expected_title in test_cases:
-            error = UnableToPlotError(error_msg)
+        for error_msg, reason, expected_title in test_cases:
+            error = UnableToPlotError(error_msg, reason=reason)
 
             # Mock QMessageBox to capture the message
             with patch("monstim_gui.managers.plot_controller.QMessageBox") as mock_msg:
@@ -111,13 +113,10 @@ class TestUnableToPlotErrorHandling:
                 user_message = call_args[0][2]  # message argument
 
                 # Verify title is set correctly
-                if "No channels to plot" in error_msg:
-                    assert actual_title == "No Channels Selected"
-                else:
-                    assert actual_title == "Plot Error"
+                assert actual_title == expected_title
 
                 # Verify user-friendly message content
-                if "No channels to plot" in error_msg:
+                if reason == "no_channels":
                     assert "select at least one channel" in user_message.lower()
                 else:
                     assert "unable to create plot" in user_message.lower()
@@ -142,7 +141,7 @@ class TestUnableToPlotErrorHandling:
     def test_canvas_validation_error_handling(self):
         """Test error handling when canvas is None or invalid."""
         # This tests the pattern where canvas=None should raise UnableToPlotError
-        with pytest.raises(UnableToPlotError, match="Canvas.*required"):
+        with pytest.raises(UnableToPlotError, match=r"Canvas.*required"):
             raise UnableToPlotError("Canvas is required for plotting")
 
         # Test invalid canvas scenarios
@@ -190,6 +189,7 @@ class TestGracefulDegradationScenarios:
         # Repository should handle missing data gracefully
         # The current implementation raises IndexError when no recordings exist
         # This tests that the error is predictable and handles gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -200,6 +200,9 @@ class TestGracefulDegradationScenarios:
             assert isinstance(e, (IndexError, FileNotFoundError, OSError, ValueError))
             # Verify the error is informative
             assert len(str(e)) > 0
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_corrupted_annotation_file_recovery(self, temp_workspace):
         """Test recovery when annotation files are corrupted."""
@@ -212,6 +215,7 @@ class TestGracefulDegradationScenarios:
             f.write('{"invalid": json, "syntax":]')  # Invalid JSON
 
         # System should handle corrupted annotations gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -220,6 +224,9 @@ class TestGracefulDegradationScenarios:
         except (json.JSONDecodeError, ValueError, FileNotFoundError) as e:
             # These are acceptable failure modes for corrupted data
             assert isinstance(e, (json.JSONDecodeError, ValueError, FileNotFoundError))
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_partial_data_loading_resilience(self, temp_workspace):
         """Test system resilience when only partial data is available."""
@@ -257,6 +264,7 @@ class TestGracefulDegradationScenarios:
             f.write(b"not an hdf5 file")
 
         # System should load what it can and handle errors gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -264,7 +272,10 @@ class TestGracefulDegradationScenarios:
             assert loaded_session is not None
         except Exception as e:
             # Acceptable if the corruption is too severe
-            logging.info(f"Acceptable graceful failure: {e}")
+            logger.info(f"Acceptable graceful failure: {e}")
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_memory_pressure_graceful_degradation(self, mock_corrupted_data):
         """Test graceful behavior under memory pressure scenarios."""
@@ -273,7 +284,7 @@ class TestGracefulDegradationScenarios:
             try:
                 # Attempt operation that would normally succeed
                 _ = np.array([1, 2, 3, 4, 5])
-                assert False, "Should have raised MemoryError"
+                raise AssertionError("Should have raised MemoryError")
             except MemoryError as e:
                 # This is the expected graceful failure
                 assert "memory" in str(e).lower()
@@ -306,7 +317,7 @@ class TestGracefulDegradationScenarios:
 
             with open(invalid_config) as f:
                 _ = yaml.safe_load(f)
-            assert False, "Should have failed to parse invalid YAML"
+            raise AssertionError("Should have failed to parse invalid YAML")
         except yaml.YAMLError:
             # Expected graceful failure - system should use defaults
             default_config = {"default": True}
@@ -453,15 +464,13 @@ class TestSystemResilienceUnderFailureConditions:
                 output_file = temp_workspace / "large_output.h5"
                 with open(output_file, "w") as f:
                     f.write("data")
-                assert False, "Should have raised OSError"
+                raise AssertionError("Should have raised OSError for disk full")
             except OSError as e:
                 # System should handle disk full gracefully
                 assert "space" in str(e).lower() or "device" in str(e).lower()
 
                 # Recovery guidance should be provided
-                recovery_msg = (
-                    "Insufficient disk space. Please free up space and try again, " "or select a different output location."
-                )
+                recovery_msg = "Insufficient disk space. Please free up space and try again, or select a different output location."
                 assert "disk space" in recovery_msg.lower()
                 assert "free up space" in recovery_msg.lower()
 
@@ -586,6 +595,7 @@ class TestRepositoryErrorHandling:
             f.write(b"corrupted hdf5 data")
 
         # Repository should handle corruption gracefully
+        loaded_session = None
         try:
             repo = SessionRepository(session_dir)
             loaded_session = repo.load()
@@ -596,6 +606,9 @@ class TestRepositoryErrorHandling:
             assert isinstance(e, (OSError, ValueError, Exception))
             # Error message should be informative
             assert len(str(e)) > 0
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
     def test_repository_permission_error_handling(self, temp_workspace):
         """Test handling of permission errors in repository operations."""
@@ -608,7 +621,7 @@ class TestRepositoryErrorHandling:
             try:
                 new_dir = restricted_dir / "new_folder"
                 new_dir.mkdir()
-                assert False, "Should have raised PermissionError"
+                raise AssertionError("Should have raised PermissionError")
             except PermissionError as e:
                 # Repository should provide helpful error messages
                 error_msg = f"Unable to create directory due to permissions: {e}"
@@ -642,6 +655,7 @@ class TestRepositoryErrorHandling:
 
         # Repository should handle unexpected changes
         # Note: Since no recordings exist, this will raise IndexError - that's acceptable
+        loaded_session = None
         try:
             loaded_session = repo.load()
             # May succeed with updated data or detect the change
@@ -650,6 +664,9 @@ class TestRepositoryErrorHandling:
             # IndexError is expected when no recordings exist - acceptable failure
             # ValueError/JSONDecodeError if change detection/validation fails
             assert isinstance(e, (IndexError, ValueError, json.JSONDecodeError))
+        finally:
+            if loaded_session is not None:
+                loaded_session.close()
 
 
 class TestConfigurationErrorRecovery:
@@ -767,7 +784,7 @@ class TestMemoryAndResourceManagement:
                     assert "data" in f
                     assert f["data"].shape == (100, 2)
 
-        except (OSError, IOError) as e:
+        except OSError as e:
             # Acceptable if system resource limits are hit
             assert "too many" in str(e).lower() or "resource" in str(e).lower()
 
@@ -792,12 +809,12 @@ class TestMemoryAndResourceManagement:
                 return "completed"
             except Exception as e:
                 # Log error but don't crash
-                logging.error(f"Worker error: {e}")
+                logger.error(f"Worker error: {e}")
                 return None
 
         try:
             # Create multiple threads
-            for i in range(5):
+            for _i in range(5):
                 thread = threading.Thread(target=worker_function)
                 thread.start()
                 threads.append(thread)
@@ -808,7 +825,7 @@ class TestMemoryAndResourceManagement:
 
                 # Check if thread completed properly
                 if thread.is_alive():
-                    logging.warning("Thread did not complete within timeout")
+                    logger.warning("Thread did not complete within timeout")
 
         except RuntimeError as e:
             # Thread creation errors should be handled gracefully
@@ -819,7 +836,7 @@ class TestMemoryAndResourceManagement:
             for thread in threads:
                 if thread.is_alive():
                     # In real implementation, would use proper cleanup
-                    logging.warning("Thread still alive during cleanup")
+                    logger.warning("Thread still alive during cleanup")
 
 
 # Ensure proper cleanup after all tests

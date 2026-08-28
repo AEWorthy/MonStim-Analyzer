@@ -28,6 +28,29 @@ PIP_EXCLUDE = {
     "shiboken6",
 }
 
+# Known name equivalences between pip and conda naming.
+#
+# `requirements.txt` must use PyPI names for pip-only installs; conda
+# environments should keep lean conda package names where they differ.
+NAME_EQUIVALENTS = {
+    "matplotlib": ("matplotlib-base",),
+    "matplotlib-base": ("matplotlib",),
+}
+
+
+def normalize_name(name):
+    """Normalize package names for cross-file comparisons."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+PIP_EXCLUDE = {normalize_name(name) for name in PIP_EXCLUDE}
+
+
+def equivalent_names(name):
+    normalized = normalize_name(name)
+    yield normalized
+    yield from NAME_EQUIVALENTS.get(normalized, ())
+
 
 def parse_requirements(path="requirements.txt"):
     reqs = {}
@@ -39,7 +62,7 @@ def parse_requirements(path="requirements.txt"):
         if not ln or ln.startswith("#"):
             continue
         name = re.split(r"[=<>!~\[]", ln, maxsplit=1)[0].strip()
-        if name.lower() in DEV_EXCLUDE:
+        if normalize_name(name) in DEV_EXCLUDE:
             continue
         # Prefer == versions if available
         m = re.search(r"==(.+)$", ln)
@@ -67,11 +90,11 @@ def sync(env_path="environment.yml", req_path="requirements.txt"):
     for item in deps:
         if isinstance(item, str):
             name = item.split("=")[0].strip()
-            lower = name.lower()
+            equivalent_conda_names = set(equivalent_names(name))
             # If requirements contain this package, update the conda style to name=version
             match = None
-            for rname in reqs.keys():
-                if rname.lower() == lower:
+            for rname in reqs:
+                if normalize_name(rname) in equivalent_conda_names:
                     match = rname
                     break
             if match:
@@ -81,7 +104,7 @@ def sync(env_path="environment.yml", req_path="requirements.txt"):
                 else:
                     # keep original if no exact version available
                     new_deps.append(item)
-                conda_updated.add(match.lower())
+                conda_updated.add(normalize_name(match))
             else:
                 new_deps.append(item)
         else:
@@ -91,7 +114,7 @@ def sync(env_path="environment.yml", req_path="requirements.txt"):
     # Build pip list from requirements that were not applied to conda entries
     pip_items = []
     for rname, data in reqs.items():
-        lname = rname.lower()
+        lname = normalize_name(rname)
         if lname in conda_updated:
             continue
         # Skip items that should be managed by conda (avoid pip/conda mixing)

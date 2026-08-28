@@ -1,14 +1,21 @@
 import os
+from pathlib import Path
 
 import pytest
+from matplotlib.figure import Figure
 
 from monstim_gui.dialogs import help_about as ha
 
 
 def setup_function():
-    # Ensure cache and files are cleared before each test
+    # Ensure in-memory entries cannot leak between tests.
     ha._IMG_CACHE.clear()
-    ha.clear_math_cache()
+
+
+@pytest.fixture(autouse=True)
+def isolated_math_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Keep renderer tests independent of the user's Qt cache directory."""
+    monkeypatch.setattr(ha, "_CACHE_DIR", tmp_path)
 
 
 def test_render_and_cache(tmp_path):
@@ -32,13 +39,13 @@ def test_placeholder_regex_extraction():
 
     # Display math using $$
     html2 = "before $$E=mc^2$$ after"
-    out2, items2 = ha._replace_math_with_placeholders(html2)
+    _, items2 = ha._replace_math_with_placeholders(html2)
     assert len(items2) == 1
     assert items2[0] == ("E=mc^2", True)
 
     # Inline math using single $
     html3 = "a $b+c$ d"
-    out3, items3 = ha._replace_math_with_placeholders(html3)
+    _, items3 = ha._replace_math_with_placeholders(html3)
     assert len(items3) == 1
     assert items3[0] == ("b+c", False)
 
@@ -72,34 +79,21 @@ def test_cache_key_generation_and_fontsize_variation():
     assert a[0] != b[0]
 
 
-def test_render_failure_propagates(monkeypatch):
-    # Simulate a failure inside matplotlib figure/text path
+def test_render_failure_uses_fallback(monkeypatch):
+    # Simulate a failure inside the matplotlib figure/text path.
 
     def bad_figure(*args, **kwargs):
-        class BadFig:
-            def __init__(self):
-                class Patch:
-                    def set_alpha(self, v):
-                        return None
-
-                self.patch = Patch()
-
-            def add_axes(self, *a, **kw):
-                class Ax:
-                    def axis(self, *a, **kw):
-                        return None
-
-                    def text(self, *a, **kw):
-                        raise RuntimeError("Simulated math render failure")
-
-                return Ax()
-
-            def savefig(self, *a, **kw):
+        class BadFigure(Figure):
+            def savefig(self, *args, **kwargs):
                 raise RuntimeError("Simulated save failure")
 
-        return BadFig()
+        return BadFigure()
 
-    monkeypatch.setattr(ha.plt, "figure", bad_figure)
+    monkeypatch.setattr(ha, "Figure", bad_figure)
 
-    with pytest.raises(RuntimeError):
-        ha._render_tex_to_img("\\invalid\\tex", fontsize=12, dark_mode=False)
+    path, render_w, render_h, display_w, display_h = ha._render_tex_to_img("\\invalid\\tex", fontsize=12, dark_mode=False)
+
+    assert os.path.exists(path)
+    assert (render_w, render_h) == (1, 1)
+    assert display_w >= 0
+    assert display_h >= 0

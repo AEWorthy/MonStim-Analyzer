@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import Tuple
+import logging
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def _as_numpy(x):
     try:
         return np.asarray(x)
     except Exception:
+        logger.exception(f"Failed to convert to numpy array: {x}. Returning as-is.")
         return x
 
 
@@ -17,7 +20,7 @@ def decimate_series(
     y: np.ndarray,
     max_points: int = 10000,
     strategy: str = "minmax",
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Reduce the number of plotted points while preserving visual features.
 
@@ -34,7 +37,7 @@ def decimate_series(
 
     Returns
     -------
-    (x_d, y_d) : Tuple[np.ndarray, np.ndarray]
+    (x_d, y_d) : tuple[np.ndarray, np.ndarray]
         Decimated series suitable for plotting
     """
     if max_points is None or max_points <= 0:

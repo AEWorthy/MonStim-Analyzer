@@ -1,0 +1,5 @@
+name: Optical-long
+description: EMG reflex analysis with optical stimulation (100 ms window).
+analysis_parameters:
+  time_window: 100.0
+  pre_stim_time: 5.0

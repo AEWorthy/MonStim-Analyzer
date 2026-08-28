@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import copy
 import json
@@ -6,10 +8,29 @@ from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 if TYPE_CHECKING:
     from monstim_gui.gui_main import MonstimGUI
+
+logger = logging.getLogger(__name__)
+
+
+def _refresh_data_views(gui, *experiment_ids):
+    """Refresh real GUI views while remaining compatible with command unit mocks."""
+    data_manager = getattr(gui, "data_manager", None)
+    refresh = getattr(data_manager, "refresh_data_views", None)
+    experiments = getattr(gui, "expts_dict", None)
+    if not callable(refresh) or not isinstance(experiments, dict):
+        return
+    paths = [Path(experiments[experiment_id]) for experiment_id in experiment_ids if experiment_id in experiments]
+    refresh(*paths)
+
+
+def _cancel_cache_warmup(gui) -> None:
+    coordinator = getattr(gui, "cache_warmup", None)
+    if coordinator is not None:
+        coordinator.cancel_and_wait()
 
 
 class Command(abc.ABC):
@@ -28,9 +49,37 @@ class Command(abc.ABC):
         return getattr(self, "command_name", type(self).__name__)
 
 
+class BatchCommand:
+    """Group already-compatible commands into one atomic undo-history entry."""
+
+    def __init__(self, command_name: str, commands: list[Command]):
+        self.command_name = command_name
+        self.commands = list(commands)
+        self._executed: list[Command] = []
+
+    def execute(self):
+        self._executed.clear()
+        try:
+            for command in self.commands:
+                command.execute()
+                self._executed.append(command)
+        except Exception:
+            for command in reversed(self._executed):
+                command.undo()
+            self._executed.clear()
+            raise
+
+    def undo(self):
+        for command in reversed(self._executed or self.commands):
+            command.undo()
+
+    def get_description(self) -> str:
+        return self.command_name
+
+
 class CommandInvoker:
-    def __init__(self, parent: "MonstimGUI"):
-        self.parent = parent  # type: MonstimGUI
+    def __init__(self, parent: MonstimGUI):
+        self.parent: MonstimGUI = parent  # type: MonstimGUI
         # Limit history to avoid unbounded memory growth in long-running sessions
         # Default max history retains the most recent 100 commands (configurable)
         self.max_history = 100
@@ -45,14 +94,14 @@ class CommandInvoker:
             while self.max_history is not None and len(self.history) > self.max_history:
                 self.history.popleft()
         except Exception:
-            logging.warning("Non-fatal: Command history trimming failed.", exc_info=True)
+            logger.warning("Non-fatal: Command history trimming failed.", exc_info=True)
         self.redo_stack.clear()
         self.parent.menu_bar.update_undo_redo_labels()
         # Always refresh notice icons after a command executes so diagnostics stay in sync with domain state.
         try:
             self.parent.data_selection_widget.refresh_notice_icons()
         except Exception as e:
-            logging.warning("Non-fatal: refresh_notice_icons failed after execute: %s", e, exc_info=True)
+            logger.warning("Non-fatal: refresh_notice_icons failed after execute: %s", e, exc_info=True)
 
     def undo(self):
         if self.history:
@@ -63,7 +112,7 @@ class CommandInvoker:
             try:
                 self.parent.data_selection_widget.refresh_notice_icons()
             except Exception as e:
-                logging.warning("Non-fatal: refresh_notice_icons failed after undo: %s", e, exc_info=True)
+                logger.warning("Non-fatal: refresh_notice_icons failed after undo: %s", e, exc_info=True)
 
     def redo(self):
         if self.redo_stack:
@@ -74,7 +123,7 @@ class CommandInvoker:
             try:
                 self.parent.data_selection_widget.refresh_notice_icons()
             except Exception as e:
-                logging.warning("Non-fatal: refresh_notice_icons failed after redo: %s", e, exc_info=True)
+                logger.warning("Non-fatal: refresh_notice_icons failed after redo: %s", e, exc_info=True)
 
     def get_undo_command_name(self):
         if self.history:
@@ -98,7 +147,7 @@ class CommandInvoker:
 class ExcludeRecordingCommand(Command):
     def __init__(self, gui, recording_id: str):
         self.command_name: str = "Exclude Recording"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.recording_id: str = recording_id
 
     def execute(self):
@@ -123,7 +172,7 @@ class ExcludeRecordingCommand(Command):
 class RestoreRecordingCommand(Command):
     def __init__(self, gui, recording_id: str):
         self.command_name: str = "Restore Recording"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.recording_id = recording_id
 
     def execute(self):
@@ -149,7 +198,7 @@ class ExcludeSessionCommand(Command):
 
     def __init__(self, gui):
         self.command_name = "Exclude Session"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.removed_session = None
         self.session_id = None
         self.idx = None
@@ -158,7 +207,7 @@ class ExcludeSessionCommand(Command):
     def execute(self):
         # Verify we have valid session and dataset
         if not self.gui.current_session or not self.gui.current_dataset:
-            logging.warning("Cannot exclude session: No session or dataset is currently selected.")
+            logger.warning("Cannot exclude session: No session or dataset is currently selected.")
             return  # Exit gracefully
 
         self.removed_session = self.gui.current_session
@@ -171,7 +220,7 @@ class ExcludeSessionCommand(Command):
         except ValueError:
             # Session is not in the list - it may have already been excluded
             # (e.g., when all its recordings were excluded)
-            logging.warning(
+            logger.warning(
                 f"Cannot exclude session '{self.session_id}': Session is not in the dataset's sessions list. "
                 f"It may have already been excluded (e.g., by excluding all its recordings)."
             )
@@ -182,10 +231,7 @@ class ExcludeSessionCommand(Command):
         new_current = None
         remaining_sessions = self.gui.current_dataset.sessions
         if remaining_sessions:
-            if self.idx < len(remaining_sessions):
-                new_current = remaining_sessions[self.idx]
-            else:
-                new_current = remaining_sessions[-1]
+            new_current = remaining_sessions[self.idx] if self.idx < len(remaining_sessions) else remaining_sessions[-1]
         self.gui.current_session = new_current
         # Update session list; keep dataset selection
         self.gui.data_selection_widget.update(levels=("session",))
@@ -204,16 +250,14 @@ class ExcludeSessionCommand(Command):
                 try:
                     self.gui.plot_widget.on_data_selection_changed()
                 except Exception:
-                    logging.warning(
-                        "Plot refresh after session exclusion (no sessions left) failed (non-fatal).", exc_info=True
-                    )
+                    logger.warning("Plot refresh after session exclusion (no sessions left) failed (non-fatal).", exc_info=True)
 
         # Always refresh plots after exclusion to reflect new session
         if self.gui.current_session and hasattr(self.gui, "plot_widget"):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception:
-                logging.warning("Plot refresh after session exclusion failed (non-fatal).", exc_info=True)
+                logger.warning("Plot refresh after session exclusion failed (non-fatal).", exc_info=True)
 
     def undo(self):
         self.gui.current_dataset.restore_session(self.session_id)
@@ -236,7 +280,7 @@ class ExcludeSessionCommand(Command):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception:
-                logging.warning("Plot refresh after session exclusion undo failed (non-fatal).", exc_info=True)
+                logger.warning("Plot refresh after session exclusion undo failed (non-fatal).", exc_info=True)
 
 
 class ExcludeDatasetCommand(Command):
@@ -244,7 +288,7 @@ class ExcludeDatasetCommand(Command):
 
     def __init__(self, gui):
         self.command_name = "Exclude Dataset"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.removed_dataset = None
         self.dataset_id = None
         self.idx = None
@@ -253,7 +297,7 @@ class ExcludeDatasetCommand(Command):
     def execute(self):
         # Verify we have valid dataset and experiment
         if not self.gui.current_dataset or not self.gui.current_experiment:
-            logging.warning("Cannot exclude dataset: No dataset or experiment is currently selected.")
+            logger.warning("Cannot exclude dataset: No dataset or experiment is currently selected.")
             return  # Exit gracefully
 
         # Capture state prior to exclusion
@@ -262,9 +306,8 @@ class ExcludeDatasetCommand(Command):
 
         # Verify the dataset is in the experiment's datasets list before excluding
         if self.gui.current_dataset not in self.gui.current_experiment.datasets:
-            logging.warning(
-                f"Cannot exclude dataset '{self.dataset_id}': Dataset is not in the experiment's datasets list. "
-                f"It may have already been excluded."
+            logger.warning(
+                f"Cannot exclude dataset '{self.dataset_id}': Dataset is not in the experiment's datasets list. It may have already been excluded."
             )
             return  # Exit gracefully without making changes
 
@@ -278,10 +321,7 @@ class ExcludeDatasetCommand(Command):
         remaining = self.gui.current_experiment.datasets
         new_dataset = None
         if remaining:
-            if self.idx is not None and self.idx < len(remaining):
-                new_dataset = remaining[self.idx]
-            else:
-                new_dataset = remaining[-1]
+            new_dataset = remaining[self.idx] if self.idx is not None and self.idx < len(remaining) else remaining[-1]
 
         self.gui.current_dataset = new_dataset
         # Reset session selection relative to new dataset
@@ -306,7 +346,7 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f"Index error during dataset exclusion execute: {e}")
+                logger.warning(f"Index error during dataset exclusion execute: {e}")
         self.gui.data_selection_widget.update(levels=("session",))
         if self.gui.current_session:
             try:
@@ -314,14 +354,14 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except Exception as e:
-                logging.warning(f"Non-fatal: session combo update failed after dataset exclusion: {e}", exc_info=True)
+                logger.warning(f"Non-fatal: session combo update failed after dataset exclusion: {e}", exc_info=True)
 
         # Trigger downstream updates (plots etc.)
         if hasattr(self.gui, "plot_widget"):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception:
-                logging.debug("Plot refresh after dataset exclusion failed (non-fatal).", exc_info=True)
+                logger.debug("Plot refresh after dataset exclusion failed (non-fatal).", exc_info=True)
 
     def undo(self):
         # Restore dataset in domain
@@ -349,7 +389,7 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(ds_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f"Index error during dataset exclusion undo: {e}")
+                logger.warning(f"Index error during dataset exclusion undo: {e}")
 
         # Update sessions and select first session (consistent with RestoreDatasetCommand)
         self.gui.data_selection_widget.update(levels=("session",))
@@ -360,7 +400,7 @@ class ExcludeDatasetCommand(Command):
                     self.gui.current_session = sessions_attr[0]
                 except Exception as e:
                     self.gui.current_session = None
-                    logging.warning(f"Non-fatal: session selection failed after dataset exclusion undo: {e}", exc_info=True)
+                    logger.warning(f"Non-fatal: session selection failed after dataset exclusion undo: {e}", exc_info=True)
             else:
                 self.gui.current_session = None
         else:
@@ -371,14 +411,14 @@ class ExcludeDatasetCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except Exception as e:
-                logging.warning(f"Non-fatal: session combo update failed after dataset exclusion undo: {e}", exc_info=True)
+                logger.warning(f"Non-fatal: session combo update failed after dataset exclusion undo: {e}", exc_info=True)
 
         # Trigger downstream updates
         if hasattr(self.gui, "plot_widget"):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception:
-                logging.debug("Plot refresh after dataset exclusion undo failed (non-fatal).", exc_info=True)
+                logger.debug("Plot refresh after dataset exclusion undo failed (non-fatal).", exc_info=True)
 
 
 class RestoreSessionCommand(Command):
@@ -386,7 +426,7 @@ class RestoreSessionCommand(Command):
 
     def __init__(self, gui, session_id: str):
         self.command_name = "Restore Session"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.session_id = session_id
         self.session_obj = None
 
@@ -407,14 +447,14 @@ class RestoreSessionCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(session_index)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f"Session index error during session restore: {e}")
+                logger.warning(f"Session index error during session restore: {e}")
 
         # Refresh plots since restored session becomes active
         if self.gui.current_session and hasattr(self.gui, "plot_widget"):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception as e:
-                logging.warning(f"Plot refresh after session restore failed (non-fatal): {e}", exc_info=True)
+                logger.warning(f"Plot refresh after session restore failed (non-fatal): {e}", exc_info=True)
 
     def undo(self):
         self.gui.current_dataset.exclude_session(self.session_id)
@@ -425,7 +465,7 @@ class RestoreSessionCommand(Command):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception as e:
-                logging.warning(f"Plot refresh after session restore undo failed (non-fatal): {e}", exc_info=True)
+                logger.warning(f"Plot refresh after session restore undo failed (non-fatal): {e}", exc_info=True)
 
 
 class RestoreDatasetCommand(Command):
@@ -433,7 +473,7 @@ class RestoreDatasetCommand(Command):
 
     def __init__(self, gui, dataset_id: str):
         self.command_name = "Restore Dataset"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
         self.dataset_obj = None
 
@@ -461,7 +501,7 @@ class RestoreDatasetCommand(Command):
                 self.gui.data_selection_widget.dataset_combo.setCurrentIndex(dataset_index)
                 self.gui.data_selection_widget.dataset_combo.blockSignals(False)
             except ValueError as e:
-                logging.warning(f"Dataset index error during dataset restore: {e}")
+                logger.warning(f"Dataset index error during dataset restore: {e}")
 
         # Now refresh the session list for this dataset
         self.gui.data_selection_widget.update(levels=("session",))
@@ -475,7 +515,7 @@ class RestoreDatasetCommand(Command):
                 self.gui.data_selection_widget.session_combo.setCurrentIndex(0)
                 self.gui.data_selection_widget.session_combo.blockSignals(False)
             except Exception as e:
-                logging.warning(f"Non-fatal: session combo update failed after dataset restore: {e}", exc_info=True)
+                logger.warning(f"Non-fatal: session combo update failed after dataset restore: {e}", exc_info=True)
         else:
             self.gui.current_session = None
 
@@ -484,7 +524,7 @@ class RestoreDatasetCommand(Command):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception as e:
-                logging.warning(f"Plot widget refresh after dataset restore failed (non-fatal): {e}", exc_info=True)
+                logger.warning(f"Plot widget refresh after dataset restore failed (non-fatal): {e}", exc_info=True)
 
     def undo(self):
         self.gui.current_experiment.exclude_dataset(self.dataset_id)
@@ -496,13 +536,13 @@ class RestoreDatasetCommand(Command):
             try:
                 self.gui.plot_widget.on_data_selection_changed()
             except Exception as e:
-                logging.warning(f"Plot widget refresh after dataset undo failed (non-fatal): {e}", exc_info=True)
+                logger.warning(f"Plot widget refresh after dataset undo failed (non-fatal): {e}", exc_info=True)
 
 
 class InvertChannelPolarityCommand(Command):
     def __init__(self, gui, level: str, channel_indexes_to_invert: list[int]):
         self.command_name = "Invert Channel Polarity"
-        self.gui: "MonstimGUI" = gui  # type: EMGAnalysisGUI
+        self.gui: MonstimGUI = gui  # type: EMGAnalysisGUI
         self.channel_indexes_to_invert = channel_indexes_to_invert
 
         match level:
@@ -527,7 +567,7 @@ class InvertChannelPolarityCommand(Command):
 class SetLatencyWindowsCommand(Command):
     def __init__(self, gui, level: str, new_windows: list):
         self.command_name: str = "Set Latency Windows"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         match level:
             case "experiment":
                 self.level = self.gui.current_experiment
@@ -544,36 +584,48 @@ class SetLatencyWindowsCommand(Command):
         self.old_windows = {s.id: copy.deepcopy(s.annot.latency_windows) for s in self.sessions}
 
     def _apply(self, windows):
+        _cancel_cache_warmup(self.gui)
         import copy
 
+        from monstim_signals.io.repositories import SessionRepository
+
+        calculation_changed = False
         for s in self.sessions:
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = [copy.deepcopy(w) for w in windows]
-            s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
     def execute(self):
         self._apply(self.new_windows)
 
     def undo(self):
+        _cancel_cache_warmup(self.gui)
+        from monstim_signals.io.repositories import SessionRepository
+
+        calculation_changed = False
         for s in self.sessions:
             windows = self.old_windows[s.id]
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = windows
-            s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
 
 class InsertSingleLatencyWindowCommand(Command):
@@ -593,7 +645,7 @@ class InsertSingleLatencyWindowCommand(Command):
             replace_mode: If True and window name exists, replace it. If False, append with unique name.
         """
         self.command_name: str = f"Insert Window '{window.name}'"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.replace_mode = replace_mode
 
         match level:
@@ -631,40 +683,49 @@ class InsertSingleLatencyWindowCommand(Command):
         return result
 
     def execute(self):
+        _cancel_cache_warmup(self.gui)
+        from monstim_signals.io.repositories import SessionRepository
 
+        calculation_changed = False
         for s in self.sessions:
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = self._merge_window(s.annot.latency_windows, self.new_window)
-            s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
-
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
     def undo(self):
+        _cancel_cache_warmup(self.gui)
+        from monstim_signals.io.repositories import SessionRepository
+
+        calculation_changed = False
         for s in self.sessions:
             windows = self.old_windows[s.id]
+            old_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
             s.annot.latency_windows = windows
-            s.update_latency_window_parameters()
-            if s.repo is not None:
-                s.repo.save(s)
-
-        if hasattr(self.level, "update_latency_window_parameters"):
-            if isinstance(self.level, list):
-                for obj in self.level:
-                    obj.update_latency_window_parameters()
+            new_fingerprint = tuple((w.name, tuple(w.start_times), tuple(w.durations)) for w in s.annot.latency_windows)
+            changed = old_fingerprint != new_fingerprint
+            calculation_changed |= changed
+            if changed:
+                s.invalidate_window_results()
             else:
-                self.level.update_latency_window_parameters()
+                s.update_latency_window_parameters()
+        SessionRepository.save_many(self.sessions)
+        if calculation_changed and hasattr(self.level, "invalidate_aggregate_results"):
+            self.level.invalidate_aggregate_results()
 
 
 class ChangeChannelNamesCommand(Command):
     def __init__(self, gui, level: str, new_names: dict):
         self.command_name: str = "Change Channel Names"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.new_names = copy.deepcopy(new_names)
 
         match level:
@@ -696,7 +757,7 @@ class BulkRecordingExclusionCommand(Command):
 
         Args:
             gui: The main GUI instance
-            changes: List of dicts with format:
+            changes: list of dicts with format:
                 [
                     {
                         'session': session_object,
@@ -709,88 +770,138 @@ class BulkRecordingExclusionCommand(Command):
                 ]
         """
         self.command_name = "Bulk Recording Exclusion"
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.changes = changes
+        self._previous_curation: dict[tuple[int, str], dict | None] = {}
 
     def execute(self):
-        """Apply all recording exclusions/inclusions."""
+        """Apply all changes and persist each affected session only once."""
         try:
+            if not self._supports_batched_persistence():
+                self._execute_legacy()
+                return
+            changed_sessions = []
             for session_change in self.changes:
                 session = session_change["session"]
+                excluded = set(session.annot.excluded_recordings)
                 for change in session_change["changes"]:
                     recording_id = change["recording_id"]
                     should_exclude = change["exclude"]
-
                     if should_exclude:
-                        session.exclude_recording(recording_id)
+                        excluded.add(recording_id)
                     else:
-                        session.restore_recording(recording_id)
+                        excluded.discard(recording_id)
+                    curation = change.get("curation")
+                    if curation is not None:
+                        key = (id(session), recording_id)
+                        if key not in self._previous_curation:
+                            previous = session.annot.recording_curation.get(recording_id)
+                            self._previous_curation[key] = dict(previous) if previous is not None else None
+                        session.annot.recording_curation[recording_id] = curation
+                session.annot.excluded_recordings = sorted(excluded)
+                session.invalidate_selection_results()
+                changed_sessions.append(session)
 
-            # Update UI to reflect changes
+            self._save_sessions(changed_sessions)
             self.gui.data_selection_widget.sync_combo_selections()
 
         except Exception as e:
-            QMessageBox.critical(self.gui, "Error", f"Failed to apply bulk exclusions: {str(e)}")
+            QMessageBox.critical(self.gui, "Error", f"Failed to apply bulk exclusions: {e!s}")
+
+    def _supports_batched_persistence(self) -> bool:
+        return all(isinstance(change["session"].annot.excluded_recordings, list) for change in self.changes)
+
+    def _execute_legacy(self) -> None:
+        """Keep this command usable for lightweight domain doubles and old sessions."""
+        for session_change in self.changes:
+            session = session_change["session"]
+            for change in session_change["changes"]:
+                if change["exclude"]:
+                    session.exclude_recording(change["recording_id"])
+                else:
+                    session.restore_recording(change["recording_id"])
+        self.gui.data_selection_widget.sync_combo_selections()
+
+    @staticmethod
+    def _save_sessions(sessions):
+        """Batch JSON writes and their matching catalog updates."""
+        if not sessions:
+            return
+        from monstim_signals.io.repositories import SessionRepository
+
+        SessionRepository.save_many(sessions)
 
     def undo(self):
-        """Reverse all recording exclusions/inclusions."""
+        """Reverse all changes with the same batched persistence path."""
         try:
-            # Apply changes in reverse
+            if not self._supports_batched_persistence():
+                self._undo_legacy()
+                return
+            changed_sessions = []
             for session_change in reversed(self.changes):
                 session = session_change["session"]
+                excluded = set(session.annot.excluded_recordings)
                 for change in reversed(session_change["changes"]):
                     recording_id = change["recording_id"]
                     should_exclude = change["exclude"]
-
-                    # Do the opposite of what was done
                     if should_exclude:
-                        session.restore_recording(recording_id)
+                        excluded.discard(recording_id)
                     else:
-                        session.exclude_recording(recording_id)
+                        excluded.add(recording_id)
+                    if change.get("curation") is not None:
+                        previous = self._previous_curation.get((id(session), recording_id))
+                        if previous is None:
+                            session.annot.recording_curation.pop(recording_id, None)
+                        else:
+                            session.annot.recording_curation[recording_id] = previous
+                session.annot.excluded_recordings = sorted(excluded)
+                session.invalidate_selection_results()
+                changed_sessions.append(session)
 
-            # Update UI to reflect changes
+            self.gui.data_selection_widget.sync_combo_selections()
+            self._save_sessions(changed_sessions)
+            self.gui.data_selection_widget.sync_combo_selections()
             self.gui.data_selection_widget.sync_combo_selections()
 
         except Exception as e:
-            QMessageBox.critical(self.gui, "Error", f"Failed to undo bulk exclusions: {str(e)}")
+            logger.error(f"Failed to undo bulk exclusions: {e!s}")
+            QMessageBox.critical(self.gui, "Error", f"Failed to undo bulk exclusions: {e!s}")
+
+    def _undo_legacy(self) -> None:
+        for session_change in reversed(self.changes):
+            session = session_change["session"]
+            for change in reversed(session_change["changes"]):
+                if change["exclude"]:
+                    session.restore_recording(change["recording_id"])
+                else:
+                    session.exclude_recording(change["recording_id"])
+        self.gui.data_selection_widget.sync_combo_selections()
 
 
 # Data Curation Commands
 class CreateExperimentCommand(Command):
     def __init__(self, gui, exp_name: str):
         self.command_name = f"Create Experiment '{exp_name}'"
-        self.gui = gui
+        self.gui: MonstimGUI = gui
         self.exp_name = exp_name
 
     def execute(self):
         """Create the experiment immediately."""
         try:
             self.gui.data_manager.create_experiment(self.exp_name)
-            # Refresh index for the newly created experiment
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                exp_path = Path(self.gui.expts_dict.get(self.exp_name, ""))
-                if exp_path and exp_path.exists():
-                    ensure_fresh_index(self.exp_name, exp_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after experiment create failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui, self.exp_name)
         except Exception as e:
-            raise Exception(f"Failed to create experiment: {str(e)}")
+            logger.exception(f"Failed to create experiment: {e!s}")
+            raise Exception(f"Failed to create experiment: {e!s}") from e
 
     def undo(self):
         """Delete the created experiment."""
         try:
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
-            # No index refresh needed; experiment was removed
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui)
         except Exception as e:
-            raise Exception(f"Failed to undo experiment creation: {str(e)}")
+            logger.exception(f"Failed to undo experiment creation: {e!s}")
+            raise Exception(f"Failed to undo experiment creation: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Created experiment '{self.exp_name}'"
@@ -799,7 +910,7 @@ class CreateExperimentCommand(Command):
 class MoveDatasetCommand(Command):
     def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str):
         self.command_name = f"Move '{dataset_name}' from '{from_exp}' to '{to_exp}'"
-        self.gui = gui
+        self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.from_exp = from_exp
@@ -809,45 +920,19 @@ class MoveDatasetCommand(Command):
         """Move the dataset immediately."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
-            # Refresh index for both source and destination experiments
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                src_path = Path(self.gui.expts_dict.get(self.from_exp, ""))
-                dst_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
-                if src_path and src_path.exists():
-                    ensure_fresh_index(self.from_exp, src_path)
-                if dst_path and dst_path.exists():
-                    ensure_fresh_index(self.to_exp, dst_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after dataset move failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
         except Exception as e:
-            raise Exception(f"Failed to move dataset: {str(e)}")
+            logger.exception(f"Failed to move dataset: {e!s}")
+            raise Exception(f"Failed to move dataset: {e!s}") from e
 
     def undo(self):
         """Move the dataset back to original location."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
-            # Refresh index for both experiments after undo
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                dst_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
-                src_path = Path(self.gui.expts_dict.get(self.from_exp, ""))
-                if dst_path and dst_path.exists():
-                    ensure_fresh_index(self.to_exp, dst_path)
-                if src_path and src_path.exists():
-                    ensure_fresh_index(self.from_exp, src_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after dataset move undo failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
         except Exception as e:
-            raise Exception(f"Failed to undo dataset move: {str(e)}")
+            logger.exception(f"Failed to undo dataset move: {e!s}")
+            raise Exception(f"Failed to undo dataset move: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Moved dataset '{self.dataset_name}' from '{self.from_exp}' to '{self.to_exp}'"
@@ -860,7 +945,7 @@ class MoveDatasetsCommand(Command):
         """
         moves: list of tuples (dataset_id, dataset_name, from_exp, to_exp)
         """
-        self.gui: "MonstimGUI" = gui
+        self.gui: MonstimGUI = gui
         self.moves = list(moves)
         self.command_name = f"Move {len(self.moves)} datasets"
         # Will record only the moves that actually succeeded during execute()
@@ -869,82 +954,70 @@ class MoveDatasetsCommand(Command):
     def execute(self):
         """Execute all moves sequentially. Record successes for undo."""
         try:
+            self._succeeded.clear()
+            self.gui.data_manager.close_all_data()
+
             for ds_id, ds_name, from_exp, to_exp in self.moves:
                 try:
-                    self.gui.data_manager.move_dataset(ds_id, ds_name, from_exp, to_exp)
+                    self.gui.data_manager.move_dataset(
+                        ds_id,
+                        ds_name,
+                        from_exp,
+                        to_exp,
+                        close_open_data=False,  # Already closed all data at start
+                    )
                     self._succeeded.append((ds_id, ds_name, from_exp, to_exp))
                 except Exception as e:
-                    logging.error(f"Failed to move dataset '{ds_name}' from '{from_exp}' to '{to_exp}': {e}")
+                    logger.error(f"Failed to move dataset '{ds_name}' from '{from_exp}' to '{to_exp}': {e}")
 
-            # Refresh index for all affected experiments (unique)
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+                if len(self._succeeded) % 10 == 0:
+                    QApplication.processEvents()
 
-                affected = set()
-                for ds_id, ds_name, from_exp, to_exp in self._succeeded:
-                    affected.add(from_exp)
-                    affected.add(to_exp)
-                for exp in affected:
-                    exp_path = Path(self.gui.expts_dict.get(exp, ""))
-                    if exp_path and exp_path.exists():
-                        ensure_fresh_index(exp, exp_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after batched move failed.", exc_info=True)
+                logger.debug(f"Processed {len(self._succeeded)} dataset moves.")
 
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                try:
-                    self.gui._data_curation_manager.load_data()
-                except Exception:
-                    # Best-effort; do not fail the entire command if refresh errors
-                    logging.exception("Failed to refresh Data Curation Manager after batched move")
+            affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
+            _refresh_data_views(self.gui, *affected)
 
         except Exception as e:
-            raise Exception(f"Failed to execute batched dataset moves: {str(e)}")
+            logger.exception(f"Failed to execute batched dataset moves: {e!s}")
+            raise Exception(f"Failed to execute batched dataset moves: {e!s}") from e
 
     def undo(self):
         """Undo by moving succeeded items back in reverse order."""
         try:
+            self.gui.data_manager.close_all_data()
+
             for ds_id, ds_name, from_exp, to_exp in reversed(self._succeeded):
                 try:
                     # Move back from to_exp -> from_exp
-                    self.gui.data_manager.move_dataset(ds_id, ds_name, to_exp, from_exp)
+                    self.gui.data_manager.move_dataset(
+                        ds_id,
+                        ds_name,
+                        to_exp,
+                        from_exp,
+                        close_open_data=False,
+                    )
                 except Exception as e:
-                    logging.error(f"Failed to undo move of dataset '{ds_name}' from '{to_exp}' back to '{from_exp}': {e}")
+                    logger.error(f"Failed to undo move of dataset '{ds_name}' from '{to_exp}' back to '{from_exp}': {e}")
 
-            # Refresh index for all affected experiments after undo
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
+                if len(self._succeeded) % 10 == 0:
+                    QApplication.processEvents()
 
-                affected = set()
-                for ds_id, ds_name, from_exp, to_exp in self._succeeded:
-                    affected.add(from_exp)
-                    affected.add(to_exp)
-                for exp in affected:
-                    exp_path = Path(self.gui.expts_dict.get(exp, ""))
-                    if exp_path and exp_path.exists():
-                        ensure_fresh_index(exp, exp_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after batched move undo failed.", exc_info=True)
-
-            # Refresh once after undo
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                try:
-                    self.gui._data_curation_manager.load_data()
-                except Exception:
-                    logging.exception("Failed to refresh Data Curation Manager after undoing batched move")
+            affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
+            _refresh_data_views(self.gui, *affected)
 
         except Exception as e:
-            raise Exception(f"Failed to undo batched dataset moves: {str(e)}")
+            logger.exception(f"Failed to undo batched dataset moves: {e!s}")
+            raise Exception(f"Failed to undo batched dataset moves: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Moved {len(self._succeeded)} dataset(s) in batch"
 
 
 class CopyDatasetCommand(Command):
-    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str = None):
+    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str | None = None):
         self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
-        self.gui = gui
+        self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.from_exp = from_exp
@@ -959,52 +1032,39 @@ class CopyDatasetCommand(Command):
             from pathlib import Path
 
             to_exp_path = Path(self.gui.expts_dict[self.to_exp])
-            original_datasets = set(f.name for f in to_exp_path.iterdir() if f.is_dir())
+            original_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
 
             self.gui.data_manager.copy_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp, self.new_name)
 
-            # Find the new dataset folder name (might have _copy suffix)
-            new_datasets = set(f.name for f in to_exp_path.iterdir() if f.is_dir())
-            added_datasets = new_datasets - original_datasets
-            if added_datasets:
-                self.copied_folder_name = list(added_datasets)[0]
-            else:
-                self.copied_folder_name = self.dataset_id  # fallback
-
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
-            # Refresh index for destination experiment
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
-                if to_exp_path and to_exp_path.exists():
-                    ensure_fresh_index(self.to_exp, to_exp_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after dataset copy failed.", exc_info=True)
+            self.finalize_copy(original_datasets)
         except Exception as e:
-            raise Exception(f"Failed to copy dataset: {str(e)}")
+            logger.exception(f"Failed to copy dataset: {e!s}")
+            raise Exception(f"Failed to copy dataset: {e!s}") from e
+
+    def finalize_copy(self, original_datasets=None):
+        """Finish command bookkeeping and refresh UI after an async copy."""
+        from pathlib import Path
+
+        to_exp_path = Path(self.gui.expts_dict[self.to_exp])
+        if original_datasets is None:
+            original_datasets = set()
+
+        # Find the new dataset folder name (might have _copy suffix)
+        new_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
+        added_datasets = new_datasets - original_datasets
+        self.copied_folder_name = next(iter(added_datasets), self.new_name or self.dataset_id)
+
+        _refresh_data_views(self.gui, self.to_exp)
 
     def undo(self):
         """Delete the copied dataset."""
         try:
             if self.copied_folder_name:
                 self.gui.data_manager.delete_dataset(self.copied_folder_name, self.copied_folder_name, self.to_exp)
-                # Refresh the data curation manager if it's open
-                if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                    self.gui._data_curation_manager.load_data()
-                # Refresh index for destination experiment after deletion
-                try:
-                    from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                    to_exp_path = Path(self.gui.expts_dict.get(self.to_exp, ""))
-                    if to_exp_path and to_exp_path.exists():
-                        ensure_fresh_index(self.to_exp, to_exp_path)
-                except Exception:
-                    logging.debug("Non-fatal: index refresh after undo dataset copy failed.", exc_info=True)
+                _refresh_data_views(self.gui, self.to_exp)
         except Exception as e:
-            raise Exception(f"Failed to undo dataset copy: {str(e)}")
+            logger.exception(f"Failed to undo dataset copy: {e!s}")
+            raise Exception(f"Failed to undo dataset copy: {e!s}") from e
 
     def get_description(self) -> str:
         if self.from_exp == self.to_exp:
@@ -1031,12 +1091,10 @@ class DeleteExperimentCommand(Command):
             # For now, we'll use the existing delete method from data manager
             # Note: This is irreversible, so undo will show a warning
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
-            # No index refresh needed; experiment removed
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
+            _refresh_data_views(self.gui)
         except Exception as e:
-            raise Exception(f"Failed to delete experiment: {str(e)}")
+            logger.exception(f"Failed to delete experiment: {e!s}")
+            raise Exception(f"Failed to delete experiment: {e!s}") from e
 
     def undo(self):
         """Cannot undo experiment deletion - show warning."""
@@ -1062,53 +1120,16 @@ class RenameExperimentCommand(Command):
         """Rename the experiment immediately."""
         # Let exceptions from data_manager propagate with their original messages
         self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
-        # Refresh index for the renamed experiment (new path) and clean up old if present
-        try:
-            from monstim_signals.io.experiment_index import ensure_fresh_index
-
-            new_path = Path(self.gui.expts_dict.get(self.new_name, ""))
-            if new_path and new_path.exists():
-                ensure_fresh_index(self.new_name, new_path)
-        except Exception:
-            logging.debug("Non-fatal: index refresh after experiment rename failed.", exc_info=True)
-        # Refresh the data curation manager if it's open
-        if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-            try:
-                logging.debug(f"Refreshing data curation manager after rename from '{self.old_name}' to '{self.new_name}'")
-                self.gui._data_curation_manager.load_data()
-                logging.debug("Data curation manager refresh completed successfully")
-            except Exception as e:
-                logging.error(f"Failed to refresh data curation manager after rename: {e}", exc_info=True)
-                # Re-raise to prevent silent failures
-                raise
+        _refresh_data_views(self.gui, self.new_name)
 
     def undo(self):
         """Rename back to original name."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
-            # Refresh index for the restored original experiment
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                old_path = Path(self.gui.expts_dict.get(self.old_name, ""))
-                if old_path and old_path.exists():
-                    ensure_fresh_index(self.old_name, old_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after experiment rename undo failed.", exc_info=True)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                try:
-                    logging.debug(
-                        f"Refreshing data curation manager after undo rename from '{self.new_name}' back to '{self.old_name}'"
-                    )
-                    self.gui._data_curation_manager.load_data()
-                    logging.debug("Data curation manager refresh after undo completed successfully")
-                except Exception as e:
-                    logging.error(f"Failed to refresh data curation manager after rename undo: {e}", exc_info=True)
-                    # Re-raise to prevent silent failures
-                    raise
+            _refresh_data_views(self.gui, self.old_name)
         except Exception as e:
-            raise Exception(f"Failed to undo experiment rename: {str(e)}")
+            logger.exception(f"Failed to undo experiment rename: {e!s}")
+            raise Exception(f"Failed to undo experiment rename: {e!s}") from e
 
     def get_description(self) -> str:
         return f"Renamed experiment '{self.old_name}' to '{self.new_name}'"
@@ -1127,20 +1148,10 @@ class DeleteDatasetCommand(Command):
     def execute(self):
         try:
             self.gui.data_manager.delete_dataset(self.dataset_id, self.dataset_name, self.exp_id)
-            # Refresh the data curation manager if it's open
-            if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-                self.gui._data_curation_manager.load_data()
-            # Refresh index for the experiment after dataset deletion
-            try:
-                from monstim_signals.io.experiment_index import ensure_fresh_index
-
-                exp_path = Path(self.gui.expts_dict.get(self.exp_id, ""))
-                if exp_path and exp_path.exists():
-                    ensure_fresh_index(self.exp_id, exp_path)
-            except Exception:
-                logging.debug("Non-fatal: index refresh after dataset deletion failed.", exc_info=True)
+            _refresh_data_views(self.gui, self.exp_id)
         except Exception as e:
-            raise Exception(f"Failed to delete dataset: {str(e)}")
+            logger.exception(f"Failed to delete dataset: {e!s}")
+            raise Exception(f"Failed to delete dataset: {e!s}") from e
 
     def undo(self):
         QMessageBox.warning(
@@ -1199,11 +1210,10 @@ class ToggleDatasetInclusionCommand(Command):
 
             repo.expt_js.write_text(json.dumps(asdict(annot), indent=2))
         except Exception as e:
-            raise Exception(f"Failed to update dataset inclusion: {e}")
+            logger.exception(f"Failed to update dataset inclusion: {e!s}")
+            raise Exception(f"Failed to update dataset inclusion: {e!s}") from e
 
-        # Refresh open dialog/UI if present
-        if hasattr(self.gui, "_data_curation_manager") and self.gui._data_curation_manager:
-            self.gui._data_curation_manager.load_data()
+        _refresh_data_views(self.gui, self.exp_id)
 
     def execute(self):
         self._apply(self.exclude)
@@ -1229,7 +1239,7 @@ class ToggleCompletionStatusCommand(Command):
     persistence to ensure undo/redo works reliably across selection changes.
     """
 
-    def __init__(self, gui, level: str, target_object):
+    def __init__(self, gui, level: str, target_object, *, experiment_id: str | None = None, new_status: bool | None = None, dataset_path=None):
         """
         Args:
             gui: The main GUI instance
@@ -1240,7 +1250,8 @@ class ToggleCompletionStatusCommand(Command):
         self.level = level
         self.target_id = target_object.id
         self.old_status = getattr(target_object, "is_completed", False)
-        self.new_status = not self.old_status
+        self.new_status = not self.old_status if new_status is None else new_status
+        self.dataset_path = Path(dataset_path) if dataset_path is not None else None
 
         # Store hierarchy IDs for reliable lookup from disk
         if level == "experiment":
@@ -1248,7 +1259,7 @@ class ToggleCompletionStatusCommand(Command):
             self.dataset_id = None
         elif level == "dataset":
             # Get parent experiment ID from current context
-            self.experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+            self.experiment_id = experiment_id or (self.gui.current_experiment.id if self.gui.current_experiment else None)
             self.dataset_id = target_object.id
             if not self.experiment_id:
                 raise ValueError("Cannot toggle dataset completion status: no parent experiment in context")
@@ -1278,7 +1289,7 @@ class ToggleCompletionStatusCommand(Command):
             match self.level:
                 case "experiment":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
-                        logging.error(f"Experiment '{self.experiment_id}' not found in expts_dict")
+                        logger.error(f"Experiment '{self.experiment_id}' not found in expts_dict")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
                     annot_file = exp_path / "experiment.annot.json"
@@ -1301,22 +1312,22 @@ class ToggleCompletionStatusCommand(Command):
                         ):
                             self.gui.current_experiment.is_completed = status
                     except Exception:
-                        logging.error(
+                        logger.exception(
                             f"Failed to update in-memory experiment object for experiment '{self.experiment_id}'",
                             exc_info=True,
                         )
 
                 case "dataset":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
-                        logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        logger.error(f"Parent experiment '{self.experiment_id}' not found")
                         return
                     if not self.dataset_id:
-                        logging.error("Dataset ID is missing")
+                        logger.error("Dataset ID is missing")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
-                    dataset_path = exp_path / self.dataset_id
+                    dataset_path = self.dataset_path or exp_path / self.dataset_id
                     if not dataset_path.exists():
-                        logging.error(f"Dataset path '{dataset_path}' not found")
+                        logger.error(f"Dataset path '{dataset_path}' not found")
                         return
                     annot_file = dataset_path / "dataset.annot.json"
 
@@ -1328,6 +1339,10 @@ class ToggleCompletionStatusCommand(Command):
 
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
+
+                    from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
+
+                    refresh_dataset_annotation(dataset_path)
 
                     # Update in-memory dataset object if present
                     try:
@@ -1341,25 +1356,23 @@ class ToggleCompletionStatusCommand(Command):
                                     ds.is_completed = status
                                     break
                     except Exception:
-                        logging.error(
-                            f"Failed to update in-memory dataset object for dataset '{self.dataset_id}'", exc_info=True
-                        )
+                        logger.exception(f"Failed to update in-memory dataset object for dataset '{self.dataset_id}'", exc_info=True)
 
                 case "session":
                     if not self.experiment_id or self.experiment_id not in self.gui.expts_dict:
-                        logging.error(f"Parent experiment '{self.experiment_id}' not found")
+                        logger.error(f"Parent experiment '{self.experiment_id}' not found")
                         return
                     if not self.dataset_id:
-                        logging.error("Parent dataset ID is missing")
+                        logger.error("Parent dataset ID is missing")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
                     dataset_path = exp_path / self.dataset_id
                     if not dataset_path.exists():
-                        logging.error(f"Parent dataset path '{dataset_path}' not found")
+                        logger.error(f"Parent dataset path '{dataset_path}' not found")
                         return
                     session_path = dataset_path / self.target_id
                     if not session_path.exists():
-                        logging.error(f"Session path '{session_path}' not found")
+                        logger.error(f"Session path '{session_path}' not found")
                         return
                     annot_file = session_path / "session.annot.json"
 
@@ -1372,24 +1385,22 @@ class ToggleCompletionStatusCommand(Command):
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
+                    from monstim_signals.io.experiment_catalog import refresh_session_annotation
+
+                    refresh_session_annotation(session_path)
+
                     # Update in-memory session object if present
                     try:
-                        if (
-                            hasattr(self.gui, "current_dataset")
-                            and self.gui.current_dataset
-                            and getattr(self.gui.current_dataset, "sessions", None)
-                        ):
+                        if hasattr(self.gui, "current_dataset") and self.gui.current_dataset and getattr(self.gui.current_dataset, "sessions", None):
                             for s in self.gui.current_dataset.sessions:
                                 if getattr(s, "id", None) == self.target_id:
                                     s.is_completed = status
                                     break
                     except Exception:
-                        logging.error(
-                            f"Failed to update in-memory session object for session '{self.target_id}'", exc_info=True
-                        )
+                        logger.exception(f"Failed to update in-memory session object for session '{self.target_id}'", exc_info=True)
 
                 case _:
-                    logging.error(f"Unknown level '{self.level}' for completion status toggle")
+                    logger.error(f"Unknown level '{self.level}' for completion status toggle")
                     return
 
             # Refresh UI if the affected object is currently visible
@@ -1398,7 +1409,7 @@ class ToggleCompletionStatusCommand(Command):
                 self.gui.data_selection_widget.update_all_completion_statuses()
 
         except Exception as e:
-            logging.error(f"Failed to apply completion status: {e}", exc_info=True)
+            logger.exception(f"Failed to apply completion status: {e}", exc_info=True)
 
     def execute(self):
         """Toggle completion status to new value."""
@@ -1481,6 +1492,7 @@ class EditDatasetMetadataCommand(Command):
 
         # Rename folder if needed (before mutating metadata)
         # This ensures atomicity - if rename fails, metadata hasn't changed yet
+        old_dataset_id = self.dataset.id
         if folder_name and self.dataset.repo:
             current_folder = self.dataset.repo.folder  # Already a Path object
             if current_folder.name != folder_name:
@@ -1494,10 +1506,10 @@ class EditDatasetMetadataCommand(Command):
                 if hasattr(self.dataset, "close"):
                     try:
                         self.dataset.close()
-                        logging.debug("Closed dataset before folder rename to release file handles.")
+                        logger.debug("Closed dataset before folder rename to release file handles.")
                     except Exception as close_err:
                         # Proceed with rename even if close fails; behavior is no worse than before
-                        logging.warning(
+                        logger.warning(
                             "Failed to close dataset cleanly before rename: %s",
                             close_err,
                             exc_info=True,
@@ -1505,12 +1517,19 @@ class EditDatasetMetadataCommand(Command):
                 try:
                     # Use repository rename with retry logic
                     self.dataset.repo.rename(new_folder_path, dataset=self.dataset)
-                    logging.info(f"Renamed dataset folder: {current_folder.name} → {folder_name}")
+                    logger.info(f"Renamed dataset folder: {current_folder.name} → {folder_name}")
+                    from monstim_gui.core.application_state import app_state
+
+                    experiment_id = self.gui.current_experiment.id if self.gui.current_experiment else None
+                    app_state.migrate_renamed_selection(
+                        "dataset",
+                        old_dataset_id,
+                        self.dataset.id,
+                        experiment_id=experiment_id,
+                    )
                 except OSError as e:
                     if getattr(e, "errno", None) == errno.EACCES:
-                        raise OSError(
-                            f"Cannot rename folder - it is in use. " f"Please close any programs accessing: {current_folder}"
-                        ) from e
+                        raise OSError(f"Cannot rename folder - it is in use. Please close any programs accessing: {current_folder}") from e
                     raise
 
         # Update annotation after successful rename (or if no rename needed)
@@ -1521,22 +1540,19 @@ class EditDatasetMetadataCommand(Command):
         # Save annotation changes
         if self.dataset.repo:
             self.dataset.repo.save(self.dataset)
-            logging.info(
-                f"Updated metadata for dataset '{self.dataset.id}': "
-                f"date={date}, animal_id={animal_id}, condition={condition}"
-            )
+            logger.info(f"Updated metadata for dataset '{self.dataset.id}': date={date}, animal_id={animal_id}, condition={condition}")
 
     def execute(self):
         """Apply the new metadata and folder name."""
         try:
             self._apply_metadata(self.new_date, self.new_animal_id, self.new_condition, self.new_folder_name)
 
-            # Refresh UI to show updated display name
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
+            _refresh_data_views(self.gui)
 
         except Exception as e:
-            logging.error(f"Failed to apply dataset metadata changes: {e}", exc_info=True)
+            logger.exception(f"Failed to apply dataset metadata changes: {e}", exc_info=True)
             raise
 
     def undo(self):
@@ -1544,12 +1560,12 @@ class EditDatasetMetadataCommand(Command):
         try:
             self._apply_metadata(self.old_date, self.old_animal_id, self.old_condition, self.old_folder_name)
 
-            # Refresh UI to show reverted display name
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
+            _refresh_data_views(self.gui)
 
         except Exception as e:
-            logging.error(f"Failed to undo dataset metadata changes: {e}", exc_info=True)
+            logger.exception(f"Failed to undo dataset metadata changes: {e!s}", exc_info=True)
             raise
 
     def get_description(self) -> str:

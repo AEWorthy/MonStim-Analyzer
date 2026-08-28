@@ -21,7 +21,9 @@ EXE_NAME = f'MonStim Analyzer v{VERSION}'
 DIST_NAME = f'MonStim_Analyzer_v{VERSION}-WIN'
 
 datas = []
-datas += collect_data_files('src')
+datas += collect_data_files('assets')
+# Preserve the complete nested documentation tree in the bundle: help topics,
+# developer references, and configuration/profile resources all resolve from it.
 datas += collect_data_files('docs')
 datas += collect_data_files('numpy')
 datas += collect_data_files('scipy')
@@ -34,7 +36,7 @@ a = Analysis( # type: ignore  # noqa: F821
     ['main.py'],
     pathex=[os.path.dirname(os.path.abspath('main.py'))],
     binaries=[],
-    datas=datas, # add config.yml and readme.md to datas. Add Settings option to the GUI under File
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -44,10 +46,17 @@ a = Analysis( # type: ignore  # noqa: F821
     optimize=1, # change to 1 for release, 0 for debug
 )
 
-# Custom hook: exclude docs/config-user.yml from datas
-a.datas = [d for d in a.datas if not (
-    isinstance(d, tuple) and 'config-user.yml' in d[0]
-)]
+# A user override must not ship with the application. The default configuration
+# and bundled profiles remain under docs/resources. ``Analysis.datas`` differs
+# slightly across PyInstaller releases, so inspect both name/path fields.
+def is_user_config_data(entry):
+    return isinstance(entry, tuple) and any(
+        str(field).replace('\\', '/').endswith('docs/resources/config-user.yml')
+        for field in entry[:2]
+    )
+
+
+a.datas = [entry for entry in a.datas if not is_user_config_data(entry)]
 
 pyz = PYZ(a.pure) # type: ignore
 
@@ -66,7 +75,7 @@ exe = EXE( # type: ignore
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/icon.ico'
+    icon='assets/icon.ico'
 )
 
 coll = COLLECT( # type: ignore
@@ -78,8 +87,7 @@ coll = COLLECT( # type: ignore
     name=DIST_NAME
 )
 
-# Ensure the dist directory exists, and copy the readme.md and QUICKSTART.md files to it
+# Ensure the dist directory exists, and copy the user guide and quick-start file to it.
 os.makedirs(CONF['distpath'], exist_ok=True)
-shutil.copy2('docs/readme.md', os.path.join(CONF['distpath'], DIST_NAME))
+shutil.copy2('docs/user/using_monstim.md', os.path.join(CONF['distpath'], DIST_NAME, 'USER_GUIDE.md'))
 shutil.copy2('QUICKSTART.md', os.path.join(CONF['distpath'], DIST_NAME))
-

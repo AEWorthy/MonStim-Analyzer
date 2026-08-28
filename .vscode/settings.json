@@ -1,6 +1,10 @@
 {
+    "python.defaultInterpreterPath": "C:\\Users\\aewor\\miniconda3\\envs\\monstim\\python.exe",
+    "python.testing.cwd": "${workspaceFolder}",
     "python.testing.pytestArgs": [
-        "tests"
+        "tests",
+        "-s",
+        "-v"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,

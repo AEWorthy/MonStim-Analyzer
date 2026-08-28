@@ -20,13 +20,15 @@ def test_experiment_parallel_load(tmp_path: Path):
     cfg.update({"lazy_open_h5": True, "load_workers": 2})
     repo = ExperimentRepository(exp)
     expt = repo.load(config=cfg)
+    try:
+        assert expt is not None
+        assert len(expt.datasets) == 2
 
-    assert expt is not None
-    assert len(expt.datasets) == 2
-
-    # Recordings should still be accessible (lazy reopen)
-    for ds in expt.datasets:
-        for session in ds.sessions:
-            for rec in session.recordings:
-                view = rec.raw_view(t=slice(0, 10))
-                assert view.shape[0] == 10
+        # Recordings should still be accessible (lazy reopen)
+        for ds in expt.datasets:
+            for session in ds.sessions:
+                for rec in session.recordings:
+                    view = rec.raw_view(t=slice(0, 10))
+                    assert view.shape[0] == 10
+    finally:
+        expt.close()

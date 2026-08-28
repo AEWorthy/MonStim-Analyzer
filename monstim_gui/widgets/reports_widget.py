@@ -1,15 +1,17 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QGridLayout, QGroupBox, QPushButton, QSizePolicy
+from PySide6.QtWidgets import QGridLayout, QPushButton, QSizePolicy
+
+from monstim_gui.widgets.collapsible_group_box import CollapsibleGroupBox
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
 
 
-class ReportsWidget(QGroupBox):
-    def __init__(self, parent: "MonstimGUI"):
-        super().__init__("Reports", parent)
+class ReportsWidget(CollapsibleGroupBox):
+    def __init__(self, parent: MonstimGUI):
+        super().__init__("Reports", parent, expanded=False)
         self.parent = parent  # type: MonstimGUI
         self.layout = QGridLayout()
         self.layout.setContentsMargins(8, 8, 8, 8)
@@ -17,6 +19,7 @@ class ReportsWidget(QGroupBox):
         self.layout.setVerticalSpacing(8)
         self.setLayout(self.layout)
         self.create_report_buttons()
+        self.set_expanded(False)
 
     def create_report_buttons(self):
         buttons = [
@@ -38,7 +41,8 @@ class ReportsWidget(QGroupBox):
             (
                 "M-max Report (RMS)",
                 self.parent.report_manager.show_mmax_report,
-                "Generate a report for the currently selected data level's M-max analysis including RMS values, plateau detection results, and normalization data",
+                "Generate a report for the currently selected data level's M-max analysis including RMS values, "
+                "plateau detection results, and normalization data",
             ),
             # Add new buttons here as tuples in the format:
             # ("Button Label", callback_function, "Tooltip text").
@@ -63,7 +67,8 @@ class ReportsWidget(QGroupBox):
             btn.setToolTip(tooltip)
 
             # 1) make it expand to fill whatever cell size you're given
-            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            btn.setMinimumWidth(0)
 
             row = idx // N_COLS
             col = idx % N_COLS
