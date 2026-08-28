@@ -14,7 +14,7 @@ pyqtgraph==0.14.0
 Markdown==3.10.2
 python_markdown_math==0.9
 pytest==9.1.1
-setuptools==82.0.1
+setuptools==84.0.0
 
  # NOTE: This `requirements.txt` is generated from `environment.yml`.
  # Keep PyQt packages managed by conda (do NOT list PySide6 here).
