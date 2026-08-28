@@ -6,6 +6,7 @@ from .latency import LatencyWindowsDialog
 from .preferences import PreferencesDialog
 from .program_settings import ProgramSettingsDialog
 from .reporting import CopyableReportDialog
+from .settings_center import SettingsCenter
 
 __all__ = [
     "AboutDialog",
@@ -18,5 +19,6 @@ __all__ = [
     "LatencyWindowsDialog",
     "PreferencesDialog",
     "ProgramSettingsDialog",
+    "SettingsCenter",
     "clear_math_cache",
 ]

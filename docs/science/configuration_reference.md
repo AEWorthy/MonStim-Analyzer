@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Open **File > Analysis Preferences** to review or change an analysis profile. A profile records software choices; it does not establish that a choice is scientifically correct for every muscle, species, amplifier, sampling rate, or protocol. Validate and record the profile used for each analysis.
+Open **File > Settings Center** to review Program settings, Global Analysis defaults, and analysis profiles. A profile records software choices; it does not establish that a choice is scientifically correct for every muscle, species, amplifier, sampling rate, or protocol. Validate and record the profile used for each analysis.
 
 ## Core defaults
 
@@ -13,7 +13,6 @@ Open **File > Analysis Preferences** to review or change an analysis profile. A 
 | Displayed pre-stimulus time | 2.0 ms | Default baseline shown before the stimulus. |
 | Default amplitude method | RMS | The starting method for plots; choose the method required by the analysis plan. |
 | Default channel names | LG, TA, SOL | Labels used when the imported data do not provide channel names. |
-| Suspected H-reflex threshold | 0.5 mV | A display-screening threshold, not a diagnostic criterion. |
 
 ## EMG filter defaults
 
@@ -36,7 +35,7 @@ MonStim uses forward-and-reverse filtering to avoid net phase shift. It does not
 | Smoothing-window ratio | 0.25 | Sets the Savitzky–Golay window from the number of stimulus levels. |
 | M-wave recognition names | M-wave aliases | Global names that identify the M-response latency window for M-max. The user list replaces the shipped aliases; an empty list disables automatic recognition. |
 
-The M-wave recognition names are global user settings, not profile settings. Edit them in **File > Analysis Preferences > Latency Window Settings**. The M-max estimator also uses a third-order smoothing polynomial, a 95th-percentile candidate, a top-20% candidate, and a high-stimulus fallback. These are reproducibility settings, not physiological constants. See [M-max estimation](mmax_estimation.md) before using M-max normalization.
+The M-wave recognition names are global user settings, not profile settings. Edit them in **File > Settings Center > Global Analysis > Latency windows**. The M-max estimator also uses a third-order smoothing polynomial, a 95th-percentile candidate, a top-20% candidate, and a high-stimulus fallback. These are reproducibility settings, not physiological constants. See [M-max estimation](mmax_estimation.md) before using M-max normalization.
 
 ## Presets and appearance
 
@@ -45,5 +44,6 @@ Latency-window presets are templates for their named protocols, not universal ti
 ## Related topics
 
 - [Analysis profiles](../user/analysis_profiles.md)
+- [Settings Center](../user/settings_center.md)
 - [M-max estimation and review](mmax_estimation.md)
 - [Back to Help Library](../user/index.md)

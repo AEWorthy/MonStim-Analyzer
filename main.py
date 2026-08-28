@@ -13,6 +13,8 @@ from monstim_gui.core.splash import SPLASH_INFO
 
 LOG_FILE = "app.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+APP_ORGANIZATION = "WorthyLab"
+APP_NAME = "MonStim Analyzer"
 IS_FROZEN = getattr(sys, "frozen", False)
 CONSOLE_DEBUG_MODE = False  # Only relevant if not frozen
 
@@ -27,7 +29,7 @@ def get_logger() -> logging.Logger:
 def make_default_log_dir() -> str:
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
-        base = os.getenv("APPDATA", r"C:\Users\%USERNAME%\AppData\Roaming")
+        raise RuntimeError("Qt application identity must be configured before resolving the log directory")
     log_dir = os.path.join(base, "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
@@ -131,16 +133,16 @@ def qt_message_handler(mode, context, message):
         logger.info(f"Qt Info: {message}")
 
 
-def main(is_frozen: bool) -> int:
+def main(is_frozen: bool, app: QApplication | None = None) -> int:
     try:
-        from monstim_gui.core.ui_scaling import setup_dpi_awareness
+        if app is None:
+            from monstim_gui.core.ui_scaling import setup_dpi_awareness
 
-        setup_dpi_awareness()
-
-        app = QApplication(sys.argv)
-        app.setOrganizationName("WorthyLab")
-        app.setApplicationName("MonStim Analyzer")
-        app.setApplicationVersion(SPLASH_INFO["version"])
+            setup_dpi_awareness()
+            app = QApplication(sys.argv)
+            app.setOrganizationName(APP_ORGANIZATION)
+            app.setApplicationName(APP_NAME)
+            app.setApplicationVersion(SPLASH_INFO["version"])
 
         # Install Qt message handler to catch Qt internal errors
         from PySide6.QtCore import qInstallMessageHandler
@@ -178,6 +180,14 @@ def main(is_frozen: bool) -> int:
 
 if __name__ == "__main__":
     args = parse_arguments()
+    from monstim_gui.core.ui_scaling import setup_dpi_awareness
+
+    setup_dpi_awareness()
+    app = QApplication(sys.argv)
+    app.setOrganizationName(APP_ORGANIZATION)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(SPLASH_INFO["version"])
+
     if IS_FROZEN:
         log_dir = setup_logging(debug=args.debug, log_dir=args.log_dir)
         get_logger().info("Logger initialized. Running via frozen executable.")
@@ -193,4 +203,4 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     get_logger().info("Initialization complete. Starting application.")
-    sys.exit(main(IS_FROZEN))
+    sys.exit(main(IS_FROZEN, app))

@@ -11,6 +11,7 @@ This is the in-app reference for MonStim Analyzer. Links open in the same help w
 - [Application guide](using_monstim.md) — fuller feature and menu reference.
 - [Experiment import](importing_experiments.md) — required folder and file layout.
 - [Analysis profiles](analysis_profiles.md) — save and reuse analysis choices.
+- [Settings Center](settings_center.md) — program behavior, global analysis defaults, and profile management.
 
 ## Everyday analysis
 

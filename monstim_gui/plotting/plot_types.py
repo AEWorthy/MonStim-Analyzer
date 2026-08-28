@@ -11,7 +11,6 @@ from .plot_options import (
 
 PLOT_NAME_DICT = {
     "EMG": "emg",
-    "Suspected H-reflexes": "suspectedH",
     "Reflex:Stimulus Curves": "reflexCurves",
     "M-max": "mmax",
     "Max H-reflex": "maxH",

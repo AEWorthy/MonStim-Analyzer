@@ -1,4 +1,5 @@
 import os
+from collections.abc import Mapping
 
 import yaml
 
@@ -39,9 +40,31 @@ class ConfigRepository:
         clear_config_cache()
 
     def write_config(self, config: dict) -> None:
+        """Persist only values that differ from the shipped configuration.
+
+        The UI works with the resolved configuration, but writing that complete
+        mapping made every shipped default a permanent user override.  Keeping
+        the file sparse lets new application defaults take effect naturally.
+        """
+        config = self._user_overrides(config, self.read_default_config())
         with open(self.user_config_file, "w") as file:
             yaml.safe_dump(config, file)
         self.refresh()
+
+    @classmethod
+    def _user_overrides(cls, values, defaults):
+        """Return the recursive subset of ``values`` differing from defaults."""
+        if isinstance(values, Mapping) and isinstance(defaults, Mapping):
+            result = {}
+            for key, value in values.items():
+                if key not in defaults:
+                    result[key] = value
+                    continue
+                override = cls._user_overrides(value, defaults[key])
+                if override != {}:
+                    result[key] = override
+            return result
+        return {} if values == defaults else values
 
     @staticmethod
     def coerce_types(user_data, reference_data):

@@ -10,11 +10,12 @@ Start from a representative session. Confirm channel mapping, filter settings, l
 
 ## Create or update a profile
 
-1. Open **File > Analysis Preferences**.
-2. Select the default profile to review shipped settings, or create/select a named profile.
-3. Adjust only settings supported by the analysis plan.
-4. Save the profile with a descriptive name and, where available, a description of the protocol or condition.
-5. Replot a representative session and an aggregate level to verify the result.
+1. Open **File > Settings Center > Profiles**.
+2. Select a built-in profile to review it, or create/select a user profile in the **Profile Library**.
+3. Duplicate a built-in profile before editing it. Built-in profiles are read-only.
+4. Review **Overview** to see every explicit override beside its global default, then adjust only settings supported by the analysis plan.
+5. Click **Apply** or **OK** to save. Selecting or editing a profile here does not activate it; use the main-window profile selector when you are ready to activate it.
+6. Replot a representative session and an aggregate level to verify the result.
 
 Profiles can supply analysis defaults and latency-window presets. Session annotations remain the authority for applied latency windows; loading a profile does not silently overwrite every session's existing windows.
 
@@ -25,6 +26,7 @@ Record the selected profile with each export. If a profile changes filter cutoff
 ## Related topics
 
 - [Analysis preferences and defaults](../science/configuration_reference.md)
+- [Settings Center](settings_center.md)
 - [Latency windows](latency_windows.md)
 - [Exporting results](exporting_results.md)
 - [Back to Help Library](index.md)

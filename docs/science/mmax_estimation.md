@@ -10,7 +10,7 @@ For each channel, MonStim takes paired stimulus voltages and M-wave amplitudes c
 
 ## Name and create the M-wave window
 
-M-max uses the first latency window whose name matches a configured M-wave recognition name without regard to case. The shipped names are `M-wave`, `M_wave`, `M wave`, `Mwave`, `M-response`, `M_response`, and `M response`; use the canonical name `M-wave` for new work. You can add or remove names globally in **File > Analysis Preferences > Latency Window Settings > M-wave Recognition Names**. The list replaces the shipped names, does not extend them, and is not controlled by analysis profiles.
+M-max uses the first latency window whose name matches a configured M-wave recognition name without regard to case. The shipped names are `M-wave`, `M_wave`, `M wave`, `Mwave`, `M-response`, `M_response`, and `M response`; use the canonical name `M-wave` for new work. You can add or remove names globally in **File > Settings Center > Global Analysis > Latency windows > M-wave Recognition Names**. The list replaces the shipped names, does not extend them, and is not controlled by analysis profiles.
 
 An empty recognition-name list intentionally disables automatic M-wave classification. M-max calculation and relative-to-M-max normalization will then have no M-response window until you restore or add a name.
 

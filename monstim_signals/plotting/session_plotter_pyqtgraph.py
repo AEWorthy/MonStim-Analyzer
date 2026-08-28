@@ -430,7 +430,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
         plot_legend: bool = True,
         plot_colormap: bool = False,
         data_type: str = "filtered",
-        stimuli_to_plot: list[str] | None = None,
         interactive_cursor: bool = True,
         show_extrema_labels: bool = False,
         extrema_label_method: str = "exclusive_extrema_ptt",
@@ -452,8 +451,6 @@ class SessionPlotterPyQtGraph(BasePlotterPyQtGraph):
             Whether to show colormap (default: False)
         data_type : str, optional
             Type of data to plot (default: 'filtered')
-        stimuli_to_plot : list[str], optional
-            list of stimuli to plot
         interactive_cursor : bool, optional
             Whether to enable interactive crosshair cursor (default: True)
         collect_raw_data : bool, optional

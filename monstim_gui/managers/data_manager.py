@@ -959,9 +959,9 @@ class DataManager:
     # ------------------------------------------------------------------
     def show_preferences_window(self):
         logger.debug("Showing preferences window.")
-        from monstim_gui.dialogs.preferences import PreferencesDialog
+        from monstim_gui.dialogs.settings_center import SettingsCenter
 
-        window = PreferencesDialog(get_config_path(), parent=self.gui, config_repo=self.gui.config_repo)
+        window = SettingsCenter(get_config_path(), parent=self.gui, config_repo=self.gui.config_repo)
         if window.exec() == QDialog.DialogCode.Accepted:
             # After closing preferences, refresh the profile selector in the main window
             if hasattr(self.gui, "refresh_profile_selector"):

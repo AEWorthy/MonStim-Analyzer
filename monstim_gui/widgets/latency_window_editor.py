@@ -74,7 +74,7 @@ class _SelectAllLineEdit(QLineEdit):
 
 
 class _SelectAllDoubleSpinBox(QDoubleSpinBox):
-    """A numeric editor whose editable text is selected whenever it gains focus."""
+    """A numeric editor whose value is selected whenever it gains focus."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -282,6 +282,7 @@ class LatencyWindowEditor(QWidget):
     """Compact list, drag reordering, quick edits, and a persistent detail inspector."""
 
     changed = Signal()
+    CHANNEL_TABLE_ROW_HEIGHT = 36
 
     def __init__(
         self,
@@ -290,6 +291,7 @@ class LatencyWindowEditor(QWidget):
         *,
         compact: bool = False,
         minimal_toolbar: bool = False,
+        show_history: bool = True,
         toolbar_extra=None,
         m_wave_window_names: list[str] | tuple[str, ...] | None = None,
     ):
@@ -297,6 +299,7 @@ class LatencyWindowEditor(QWidget):
         self.channel_names = channel_names or ["Default"]
         self.compact = compact
         self.minimal_toolbar = minimal_toolbar
+        self.show_history = show_history
         self.toolbar_extra = toolbar_extra
         self.m_wave_window_names = tuple(m_wave_window_names) if m_wave_window_names is not None else None
         self._m_wave_window_name_keys = frozenset(name.casefold() for name in self.m_wave_window_names or ())
@@ -323,6 +326,8 @@ class LatencyWindowEditor(QWidget):
             ("Paste", self.paste, "Paste", "Paste latency window(s) (Ctrl+V)"),
         )
         for label, slot, icon_text, tooltip in actions:
+            if not self.show_history and label in {"Undo", "Redo"}:
+                continue
             if self.minimal_toolbar and label not in {"Undo", "Redo", "Add", "Delete"}:
                 continue
             button = QToolButton() if self.minimal_toolbar else QPushButton(label)
@@ -408,12 +413,13 @@ class LatencyWindowEditor(QWidget):
         self.model.dataChanged.connect(lambda *_: self._record_history("Edit latency window"))
         self.model.modelReset.connect(lambda: self._record_history("Reorder latency windows"))
         self.model.rows_reordered.connect(self._restore_selection_after_reorder)
-        self.undo_stack.canUndoChanged.connect(self.undo_button.setEnabled)
-        self.undo_stack.canRedoChanged.connect(self.redo_button.setEnabled)
-        self.undo_button.setEnabled(False)
-        self.redo_button.setEnabled(False)
-        QShortcut(QKeySequence.StandardKey.Undo, self, activated=self.undo_stack.undo)
-        QShortcut(QKeySequence.StandardKey.Redo, self, activated=self.undo_stack.redo)
+        if self.show_history:
+            self.undo_stack.canUndoChanged.connect(self.undo_button.setEnabled)
+            self.undo_stack.canRedoChanged.connect(self.redo_button.setEnabled)
+            self.undo_button.setEnabled(False)
+            self.redo_button.setEnabled(False)
+            QShortcut(QKeySequence.StandardKey.Undo, self, activated=self.undo_stack.undo)
+            QShortcut(QKeySequence.StandardKey.Redo, self, activated=self.undo_stack.redo)
         QShortcut(QKeySequence("Ctrl+Shift+D"), self, activated=self.duplicate_selected)
         QShortcut(QKeySequence.StandardKey.Copy, self, activated=self.copy_selected)
         QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=self.copy_all)
@@ -469,7 +475,10 @@ class LatencyWindowEditor(QWidget):
         self.channel_table = QTableWidget(0, 2)
         self.channel_table.setHorizontalHeaderLabels(["Channel", "Start time (ms)"])
         self.channel_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        # Both columns share the available inspector width.  This keeps the
+        # embedded editor inside the viewport as the dialog is resized.
         self.channel_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.channel_table.verticalHeader().setDefaultSectionSize(self.CHANNEL_TABLE_ROW_HEIGHT)
         self.channel_table.setMinimumHeight(140)
         self.channel_start_label = QLabel()
         per_channel_panel = QWidget()

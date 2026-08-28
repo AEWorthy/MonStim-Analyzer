@@ -147,24 +147,7 @@ class PlotController:
 
         # Work on a deepcopy that will be passed to hooks and used for plotting
         plot_options_for_hooks = copy.deepcopy(plot_options) if plot_options is not None else {}
-
-        # Only inject stimuli_to_plot for session-level EMG plots
-        config = None
-        if self.gui.current_session and hasattr(self.gui.current_session, "_config"):
-            config = self.gui.current_session._config
-
         is_session_emg_plot = self.gui.plot_widget.session_radio.isChecked() and plot_type_raw == "EMG"
-
-        # Determine if the default profile is selected
-        default_profile_selected = False
-        if hasattr(self.gui, "profile_selector_combo"):
-            default_profile_selected = self.gui.profile_selector_combo.currentIndex() == 0
-
-        if is_session_emg_plot:
-            if config and "stimuli_to_plot" in config:
-                plot_options_for_hooks["stimuli_to_plot"] = config["stimuli_to_plot"]
-            elif default_profile_selected:
-                plot_options_for_hooks["stimuli_to_plot"] = ["Electrical"]
 
         level, level_object = self.get_plot_level_and_object()
 

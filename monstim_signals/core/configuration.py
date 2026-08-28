@@ -87,12 +87,11 @@ class AnalysisConfig:
     bin_size: float
     default_method: str
     m_max_args: Mapping[str, Any]
-    h_threshold: float
     m_wave_window_names: tuple[str, ...]
 
     @property
     def fingerprint(self) -> tuple[Any, ...]:
-        return (self.bin_size, self.default_method, _fingerprint(self.m_max_args), self.h_threshold, self.m_wave_window_names)
+        return (self.bin_size, self.default_method, _fingerprint(self.m_max_args), self.m_wave_window_names)
 
 
 @dataclass(frozen=True)
@@ -138,7 +137,6 @@ class ResolvedConfig(Mapping[str, Any]):
             bin_size=float(self._values["bin_size"]),
             default_method=str(self._values["default_method"]),
             m_max_args=self._values["m_max_args"],
-            h_threshold=float(self._values.get("h_threshold", 0.5)),
             m_wave_window_names=tuple(self._values["m_wave_window_names"]),
         )
         plot_keys = {
@@ -152,7 +150,6 @@ class ResolvedConfig(Mapping[str, Any]):
             "latency_window_style",
             "subplot_adjust_args",
             "plotting",
-            "stimuli_to_plot",
         }
         self.plot = PlotConfig(
             time_window=float(self._values["time_window"]),
@@ -191,7 +188,7 @@ class ResolvedConfig(Mapping[str, Any]):
         if len({name.casefold() for name in normalized_m_wave_names}) != len(normalized_m_wave_names):
             raise ValueError("m_wave_window_names cannot contain duplicate names ignoring case")
         result["m_wave_window_names"] = normalized_m_wave_names
-        for key in ("bin_size", "time_window", "pre_stim_time", "h_threshold"):
+        for key in ("bin_size", "time_window", "pre_stim_time"):
             if key in result:
                 result[key] = float(result[key])
         if not isinstance(result["butter_filter_args"], Mapping) or not isinstance(result["m_max_args"], Mapping):
@@ -240,8 +237,6 @@ class ResolvedConfig(Mapping[str, Any]):
         channel_names = result.get("default_channel_names", [])
         if not isinstance(channel_names, list) or not all(isinstance(name, str) and name for name in channel_names):
             raise ValueError("default_channel_names must be a list of non-empty strings")
-        if "stimuli_to_plot" in result and not isinstance(result["stimuli_to_plot"], list):
-            raise ValueError("stimuli_to_plot must be a list")
         if "plotting" in result and not isinstance(result["plotting"], Mapping):
             raise ValueError("plotting must be a mapping")
         return result
@@ -315,6 +310,6 @@ class ConfigResolver:
             unknown = sorted(_unknown_paths(self._load_base(), overlay))
             if unknown:
                 raise ValueError(f"Unknown analysis profile keys: {', '.join(unknown)}")
-            extra = {key: profile[key] for key in ("latency_window_preset", "stimuli_to_plot") if key in profile}
+            extra = {key: profile[key] for key in ("latency_window_preset",) if key in profile}
             overlay = deep_merge(overlay, extra)
         return ResolvedConfig(deep_merge(self._load_base(), overlay))

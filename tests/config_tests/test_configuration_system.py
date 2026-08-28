@@ -49,7 +49,6 @@ class TestConfigRepository:
             "title_font_size": 16,
             "m_color": "tab:red",
             "h_color": "tab:blue",
-            "h_threshold": 0.5,
             "preferred_date_format": "YYMMDD",
         }
 
@@ -123,6 +122,18 @@ class TestConfigRepository:
             written_config = yaml.safe_load(f)
 
         assert written_config == test_config
+
+    def test_write_config_omits_shipped_defaults(self):
+        """Saving the resolved UI view must not pin every shipped default."""
+        repo = ConfigRepository(self.default_config_path)
+        resolved = repo.read_config()
+        resolved["bin_size"] = 0.03
+        repo.write_config(resolved)
+
+        with open(self.user_config_path) as f:
+            written_config = yaml.safe_load(f)
+
+        assert written_config == {"bin_size": 0.03}
 
     def test_type_coercion_basic_types(self):
         """Test type coercion for basic data types."""
@@ -263,7 +274,6 @@ class TestProfileManager:
             "name": "Test Profile 1",
             "description": "A test profile for EMG analysis",
             "analysis_parameters": {"time_window": 10.0, "default_method": "peak_to_trough"},
-            "stimuli_to_plot": ["Electrical"],
         }
 
         self.profile2_data = {
@@ -427,6 +437,35 @@ class TestProfileManager:
 
         # Should work but without type coercion
         assert loaded_data["name"] == "Test Profile 1"
+
+    def test_builtin_profiles_are_read_only_and_user_profiles_are_writable(self):
+        builtin_dir = os.path.join(self.temp_dir, "builtin")
+        user_dir = os.path.join(self.temp_dir, "user")
+        os.makedirs(builtin_dir)
+        builtin_path = os.path.join(builtin_dir, "example.yml")
+        with open(builtin_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.profile1_data, f)
+
+        pm = ProfileManager(reference_config=self.reference_config, builtin_dir=builtin_dir, user_dir=user_dir)
+        records = pm.list_profile_records()
+        assert records[0].read_only is True
+        with pytest.raises(ValueError, match="read-only"):
+            pm.save_profile(self.profile1_data, builtin_path)
+
+        saved_path = pm.duplicate_profile(builtin_path, "My Copy")
+        assert saved_path.startswith(user_dir)
+        assert os.path.exists(saved_path)
+
+    def test_import_profile_conflict_can_keep_both(self):
+        pm = ProfileManager(self.profile_dir, self.reference_config)
+        pm.save_profile(self.profile1_data)
+        incoming = os.path.join(self.temp_dir, "incoming.yml")
+        with open(incoming, "w", encoding="utf-8") as f:
+            yaml.safe_dump(self.profile1_data, f)
+
+        imported = pm.import_profile(incoming, conflict="keep_both")
+        assert os.path.exists(imported)
+        assert pm.load_profile(imported)["name"] == "Test Profile 1 2"
 
 
 class TestApplicationState:

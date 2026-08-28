@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
+from ..core.ui_theme import install_wheel_change_guard
+from ..widgets.collapsible_group_box import CollapsibleGroupBox
 from .plot_types import PLOT_OPTIONS_DICT
 
 if TYPE_CHECKING:
@@ -33,9 +35,9 @@ if TYPE_CHECKING:
 
 
 # Plotting Widget
-class PlotWidget(QGroupBox):
+class PlotWidget(CollapsibleGroupBox):
     def __init__(self, parent: MonstimGUI):
-        super().__init__("Plotting", parent)
+        super().__init__("Plotting", parent, expanded=True)
         self.current_option_widget: BasePlotOptions = None
         self.parent: MonstimGUI = parent
         self.layout: QVBoxLayout = QVBoxLayout()
@@ -74,6 +76,7 @@ class PlotWidget(QGroupBox):
         self.plot_type_label.setToolTip("Select the type of plot to generate")
         form.addRow(self.plot_type_label, self.plot_type_combo)
         self.plot_type_combo.currentTextChanged.connect(self.on_plot_type_changed)
+        self._wheel_change_guard = install_wheel_change_guard(self)
 
         self.layout.addLayout(form)
 
@@ -120,6 +123,7 @@ class PlotWidget(QGroupBox):
         self.create_additional_options()
         # self.import_canvas()
         self.setLayout(self.layout)
+        self.set_expanded(True)
 
     def initialize_plot_widget(self):
         # Occurs after the data has been loaded. Called from EMGAnalysisGUI.
@@ -143,6 +147,10 @@ class PlotWidget(QGroupBox):
         # Initialize plot types and options
         self.update_plot_types()
         self.update_plot_options()
+
+    def _guard_plot_option_wheels(self) -> None:
+        """Keep scrolling the options pane from changing plot controls."""
+        self._wheel_change_guard = install_wheel_change_guard(self, self._wheel_change_guard)
 
     def create_additional_options(self):
         self.additional_options_layout = QVBoxLayout()
@@ -373,6 +381,7 @@ class PlotWidget(QGroupBox):
 
                 # Connect option change signals so modifications are saved immediately
                 self.connect_option_change_signals()
+                self._guard_plot_option_wheels()
 
                 self.options_layout.update()
 
@@ -442,6 +451,7 @@ class PlotWidget(QGroupBox):
 
             # Connect option change signals so modifications are saved immediately
             self.connect_option_change_signals()
+            self._guard_plot_option_wheels()
 
             # Refresh the option content's geometry after it is initialized.
             QTimer.singleShot(50, self.recalculate_options_size)

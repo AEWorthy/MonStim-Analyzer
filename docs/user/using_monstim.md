@@ -24,8 +24,7 @@ Use **File > Save Current Experiment** to save the selected experiment. Most edi
 | Goal | Where to start |
 | --- | --- |
 | Import one or several experiments | **File > Import an Experiment** or **Import Multiple Experiments**; see [Importing experiments](importing_experiments.md). |
-| Change analysis defaults for a profile | **File > Analysis Preferences**; see [Configuration reference](../science/configuration_reference.md). |
-| Adjust application and display behavior | **File > Settings**; see [UI scaling and display troubleshooting](ui_scaling_guide.md). |
+| Change profiles, analysis defaults, or application behavior | **File > Settings Center**; see [Settings Center](settings_center.md). |
 | Create or standardize timing windows | **Edit > Session/Dataset/Experiment > Manage Latency Windows**; see [Latency windows](latency_windows.md). |
 | Exclude a set of recordings after review | **Edit > Data Curation > Recording Exclusion Editor**; see [Recording exclusion editor](recording_exclusion_editor.md). |
 | Change channel names or invert polarity | **Edit > Session/Dataset/Experiment**. |

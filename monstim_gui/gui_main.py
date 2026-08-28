@@ -39,6 +39,7 @@ from monstim_gui.commands import (
     RestoreSessionCommand,
 )
 from monstim_gui.core.splash import SPLASH_INFO
+from monstim_gui.core.ui_theme import apply_application_theme
 from monstim_gui.dialogs import (
     AboutDialog,
     ChangeChannelNamesDialog,
@@ -69,6 +70,7 @@ logger = logging.getLogger(__name__)
 class MonstimGUI(QMainWindow):
     def __init__(self):
         super().__init__()
+        apply_application_theme()
         self.setWindowTitle(f"MonStim Analyzer {SPLASH_INFO['version']}")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), "icon.png")))
         self.handle_qt_error_logs()
@@ -147,6 +149,7 @@ class MonstimGUI(QMainWindow):
         from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QWidget
 
         self.profile_selector_row = QWidget()
+        self.profile_selector_row.setObjectName("profileSelectorRow")
         self.profile_selector_layout = QHBoxLayout(self.profile_selector_row)
         self.profile_selector_layout.setContentsMargins(8, 2, 8, 2)
         self.profile_selector_label = QLabel("Analysis Profile:")

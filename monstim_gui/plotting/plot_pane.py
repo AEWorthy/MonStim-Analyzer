@@ -7,6 +7,7 @@ import pyqtgraph as pg
 from PySide6.QtWidgets import QGroupBox, QSizePolicy, QVBoxLayout
 
 from monstim_gui.core.application_state import app_state
+from monstim_gui.core.ui_scaling import ui_scaling
 
 if TYPE_CHECKING:
     from monstim_gui import MonstimGUI
@@ -45,7 +46,9 @@ class PlotPane(QGroupBox):
             logger.info("OpenGL acceleration disabled (software rendering)")
 
         self.graphics_layout.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.graphics_layout.setMinimumSize(800, 400)
+        # Leave enough room for useful plots without preventing the main
+        # splitter from giving the sidebar additional width.
+        self.graphics_layout.setMinimumSize(ui_scaling.scale_size(400), 400)
         self.graphics_layout.setAntialiasing(True)
         self.graphics_layout.setUpdatesEnabled(True)
 

@@ -116,7 +116,7 @@ def get_log_dir() -> str:
 
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     if not base:
-        base = os.getenv("APPDATA", r"C:\\Users\\%USERNAME%\\AppData\\Roaming")
+        raise RuntimeError("Qt application identity must be configured before resolving the log directory")
     log_dir = os.path.join(base, "logs")
     os.makedirs(log_dir, exist_ok=True)
     return log_dir

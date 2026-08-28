@@ -90,8 +90,10 @@ class ChannelSelectorWidget(QGroupBox):
         grid.setSpacing(2)  # Minimal spacing between checkboxes
         grid.setContentsMargins(2, 2, 2, 2)  # Minimal padding to minimize space
 
-        # Set size policy to make it as compact as possible
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # Keep the selector at its natural width instead of stretching it across
+        # the options panel.  This leaves only the intended spacing between the
+        # channel checkboxes when the panel is wider than the selector.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         self.checkboxes: list[QCheckBox] = []
 
@@ -103,6 +105,7 @@ class ChannelSelectorWidget(QGroupBox):
         total = (max_ch + 5) // 6 * 6  # Round up to the nearest multiple of 6
         for idx in range(total):
             cb = QCheckBox(f"{idx}")
+            cb.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             # Only enable the ones your data actually has
             cb.setEnabled(idx < max_ch)
             cb.setChecked(idx < max_ch)

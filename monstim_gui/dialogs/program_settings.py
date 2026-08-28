@@ -6,7 +6,7 @@ performance, and data tracking settings.
 
 import logging
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -20,7 +20,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from monstim_gui.core.application_state import ApplicationState
@@ -35,8 +37,16 @@ logger = logging.getLogger(__name__)
 class ProgramSettingsDialog(QDialog):
     settings_changed = Signal()  # Signal emitted when settings change
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, embedded: bool = False):
         super().__init__(parent)
+        self.embedded = embedded
+        if embedded:
+            # Settings Center hosts this reusable editor as an ordinary child
+            # widget.  Leaving it as a native QDialog prevents its parent's
+            # layout from assigning geometry, which produced a blank Program
+            # page on some Windows/PySide configurations.
+            self.setWindowFlags(Qt.WindowType.Widget)
+            self.setModal(False)
         self.app_state = ApplicationState()
         self._original_opengl_setting = None  # Track original OpenGL setting for restart warning
         self.setup_ui()
@@ -44,20 +54,34 @@ class ProgramSettingsDialog(QDialog):
 
     def setup_ui(self):
         """Set up the dialog UI."""
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("Program Settings")
         self.setModal(True)
-        self.resize(680, 900)
+        if not self.embedded:
+            self.resize(680, 900)
 
         # Main layout
         main_layout = QVBoxLayout(self)
 
-        # Create setting groups in logical order
-        main_layout.addWidget(self.create_display_group())
-        main_layout.addWidget(self.create_ui_scaling_group())
-        main_layout.addWidget(self.create_performance_group())
-        main_layout.addWidget(self.create_cache_warmup_group())
-        main_layout.addWidget(self.create_tracking_group())
-        main_layout.addWidget(self.create_data_management_group())
+        tabs = QTabWidget(self)
+        tabs.addTab(
+            self._tab_page(self.create_display_group(), self.create_ui_scaling_group()),
+            "Appearance",
+        )
+        tabs.addTab(
+            self._tab_page(self.create_performance_group(), self.create_cache_warmup_group()),
+            "Performance",
+        )
+        tabs.addTab(
+            self._tab_page(self.create_tracking_group(), self.create_data_management_group()),
+            "Privacy and data",
+        )
+        tabs.setTabToolTip(0, "Window appearance, sizing, and interface scaling.")
+        tabs.setTabToolTip(1, "Loading behavior and optional cache warm-up.")
+        tabs.setTabToolTip(2, "Remembered state, recent data, and recovery controls.")
+        main_layout.addWidget(tabs, 1)
+
+        if self.embedded:
+            return
 
         # Button layout
         button_layout = QHBoxLayout()
@@ -82,6 +106,16 @@ class ProgramSettingsDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         main_layout.addLayout(button_layout)
+
+    @staticmethod
+    def _tab_page(*groups: QGroupBox) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        for group in groups:
+            layout.addWidget(group)
+        layout.addStretch()
+        return page
 
     def create_tracking_group(self):
         """Create the data tracking settings group."""
@@ -387,7 +421,7 @@ class ProgramSettingsDialog(QDialog):
         self.path_tracking_checkbox.setChecked(self.app_state.should_track_import_export_paths())
         self.recent_files_checkbox.setChecked(self.app_state.should_track_recent_files())
 
-    def save_settings(self):
+    def save_settings(self, *, notify: bool = True):
         """Save the current setting values."""
         # Save display settings
         ui_config.set("center_windows", self.center_windows_checkbox.isChecked())
@@ -424,13 +458,13 @@ class ProgramSettingsDialog(QDialog):
         if self._original_opengl_setting != self.opengl_checkbox.isChecked():
             restart_required = True
 
-        if restart_required:
+        if restart_required and notify:
             QMessageBox.information(
                 self,
                 "Restart Required",
                 "Some settings have been changed that require a restart.\n\nPlease restart the application for all changes to take effect.",
             )
-        else:
+        elif notify:
             QMessageBox.information(
                 self,
                 "Settings Saved",

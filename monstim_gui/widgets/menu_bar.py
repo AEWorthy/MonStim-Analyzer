@@ -63,14 +63,9 @@ class MenuBar(QMenuBar):
         file_menu.addSeparator()
 
         # Preferences button
-        preferences_action = file_menu.addAction("Analysis Preferences")
+        preferences_action = file_menu.addAction("Settings Center")
         preferences_action.triggered.connect(self.parent.data_manager.show_preferences_window)
-        preferences_action.setStatusTip("Configure analysis and plotting preferences")
-
-        # Program Settings button (includes Display and UI Scaling preferences)
-        program_prefs_action = file_menu.addAction("Settings")
-        program_prefs_action.triggered.connect(self.show_program_preferences)
-        program_prefs_action.setStatusTip("Configure application, display, and interface settings")
+        preferences_action.setStatusTip("Configure program settings, global analysis defaults, and profile overrides")
 
         file_menu.addSeparator()
 

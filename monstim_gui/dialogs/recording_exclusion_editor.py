@@ -356,6 +356,10 @@ class RecordingExclusionEditor(QDialog):
         """Create the stimulus amplitude exclusion criteria tab."""
         tab_widget = QWidget()
         layout = QVBoxLayout(tab_widget)
+        # A checkable group's title extends above its frame.  Keep a full
+        # indicator-height of breathing room below the tab pane: some Qt
+        # styles otherwise clip the checkbox at the top of the first tab row.
+        layout.setContentsMargins(10, 20, 10, 10)
 
         # Enable/disable group
         self.stimulus_group = QGroupBox("Exclude recordings by stimulus amplitude")
@@ -422,6 +426,9 @@ class RecordingExclusionEditor(QDialog):
         """Create quality-based exclusion criteria tab."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        # Match the stimulus tab so its checkable group title cannot intersect
+        # the tab pane border on styles with taller checkbox indicators.
+        layout.setContentsMargins(10, 20, 10, 10)
 
         self.quality_group = QGroupBox("Exclude recordings by quality metrics")
         self.quality_group.setCheckable(True)

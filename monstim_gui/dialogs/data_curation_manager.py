@@ -29,7 +29,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QBrush, QColor, QDrag, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -435,7 +436,10 @@ class DataCurationManager(QDialog):
         """Set up the dialog UI with tabbed interface."""
         self.setWindowTitle("Data Curation Manager")
         self.setModal(True)
-        self.resize(1000, 700)
+        # Match the working footprint of the Recording Exclusion Editor.  The
+        # data tree is the primary task surface, so it needs room rather than
+        # being squeezed beneath a wall of batch-operation buttons.
+        self.resize(1000, 600)
 
         # Main layout with reduced margins
         main_layout = QVBoxLayout(self)
@@ -497,85 +501,137 @@ class DataCurationManager(QDialog):
             logger.warning("Failed to set size policy for instructions label; using default.")
         layout.addWidget(instructions)
 
-        # Batch operations
-        batch_layout = QHBoxLayout()
+        # Keep commands close to the data they operate on without letting them
+        # dominate the dialog.  Less-common batch commands live in two compact
+        # menus; their QAction instances retain the same enabled-state logic as
+        # the former buttons.
+        command_layout = QHBoxLayout()
+        command_layout.setSpacing(6)
 
-        # Quick experiment creation
-        self.create_blank_experiment_button = QPushButton("Create Blank Experiment")
+        self.create_blank_experiment_button = QToolButton()
+        self.create_blank_experiment_button.setText("New Experiment")
         self.create_blank_experiment_button.clicked.connect(self.create_experiment)
         self.create_blank_experiment_button.setToolTip("Create a new empty experiment for organizing datasets")
-        batch_layout.addWidget(self.create_blank_experiment_button)
+        command_layout.addWidget(self.create_blank_experiment_button)
 
-        # Import new experiment button (to the right of Create Blank Experiment)
-        self.import_new_experiment_button = QPushButton("Import New Experiment")
+        self.import_new_experiment_button = QToolButton()
+        self.import_new_experiment_button.setText("Import…")
         self.import_new_experiment_button.clicked.connect(self.import_experiment)
         self.import_new_experiment_button.setToolTip("Import a new experiment using the standard import workflow")
-        self.import_new_experiment_button.setMaximumHeight(self.create_blank_experiment_button.maximumHeight())
-        batch_layout.addWidget(self.import_new_experiment_button)
+        command_layout.addWidget(self.import_new_experiment_button)
 
-        self.rebuild_catalogs_button = QPushButton("Force Rebuild Data Catalog")
+        self.rebuild_catalogs_button = QToolButton()
+        self.rebuild_catalogs_button.setText("Rebuild Catalog")
         self.rebuild_catalogs_button.setToolTip("Re-scan all files in the currently selected experiment to recover data missing from the catalog")
         self.rebuild_catalogs_button.clicked.connect(self.force_rebuild_catalogs)
-        batch_layout.addWidget(self.rebuild_catalogs_button)
+        command_layout.addWidget(self.rebuild_catalogs_button)
 
-        self.validate_selected_button = QPushButton("Validate Selected")
-        self.validate_selected_button.setToolTip("Check checked datasets for readable metadata and session folders")
-        self.validate_selected_button.clicked.connect(self.validate_selected_datasets)
-        self.validate_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.validate_selected_button)
-
-        self.exclude_selected_button = QPushButton("Exclude Selected")
-        self.exclude_selected_button.setToolTip("Hide checked datasets from analysis without deleting their files")
-        self.exclude_selected_button.clicked.connect(lambda: self.set_selected_datasets_included(False))
-        self.exclude_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.exclude_selected_button)
-
-        self.restore_selected_button = QPushButton("Restore Selected")
-        self.restore_selected_button.setToolTip("Return checked excluded datasets to analysis")
-        self.restore_selected_button.clicked.connect(lambda: self.set_selected_datasets_included(True))
-        self.restore_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.restore_selected_button)
-
-        self.mark_complete_button = QPushButton("Mark Complete")
-        self.mark_complete_button.setToolTip("Mark checked datasets complete without changing any sessions")
-        self.mark_complete_button.clicked.connect(lambda: self.set_selected_datasets_completion(True))
-        self.mark_complete_button.setEnabled(False)
-        batch_layout.addWidget(self.mark_complete_button)
-
-        self.mark_incomplete_button = QPushButton("Mark Incomplete")
-        self.mark_incomplete_button.setToolTip("Mark checked datasets incomplete without changing any sessions")
-        self.mark_incomplete_button.clicked.connect(lambda: self.set_selected_datasets_completion(False))
-        self.mark_incomplete_button.setEnabled(False)
-        batch_layout.addWidget(self.mark_incomplete_button)
-
-        batch_layout.addStretch()
-
-        self.select_all_button = QPushButton("Select All")
+        self.select_all_button = QToolButton()
+        self.select_all_button.setText("Select All")
         self.select_all_button.clicked.connect(self.select_all_datasets)
-        batch_layout.addWidget(self.select_all_button)
+        command_layout.addWidget(self.select_all_button)
 
-        self.clear_selection_button = QPushButton("Clear Selection")
+        self.clear_selection_button = QToolButton()
+        self.clear_selection_button.setText("Clear")
         self.clear_selection_button.clicked.connect(self.clear_dataset_selection)
-        batch_layout.addWidget(self.clear_selection_button)
+        self.clear_selection_button.setToolTip("Clear checked datasets")
+        command_layout.addWidget(self.clear_selection_button)
 
-        batch_layout.addStretch()
+        def add_selected_action(label, callback, tooltip):
+            action = QAction(label, self)
+            action.setToolTip(tooltip)
+            action.triggered.connect(callback)
+            action.setEnabled(False)
+            return action
 
-        self.move_selected_button = QPushButton("Move Selected To...")
-        self.move_selected_button.clicked.connect(self.move_selected_datasets)
-        self.move_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.move_selected_button)
+        self.validate_selected_button = add_selected_action(
+            "Validate Selected",
+            self.validate_selected_datasets,
+            "Check checked datasets for readable metadata and session folders.",
+        )
+        self.exclude_selected_button = add_selected_action(
+            "Exclude Selected",
+            lambda: self.set_selected_datasets_included(False),
+            "Hide checked datasets from analysis without deleting their files.",
+        )
+        self.restore_selected_button = add_selected_action(
+            "Restore Selected",
+            lambda: self.set_selected_datasets_included(True),
+            "Return checked excluded datasets to analysis.",
+        )
+        self.mark_complete_button = add_selected_action(
+            "Mark Complete",
+            lambda: self.set_selected_datasets_completion(True),
+            "Mark checked datasets complete without changing any sessions.",
+        )
+        self.mark_incomplete_button = add_selected_action(
+            "Mark Incomplete",
+            lambda: self.set_selected_datasets_completion(False),
+            "Mark checked datasets incomplete without changing any sessions.",
+        )
+        self.move_selected_button = add_selected_action(
+            "Move Selected To…",
+            self.move_selected_datasets,
+            "Move checked datasets to another experiment.",
+        )
+        self.copy_selected_button = add_selected_action(
+            "Copy Selected To…",
+            self.copy_selected_datasets,
+            "Copy checked datasets to another experiment.",
+        )
+        self.delete_selected_button = add_selected_action(
+            "Delete Selected",
+            self.delete_selected_datasets,
+            "Delete checked datasets.",
+        )
 
-        self.copy_selected_button = QPushButton("Copy Selected To...")
-        self.copy_selected_button.clicked.connect(self.copy_selected_datasets)
-        self.copy_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.copy_selected_button)
+        selected_menu = QMenu(self)
+        selected_menu.addActions(
+            [
+                self.validate_selected_button,
+                self.exclude_selected_button,
+                self.restore_selected_button,
+                self.mark_complete_button,
+                self.mark_incomplete_button,
+            ]
+        )
+        selected_commands_button = QToolButton()
+        selected_commands_button.setText("Selected Actions")
+        selected_commands_button.setToolTip("Actions for checked datasets")
+        selected_commands_button.setMenu(selected_menu)
+        selected_commands_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        command_layout.addWidget(selected_commands_button)
 
-        self.delete_selected_button = QPushButton("Delete Selected")
-        self.delete_selected_button.clicked.connect(self.delete_selected_datasets)
-        self.delete_selected_button.setEnabled(False)
-        batch_layout.addWidget(self.delete_selected_button)
+        organize_menu = QMenu(self)
+        organize_menu.addActions(
+            [
+                self.move_selected_button,
+                self.copy_selected_button,
+                self.delete_selected_button,
+            ]
+        )
+        organize_button = QToolButton()
+        organize_button.setText("Organize")
+        organize_button.setToolTip("Move, copy, or delete checked datasets")
+        organize_button.setMenu(organize_menu)
+        organize_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        command_layout.addWidget(organize_button)
 
-        layout.addLayout(batch_layout)
+        # QToolButton's native minimum can be disproportionately wide on
+        # high-DPI Windows styles.  Deliberate compact widths keep this command
+        # row below the 800 px working width while preserving readable labels.
+        for button, width in (
+            (self.create_blank_experiment_button, 110),
+            (self.import_new_experiment_button, 75),
+            (self.rebuild_catalogs_button, 110),
+            (self.select_all_button, 70),
+            (self.clear_selection_button, 60),
+            (selected_commands_button, 125),
+            (organize_button, 80),
+        ):
+            button.setFixedWidth(width)
+        command_layout.addStretch()
+        layout.addLayout(command_layout)
 
         # Search/filter box for quick filtering of datasets
         search_layout = QHBoxLayout()
@@ -584,15 +640,12 @@ class DataCurationManager(QDialog):
         self.search_box.setPlaceholderText("Search by name, id, animal, condition, date, date_added...")
         self.search_box.setClearButtonEnabled(True)
         self.search_box.textChanged.connect(self.on_search_text_changed)
-        # Make search box expand enough to fit its placeholder text
-        try:
-            fm = self.search_box.fontMetrics()
-            ph = self.search_box.placeholderText()
-            w = fm.horizontalAdvance(ph) + 24  # padding for icon/clear button
-            self.search_box.setMinimumWidth(w)
-            self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        except Exception:
-            pass
+        # The search field should be comfortably usable, but its placeholder is
+        # intentionally descriptive and must not dictate the dialog width.
+        # A 260 px minimum keeps this manager usable on laptop displays; the
+        # field still grows with the window through its expanding size policy.
+        self.search_box.setMinimumWidth(260)
+        self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # Filter builder button opens advanced filter dialog
         self.filter_button = QPushButton("Filter")
@@ -632,23 +685,16 @@ class DataCurationManager(QDialog):
         # Let the first column stretch to take remaining space and keep date columns compact
         try:
             # Allow user to drag-resize the first column interactively
-            header.setSectionResizeMode(0, header.ResizeMode.Interactive)
-            header.setSectionResizeMode(1, header.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(2, header.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(3, header.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(4, header.ResizeMode.ResizeToContents)
-            # Set an initial width for the Name column for readability
-            try:
-                header.resizeSection(0, 420)
-            except Exception:
-                logger.debug("Failed to resize first column; using default width.")
+            header.setMinimumSectionSize(40)
+            for column, width in enumerate((150, 70, 70, 80, 80)):
+                header.setSectionResizeMode(column, header.ResizeMode.Interactive)
+                header.resizeSection(column, width)
         except Exception:
             # Fallback for older Qt versions
-            header.setSectionResizeMode(0, header.Interactive)
-            header.setSectionResizeMode(1, header.ResizeToContents)
-            header.setSectionResizeMode(2, header.ResizeToContents)
-            header.setSectionResizeMode(3, header.ResizeToContents)
-            header.setSectionResizeMode(4, header.ResizeToContents)
+            header.setMinimumSectionSize(40)
+            for column, width in enumerate((150, 70, 70, 80, 80)):
+                header.setSectionResizeMode(column, header.Interactive)
+                header.resizeSection(column, width)
 
         # Place tree and details pane side-by-side using a splitter for resizable/minimizable behavior
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -672,7 +718,7 @@ class DataCurationManager(QDialog):
         # Set initial sizes: favor tree and set details pane to its minimum collapse width
         try:
             min_w = self.details_pane.minimumWidth()
-            splitter.setSizes([max(700, 2 * min_w), min_w])
+            splitter.setSizes([360, min_w])
         except Exception:
             pass
         # Make the splitter region dictate vertical growth; remove excess blank space above
@@ -1006,7 +1052,6 @@ class DataCurationManager(QDialog):
                     if len(t) > len(max_text):
                         max_text = t
                 width = fm.horizontalAdvance(max_text) + 40  # padding for icon/checkbox
-                # cap to a reasonable maximum
                 width = min(max(300, width), 600)
                 header.resizeSection(0, width)
             except Exception:
@@ -1314,8 +1359,8 @@ class DataCurationManager(QDialog):
 
         # Constrain width so long text doesn't expand the splitter/window
         try:
-            box.setMinimumWidth(260)
-            box.setMaximumWidth(380)
+            box.setMinimumWidth(200)
+            box.setMaximumWidth(300)
         except Exception:
             logger.debug("Failed to set width constraints for details pane; using default.")
 

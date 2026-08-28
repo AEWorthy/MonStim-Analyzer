@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
+from monstim_gui.core.ui_theme import apply_application_theme
 from monstim_gui.dialogs.latency import LatencyWindowsDialog
 from monstim_gui.dialogs.preferences import MWaveWindowNamesEditor
 from monstim_signals.core import LatencyWindow, SessionAnnot
@@ -92,6 +93,29 @@ def test_latency_window_text_fields_select_existing_value_on_focus():
         QApplication.processEvents()
         assert field.selectedText() == field.text()
 
+    dialog.close()
+
+
+def test_per_channel_timing_editors_have_space_for_spin_controls():
+    apply_application_theme(QApplication.instance())
+    session = _session("S1", 1.0)
+    session.channel_names = ["Ch0", "Ch1"]
+    session.annot.latency_windows[0].start_times = [1.4, 1.5]
+    gui = _GUI(session)
+    dialog = LatencyWindowsDialog(session, gui, config_repo=_ConfigRepo())
+    dialog.resize(dialog.minimumSize())
+    dialog.show()
+    dialog.editor.table.selectRow(0)
+    dialog.editor.per_channel_radio.setChecked(True)
+    QApplication.processEvents()
+
+    table = dialog.editor.channel_table
+    spinbox = table.cellWidget(0, 1)
+
+    assert table.horizontalScrollBar().maximum() == 0
+    assert spinbox.geometry().right() < table.viewport().rect().right()
+    assert spinbox.width() > 0
+    assert spinbox.height() >= dialog.editor.CHANNEL_TABLE_ROW_HEIGHT - 11
     dialog.close()
 
 

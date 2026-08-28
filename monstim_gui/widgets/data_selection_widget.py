@@ -6,7 +6,6 @@ from PySide6.QtGui import QColor, QCursor, QPainter
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
-    QGroupBox,
     QLabel,
     QMenu,
     QPushButton,
@@ -15,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from monstim_gui.core.responsive_widgets import ResponsiveComboBox
+from monstim_gui.widgets.collapsible_group_box import CollapsibleGroupBox
 
 if TYPE_CHECKING:
     from gui_main import MonstimGUI
@@ -74,7 +74,7 @@ class CircleDelegate(QStyledItemDelegate):
         painter.restore()
 
 
-class DataSelectionWidget(QGroupBox):
+class DataSelectionWidget(CollapsibleGroupBox):
     def __init__(self, parent: MonstimGUI):
         super().__init__("Data Selection", parent)
         self.parent: MonstimGUI = parent
@@ -175,7 +175,9 @@ class DataSelectionWidget(QGroupBox):
         self.manage_data_button.clicked.connect(self._on_manage_data_clicked)
         btn_layout.addWidget(self.manage_data_button)
 
-        form.addRow("", button_widget)
+        # Let the paired management buttons span the form instead of forcing
+        # the empty label column to be included in their minimum width.
+        form.addRow(button_widget)
 
         self.setLayout(form)
         self.setup_context_menus()
@@ -183,7 +185,10 @@ class DataSelectionWidget(QGroupBox):
 
         for combo in (self.experiment_combo, self.dataset_combo, self.session_combo):
             combo.setItemDelegate(self.circle_delegate)
-            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            # Keep the sidebar width independent of the longest loaded name.
+            # ResponsiveComboBox already provides a practical minimum width and
+            # uses elision plus a tooltip for text that exceeds the field.
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             combo.view().setTextElideMode(Qt.TextElideMode.ElideRight)
 
         self._update_notice_icons()

@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QAbstractItemView,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -32,31 +34,6 @@ from monstim_gui.managers.profile_manager import ProfileManager
 from monstim_gui.widgets.latency_window_editor import LatencyWindowEditor
 from monstim_signals.core import LatencyWindow
 
-STIMULUS_OPTIONS = ["Force", "Length", "Electrical", "Optical"]
-
-
-class StimulusSelectorWidget(QWidget):
-    def __init__(self, selected=None, parent=None):
-        super().__init__(parent)
-        self.checkboxes = {}
-        layout = QHBoxLayout(self)
-        for signal in STIMULUS_OPTIONS:
-            cb = QCheckBox(signal)
-            layout.addWidget(cb)
-            self.checkboxes[signal] = cb
-        if selected:
-            for sig in selected:
-                if sig in self.checkboxes:
-                    self.checkboxes[sig].setChecked(True)
-        layout.addStretch(1)
-
-    def get_selected(self):
-        return [sig for sig, cb in self.checkboxes.items() if cb.isChecked()]
-
-    def set_selected(self, selected):
-        for sig, cb in self.checkboxes.items():
-            cb.setChecked(sig in selected)
-
 
 class MWaveWindowNamesEditor(QWidget):
     """Editable global list of latency-window names recognized as M-responses."""
@@ -64,18 +41,35 @@ class MWaveWindowNamesEditor(QWidget):
     def __init__(self, names: list[str], shipped_defaults: list[str], parent=None):
         super().__init__(parent)
         self.shipped_defaults = list(shipped_defaults)
-        self._name_fields: list[QLineEdit] = []
         layout = QVBoxLayout(self)
-        self._names_layout = QVBoxLayout()
-        self._names_layout.setContentsMargins(0, 0, 0, 0)
-        layout.addLayout(self._names_layout)
+        explanation = QLabel(
+            "Names in this list are recognized as the M-response latency window for M-max calculations. Double-click a name to edit it.",
+            self,
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        self.table = QTableWidget(0, 1, self)
+        self.table.setHorizontalHeaderLabels(["Recognized M-wave window name"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
+        self.table.setToolTip("Double-click a row to edit its recognized M-wave name.")
+        layout.addWidget(self.table)
 
         controls = QHBoxLayout()
-        add_button = QPushButton("Add name")
-        reset_button = QPushButton("Restore shipped defaults")
+        add_button = QPushButton("Add Name")
+        remove_button = QPushButton("Remove Selected")
+        reset_button = QPushButton("Restore Shipped Defaults")
         add_button.clicked.connect(lambda: self.add_name())
+        remove_button.clicked.connect(self.remove_selected)
         reset_button.clicked.connect(self.restore_shipped_defaults)
+        add_button.setToolTip("Add a new name recognized as an M-wave window.")
+        remove_button.setToolTip("Remove the selected names from M-wave recognition.")
+        reset_button.setToolTip("Restore the shipped M-wave recognition names.")
         controls.addWidget(add_button)
+        controls.addWidget(remove_button)
         controls.addWidget(reset_button)
         controls.addStretch()
         layout.addLayout(controls)
@@ -88,41 +82,33 @@ class MWaveWindowNamesEditor(QWidget):
         self.set_names(names)
 
     def add_name(self, name: str = "") -> None:
-        row = QWidget(self)
-        row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        field = QLineEdit(name, row)
-        field.setPlaceholderText("Latency-window name")
-        remove_button = QPushButton("Remove", row)
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        item = QTableWidgetItem(name)
+        item.setToolTip("Double-click to edit this M-wave recognition name.")
+        self.table.setItem(row, 0, item)
+        self.table.setCurrentCell(row, 0)
+        if not name:
+            self.table.editItem(item)
+        self._update_table_height()
 
-        def remove() -> None:
-            self._name_fields.remove(field)
-            self._names_layout.removeWidget(row)
-            row.deleteLater()
-            self._update_empty_notice()
-
-        remove_button.clicked.connect(remove)
-        row_layout.addWidget(field, 1)
-        row_layout.addWidget(remove_button)
-        self._names_layout.addWidget(row)
-        self._name_fields.append(field)
-        self._update_empty_notice()
+    def remove_selected(self) -> None:
+        rows = sorted({index.row() for index in self.table.selectionModel().selectedRows()}, reverse=True)
+        for row in rows:
+            self.table.removeRow(row)
+        self._update_table_height()
 
     def set_names(self, names: list[str]) -> None:
-        while self._name_fields:
-            field = self._name_fields.pop()
-            row = field.parentWidget()
-            self._names_layout.removeWidget(row)
-            row.deleteLater()
+        self.table.setRowCount(0)
         for name in names:
             self.add_name(name)
-        self._update_empty_notice()
+        self._update_table_height()
 
     def restore_shipped_defaults(self) -> None:
         self.set_names(self.shipped_defaults)
 
     def names(self) -> list[str]:
-        return [field.text() for field in self._name_fields]
+        return [self.table.item(row, 0).text() if self.table.item(row, 0) else "" for row in range(self.table.rowCount())]
 
     def validate(self) -> list[str]:
         names = [name.strip() for name in self.names()]
@@ -133,7 +119,13 @@ class MWaveWindowNamesEditor(QWidget):
         return names
 
     def _update_empty_notice(self) -> None:
-        self.empty_notice.setVisible(not self._name_fields)
+        self.empty_notice.setVisible(self.table.rowCount() == 0)
+
+    def _update_table_height(self) -> None:
+        header_height = self.table.horizontalHeader().height()
+        row_height = self.table.verticalHeader().defaultSectionSize()
+        self.table.setFixedHeight(header_height + row_height * self.table.rowCount() + 4)
+        self._update_empty_notice()
 
 
 class LatencyWindowPresetEditor(QWidget):
@@ -201,7 +193,7 @@ class LatencyWindowPresetEditor(QWidget):
 
         # The normal horizontal editor is easier to use for long preset lists;
         # the preferences dialog is deliberately wide enough to host it.
-        self.editor = LatencyWindowEditor(["Default"], self)
+        self.editor = LatencyWindowEditor(["Default"], self, show_history=False)
         layout.addWidget(self.editor, 1)
 
         if self.preset_combo.count() > 0:
@@ -447,7 +439,6 @@ class PreferencesDialog(QDialog):
                     "default_channel_names",
                 ],
                 "EMG Filter Settings": ["butter_filter_args"],
-                "'Suspected H-reflex' Plot Settings": ["h_threshold"],
                 "M-max Calculation Settings": ["m_max_args"],
                 "M-wave Recognition Names": ["m_wave_window_names"],
                 "Plot Style Settings": [
@@ -465,7 +456,6 @@ class PreferencesDialog(QDialog):
             tabs = {
                 "Plot Settings": [
                     "Basic Plotting Parameters",
-                    "'Suspected H-reflex' Plot Settings",
                     "Plot Style Settings",
                 ],
                 "Latency Window Settings": ["M-wave Recognition Names", "Latency Window Presets"],
@@ -560,16 +550,6 @@ class PreferencesDialog(QDialog):
             self.fields["profile_name"] = name_edit
             self.fields["profile_description"] = desc_edit
             vbox.addWidget(name_group)
-            # Stimuli to plot (checkboxes)
-            stimuli = data.get("stimuli_to_plot", [])
-            stimuli_group = QGroupBox("Stimuli to Plot")
-            stimuli_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-            stimuli_layout = QVBoxLayout(stimuli_group)
-            stimuli_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-            stimuli_widget = StimulusSelectorWidget(selected=stimuli)
-            stimuli_layout.addWidget(stimuli_widget)
-            self.fields["stimuli_to_plot"] = stimuli_widget
-            vbox.addWidget(stimuli_group)
             # Analysis parameters
             analysis_params = data.get("analysis_parameters", {})
             analysis_group = QGroupBox("Analysis Parameters")
@@ -688,11 +668,6 @@ class PreferencesDialog(QDialog):
         _name, path, data = self.profiles[idx - 1]  # -1 because of global
         self.active_profile_path = path
         self.active_profile_data = data
-        # Update stimuli fields
-        stimuli = data.get("stimuli_to_plot", [])
-        if "stimuli_to_plot" in self.fields:
-            stimuli_widget = self.fields["stimuli_to_plot"]
-            stimuli_widget.set_selected(stimuli)
         # Update analysis_parameters fields in the UI
         analysis_params = data.get("analysis_parameters", {})
         if not isinstance(analysis_params, dict):
@@ -713,7 +688,6 @@ class PreferencesDialog(QDialog):
                 "name": name,
                 "description": "",
                 "latency_window_preset": "default",
-                "stimuli_to_plot": ["Electrical"],
                 "analysis_parameters": {},
             }
             self.profile_manager.save_profile(new_data)
@@ -794,9 +768,6 @@ class PreferencesDialog(QDialog):
             profile_name = name_edit.text().strip() if name_edit else name
             profile_desc = desc_edit.toPlainText().strip() if desc_edit else data.get("description", "")
             profile_data = {"name": profile_name, "description": profile_desc}
-            stimuli_widget = self.fields.get("stimuli_to_plot")
-            if stimuli_widget:
-                profile_data["stimuli_to_plot"] = stimuli_widget.get_selected()
             analysis_params = {}
             invalid_colors = []
             for key, field in self.fields.items():

@@ -802,7 +802,7 @@ class Session:
         Plots EMG data from a single session using the specified plot_type.
 
         Args:
-            - plot_type (str): The type of plot to generate. Options include 'emg', 'suspectedH',
+            - plot_type (str): The type of plot to generate. Options include 'emg',
                 'reflexCurves', 'reflexAverages', and 'mCurvesSmoothened'.
                 Plot types are defined in the EMGSessionPlotter class in Plot_EMG.py.
             - channel_names (list): A list of channel names to plot. If None, all channels will be plotted.
@@ -821,7 +821,6 @@ class Session:
                 Less common keyword arguments include:
                 - 'm_flags' (bool): Whether to plot flags at the M-wave window (True) or not (False). Default is False.
                 - 'h_flags' (bool): Whether to plot flags at the H-reflex window (True) or not (False). Default is False.
-                - 'h_threshold' (float): The threshold for detecting the H-reflex in the suspectedH plot. Default is 0.3.
                 - 'mmax_report' (bool): Whether to print the details of the M-max calculations (True) or not (False). Default is False.
                 - 'manual_mmax' (float): The manually set M-wave amplitude to use for plotting the reflex curves. Default is None.
 
@@ -834,9 +833,6 @@ class Session:
 
             # Plot raw EMG data with flags at the M-wave and H-reflex windows
             session.plot(data_type='raw', all_flags=True)
-
-            # Plot all EMG data with the M-wave and H-reflex windows highlighted
-            session.plot(plot_type='suspectedH')
 
             # Plot the reflex curves for each channel
             session.plot(plot_type='reflexCurves')
