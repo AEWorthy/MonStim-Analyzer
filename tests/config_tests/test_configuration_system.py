@@ -456,6 +456,44 @@ class TestProfileManager:
         assert saved_path.startswith(user_dir)
         assert os.path.exists(saved_path)
 
+    def test_migration_does_not_copy_any_shipped_profile(self):
+        """Applying settings must not turn a bundled profile into a user profile."""
+        builtin_dir = os.path.join(self.temp_dir, "builtin")
+        user_dir = os.path.join(self.temp_dir, "user")
+        os.makedirs(builtin_dir)
+        shipped_names = (
+            "emg_force_stretch.yml",
+            "emg_force_vibration.yml",
+            "hreflex.yml",
+            "optical-long.yml",
+            "optical-short.yml",
+            "pre-stimulus_view.yml",
+        )
+        for name in shipped_names:
+            with open(os.path.join(builtin_dir, name), "w", encoding="utf-8") as f:
+                yaml.safe_dump({"name": name.removesuffix(".yml")}, f)
+
+        pm = ProfileManager(reference_config=self.reference_config, builtin_dir=builtin_dir, user_dir=user_dir)
+
+        assert pm.migrate_legacy_profiles() == []
+        assert not os.path.exists(user_dir)
+
+    def test_migration_moves_unknown_legacy_profile_to_user_library(self):
+        """Unrecognised files remain eligible for the one-time legacy migration."""
+        builtin_dir = os.path.join(self.temp_dir, "builtin")
+        user_dir = os.path.join(self.temp_dir, "user")
+        os.makedirs(builtin_dir)
+        legacy_path = os.path.join(builtin_dir, "old_custom.yml")
+        with open(legacy_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump({"name": "Old Custom", "analysis_parameters": {}}, f)
+
+        pm = ProfileManager(reference_config=self.reference_config, builtin_dir=builtin_dir, user_dir=user_dir)
+
+        migrated = pm.migrate_legacy_profiles()
+
+        assert migrated == [os.path.join(user_dir, "old_custom.yml")]
+        assert os.path.exists(migrated[0])
+
     def test_import_profile_conflict_can_keep_both(self):
         pm = ProfileManager(self.profile_dir, self.reference_config)
         pm.save_profile(self.profile1_data)

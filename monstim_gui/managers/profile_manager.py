@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 # moved into the writable library without copying the shipped examples.
 BUILTIN_PROFILE_FILENAMES = frozenset(
     {
-        "classic_emg.yml",
         "emg_force_stretch.yml",
         "emg_force_vibration.yml",
+        "hreflex.yml",
         "optical-long.yml",
         "optical-short.yml",
         "pre-stimulus_view.yml",

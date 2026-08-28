@@ -89,5 +89,5 @@ coll = COLLECT( # type: ignore
 
 # Ensure the dist directory exists, and copy the user guide and quick-start file to it.
 os.makedirs(CONF['distpath'], exist_ok=True)
-shutil.copy2('docs/user/using_monstim.md', os.path.join(CONF['distpath'], DIST_NAME))
+shutil.copy2('docs/user/using_monstim.md', os.path.join(CONF['distpath'], DIST_NAME, 'USER_GUIDE.md'))
 shutil.copy2('QUICKSTART.md', os.path.join(CONF['distpath'], DIST_NAME))
