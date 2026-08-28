@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.6.0] - 2026-08-28
+
+### Added
+- **Bulk analysis export**: Added a background-worker export workflow for experiment and dataset analyses, with progress reporting, cancellation, error handling, and structured tabular output.
+- **Long-form reflex amplitude export**: Added long-form export of latency-window reflex amplitudes for downstream analysis, including channel metadata, gain information, and the selected analysis context.
+- **Extrema-based peak-to-trough analysis**: Added extrema-based PTT methods and plotting support for more explicit peak and trough selection, annotations, and export of the resulting measurements.
+- **Persistent experiment catalog**: Added a SQLite-backed experiment catalog for faster discovery and loading of large experiment trees.
+- **Catalog freshness and repair**: Added filesystem signatures, stale-catalog detection, rebuild workflows, and menu actions for catalog maintenance after external changes or relocation.
+- **Typed configuration system**: Added typed configuration loading, validation, profile-aware settings, and configuration documentation.
+- **Cache warm-up coordination**: Added coordinated background cache preparation with progress and cancellation support.
+- **Settings Center**: Added a consolidated settings interface covering application preferences, analysis profiles, plotting, scaling, and related configuration controls.
+- **Configurable M-wave names**: Added global M-wave window aliases, validation, and conditional M-max compatibility behavior. An empty alias list can intentionally disable automatic M-wave recognition.
+- **Dataset metadata editing**: Added an undoable command for editing dataset metadata while preserving repository and catalog consistency.
+- **Curation and exclusion improvements**: Added richer recording-exclusion previews, bulk curation support, protected manual exclusions, improved selection behavior, and bundled undoable commands.
+- **QSettings management tools**: Added settings inspection, persistence checks, and migration support for troubleshooting application state.
+
+### Changed
+- **Experiment loading and indexing**: Reworked loading around repository-backed catalog queries, improved synchronization between in-memory objects and persisted metadata, and removed the older standalone experiment-index implementation.
+- **Annotation compatibility**: Added migration and validation support for annotation JSON metadata, including current-version normalization, strict future-version handling, dry-run reporting, and safer repository writes.
+- **Signal-data caching**: Reworked session, dataset, and experiment caches to distinguish all-recording data from active-recording views, avoid unnecessary DataFrame construction, and release HDF5 resources deliberately during close and reload operations.
+- **Latency-window editing**: Rebuilt the latency-window editor with explicit Global and Per-channel modes, model-driven persistence, heterogeneous-window handling, clipboard support, and improved field editing and selection behavior.
+- **Plotting and analysis performance**: Optimized aggregate extrema and latency-window plots, reduced redundant data preparation, improved plot range and error handling, and removed unsupported session-level M-max plot types.
+- **Data manager synchronization**: Improved refresh, rename, relocation, and selection restoration behavior, including stable hierarchy-aware identifiers and catalog refresh after mutations.
+- **Application configuration**: Consolidated project tooling configuration in `pyproject.toml`, updated dependency-management workflows, and aligned CI with the `monstim` Conda environment.
+- **User interface**: Added a shared theme, responsive controls, collapsible groups, improved scaling behavior, clearer notices, and more consistent dialogs and menus.
+
+### Fixed
+- Prevented stale catalog records and in-memory selections after filesystem changes, metadata edits, renames, imports, and reloads.
+- Fixed HDF5 handle lifecycle issues that could prevent copying, moving, replacing, or deleting experiment files on Windows.
+- Fixed session and dataset completion/exclusion state persistence and prevented unintended cascading exclusions.
+- Fixed latency-window editor persistence when values are equal but the selected Global or Per-channel ownership mode differs.
+- Fixed selection clearing and detail-popup continuity in the recording exclusion editor.
+- Fixed plotting failures and misleading axis scaling when active recordings are absent or differ from the complete recording set.
+- Fixed filtering, sorting, channel-gain handling, and work-count calculations in analysis and export workflows.
+- Removed the unreliable legacy zero-motor-length correction from V3H parsing.
+- Fixed UI scaling and multi-monitor behavior without overriding Qt's native per-monitor DPI handling.
+
+### Documentation
+- Reorganized documentation into user, science, developer, and resource sections, with updated navigation and bundled configuration/profile resources.
+- Added documentation for bulk export, extrema-based PTT analysis, annotation data versioning, settings management, configuration reference, EMG processing, analysis methods, UI scaling, and diagnostic notices.
+- Updated the quickstart, architecture, testing, and contribution documentation for the current application structure and release workflow.
+
+### Testing and maintenance
+- Added broad regression coverage for catalog lifecycle, metadata migration, HDF5 handle cleanup, cache contracts and warm-up, bulk export, extrema PTT, latency-window behavior, curation commands, settings controls, plotting errors, and help rendering.
+- Modernized linting, formatting, dependency checks, CI actions, test configuration, and environment synchronization.
+
+
 ## [0.5.2] - 2026-02-10
 
 ### Added

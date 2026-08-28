@@ -4,7 +4,8 @@ from html import escape
 logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -77,7 +78,6 @@ class LatencyWindowsDialog(QDialog):
         self.config_repo = config_repo or ConfigRepository(get_config_path())
         self.init_ui()
         self.set_apply_level(self._level_for_data(data), reload=True)
-        self._reposition_to_left_middle_of_parent()
 
     @staticmethod
     def _level_for_data(data: Experiment | Dataset | Session) -> str:
@@ -186,8 +186,22 @@ class LatencyWindowsDialog(QDialog):
     def _on_apply_level_changed(self) -> None:
         self.refresh_from_current_selection()
 
-    def _reposition_to_left_middle_of_parent(self):
-        # Get screen geometry
+    def showEvent(self, event: QEvent) -> None:
+        """Place the dialog once Qt has assigned its real display screen."""
+        super().showEvent(event)
+        QTimer.singleShot(0, self._reposition_to_left_middle_of_parent)
+
+    def _reposition_to_left_middle_of_parent(self) -> None:
+        """Move a shown desktop dialog to the left edge of its screen.
+
+        An unshown dialog has no stable native window or screen association.
+        Querying ``self.screen()`` in that state can corrupt Qt's Windows
+        platform state during headless test runs.  Offscreen Qt has no desktop
+        placement semantics, so there is deliberately nothing to do there.
+        """
+        if QGuiApplication.platformName().casefold() == "offscreen":
+            return
+
         screen = self.screen()
         if not screen:
             return

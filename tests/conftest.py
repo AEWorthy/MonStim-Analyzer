@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 
-# Ensure Qt doesn't try to connect to a display in CI/headless
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# GUI tests must use the same headless Qt platform regardless of whether they
+# are started by pytest, VS Code's in-process pytest runner, or CI.  Retaining
+# an inherited ``windows`` platform here leaves native widget creation exposed
+# to the IDE process and has produced intermittent access violations on Windows.
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 # VS Code launches the selected Conda interpreter directly for pytest instead
 # of activating the environment first.  On Windows that leaves its base
@@ -31,6 +34,23 @@ else:
     _conda_dll_directory = None
 
 
+# Construct and retain the only QApplication before pytest collects test
+# modules.  A lazy fixture can run after a module (or a VS Code plugin) has
+# already touched Qt, making a later QWidget construction unsafe.  Keep the
+# wrapper module-global for the whole interpreter lifetime.
+def _create_test_qapplication():
+    from PySide6.QtWidgets import QApplication
+
+    application = QApplication.instance()
+    if application is None:
+        application = QApplication([])
+    application.setQuitOnLastWindowClosed(False)
+    return application
+
+
+_test_qapplication = _create_test_qapplication()
+
+
 @pytest.fixture(scope="session")
 def qapplication():
     """Keep one QApplication alive for the complete Qt-test session.
@@ -40,10 +60,7 @@ def qapplication():
     therefore destroy the application while PyQtGraph still owns graphics
     objects, which is prone to intermittent native crashes on Windows.
     """
-    from PySide6.QtWidgets import QApplication
-
-    application = QApplication.instance() or QApplication([])
-    yield application
+    yield _test_qapplication
     # Do not call quit() or delete the wrapper: widgets may be finalized after
     # individual test teardown, and Qt should own the shutdown sequence.
 
