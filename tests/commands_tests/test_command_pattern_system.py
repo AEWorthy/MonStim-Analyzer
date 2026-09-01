@@ -332,9 +332,8 @@ class TestCommandExecutionIntegrity:
         with pytest.raises(Exception, match="Undo failed"):
             invoker.undo()
 
-        # Verify state is still consistent (command removed from history even if undo failed)
-        # Current implementation doesn't push to redo_stack if undo raises
-        assert len(invoker.history) == 0
+        # A failed disk-backed undo must remain available to retry.
+        assert len(invoker.history) == 1
         assert len(invoker.redo_stack) == 0
 
 
@@ -416,6 +415,36 @@ class TestRecordingCommands:
         session.exclude_recording.assert_any_call("REC002")
         session.restore_recording.assert_any_call("REC003")
         assert mock_gui.data_selection_widget.sync_combo_selections.call_count == 2
+
+    def test_bulk_recording_exclusion_command_propagates_persistence_failure(self, monkeypatch):
+        """A failed save must not be recorded as a successful undoable command."""
+        import monstim_gui.commands as commands_module
+
+        mock_gui = Mock()
+        mock_gui.data_selection_widget = Mock()
+        session = Mock()
+        session.annot.excluded_recordings = []
+        session.annot.recording_curation = {}
+
+        monkeypatch.setattr(
+            commands_module.BulkRecordingExclusionCommand,
+            "_save_sessions",
+            staticmethod(lambda _sessions: (_ for _ in ()).throw(OSError("disk unavailable"))),
+        )
+
+        command = BulkRecordingExclusionCommand(
+            mock_gui,
+            [{"session": session, "changes": [{"recording_id": "REC001", "exclude": True}]}],
+        )
+
+        invoker = CommandInvoker(mock_gui)
+        with pytest.raises(OSError, match="disk unavailable"):
+            invoker.execute(command)
+
+        assert session.annot.excluded_recordings == []
+        assert session.annot.recording_curation == {}
+        assert not invoker.history
+        mock_gui.data_selection_widget.sync_combo_selections.assert_not_called()
 
 
 class TestSessionCommands:

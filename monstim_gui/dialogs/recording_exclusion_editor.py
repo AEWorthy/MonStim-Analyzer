@@ -15,6 +15,7 @@ from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -78,6 +79,8 @@ class RecordingExclusionEditor(QDialog):
         self._recording_index_cache: dict[int, dict[str, int]] = {}
         self._preview_y_range: tuple[float, float] | None = None
         self._preview_is_stale = False
+        self._last_preview_signature: tuple[Any, ...] | None = None
+        self._apply_busy_cursor_active = False
         self.preview_channel_index: int | None = None
         self._detail_preview_dialog: QDialog | None = None
         self._sort_column = 1
@@ -298,6 +301,22 @@ class RecordingExclusionEditor(QDialog):
     def eventFilter(self, watched, event):
         if isinstance(watched, QComboBox) and event.type() == QEvent.Type.Wheel:
             return True
+        apply_button = getattr(self, "apply_button", None)
+        if isinstance(watched, QDoubleSpinBox) and event.type() == QEvent.Type.FocusOut:
+            # Focus leaves the editor before the next control receives its
+            # mouse event. Set busy before valueChanged can do commit work on
+            # the GUI thread; the queued restore also covers non-Apply clicks.
+            self._set_apply_busy_cursor()
+            QTimer.singleShot(0, self._restore_apply_busy_cursor)
+        elif watched is apply_button and event.type() == QEvent.Type.MouseButtonPress:
+            # Covers clicks when no spin box currently owns focus.
+            self._set_apply_busy_cursor()
+        elif watched is apply_button and event.type() == QEvent.Type.MouseButtonRelease:
+            position = event.position().toPoint()
+            if not apply_button.rect().contains(position):
+                # Releasing outside cancels the click, so apply_exclusions()
+                # will not get a chance to restore the override cursor.
+                self._restore_apply_busy_cursor()
         table = getattr(self, "recordings_table", None)
         is_mouse_event = event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease)
         is_empty_table_click = table is not None and watched is table.viewport() and is_mouse_event and not table.indexAt(event.pos()).isValid()
@@ -313,6 +332,16 @@ class RecordingExclusionEditor(QDialog):
             # clears it; a click on a valid table row updates it instead.
             QTimer.singleShot(0, self._clear_table_selection)
         return super().eventFilter(watched, event)
+
+    def _set_apply_busy_cursor(self) -> None:
+        if not self._apply_busy_cursor_active:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            self._apply_busy_cursor_active = True
+
+    def _restore_apply_busy_cursor(self) -> None:
+        if self._apply_busy_cursor_active:
+            QApplication.restoreOverrideCursor()
+            self._apply_busy_cursor_active = False
 
     def _clear_table_selection(self) -> None:
         """Clear both the selected rows and current index after an empty click."""
@@ -414,8 +443,8 @@ class RecordingExclusionEditor(QDialog):
         # review table.  The Preview button executes staged criteria.
         self.stimulus_group.toggled.connect(self._mark_preview_stale)
         self.threshold_type_combo.currentTextChanged.connect(self._mark_preview_stale)
-        self.threshold_spinbox.editingFinished.connect(self.update_preview)
-        self.threshold2_spinbox.editingFinished.connect(self.update_preview)
+        self.threshold_spinbox.editingFinished.connect(self._criteria_value_committed)
+        self.threshold2_spinbox.editingFinished.connect(self._criteria_value_committed)
 
         layout.addWidget(self.stimulus_group)
         layout.addStretch()
@@ -527,7 +556,7 @@ class RecordingExclusionEditor(QDialog):
         self.quality_group.toggled.connect(self._mark_preview_stale)
         for spinbox in (self.snr_spin, self.drift_spin, self.flatline_spin, self.line_noise_spin, self.burst_duration_spin, self.outlier_z_spin):
             spinbox.setKeyboardTracking(False)
-            spinbox.editingFinished.connect(self.update_preview)
+            spinbox.editingFinished.connect(self._criteria_value_committed)
         self.range_start_spin.setKeyboardTracking(False)
         self.range_end_spin.setKeyboardTracking(False)
         self.range_start_spin.editingFinished.connect(self._range_value_changed)
@@ -700,7 +729,38 @@ class RecordingExclusionEditor(QDialog):
         self._detail_preview_dialog = detail_dialog
         return detail_dialog
 
+    def _preview_signature(self) -> tuple[Any, ...]:
+        """Return the settings whose committed values produced the table."""
+        return (
+            self.level_combo.currentData(),
+            self.stimulus_group.isChecked(),
+            self.threshold_type_combo.currentData(),
+            self.threshold_spinbox.value(),
+            self.threshold2_spinbox.value(),
+            self.quality_group.isChecked(),
+            self.snr_spin.value(),
+            self.drift_spin.value(),
+            self.flatline_spin.value(),
+            self.line_noise_spin.value(),
+            self.burst_duration_spin.value(),
+            self.outlier_z_spin.value(),
+            self.range_combo.currentData(),
+            self.range_start_spin.value(),
+            self.range_end_spin.value(),
+            self.preview_range_combo.currentData(),
+            self.preview_start_spin.value(),
+            self.preview_end_spin.value(),
+            self.preview_y_scale_combo.currentData(),
+            self.preview_channel_index,
+        )
+
+    def _criteria_value_committed(self) -> None:
+        if self._preview_signature() != self._last_preview_signature:
+            self.update_preview()
+
     def _range_value_changed(self):
+        if self._preview_signature() == self._last_preview_signature:
+            return
         self._clear_preview_caches()
         self.update_preview()
 
@@ -711,6 +771,8 @@ class RecordingExclusionEditor(QDialog):
         self._recording_index_cache.clear()
 
     def _preview_setting_changed(self):
+        if self._preview_signature() == self._last_preview_signature:
+            return
         self._sparkline_cache.clear()
         self._preview_trace_cache.clear()
         self.update_preview()
@@ -725,6 +787,7 @@ class RecordingExclusionEditor(QDialog):
     def _mark_preview_current(self) -> None:
         """Record that the visible review corresponds to the current settings."""
         self._preview_is_stale = False
+        self._last_preview_signature = self._preview_signature()
         self.preview_button.setText("Preview")
         self.apply_button.setEnabled(self._command_invoker_available)
 
@@ -1464,6 +1527,7 @@ class RecordingExclusionEditor(QDialog):
     def done(self, result: int) -> None:
         """Ensure the non-modal detail sidecar never outlives this editor."""
         self._close_detail_preview()
+        self._restore_apply_busy_cursor()
         super().done(result)
 
     def closeEvent(self, event) -> None:
@@ -1686,62 +1750,76 @@ class RecordingExclusionEditor(QDialog):
 
     def apply_exclusions(self):
         """Commit the reviewed automatic and manual decisions as one undoable action."""
-        if self._preview_is_stale:
-            QMessageBox.information(self, "Preview Required", "Criteria have changed. Click Preview and review the updated results before applying.")
-            return
-        if not getattr(self, "_last_recordings_data", None):
-            QMessageBox.warning(self, "No Sessions", "No sessions available to apply exclusions to.")
-            return
+        # Keyboard/programmatic activation does not pass through the mouse
+        # event filter, so retain this as a fallback.
+        self._set_apply_busy_cursor()
 
-        changes_by_session: dict[Any, list[dict[str, Any]]] = {}
-        total_exclusions = total_inclusions = 0
-        for entry in self._last_recordings_data:
-            should_exclude = entry["will_exclude"]
-            currently_excluded = entry["currently_excluded"]
-            if should_exclude == currently_excluded:
-                continue
-            evaluation = entry["evaluation"]
-            curation = {
-                "source": "manual" if entry["manual_decision"] is not None else "automatic",
-                "decision": "exclude" if should_exclude else "include",
-                "reasons": evaluation["reasons"],
-                "metrics": {key: value for key, value in evaluation["metrics"].items() if value is not None},
-                "range": self.range_combo.currentData(),
-                "timestamp": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
-                "rule_version": 1,
-            }
-            changes_by_session.setdefault(entry["session"], []).append(
-                {"recording_id": entry["recording"].id, "exclude": should_exclude, "curation": curation}
-            )
-            if should_exclude:
-                total_exclusions += 1
-            else:
-                total_inclusions += 1
-
-        if total_exclusions == 0 and total_inclusions == 0:
-            QMessageBox.information(self, "No Changes", "No recordings need to be changed based on current criteria.")
-            return
-
-        # Confirm with user
-        level_name = self.level_combo.currentText()
-        msg = f"Apply exclusion criteria to {level_name}?\n\n"
-        msg += f"• {total_exclusions} recordings will be excluded\n"
-        msg += f"• {total_inclusions} recordings will be included\n\n"
-        msg += "This action can be undone."
-
-        reply = QMessageBox.question(
-            self,
-            "Confirm Exclusions",
-            msg,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        # Apply exclusions using command pattern for undo support
         try:
+            if self._preview_is_stale:
+                self._restore_apply_busy_cursor()
+                QMessageBox.information(
+                    self,
+                    "Preview Required",
+                    "Criteria have changed. Click Preview and review the updated results before applying.",
+                )
+                return
+            if not getattr(self, "_last_recordings_data", None):
+                self._restore_apply_busy_cursor()
+                QMessageBox.warning(self, "No Sessions", "No sessions available to apply exclusions to.")
+                return
+
+            changes_by_session: dict[Any, list[dict[str, Any]]] = {}
+            total_exclusions = total_inclusions = 0
+            for entry in self._last_recordings_data:
+                should_exclude = entry["will_exclude"]
+                currently_excluded = entry["currently_excluded"]
+                if should_exclude == currently_excluded:
+                    continue
+                evaluation = entry["evaluation"]
+                curation = {
+                    "source": "manual" if entry["manual_decision"] is not None else "automatic",
+                    "decision": "exclude" if should_exclude else "include",
+                    "reasons": evaluation["reasons"],
+                    "metrics": {key: value for key, value in evaluation["metrics"].items() if value is not None},
+                    "range": self.range_combo.currentData(),
+                    "timestamp": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
+                    "rule_version": 1,
+                }
+                changes_by_session.setdefault(entry["session"], []).append(
+                    {"recording_id": entry["recording"].id, "exclude": should_exclude, "curation": curation}
+                )
+                if should_exclude:
+                    total_exclusions += 1
+                else:
+                    total_inclusions += 1
+
+            if total_exclusions == 0 and total_inclusions == 0:
+                self._restore_apply_busy_cursor()
+                QMessageBox.information(self, "No Changes", "No recordings need to be changed based on current criteria.")
+                return
+
+            # Confirmation dialogs must use the normal cursor; the busy cursor
+            # covers only the synchronous work between clicking Apply and this
+            # prompt becoming available.
+            self._restore_apply_busy_cursor()
+            level_name = self.level_combo.currentText()
+            msg = f"Apply exclusion criteria to {level_name}?\n\n"
+            msg += f"• {total_exclusions} recordings will be excluded\n"
+            msg += f"• {total_inclusions} recordings will be included\n\n"
+            msg += "This action can be undone."
+
+            reply = QMessageBox.question(
+                self,
+                "Confirm Exclusions",
+                msg,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+            # Apply exclusions using command pattern for undo support
             command_invoker = getattr(self.gui, "command_invoker", None)
             if not callable(getattr(command_invoker, "execute", None)):
                 self._command_invoker_available = False
@@ -1756,12 +1834,16 @@ class RecordingExclusionEditor(QDialog):
                 command = BulkRecordingExclusionCommand(self.gui, changes)
                 command_invoker.execute(command)
 
-                self.exclusions_applied.emit()
                 self.accept()
-
                 self.gui.status_bar.showMessage(f"Applied exclusion criteria: {total_exclusions} excluded, {total_inclusions} included", 5000)
 
+                # Plot refreshes triggered by this signal can be expensive for
+                # large datasets.  Queue them until after the modal editor has
+                # closed so a confirmed Apply visibly completes immediately.
+                QTimer.singleShot(0, self.exclusions_applied.emit)
+
         except ImportError:
+            self._restore_apply_busy_cursor()
             # Fallback: if command class is not importable, raise a clear error
             # instead of silently applying non-undoable changes. This prevents
             # accidental data loss and encourages wiring the command system.
@@ -1773,5 +1855,8 @@ class RecordingExclusionEditor(QDialog):
             )
 
         except Exception as e:
+            self._restore_apply_busy_cursor()
             QMessageBox.critical(self, "Error", f"Failed to apply exclusions:\n{e!s}")
             logger.error(f"Error applying recording exclusions: {e}")
+        finally:
+            self._restore_apply_busy_cursor()

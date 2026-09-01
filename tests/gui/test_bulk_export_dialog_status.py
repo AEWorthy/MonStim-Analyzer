@@ -202,3 +202,76 @@ def test_recording_exclusion_preview_is_explicit_and_skips_quality_work_for_stim
 
     assert not dialog._preview_is_stale
     assert not dialog.apply_button.isEnabled()
+
+
+def test_recording_exclusion_apply_sets_busy_before_focus_commit_without_repreview(monkeypatch, qapplication):
+    from unittest.mock import Mock
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+
+    import monstim_gui.dialogs.recording_exclusion_editor as editor_module
+
+    class DummyRecording:
+        def __init__(self):
+            self.id = "rec-1"
+            self.stim_amplitude = 7.5
+            self.num_channels = 1
+            self.channel_types = ["emg"]
+
+    class DummySession:
+        def __init__(self):
+            self.id = "sess-1"
+            self.excluded_recordings = set()
+
+        def get_all_recordings(self, include_excluded=True):
+            return [DummyRecording()]
+
+    preview_calls = 0
+    original_update_preview = editor_module.RecordingExclusionEditor.update_preview
+
+    def tracked_update_preview(self):
+        nonlocal preview_calls
+        preview_calls += 1
+        return original_update_preview(self)
+
+    monkeypatch.setattr(editor_module.RecordingExclusionEditor, "update_preview", tracked_update_preview)
+    feedback_cursors = []
+
+    def decline_confirmation(*_args, **_kwargs):
+        feedback_cursors.append(QApplication.overrideCursor())
+        return editor_module.QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(editor_module.QMessageBox, "question", decline_confirmation)
+
+    parent_widget = QWidget()
+    parent_widget.current_session = DummySession()
+    parent_widget.current_dataset = None
+    parent_widget.current_experiment = None
+    parent_widget.command_invoker = Mock()
+    parent_widget.status_bar = Mock()
+
+    dialog = editor_module.RecordingExclusionEditor(parent_widget)
+    dialog.show()
+    dialog.stimulus_group.setChecked(True)
+    dialog.update_preview()
+    baseline_preview_calls = preview_calls
+    cursor_during_focus_commit = []
+    dialog.threshold_spinbox.editingFinished.connect(
+        lambda: cursor_during_focus_commit.append(QApplication.overrideCursor().shape() if QApplication.overrideCursor() else None)
+    )
+    dialog.threshold_spinbox.setFocus()
+    qapplication.processEvents()
+
+    QTest.mouseClick(dialog.apply_button, Qt.MouseButton.LeftButton)
+
+    assert cursor_during_focus_commit == [Qt.CursorShape.WaitCursor]
+    assert preview_calls == baseline_preview_calls
+    assert feedback_cursors == [None]
+    assert QApplication.overrideCursor() is None
+
+    dialog.threshold_spinbox.setValue(100.0)
+    dialog.threshold_spinbox.editingFinished.emit()
+
+    assert preview_calls == baseline_preview_calls + 1
