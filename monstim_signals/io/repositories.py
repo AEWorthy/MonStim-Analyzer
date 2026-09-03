@@ -771,7 +771,7 @@ class DatasetRepository:
                     session_annot = SessionAnnot.from_dict(json.loads(session_annot_file.read_text()))
                     if session_annot.is_completed is not True:
                         incomplete_active_session_ids.append(session_folder.name)
-                except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                except OSError, json.JSONDecodeError, TypeError, ValueError:
                     logger.warning(
                         "Could not determine completion status for session '%s'; treating it as incomplete.",
                         session_folder,

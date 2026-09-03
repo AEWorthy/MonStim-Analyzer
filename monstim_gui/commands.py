@@ -1491,9 +1491,7 @@ class SetChildCompletionStatusCommand(Command):
         repositories = [getattr(child, "repo", None) for child in self._children]
         if any(repository is None for repository in repositories):
             raise RuntimeError(f"A {self.child_level} cannot be saved because it has no repository")
-        annotation_paths = [
-            repository.session_js if self.child_level == "session" else repository.dataset_js for repository in repositories
-        ]
+        annotation_paths = [repository.session_js if self.child_level == "session" else repository.dataset_js for repository in repositories]
         original_contents = {path: path.read_bytes() for path in annotation_paths}
         previous_statuses = {id(child): bool(getattr(child, "is_completed", False)) for child in self._children}
 
