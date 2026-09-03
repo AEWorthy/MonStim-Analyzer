@@ -99,6 +99,30 @@ APPLICATION_STYLESHEET = """
     }
     QPushButton:hover { background: #41464b; border-color: #65717c; }
     QPushButton:default { border-color: #e7785b; }
+    QPushButton[plotOptionToggle="true"] {
+        min-height: 20px;
+        padding: 4px 8px;
+        color: #cbd4dc;
+        background: #2b2f33;
+        border-color: #4a5159;
+        text-align: left;
+    }
+    QPushButton[plotOptionToggle="true"]:hover {
+        color: #ffffff;
+        background: #394149;
+        border-color: #65717c;
+    }
+    QPushButton[plotOptionToggle="true"]:checked {
+        color: #ffffff;
+        background: #304b5d;
+        border-color: #6d9fbe;
+    }
+    QPushButton[plotOptionToggle="true"]:checked:hover { background: #385b70; }
+    QPushButton[plotOptionToggle="true"]:disabled {
+        color: #717a82;
+        background: #25282b;
+        border-color: #373c41;
+    }
     QTreeView, QTreeWidget, QTableView, QTableWidget, QListWidget {
         border: 1px solid #3c434b;
         border-radius: 5px;

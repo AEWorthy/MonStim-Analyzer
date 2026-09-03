@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QLineEdit,
+    QPushButton,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
@@ -30,6 +31,71 @@ if TYPE_CHECKING:
 CALCULATION_METHODS = ["peak_to_trough", "extrema_ptt", "exclusive_extrema_ptt", "rms", "average_rectified", "average_unrectified", "auc"]
 EXTREMA_METHODS = ["extrema_ptt", "exclusive_extrema_ptt"]
 DATA_TYPES = ["filtered", "raw", "rectified_raw", "rectified_filtered"]
+
+
+class OptionToggleButton(QPushButton):
+    """Accessible toggle used for binary plot-display options."""
+
+    def __init__(self, text: str, tooltip: str, parent: QWidget | None = None):
+        super().__init__(text, parent)
+        self.setCheckable(True)
+        self.setToolTip(tooltip)
+        self.setProperty("plotOptionToggle", True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+
+class StableOptionGrid(QWidget):
+    """Responsive grid that keeps a canonical option order without blank slots."""
+
+    OPTION_ORDER = (
+        "show_flags",
+        "show_legend",
+        "show_colormap",
+        "interactive_cursor",
+        "fixed_y_axis",
+        "show_extrema",
+        "relative_to_mmax",
+        "show_density",
+    )
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(2, 2, 2, 2)
+        self.grid.setHorizontalSpacing(4)
+        self.grid.setVerticalSpacing(4)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.buttons: dict[str, OptionToggleButton] = {}
+
+    def add_option(self, key: str, text: str, tooltip: str) -> OptionToggleButton:
+        if key not in self.OPTION_ORDER:
+            raise ValueError(f"Unknown plot option: {key}")
+        if key in self.buttons:
+            raise ValueError(f"Duplicate plot option: {key}")
+        button = OptionToggleButton(text, tooltip, self)
+        self.buttons[key] = button
+        self._relayout()
+        return button
+
+    def resizeEvent(self, event):
+        self._relayout()
+        super().resizeEvent(event)
+
+    def _relayout(self):
+        while self.grid.count():
+            self.grid.takeAt(0)
+
+        ordered_buttons = [self.buttons[key] for key in self.OPTION_ORDER if key in self.buttons]
+        sparse_layout = len(ordered_buttons) <= 2
+        column_count = 2 if sparse_layout else 3 if self.width() >= 430 else 2
+        buttons_per_row = 1 if sparse_layout else column_count
+
+        for column in range(3):
+            self.grid.setColumnStretch(column, 1 if column < column_count else 0)
+
+        for index, button in enumerate(ordered_buttons):
+            row, column = divmod(index, buttons_per_row)
+            self.grid.addWidget(button, row, column)
 
 
 # Base class for plot options
@@ -54,6 +120,17 @@ class BasePlotOptions(QWidget):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)  # Keep everything on one row
         form.setContentsMargins(2, 2, 2, 2)  # No margins for tight layout
         return form
+
+    def create_toggle_grid(self) -> StableOptionGrid:
+        self.toggle_grid = StableOptionGrid(self)
+        self.layout.addWidget(self.toggle_grid)
+        self.layout.addSpacing(5)
+        return self.toggle_grid
+
+    def add_toggle(self, key: str, text: str, tooltip: str) -> OptionToggleButton:
+        if not hasattr(self, "toggle_grid"):
+            self.create_toggle_grid()
+        return self.toggle_grid.add_option(key, text, tooltip)
 
     def create_options(self):
         # To be implemented by subclasses
@@ -136,24 +213,18 @@ class EMGOptions(BasePlotOptions):
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # flags / legend / colormap
-        self.all_windows_checkbox = QCheckBox()
-        self.all_windows_checkbox.setToolTip("If checked, all latency windows will be shown in the plot.")
-        self.latency_legend_checkbox = QCheckBox()
-        self.latency_legend_checkbox.setToolTip("If checked, the latency window legend will be shown in the plot.")
-        self.plot_colormap_checkbox = QCheckBox()
-        self.plot_colormap_checkbox.setToolTip("If checked, a colormap legend will be shown to the side of the plot.")
-        form.addRow("Show Flags:", self.all_windows_checkbox)
+        self.all_windows_checkbox = self.add_toggle("show_flags", "Show Flags", "Show all latency windows in the plot.")
+        self.latency_legend_checkbox = self.add_toggle("show_legend", "Show Legend", "Show the latency-window legend in the plot.")
+        self.plot_colormap_checkbox = self.add_toggle("show_colormap", "Show Colormap", "Show a colormap legend beside the plot.")
         self.all_windows_checkbox.setChecked(True)
-        self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
-        self._on_all_windows_toggled(self.all_windows_checkbox.checkState())
-        form.addRow("Show Legend:", self.latency_legend_checkbox)
+        self.all_windows_checkbox.toggled.connect(self._on_all_windows_toggled)
+        self._on_all_windows_toggled(self.all_windows_checkbox.isChecked())
         self.latency_legend_checkbox.setChecked(True)
-        form.addRow("Show Colormap:", self.plot_colormap_checkbox)
         self.plot_colormap_checkbox.setChecked(True)
-        self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        self.interactive_cursor_checkbox = self.add_toggle(
+            "interactive_cursor", "Interactive Cursor", "Show an interactive crosshair cursor in the plot."
+        )
         self.interactive_cursor_checkbox.setChecked(False)
-        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self._add_extrema_controls(form)
 
         # Create the channel selector
@@ -164,21 +235,21 @@ class EMGOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
-        enabled = state == Qt.CheckState.Checked or state == 2
+        enabled = state is True or state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value
         self.latency_legend_checkbox.setChecked(enabled)
         self.latency_legend_checkbox.setEnabled(enabled)
 
     def _add_extrema_controls(self, form):
-        self.show_extrema_labels_checkbox = QCheckBox()
-        self.show_extrema_labels_checkbox.setToolTip("Selected extrema are available only on filtered, unrectified EMG traces.")
+        self.show_extrema_labels_checkbox = self.add_toggle(
+            "show_extrema", "Show PTT Extrema", "Show selected PTT extrema on filtered, unrectified EMG traces."
+        )
         self.extrema_method_combo = ResponsiveComboBox()
         self.extrema_method_combo.addItems(EXTREMA_METHODS)
-        form.addRow("Show PTT Extrema:", self.show_extrema_labels_checkbox)
         form.addRow("Extrema Method:", self.extrema_method_combo)
         self.show_extrema_labels_checkbox.toggled.connect(self._update_extrema_controls)
         self.data_type_combo.currentTextChanged.connect(self._update_extrema_controls)
@@ -236,34 +307,23 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         form.addRow("Select Data Type:", self.data_type_combo)
 
         # Create and add checkboxes
-        self.all_windows_checkbox = QCheckBox()
-        self.all_windows_checkbox.setToolTip("If checked, all analysis windows will be shown in the plot.")
-        self.latency_legend_checkbox = QCheckBox()
-        self.latency_legend_checkbox.setToolTip("If checked, a legend for the latency markers will be shown in the plot.")
-        self.plot_colormap_checkbox = QCheckBox()
-        self.plot_colormap_checkbox.setToolTip("If checked, a colormap will be shown in the plot.")
-        self.fixed_y_axis_checkbox = QCheckBox()
-        self.fixed_y_axis_checkbox.setToolTip("If checked, the y-axis will be fixed to a range of [-1, 1].")
-        self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        self.all_windows_checkbox = self.add_toggle("show_flags", "Show Flags", "Show all analysis windows in the plot.")
+        self.latency_legend_checkbox = self.add_toggle("show_legend", "Show Legend", "Show the latency-window legend in the plot.")
+        self.plot_colormap_checkbox = self.add_toggle("show_colormap", "Show Colormap", "Show a colormap beside the plot.")
+        self.fixed_y_axis_checkbox = self.add_toggle("fixed_y_axis", "Fixed Y-Axis", "Fix the y-axis to a range of [-1, 1].")
+        self.interactive_cursor_checkbox = self.add_toggle(
+            "interactive_cursor", "Interactive Cursor", "Show an interactive crosshair cursor in the plot."
+        )
 
         # Add checkboxes to form
         # Optional TODO: Add ability to set which flags to display
-        form.addRow("Show Flags:", self.all_windows_checkbox)
         self.all_windows_checkbox.setChecked(True)
-        self.all_windows_checkbox.stateChanged.connect(self._on_all_windows_toggled)
-        self._on_all_windows_toggled(self.all_windows_checkbox.checkState())
+        self.all_windows_checkbox.toggled.connect(self._on_all_windows_toggled)
+        self._on_all_windows_toggled(self.all_windows_checkbox.isChecked())
 
-        form.addRow("Show Legend:", self.latency_legend_checkbox)
         self.latency_legend_checkbox.setChecked(True)
-
-        form.addRow("Show Colormap:", self.plot_colormap_checkbox)
         self.plot_colormap_checkbox.setChecked(True)
-
-        form.addRow("Fixed Y-Axis:", self.fixed_y_axis_checkbox)
         self.fixed_y_axis_checkbox.setChecked(True)  # Set the initial state to True
-
-        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
         self.interactive_cursor_checkbox.setChecked(False)
         self._add_extrema_controls(form)
 
@@ -278,13 +338,13 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.recording_cycler)
         self.layout.addWidget(self.channel_selector)
 
     def _on_all_windows_toggled(self, state):
         # Enable or disable the latency legend checkbox based on the state of the all_windows_checkbox
-        enabled = state == Qt.CheckState.Checked or state == 2
+        enabled = state is True or state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value
         self.latency_legend_checkbox.setChecked(enabled)
         self.latency_legend_checkbox.setEnabled(enabled)
 
@@ -344,19 +404,17 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
-        self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
-        form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
+        self.relative_to_mmax_checkbox = self.add_toggle(
+            "relative_to_mmax", "Relative to M-max", "Calculate reflex amplitudes relative to the M-max value."
+        )
         self.relative_to_mmax_checkbox.setChecked(False)
 
-        self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
-        form.addRow("Show Plot Legend:", self.show_legend_checkbox)
+        self.show_legend_checkbox = self.add_toggle("show_legend", "Show Legend", "Show the plot legend.")
         self.show_legend_checkbox.setChecked(True)
 
-        self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
-        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self.interactive_cursor_checkbox = self.add_toggle(
+            "interactive_cursor", "Interactive Cursor", "Show an interactive crosshair cursor in the plot."
+        )
         self.interactive_cursor_checkbox.setChecked(False)
 
         # Create the channel selector
@@ -367,7 +425,7 @@ class SessionReflexCurvesOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def get_options(self):
@@ -405,13 +463,11 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
-        self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
-        self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
-        form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
+        self.relative_to_mmax_checkbox = self.add_toggle(
+            "relative_to_mmax", "Relative to M-max", "Calculate reflex amplitudes relative to the M-max value."
+        )
         self.relative_to_mmax_checkbox.setChecked(False)
-        form.addRow("Show Plot Legend:", self.show_legend_checkbox)
+        self.show_legend_checkbox = self.add_toggle("show_legend", "Show Legend", "Show the plot legend.")
         self.show_legend_checkbox.setChecked(True)
 
         # Create the channel selector
@@ -422,7 +478,7 @@ class AverageReflexCurvesOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def get_options(self):
@@ -467,14 +523,11 @@ class LatencyWindowDistributionOptions(BasePlotOptions):
         form.addRow("Number of bins:", self.bins_spin)
 
         # Density checkbox
-        self.density_checkbox = QCheckBox()
-        self.density_checkbox.setToolTip("If checked, plot densities instead of raw counts")
-        form.addRow("Show Density:", self.density_checkbox)
+        self.density_checkbox = self.add_toggle("show_density", "Show Density", "Plot densities instead of raw counts.")
 
         # Legend checkbox
-        self.plot_legend_checkbox = QCheckBox()
+        self.plot_legend_checkbox = self.add_toggle("show_legend", "Show Legend", "Show the plot legend.")
         self.plot_legend_checkbox.setChecked(True)
-        form.addRow("Show Legend:", self.plot_legend_checkbox)
 
         # Channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
@@ -483,7 +536,7 @@ class LatencyWindowDistributionOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def get_options(self):
@@ -526,18 +579,15 @@ class AverageSessionReflexOptions(BasePlotOptions):
         form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
-        self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
-        self.show_legend_checkbox = QCheckBox()
-        self.show_legend_checkbox.setToolTip("If checked, the plot legend will be shown.")
-        self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
-
-        form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
+        self.relative_to_mmax_checkbox = self.add_toggle(
+            "relative_to_mmax", "Relative to M-max", "Calculate reflex amplitudes relative to the M-max value."
+        )
         self.relative_to_mmax_checkbox.setChecked(False)
-        form.addRow("Show Plot Legend:", self.show_legend_checkbox)
+        self.show_legend_checkbox = self.add_toggle("show_legend", "Show Legend", "Show the plot legend.")
         self.show_legend_checkbox.setChecked(True)
-        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
+        self.interactive_cursor_checkbox = self.add_toggle(
+            "interactive_cursor", "Interactive Cursor", "Show an interactive crosshair cursor in the plot."
+        )
         self.interactive_cursor_checkbox.setChecked(False)
 
         # Create the channel selector
@@ -548,7 +598,7 @@ class AverageSessionReflexOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def get_options(self):
@@ -586,10 +636,10 @@ class MMaxOptions(BasePlotOptions):
         form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
-        self.interactive_cursor_checkbox = QCheckBox()
-        self.interactive_cursor_checkbox.setToolTip("If checked, an interactive crosshair cursor will be shown in the plot.")
+        self.interactive_cursor_checkbox = self.add_toggle(
+            "interactive_cursor", "Interactive Cursor", "Show an interactive crosshair cursor in the plot."
+        )
         self.interactive_cursor_checkbox.setChecked(False)
-        form.addRow("Show Interactive Cursor:", self.interactive_cursor_checkbox)
 
         # Create the channel selector
         self.channel_selector = ChannelSelectorWidget(self.gui_main, parent=self)
@@ -599,7 +649,7 @@ class MMaxOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def get_options(self):
@@ -631,9 +681,9 @@ class MaxHReflexOptions(BasePlotOptions):
         form.addRow("Reflex Calc. Method:", self.method_combo)
 
         # Checkboxes
-        self.relative_to_mmax_checkbox = QCheckBox()
-        self.relative_to_mmax_checkbox.setToolTip("If checked, the reflex amplitudes will be calculated relative to the M-max value.")
-        form.addRow("Relative to M-max:", self.relative_to_mmax_checkbox)
+        self.relative_to_mmax_checkbox = self.add_toggle(
+            "relative_to_mmax", "Relative to M-max", "Calculate reflex amplitudes relative to the M-max value."
+        )
         self.relative_to_mmax_checkbox.setChecked(False)
 
         self.max_stim_value = FloatLineEdit(default_value=10.0)
@@ -659,7 +709,7 @@ class MaxHReflexOptions(BasePlotOptions):
         options_widget.setLayout(form)
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        self.layout.addWidget(options_widget)
+        self.layout.insertWidget(0, options_widget)
         self.layout.addWidget(self.channel_selector)
 
     def get_options(self):

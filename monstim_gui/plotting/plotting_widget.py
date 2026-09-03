@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
 from ..core.ui_theme import install_wheel_change_guard
 from ..widgets.collapsible_group_box import CollapsibleGroupBox
+from .plot_options import OptionToggleButton
 from .plot_types import PLOT_OPTIONS_DICT
 
 if TYPE_CHECKING:
@@ -214,12 +214,12 @@ class PlotWidget(CollapsibleGroupBox):
                 except Exception as e:
                     logger.debug(f"Failed to connect QComboBox signal for {cb}: {e}")
 
-            # checkboxes
-            for chk in w.findChildren(QCheckBox):
+            # Compact plot-option toggles
+            for chk in w.findChildren(OptionToggleButton):
                 try:
-                    chk.stateChanged.connect(self.save_current_options)
+                    chk.toggled.connect(self.save_current_options)
                 except Exception as e:
-                    logger.debug(f"Failed to connect QCheckBox signal for {chk}: {e}")
+                    logger.debug(f"Failed to connect plot option toggle for {chk}: {e}")
 
             # line edits
             for le in w.findChildren(QLineEdit):
