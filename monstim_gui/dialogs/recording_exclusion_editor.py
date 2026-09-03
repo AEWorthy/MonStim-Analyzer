@@ -53,6 +53,7 @@ class RecordingExclusionEditor(QDialog):
     """
 
     exclusions_applied = Signal()  # Signal emitted when exclusions are applied
+    _INITIAL_POSITION_LEFT_OFFSET = 32
 
     def __init__(self, parent: MonstimGUI):
         super().__init__(parent)
@@ -88,6 +89,17 @@ class RecordingExclusionEditor(QDialog):
 
         self.setup_ui()
         self.load_data()
+
+    def showEvent(self, event: QEvent) -> None:
+        """Nudge the dialog left after Qt assigns its initial desktop position."""
+        super().showEvent(event)
+        QTimer.singleShot(0, self._nudge_initial_position_left)
+
+    def _nudge_initial_position_left(self) -> None:
+        """Move the newly shown editor slightly left without changing its height."""
+        if not self.isVisible():
+            return
+        self.move(self.x() - self._INITIAL_POSITION_LEFT_OFFSET, self.y())
 
     def setup_ui(self):
         """Set up the dialog UI."""
