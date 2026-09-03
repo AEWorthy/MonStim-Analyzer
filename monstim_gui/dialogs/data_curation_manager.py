@@ -21,6 +21,7 @@ and drag-and-drop dataset organization between experiments.
 # - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
 # - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
 
+import inspect
 import logging
 import shlex
 from functools import wraps
@@ -66,14 +67,22 @@ def auto_refresh(method):
     def wrapper(self, *args, **kwargs):
         try:
             # For PyQt signal connections, filter out unexpected boolean arguments
-            # that can be passed by clicked signals ONLY if:
-            # 1. There's exactly one argument
-            # 2. That argument is a boolean
-            # This prevents filtering out legitimate boolean parameters when multiple args exist
+            # that can be passed by clicked signals.  A boolean is only spurious
+            # when the wrapped method has no required positional arguments.  Some
+            # callbacks intentionally pass a boolean (for example, include=False
+            # for the bulk exclusion action), so filtering every single boolean
+            # breaks those callbacks.
             filtered_args = args
-            if len(args) == 1 and isinstance(args[0], bool):
-                # This is likely a spurious signal argument (e.g., from clicked signal)
-                # that should be filtered out
+            required_positional = [
+                parameter
+                for parameter in inspect.signature(method).parameters.values()
+                if parameter.name != "self"
+                and parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                and parameter.default is inspect.Parameter.empty
+            ]
+            if len(args) == 1 and isinstance(args[0], bool) and not required_positional:
+                # This is the checked state emitted by a Qt signal connected to a
+                # no-argument method, rather than an argument intended by the caller.
                 filtered_args = ()
 
             result = method(self, *filtered_args, **kwargs)

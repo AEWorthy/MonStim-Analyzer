@@ -103,13 +103,12 @@ class DataManager:
         if coordinator is not None:
             coordinator.cancel_and_wait()
 
-    def refresh_data_views(self, *experiment_paths: Path) -> None:
-        """Rebuild affected catalogs and refresh both application data views."""
+    def refresh_data_views(self, *experiment_paths: Path, rebuild_catalogs: bool = True) -> None:
+        """Refresh both application data views, rebuilding selected catalogs when needed."""
         self._cancel_cache_warmup()
-        from monstim_signals.io.experiment_catalog import build_catalog
 
         paths = [Path(path) for path in experiment_paths if path]
-        if not paths:
+        if rebuild_catalogs and not paths:
             paths = [Path(self.gui.expts_dict[exp_id]) for exp_id in self.gui.expts_dict_keys]
 
         current = getattr(self.gui, "current_experiment", None)
@@ -120,9 +119,12 @@ class DataManager:
             if callable(close):
                 close(force_gc=False)
 
-        for path in paths:
-            if path.exists():
-                build_catalog(path)
+        if rebuild_catalogs:
+            from monstim_signals.io.experiment_catalog import build_catalog
+
+            for path in paths:
+                if path.exists():
+                    build_catalog(path)
 
         self.unpack_existing_experiments()
         data_selection_widget = getattr(self.gui, "data_selection_widget", None)

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _refresh_data_views(gui, *experiment_ids):
+def _refresh_data_views(gui, *experiment_ids, rebuild_catalogs=True):
     """Refresh real GUI views while remaining compatible with command unit mocks."""
     data_manager = getattr(gui, "data_manager", None)
     refresh = getattr(data_manager, "refresh_data_views", None)
@@ -24,7 +24,7 @@ def _refresh_data_views(gui, *experiment_ids):
     if not callable(refresh) or not isinstance(experiments, dict):
         return
     paths = [Path(experiments[experiment_id]) for experiment_id in experiment_ids if experiment_id in experiments]
-    refresh(*paths)
+    refresh(*paths, rebuild_catalogs=rebuild_catalogs)
 
 
 def _cancel_cache_warmup(gui) -> None:
@@ -1108,7 +1108,10 @@ class DeleteExperimentCommand(Command):
             # For now, we'll use the existing delete method from data manager
             # Note: This is irreversible, so undo will show a warning
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
-            _refresh_data_views(self.gui)
+            # The deleted experiment has no catalog left to rebuild.  Rebuilding
+            # every remaining experiment here makes deletion block the GUI for
+            # minutes on large data collections.
+            _refresh_data_views(self.gui, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to delete experiment: {e!s}")
             raise Exception(f"Failed to delete experiment: {e!s}") from e

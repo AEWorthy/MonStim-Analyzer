@@ -326,10 +326,20 @@ class RecordingExclusionEditor(QDialog):
             # from restoring the previously current row.
             QTimer.singleShot(0, self._clear_table_selection)
             return False
-        if table is not None and event.type() == QEvent.Type.MouseButtonPress and watched is not table.viewport():
+        selection_preserving_controls = {
+            getattr(self, "toggle_exclusion_button", None),
+            getattr(self, "include_button", None),
+            getattr(self, "clear_manual_button", None),
+        }
+        if (
+            table is not None
+            and event.type() == QEvent.Type.MouseButtonPress
+            and watched is not table.viewport()
+            and watched not in selection_preserving_controls
+        ):
             # Keep the detail sidecar tied to an active recording selection.
-            # Interacting with criteria, actions, or any other dialog area
-            # clears it; a click on a valid table row updates it instead.
+            # Interacting with criteria or any unrelated dialog area clears it;
+            # manual-decision controls must preserve it until their handlers run.
             QTimer.singleShot(0, self._clear_table_selection)
         return super().eventFilter(watched, event)
 
