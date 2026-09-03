@@ -62,3 +62,34 @@ def test_automatic_preview_preserves_exclusion_added_after_dialog_open(qapplicat
     assert states["rec-1"]["currently_excluded"] is True
     assert states["rec-1"]["will_exclude"] is True
     assert states["rec-1"]["status"] == "Existing exclusion"
+
+
+def test_editor_show_does_not_schedule_a_post_paint_position_nudge(monkeypatch, qapplication):
+    """The first visible editor frame must already be in its final position."""
+    import monstim_gui.dialogs.recording_exclusion_editor as editor_module
+
+    scheduled_callbacks = []
+    monkeypatch.setattr(
+        editor_module.QTimer,
+        "singleShot",
+        lambda delay, callback: scheduled_callbacks.append((delay, callback)),
+    )
+    editor = make_editor()
+
+    editor.show()
+    qapplication.processEvents()
+
+    assert scheduled_callbacks == []
+    editor.close()
+
+
+def test_detail_preview_is_positioned_entirely_on_the_editor_screen(qapplication):
+    editor = make_editor()
+    editor.show()
+    qapplication.processEvents()
+    preview = editor._create_detail_preview_dialog()
+
+    editor._position_detail_preview()
+
+    assert editor.screen().availableGeometry().contains(preview.frameGeometry())
+    editor.close()

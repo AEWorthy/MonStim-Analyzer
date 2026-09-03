@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -89,17 +89,35 @@ class RecordingExclusionEditor(QDialog):
 
         self.setup_ui()
         self.load_data()
+        self._set_initial_position()
 
-    def showEvent(self, event: QEvent) -> None:
-        """Nudge the dialog left after Qt assigns its initial desktop position."""
-        super().showEvent(event)
-        QTimer.singleShot(0, self._nudge_initial_position_left)
+    def _set_initial_position(self) -> None:
+        """Set the editor's final desktop position before its first paint.
 
-    def _nudge_initial_position_left(self) -> None:
-        """Move the newly shown editor slightly left without changing its height."""
-        if not self.isVisible():
+        Moving the dialog from a zero-delay ``showEvent`` callback makes the
+        Windows compositor paint the initial position and the corrected one in
+        rapid succession.  Besides looking like a flash, that is unsafe for
+        photosensitive users.  Matching Qt's usual parent-centred placement
+        here lets us reserve the same space for the detail preview before the
+        window is mapped.
+        """
+        if QGuiApplication.platformName().casefold() == "offscreen":
             return
-        self.move(self.x() - self._INITIAL_POSITION_LEFT_OFFSET, self.y())
+
+        parent_window = self.parentWidget().window() if self.parentWidget() is not None else None
+        screen = parent_window.screen() if parent_window is not None else None
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        parent_geometry = parent_window.frameGeometry() if parent_window is not None else available
+        x = parent_geometry.center().x() - self.width() // 2
+        y = parent_geometry.center().y() - self.height() // 2
+        x = max(available.left(), min(x, available.right() - self.width() + 1))
+        y = max(available.top(), min(y, available.bottom() - self.height() + 1))
+        self.move(max(available.left(), x - self._INITIAL_POSITION_LEFT_OFFSET), y)
 
     def setup_ui(self):
         """Set up the dialog UI."""
@@ -1544,8 +1562,28 @@ class RecordingExclusionEditor(QDialog):
     def _position_detail_preview(self) -> None:
         if self._detail_preview_dialog is None:
             return
-        editor_top_right = self.frameGeometry().topRight()
-        self._detail_preview_dialog.move(editor_top_right.x() + 8, editor_top_right.y())
+        screen = self.screen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        editor_geometry = self.frameGeometry()
+        preview_width = self._detail_preview_dialog.width()
+        preview_height = self._detail_preview_dialog.height()
+        right_x = editor_geometry.right() + 9
+        left_x = editor_geometry.left() - 8 - preview_width
+
+        # Prefer the normal right-hand sidecar, but use the left side when the
+        # editor is near the desktop edge.  The fallback is chosen before
+        # ``show()`` so the preview never visibly jumps into place.
+        if right_x + preview_width <= available.right() + 1:
+            x = right_x
+        elif left_x >= available.left():
+            x = left_x
+        else:
+            x = max(available.left(), min(right_x, available.right() - preview_width + 1))
+        y = max(available.top(), min(editor_geometry.top(), available.bottom() - preview_height + 1))
+        self._detail_preview_dialog.move(x, y)
 
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
