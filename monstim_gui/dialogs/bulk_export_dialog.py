@@ -3,7 +3,7 @@
 BulkExportDialog - wizard-style dialog for the Bulk Data Export feature.
 
 The dialog collects:
-  - Data level    : Dataset or Experiment
+  - Data Export Level    : Dataset or Experiment
   - Objects       : hierarchical collapsible experiment / dataset checkboxes
   - Data types    : Average Reflex Curves, Longform Reflex Amplitudes, M-max, Max H-reflex
   - Methods       : rms, auc, peak_to_trough, average_rectified, average_unrectified
@@ -19,12 +19,13 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -41,6 +42,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSplitter,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -81,17 +84,21 @@ class BulkExportWorker(QThread):
     def __init__(self, config: BulkExportConfig, parent=None):
         super().__init__(parent)
         self._config = config
-        self._canceled = False
+        self._canceled = threading.Event()
 
     def cancel(self) -> None:
-        self._canceled = True
+        self._canceled.set()
+
+    @property
+    def is_canceled(self) -> bool:
+        return self._canceled.is_set()
 
     def run(self) -> None:
         try:
             written = run_bulk_export(
                 self._config,
                 progress_callback=lambda cur, tot, msg: self.progress.emit(cur, tot, msg),
-                is_canceled=lambda: self._canceled,
+                is_canceled=self._canceled.is_set,
             )
             self.finished_export.emit(written)
         except Exception as exc:
@@ -267,6 +274,7 @@ class _ExperimentGroup(QWidget):
     ):
         super().__init__(parent)
         self.expt_name = expt_name
+        self.experiment_completed = experiment_completed
         self.dataset_statuses = datasets
 
         outer = QVBoxLayout(self)
@@ -398,11 +406,17 @@ class _ExperimentGroup(QWidget):
         return self._expt_cb.checkState() != Qt.CheckState.Unchecked
 
     def set_completed_only(self, enabled: bool) -> None:
-        """Hide incomplete or unknown datasets and clear hidden selections."""
+        """Hide incomplete data at every selectable level and clear its selection."""
         self._completed_only = enabled
+        experiment_is_visible = not enabled or self.experiment_completed is True
+        self.setVisible(experiment_is_visible)
+        if not experiment_is_visible:
+            self._expt_cb.blockSignals(True)
+            self._expt_cb.setChecked(False)
+            self._expt_cb.blockSignals(False)
         for cb in self._dataset_cbs:
             status = self._dataset_status_by_cb[cb]
-            is_visible = not enabled or status.is_completed is True
+            is_visible = experiment_is_visible and (not enabled or status.is_completed is True)
             row = self._dataset_row_by_cb[cb]
             row.setVisible(is_visible)
             if not is_visible and cb.isChecked():
@@ -432,19 +446,26 @@ class _ExperimentGroup(QWidget):
 class BulkExportDialog(QDialog):
     """Multi-section configuration dialog for bulk data export."""
 
+    _NARROW_LAYOUT_MAX_WIDTH = 719
+
     def __init__(self, gui: MonstimGUI, parent: QWidget | None = None):
         super().__init__(parent or gui)
         self.gui = gui
         self.setWindowTitle("Bulk Data Export")
-        self.setMinimumWidth(720)
-        self.setMinimumHeight(640)
+        self.setMinimumSize(480, 320)
+        self.resize(960, 640)
 
         self._expt_groups: list[_ExperimentGroup] = []
+        self._layout_mode: str | None = None
+        self._layout_update_pending = False
+        self._options_pane_collapsed = False
 
         self._build_ui()
         self._populate_object_tree()
         self._populate_channels()
         self._set_default_method()
+        self._refresh_readiness()
+        self._update_responsive_layout()
 
     # ─────────────────────────────────────────────────────────────────────
     # UI construction
@@ -455,8 +476,34 @@ class BulkExportDialog(QDialog):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
 
-        # ── 1. Data level ─────────────────────────────────────────────────
-        level_box = QGroupBox("Data Level")
+        # ── Output directory ─────────────────────────────────────────────
+        path_box = QGroupBox("Output Directory")
+        path_layout = QHBoxLayout(path_box)
+        self._path_edit = QLineEdit()
+        self._path_edit.setPlaceholderText("Select an output folder…")
+        default_out = str(getattr(self.gui, "export_path", "") or "")
+        if default_out:
+            self._path_edit.setText(default_out)
+        self._path_edit.textChanged.connect(self._refresh_readiness)
+        browse_btn = QPushButton("Browse…")
+        browse_btn.setFixedWidth(80)
+        browse_btn.clicked.connect(self._browse_output)
+        self._toggle_options_btn = QToolButton()
+        self._toggle_options_btn.setText("Hide Options")
+        self._toggle_options_btn.setToolTip("Show or hide the export options pane")
+        self._toggle_options_btn.clicked.connect(self._toggle_options_pane)
+        path_layout.addWidget(self._path_edit, 1)
+        path_layout.addWidget(browse_btn)
+        path_layout.addWidget(self._toggle_options_btn)
+        root.addWidget(path_box)
+
+        # ── Selection pane ───────────────────────────────────────────────
+        self._selection_pane = QWidget()
+        selection_layout = QVBoxLayout(self._selection_pane)
+        selection_layout.setContentsMargins(0, 0, 0, 0)
+        selection_layout.setSpacing(8)
+
+        level_box = QGroupBox("Data Export Level")
         level_layout = QHBoxLayout(level_box)
         self._rb_dataset = QRadioButton("Dataset")
         self._rb_experiment = QRadioButton("Experiment")
@@ -468,9 +515,9 @@ class BulkExportDialog(QDialog):
         level_layout.addWidget(self._rb_experiment)
         level_layout.addStretch()
         self._rb_dataset.toggled.connect(self._on_level_changed)
-        root.addWidget(level_box)
+        self._rb_dataset.toggled.connect(self._refresh_readiness)
+        selection_layout.addWidget(level_box)
 
-        # ── 2. Object selection tree ──────────────────────────────────────
         obj_box = QGroupBox("Select Objects to Export")
         obj_box_layout = QVBoxLayout(obj_box)
         obj_box_layout.setContentsMargins(6, 6, 6, 6)
@@ -487,11 +534,13 @@ class BulkExportDialog(QDialog):
         sel_btn_none.clicked.connect(lambda: self._set_all_objects(False))
         sel_layout.addWidget(sel_btn_all)
         sel_layout.addWidget(sel_btn_none)
-        self._cb_completed_only = QCheckBox("Completed datasets only")
+        self._cb_completed_only = QCheckBox("Completed data only")
         self._cb_completed_only.setToolTip(
-            "Hide incomplete or unknown datasets in the dataset-level selector. Experiment-level exports still export the whole selected experiment."
+            "Export only data explicitly marked Complete at every level: experiments, datasets, and sessions. "
+            "Incomplete or unknown experiment cards and dataset rows are hidden."
         )
         self._cb_completed_only.toggled.connect(self._on_completed_only_changed)
+        self._cb_completed_only.toggled.connect(self._refresh_readiness)
         sel_layout.addWidget(self._cb_completed_only)
         sel_layout.addStretch()
         obj_box_layout.addWidget(sel_row)
@@ -507,33 +556,39 @@ class BulkExportDialog(QDialog):
         self._tree_layout.addStretch()  # placeholder; groups inserted before this
         self._scroll_area.setWidget(self._tree_container)
         obj_box_layout.addWidget(self._scroll_area)
-        root.addWidget(obj_box)
+        selection_layout.addWidget(obj_box, 1)
 
-        # ── 3. Data types ─────────────────────────────────────────────────
+        # ── Export options pane ──────────────────────────────────────────
+        self._options_pane = QScrollArea()
+        self._options_pane.setWidgetResizable(True)
+        self._options_pane.setFrameShape(QScrollArea.Shape.NoFrame)
+        options_content = QWidget()
+        options_layout = QVBoxLayout(options_content)
+        options_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.setSpacing(8)
+
         dtype_box = QGroupBox("Data Types")
-        dtype_layout = QHBoxLayout(dtype_box)
+        dtype_layout = QVBoxLayout(dtype_box)
         self._dtype_cbs: dict[str, QCheckBox] = {}
         for key, label in DATA_TYPE_LABELS.items():
             cb = QCheckBox(label)
             cb.setChecked(False)
+            cb.toggled.connect(self._refresh_readiness)
             dtype_layout.addWidget(cb)
             self._dtype_cbs[key] = cb
-        dtype_layout.addStretch()
-        root.addWidget(dtype_box)
+        options_layout.addWidget(dtype_box)
 
-        # ── 4. Methods ────────────────────────────────────────────────────
         method_box = QGroupBox("Calculation Methods")
-        method_layout = QHBoxLayout(method_box)
+        method_layout = QVBoxLayout(method_box)
         self._method_cbs: dict[str, QCheckBox] = {}
         for key, label in METHOD_LABELS.items():
             cb = QCheckBox(label)
             cb.setChecked(False)
+            cb.toggled.connect(self._refresh_readiness)
             method_layout.addWidget(cb)
             self._method_cbs[key] = cb
-        method_layout.addStretch()
-        root.addWidget(method_box)
+        options_layout.addWidget(method_box)
 
-        # ── 5. Export Options ────────────────────────────────────────────
         opts_box = QGroupBox("Export Options")
         opts_layout = QVBoxLayout(opts_box)
         self._cb_normalize_mmax = QCheckBox("Normalize amplitudes to M-max")
@@ -544,36 +599,132 @@ class BulkExportDialog(QDialog):
             "⚠ Requires M-max latency windows to be defined for all selected objects."
         )
         opts_layout.addWidget(self._cb_normalize_mmax)
-        root.addWidget(opts_box)
+        options_layout.addWidget(opts_box)
 
-        # ── 6. Channels ───────────────────────────────────────────────────
         chan_box = QGroupBox("Channels")
-        self._chan_layout = QHBoxLayout(chan_box)
+        self._chan_layout = QVBoxLayout(chan_box)
         self._channel_cbs: list[QCheckBox] = []  # populated in _populate_channels
-        root.addWidget(chan_box)
+        options_layout.addWidget(chan_box)
+        options_layout.addStretch()
+        self._options_pane.setWidget(options_content)
 
-        # ── 7. Output path ───────────────────────────────────────────────
-        path_box = QGroupBox("Output Directory")
-        path_layout = QHBoxLayout(path_box)
-        self._path_edit = QLineEdit()
-        self._path_edit.setPlaceholderText("Select an output folder…")
-        default_out = str(getattr(self.gui, "export_path", "") or "")
-        if default_out:
-            self._path_edit.setText(default_out)
-        browse_btn = QPushButton("Browse…")
-        browse_btn.setFixedWidth(80)
-        browse_btn.clicked.connect(self._browse_output)
-        path_layout.addWidget(self._path_edit, 1)
-        path_layout.addWidget(browse_btn)
-        root.addWidget(path_box)
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.setChildrenCollapsible(True)
+        self._splitter.setHandleWidth(6)
+        self._splitter.addWidget(self._selection_pane)
+        self._splitter.addWidget(self._options_pane)
+        self._splitter.setStretchFactor(0, 3)
+        self._splitter.setStretchFactor(1, 2)
+        self._splitter.setSizes([570, 350])
+        root.addWidget(self._splitter, 1)
 
-        # ── 8. Button box ───────────────────────────────────────────────
+        self._tabs = QTabWidget()
+        self._tabs.setVisible(False)
+        root.addWidget(self._tabs, 1)
+
+        self._readiness_lbl = QLabel()
+        self._readiness_lbl.setWordWrap(True)
+        self._readiness_lbl.setStyleSheet("QLabel { color: #555555; }")
+        root.addWidget(self._readiness_lbl)
+
         btn_box = QDialogButtonBox()
         self._export_btn = btn_box.addButton("Export", QDialogButtonBox.ButtonRole.AcceptRole)
         btn_box.addButton(QDialogButtonBox.StandardButton.Cancel)
         btn_box.accepted.connect(self._on_accept)
         btn_box.rejected.connect(self.reject)
         root.addWidget(btn_box)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_splitter") and not self._layout_update_pending:
+            # Reparenting visible widgets from resizeEvent corrupts Qt's active
+            # layout pass on some platforms. Apply the mode change afterwards.
+            self._layout_update_pending = True
+            QTimer.singleShot(0, self._update_responsive_layout)
+
+    def _update_responsive_layout(self) -> None:
+        """Use tabs when two side-by-side panes no longer fit comfortably."""
+        self._layout_update_pending = False
+        mode = "tabs" if self.width() <= self._NARROW_LAYOUT_MAX_WIDTH else "splitter"
+        if mode == self._layout_mode:
+            return
+
+        if self._layout_mode is None and mode == "splitter":
+            self._layout_mode = mode
+            return
+
+        if mode == "tabs":
+            self._splitter.hide()
+            self._selection_pane.setParent(None)
+            self._options_pane.setParent(None)
+            self._tabs.addTab(self._selection_pane, "Selection")
+            self._tabs.addTab(self._options_pane, "Export Options")
+            self._tabs.show()
+            self._toggle_options_btn.hide()
+        else:
+            selected_tab = self._tabs.currentIndex()
+            self._tabs.hide()
+            self._tabs.removeTab(self._tabs.indexOf(self._selection_pane))
+            self._tabs.removeTab(self._tabs.indexOf(self._options_pane))
+            self._splitter.addWidget(self._selection_pane)
+            self._splitter.addWidget(self._options_pane)
+            # A non-active QTabWidget page is hidden. Reset both child
+            # visibilities before exposing the splitter again.
+            self._selection_pane.show()
+            self._options_pane.show()
+            self._splitter.show()
+            self._toggle_options_btn.show()
+            self._set_options_pane_visibility()
+            if selected_tab == 1 and not self._options_pane_collapsed:
+                self._options_pane.setFocus()
+        self._layout_mode = mode
+
+    def _toggle_options_pane(self) -> None:
+        """Collapse or restore the options pane without changing its state."""
+        if self._layout_mode != "splitter":
+            return
+        self._options_pane_collapsed = not self._options_pane_collapsed
+        self._set_options_pane_visibility()
+
+    def _set_options_pane_visibility(self) -> None:
+        """Apply the stored options-pane state after the active layout is stable."""
+        visible = not self._options_pane_collapsed
+        self._options_pane.setVisible(visible)
+        self._toggle_options_btn.setText("Hide Options" if visible else "Show Options")
+        if not visible:
+            self._splitter.setSizes([max(self.width(), 1), 0])
+        else:
+            self._splitter.setSizes([570, 350])
+
+    def _refresh_readiness(self) -> None:
+        """Provide immediate, non-blocking feedback about export requirements."""
+        dataset_mode = self._rb_dataset.isChecked()
+        selected_count = 0
+        for group in self._expt_groups:
+            if not group.is_expt_checked:
+                continue
+            selected_count += len(group.selected_dataset_ids) if dataset_mode else 1
+        data_types = sum(cb.isChecked() for cb in self._dtype_cbs.values())
+        methods = sum(cb.isChecked() for cb in self._method_cbs.values())
+        channels = sum(cb.isChecked() for cb in self._channel_cbs)
+        missing = []
+        if not selected_count:
+            missing.append("select object(s)")
+        if not data_types:
+            missing.append("choose data type(s)")
+        if not methods:
+            missing.append("choose calculation method(s)")
+        if not channels:
+            missing.append("choose channel(s)")
+        if not self._path_edit.text().strip():
+            missing.append("choose an output directory")
+
+        summary = f"{selected_count} object(s) selected · {data_types} data type(s) · {methods} method(s) · {channels} channel(s)"
+        if missing:
+            self._readiness_lbl.setText(f"Ready to export: {summary}. Still needed: {', '.join(missing)}.")
+        else:
+            self._readiness_lbl.setText(f"Ready to export: {summary}.")
+        self._export_btn.setEnabled(not missing)
 
     # ─────────────────────────────────────────────────────────────────────
     # Population helpers
@@ -593,6 +744,9 @@ class BulkExportDialog(QDialog):
         for expt_name, expt_path_str in sorted(expts_dict.items()):
             status = self._discover_experiment_status(expt_path_str)
             group = _ExperimentGroup(expt_name, status.is_completed, status.datasets)
+            group._expt_cb.stateChanged.connect(self._refresh_readiness)
+            for dataset_cb in group._dataset_cbs:
+                dataset_cb.stateChanged.connect(self._refresh_readiness)
             self._tree_layout.insertWidget(self._tree_layout.count() - 1, group)
             self._expt_groups.append(group)
 
@@ -676,6 +830,7 @@ class BulkExportDialog(QDialog):
         for i in range(len(channel_names)):
             cb = QCheckBox(f"Ch{i}")
             cb.setChecked(False)
+            cb.toggled.connect(self._refresh_readiness)
             self._chan_layout.addWidget(cb)
             self._channel_cbs.append(cb)
         self._chan_layout.addStretch()
@@ -703,16 +858,19 @@ class BulkExportDialog(QDialog):
     def _on_level_changed(self, dataset_mode_active: bool) -> None:
         for group in self._expt_groups:
             group.set_dataset_mode(dataset_mode_active)
-            group.set_completed_only(dataset_mode_active and self._cb_completed_only.isChecked())
+            group.set_completed_only(self._cb_completed_only.isChecked())
+        self._refresh_readiness()
 
     def _set_all_objects(self, checked: bool) -> None:
         for group in self._expt_groups:
-            group._expt_cb.setChecked(checked)
+            if not group.isHidden():
+                group._expt_cb.setChecked(checked)
+        self._refresh_readiness()
 
     def _on_completed_only_changed(self, checked: bool) -> None:
-        dataset_mode_active = self._rb_dataset.isChecked()
         for group in self._expt_groups:
-            group.set_completed_only(dataset_mode_active and checked)
+            group.set_completed_only(checked)
+        self._refresh_readiness()
 
     def _browse_output(self) -> None:
         current = self._path_edit.text().strip() or str(getattr(self.gui, "export_path", ""))
@@ -742,7 +900,13 @@ class BulkExportDialog(QDialog):
         def _on_finished(written: list[str]) -> None:
             progress_win.mark_done()
             worker.deleteLater()
-            if not written:
+            if worker.is_canceled:
+                QMessageBox.information(
+                    progress_win,
+                    "Bulk Export Canceled",
+                    f"Export canceled. {len(written)} fully written file(s) were kept; no incomplete workbook was saved.",
+                )
+            elif not written:
                 QMessageBox.warning(
                     progress_win,
                     "Bulk Export",
@@ -856,5 +1020,6 @@ class BulkExportDialog(QDialog):
             channel_indices=channel_indices,
             output_path=output_path,
             normalize_to_mmax=normalize_to_mmax,
+            completed_only=self._cb_completed_only.isChecked(),
             experiment_paths={name: str(expts_dict.get(name, "")) for name in selected_objects},
         )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QGroupBox, QSpinBox, QWidget
+from PySide6.QtWidgets import QGroupBox, QSpinBox, QSplitter, QTabWidget, QWidget
 
 pytestmark = pytest.mark.unit
 
@@ -51,6 +51,23 @@ def test_completed_only_filter_limits_experiment_checkbox_selection():
     assert group._dataset_row_by_cb[group._dataset_cbs[2]].isHidden() is True
     assert group._dataset_cbs[1].isChecked() is False
     assert group.selected_dataset_ids == ["DS_COMPLETE"]
+
+
+def test_completed_only_filter_hides_incomplete_experiment_card_and_clears_selection():
+    from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
+
+    group = _ExperimentGroup(
+        "Incomplete Experiment",
+        False,
+        [_DatasetStatus(dataset_id="DS_COMPLETE", display_name="Complete dataset", is_completed=True)],
+    )
+    group._expt_cb.setChecked(True)
+
+    group.set_completed_only(True)
+
+    assert group.isHidden()
+    assert not group.is_expt_checked
+    assert group.selected_dataset_ids == []
 
 
 def test_discover_experiment_status_reads_completion_metadata(monkeypatch, tmp_path):
@@ -107,6 +124,108 @@ def test_bulk_export_dialog_does_not_expose_worker_count():
     assert "Plot Options" not in group_titles
     assert not hasattr(dialog, "_sb_workers")
     assert dialog.findChildren(QSpinBox) == []
+
+
+def test_bulk_export_dialog_uses_responsive_selection_and_options_panes(qapplication):
+    from monstim_gui.dialogs.bulk_export_dialog import BulkExportDialog
+
+    gui = QWidget()
+    gui.expts_dict = {}
+    gui.export_path = ""
+    gui.channel_names = ["Ch0"]
+    gui.current_session = None
+    gui.current_dataset = None
+    gui.current_experiment = None
+
+    dialog = BulkExportDialog(gui)
+
+    assert dialog.size().width() == 960
+    assert dialog.size().height() == 640
+    assert dialog.minimumSize().width() == 480
+    assert dialog.minimumSize().height() == 320
+    assert isinstance(dialog._splitter, QSplitter)
+    assert dialog._splitter.count() == 2
+    assert dialog._splitter.sizes()[0] > dialog._splitter.sizes()[1]
+
+    dialog.show()
+    qapplication.processEvents()
+    dialog._toggle_options_pane()
+    qapplication.processEvents()
+    assert not dialog._options_pane.isVisible()
+    assert dialog._toggle_options_btn.text() == "Show Options"
+    dialog._toggle_options_pane()
+    qapplication.processEvents()
+    assert dialog._options_pane.isVisible()
+    assert dialog._toggle_options_btn.text() == "Hide Options"
+    dialog.resize(480, 320)
+    qapplication.processEvents()
+
+    assert dialog._layout_mode == "tabs"
+    assert isinstance(dialog._tabs, QTabWidget)
+    assert [dialog._tabs.tabText(index) for index in range(dialog._tabs.count())] == ["Selection", "Export Options"]
+    dialog._tabs.setCurrentIndex(1)
+    qapplication.processEvents()
+
+    dialog.resize(960, 640)
+    qapplication.processEvents()
+
+    assert dialog._layout_mode == "splitter"
+    assert dialog._splitter.count() == 2
+    assert dialog._selection_pane.isVisible()
+    assert dialog._options_pane.isVisible()
+
+    for width, expected_mode in ((480, "tabs"), (960, "splitter"), (480, "tabs"), (960, "splitter")):
+        dialog.resize(width, 640)
+        qapplication.processEvents()
+        assert dialog._layout_mode == expected_mode
+        if expected_mode == "tabs":
+            assert dialog._tabs.count() == 2
+        else:
+            assert dialog._splitter.count() == 2
+    dialog.close()
+
+
+def test_bulk_export_dialog_readiness_and_responsive_layout_preserve_selection(qapplication, tmp_path):
+    from monstim_gui.dialogs.bulk_export_dialog import BulkExportDialog, _DatasetStatus, _ExperimentGroup
+
+    gui = QWidget()
+    gui.expts_dict = {}
+    gui.export_path = ""
+    gui.channel_names = ["Ch0"]
+    gui.current_session = None
+    gui.current_dataset = None
+    gui.current_experiment = None
+    dialog = BulkExportDialog(gui)
+    group = _ExperimentGroup(
+        "Experiment A",
+        True,
+        [_DatasetStatus(dataset_id="dataset-a", display_name="Dataset A", is_completed=True)],
+    )
+    group._expt_cb.stateChanged.connect(dialog._refresh_readiness)
+    group._dataset_cbs[0].stateChanged.connect(dialog._refresh_readiness)
+    dialog._tree_layout.insertWidget(dialog._tree_layout.count() - 1, group)
+    dialog._expt_groups.append(group)
+
+    assert not dialog._export_btn.isEnabled()
+    group._dataset_cbs[0].setChecked(True)
+    next(iter(dialog._dtype_cbs.values())).setChecked(True)
+    next(iter(dialog._method_cbs.values())).setChecked(True)
+    dialog._channel_cbs[0].setChecked(True)
+    dialog._path_edit.setText(str(tmp_path))
+
+    assert dialog._export_btn.isEnabled()
+    assert "1 object(s) selected" in dialog._readiness_lbl.text()
+
+    dialog.show()
+    qapplication.processEvents()
+    dialog.resize(480, 320)
+    qapplication.processEvents()
+    dialog.resize(960, 640)
+    qapplication.processEvents()
+
+    assert group.selected_dataset_ids == ["dataset-a"]
+    assert dialog._export_btn.isEnabled()
+    dialog.close()
 
 
 def test_recording_exclusion_editor_does_not_crash_when_stimulus_filter_disabled():

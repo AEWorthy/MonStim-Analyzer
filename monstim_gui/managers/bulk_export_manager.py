@@ -18,7 +18,9 @@ import logging
 logger = logging.getLogger(__name__)
 import os
 import re
+import uuid
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -58,6 +60,15 @@ BULK_EXPORT_OPEN_FILE_RESERVE = 32
 BULK_EXPORT_MIN_DATASET_FILE_COST = 8
 
 
+class BulkExportCanceled(Exception):
+    """Raised when a bulk export reaches a cancellation-safe boundary."""
+
+
+def _raise_if_canceled(is_canceled: Callable[[], bool] | None) -> None:
+    if is_canceled is not None and is_canceled():
+        raise BulkExportCanceled
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Config dataclass
 # ─────────────────────────────────────────────────────────────────────────────
@@ -87,6 +98,9 @@ class BulkExportConfig:
 
     #: When True, add M-max-normalized amplitude columns alongside raw columns
     normalize_to_mmax: bool = False
+
+    #: When True, include only datasets and sessions explicitly marked complete.
+    completed_only: bool = False
 
     #: {expt_name: str(folder_path)} - sourced from gui.expts_dict
     experiment_paths: dict[str, str] = field(default_factory=dict)
@@ -148,10 +162,15 @@ def _auto_max_workers(task_count: int, max_dataset_recordings: int = 0) -> int:
     return max(1, min(cpu_workers, file_workers))
 
 
-def _count_dataset_recording_files(ds_folder: Path) -> int:
+def _count_dataset_recording_files(ds_folder: Path, is_canceled: Callable[[], bool] | None = None) -> int:
     """Estimate dataset size without opening recording files."""
     try:
-        return sum(1 for _ in ds_folder.rglob("*.meta.json"))
+        count = 0
+        for _root, _dirs, filenames in os.walk(ds_folder):
+            if is_canceled and is_canceled():
+                return count
+            count += sum(filename.endswith(".meta.json") for filename in filenames)
+        return count
     except OSError as exc:
         logger.warning("Could not estimate recording count for '%s': %s", ds_folder, exc)
         return 0
@@ -177,11 +196,14 @@ def _n_col_label(config: BulkExportConfig) -> str:
     return "n_datasets" if config.data_level == "experiment" else "n_sessions"
 
 
-def _get_mmax_cache(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> dict[tuple[int, str], float | None]:
+def _get_mmax_cache(
+    obj: Session | Dataset | Experiment, config: BulkExportConfig, is_canceled: Callable[[], bool] | None = None
+) -> dict[tuple[int, str], float | None]:
     """Pre-compute M-max per (channel_index, method) to avoid repeated calls."""
     cache: dict[tuple[int, str], float | None] = {}
     for ch_idx in config.channel_indices:
         for method in config.methods:
+            _raise_if_canceled(is_canceled)
             try:
                 val = obj.get_avg_m_max(method, ch_idx)
                 cache[(ch_idx, method)] = float(val) if val is not None else None
@@ -200,17 +222,74 @@ def _iter_object_datasets(obj: Dataset | Experiment) -> Iterator[Dataset]:
         yield obj
 
 
-def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
+@contextmanager
+def _completed_only_export_scope(obj: Dataset | Experiment, enabled: bool) -> Iterator[None]:
+    """Temporarily limit an export object to explicitly completed data.
+
+    Completion is independent of the ordinary exclusion state: users may mark
+    a dataset complete while still leaving individual sessions incomplete.
+    The export must therefore filter both levels.  The loaded object belongs
+    exclusively to the worker, but restore all annotations before it is closed
+    so this read-only operation cannot leak a changed selection state.
+    """
+    if not enabled:
+        yield
+        return
+
+    datasets = list(getattr(obj, "_all_datasets", [obj]))
+    original_dataset_exclusions = None
+    if hasattr(obj, "annot") and hasattr(obj.annot, "excluded_datasets"):
+        original_dataset_exclusions = list(obj.annot.excluded_datasets)
+        incomplete_dataset_ids = [dataset.id for dataset in datasets if not getattr(dataset, "is_completed", False)]
+        if not getattr(obj, "is_completed", False):
+            incomplete_dataset_ids = [dataset.id for dataset in datasets]
+        obj.annot.excluded_datasets[:] = list(dict.fromkeys([*original_dataset_exclusions, *incomplete_dataset_ids]))
+        invalidate = getattr(obj, "invalidate_aggregate_results", None)
+        if callable(invalidate):
+            invalidate()
+
+    original_session_exclusions: list[tuple[object, list[str]]] = []
+    for dataset in datasets:
+        annot = getattr(dataset, "annot", None)
+        if annot is None or not hasattr(annot, "excluded_sessions"):
+            continue
+        original = list(annot.excluded_sessions)
+        incomplete_session_ids = [session.id for session in getattr(dataset, "_all_sessions", []) if not getattr(session, "is_completed", False)]
+        annot.excluded_sessions[:] = list(dict.fromkeys([*original, *incomplete_session_ids]))
+        original_session_exclusions.append((dataset, original))
+        invalidate = getattr(dataset, "invalidate_aggregate_results", None)
+        if callable(invalidate):
+            invalidate()
+
+    try:
+        yield
+    finally:
+        for dataset, original in original_session_exclusions:
+            dataset.annot.excluded_sessions[:] = original
+            invalidate = getattr(dataset, "invalidate_aggregate_results", None)
+            if callable(invalidate):
+                invalidate()
+        if original_dataset_exclusions is not None:
+            obj.annot.excluded_datasets[:] = original_dataset_exclusions
+            invalidate = getattr(obj, "invalidate_aggregate_results", None)
+            if callable(invalidate):
+                invalidate()
+
+
+def _compute_longform_reflex_amplitudes(
+    obj: Dataset | Experiment, config: BulkExportConfig, is_canceled: Callable[[], bool] | None = None
+) -> pd.DataFrame:
     """Build one row per active recording/channel/window/method amplitude.
 
     This export preserves recording-level values for downstream mixed-effects
     models. It intentionally does not bin or average amplitudes; the binned
     stimulus column is included only as an optional modeling/grouping helper.
     """
-    mmax_cache = _get_mmax_cache(obj, config) if config.normalize_to_mmax else {}
+    mmax_cache = _get_mmax_cache(obj, config, is_canceled=is_canceled) if config.normalize_to_mmax else {}
     rows: list[dict] = []
 
     for dataset in _iter_object_datasets(obj):
+        _raise_if_canceled(is_canceled)
         dataset_id = getattr(dataset, "id", "")
         dataset_date = getattr(dataset, "date", "")
         animal_id = getattr(dataset, "animal_id", "")
@@ -222,6 +301,7 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
             window_names = [getattr(window, "name", "") for window in getattr(dataset, "latency_windows", [])]
 
         for session in getattr(dataset, "sessions", []):
+            _raise_if_canceled(is_canceled)
             session_id = getattr(session, "id", "")
             active_recordings = list(getattr(session, "recordings", []))
             stimulus_values = np.asarray(getattr(session, "stimulus_voltages", []), dtype=float)
@@ -231,6 +311,7 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
                 binned_values = np.full(len(stimulus_values), np.nan)
 
             for ch_idx in config.channel_indices:
+                _raise_if_canceled(is_canceled)
                 if ch_idx >= getattr(session, "num_channels", 0):
                     logger.debug(
                         "_compute_longform_reflex_amplitudes: channel index %d out of range for session %s - skipped.",
@@ -241,6 +322,7 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
                 ch_name = _safe_channel_name(session, ch_idx)
 
                 for method in config.methods:
+                    _raise_if_canceled(is_canceled)
                     try:
                         batches = session.get_all_lw_reflex_amplitude_results(method, ch_idx)
                     except AttributeError:  # compatibility for lightweight external Session-like objects
@@ -269,6 +351,7 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
                     mmax = mmax_cache.get((ch_idx, method)) if config.normalize_to_mmax else None
                     window_names_by_index = {batch.window_index: batch.window.name for batch in batches}
                     for batch in batches:
+                        _raise_if_canceled(is_canceled)
                         latency_window = batch.window
                         try:
                             window_start_ms = latency_window.start_times[ch_idx]
@@ -281,6 +364,7 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
                         ):
                             raise RuntimeError(f"Longform export recording/result alignment mismatch in session {session_id}")
                         for rec_idx, result in enumerate(batch.results):
+                            _raise_if_canceled(is_canceled)
                             amplitude = float(result.amplitude)
                             recording = active_recordings[rec_idx] if rec_idx < len(active_recordings) else None
                             stimulus_value = stimulus_values[rec_idx] if rec_idx < len(stimulus_values) else np.nan
@@ -347,7 +431,9 @@ def _compute_longform_reflex_amplitudes(obj: Dataset | Experiment, config: BulkE
     return pd.DataFrame(rows)
 
 
-def _compute_avg_reflex_curves(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_avg_reflex_curves(
+    obj: Session | Dataset | Experiment, config: BulkExportConfig, is_canceled: Callable[[], bool] | None = None
+) -> pd.DataFrame:
     """Build a DataFrame of averaged reflex:stimulus curve data.
 
     Columns: voltage, channel, window, mean_amplitude_{m}, stdev_amplitude_{m},
@@ -368,17 +454,20 @@ def _compute_avg_reflex_curves(obj: Session | Dataset | Experiment, config: Bulk
         logger.warning("No latency windows found - skipping avg_reflex_curves.")
         return pd.DataFrame()
 
-    mmax_cache = _get_mmax_cache(obj, config) if config.normalize_to_mmax else {}
+    mmax_cache = _get_mmax_cache(obj, config, is_canceled=is_canceled) if config.normalize_to_mmax else {}
 
     rows: list[dict] = []
     for ch_idx in config.channel_indices:
+        _raise_if_canceled(is_canceled)
         ch_name = _safe_channel_name(obj, ch_idx)
         for window_name in windows:
+            _raise_if_canceled(is_canceled)
             # Gather per-method results aligned on a common voltage axis
             voltage_array: np.ndarray | None = None
             method_cols: dict[str, np.ndarray] = {}
 
             for method in config.methods:
+                _raise_if_canceled(is_canceled)
                 try:
                     result = obj.get_average_lw_reflex_curve(method, ch_idx, window_name)
                     volts = result.get("voltages", np.array([]))
@@ -417,6 +506,7 @@ def _compute_avg_reflex_curves(obj: Session | Dataset | Experiment, config: Bulk
 
             n = len(voltage_array)
             for i in range(n):
+                _raise_if_canceled(is_canceled)
                 row: dict = {"voltage": voltage_array[i], "channel": ch_name, "window": window_name}
                 for col, arr in method_cols.items():
                     row[col] = arr[i] if i < len(arr) else np.nan
@@ -425,7 +515,7 @@ def _compute_avg_reflex_curves(obj: Session | Dataset | Experiment, config: Bulk
     return pd.DataFrame(rows)
 
 
-def _compute_mmax(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_mmax(obj: Session | Dataset | Experiment, config: BulkExportConfig, is_canceled: Callable[[], bool] | None = None) -> pd.DataFrame:
     """Build a DataFrame with one row per channel showing M-max per method."""
     try:
         n_channels = len(obj.channel_names)
@@ -434,12 +524,14 @@ def _compute_mmax(obj: Session | Dataset | Experiment, config: BulkExportConfig)
 
     rows: list[dict] = []
     for ch_idx in config.channel_indices:
+        _raise_if_canceled(is_canceled)
         if n_channels > 0 and ch_idx >= n_channels:
             logger.debug("_compute_mmax: channel index %d out of range (%d) - skipped.", ch_idx, n_channels)
             continue
         ch_name = _safe_channel_name(obj, ch_idx)
         row: dict = {"channel": ch_name, "channel_index": ch_idx}
         for method in config.methods:
+            _raise_if_canceled(is_canceled)
             try:
                 mmax, mthresh = obj.get_avg_m_max(method, ch_idx, return_avg_mmax_thresholds=True)
                 row[f"mmax_{method}"] = mmax
@@ -452,7 +544,7 @@ def _compute_mmax(obj: Session | Dataset | Experiment, config: BulkExportConfig)
     return pd.DataFrame(rows)
 
 
-def _compute_max_h(obj: Session | Dataset | Experiment, config: BulkExportConfig) -> pd.DataFrame:
+def _compute_max_h(obj: Session | Dataset | Experiment, config: BulkExportConfig, is_canceled: Callable[[], bool] | None = None) -> pd.DataFrame:
     """Build a DataFrame of average H-reflex amplitudes across stimulus voltages."""
     try:
         voltages = obj.stimulus_voltages
@@ -470,12 +562,14 @@ def _compute_max_h(obj: Session | Dataset | Experiment, config: BulkExportConfig
 
     rows: list[dict] = []
     for ch_idx in config.channel_indices:
+        _raise_if_canceled(is_canceled)
         if n_channels > 0 and ch_idx >= n_channels:
             logger.debug("_compute_max_h: channel index %d out of range (%d) - skipped.", ch_idx, n_channels)
             continue
         ch_name = _safe_channel_name(obj, ch_idx)
         method_data: dict[str, np.ndarray] = {}
         for method in config.methods:
+            _raise_if_canceled(is_canceled)
             try:
                 avg, std = obj.get_avg_h_wave_amplitudes(method, ch_idx)
                 avg_arr = np.asarray(avg)
@@ -504,6 +598,7 @@ def _compute_max_h(obj: Session | Dataset | Experiment, config: BulkExportConfig
             continue
 
         for i, v in enumerate(voltages):
+            _raise_if_canceled(is_canceled)
             row: dict = {"voltage": float(v), "channel": ch_name}
             for col, arr in method_data.items():
                 row[col] = arr[i] if i < len(arr) else np.nan
@@ -525,42 +620,60 @@ def _write_object_export(
     expt_name: str,
     obj_id: str,
     config: BulkExportConfig,
+    is_canceled: Callable[[], bool] | None = None,
 ) -> Path:
     """Compute all requested data types and write a single xlsx file.
 
     Returns the path to the written file.
     """
-    out_dir = Path(config.output_path) / _sanitize_path_component(expt_name)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     safe_id = _sanitize_path_component(obj_id)
+    out_dir = Path(config.output_path) / _sanitize_path_component(expt_name)
     out_file = out_dir / f"{safe_id}_bulk_export.xlsx"
 
-    # Compute all DataFrames before opening the writer to avoid creating empty xlsx files
+    # Compute all DataFrames before opening the writer to avoid creating empty xlsx files.
+    # Scope completion filtering around every handler so summaries, M-max, and
+    # longform rows all use the same active sessions.
     sheets: list[tuple[str, pd.DataFrame]] = []
-    for data_type in config.data_types:
-        handler = _DATA_TYPE_HANDLERS.get(data_type)
-        if handler is None:
-            logger.warning("Unknown data type '%s' - skipped.", data_type)
-            continue
-        try:
-            df = handler(obj, config)
-        except Exception as exc:
-            logger.error("Error computing '%s' for '%s/%s': %s", data_type, expt_name, obj_id, exc)
-            df = pd.DataFrame()
-        if df is not None and not df.empty:
-            sheet_name = DATA_TYPE_LABELS.get(data_type, data_type)[:31]  # Excel sheet name limit
-            sheets.append((sheet_name, df))
-        else:
-            logger.debug("No data for type '%s' in '%s/%s' - sheet skipped.", data_type, expt_name, obj_id)
+    with _completed_only_export_scope(obj, config.completed_only):
+        for data_type in config.data_types:
+            _raise_if_canceled(is_canceled)
+            handler = _DATA_TYPE_HANDLERS.get(data_type)
+            if handler is None:
+                logger.warning("Unknown data type '%s' - skipped.", data_type)
+                continue
+            try:
+                df = handler(obj, config, is_canceled=is_canceled)
+            except BulkExportCanceled:
+                raise
+            except Exception as exc:
+                logger.error("Error computing '%s' for '%s/%s': %s", data_type, expt_name, obj_id, exc)
+                df = pd.DataFrame()
+            if df is not None and not df.empty:
+                sheet_name = DATA_TYPE_LABELS.get(data_type, data_type)[:31]  # Excel sheet name limit
+                sheets.append((sheet_name, df))
+            else:
+                logger.debug("No data for type '%s' in '%s/%s' - sheet skipped.", data_type, expt_name, obj_id)
 
     if not sheets:
         logger.warning("No data written for '%s/%s' - file not created.", expt_name, obj_id)
         return out_file  # file was never created; caller can check existence
 
-    with pd.ExcelWriter(out_file, engine="openpyxl") as writer:
-        for sheet_name, df in sheets:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    _raise_if_canceled(is_canceled)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    temporary_file = out_dir / f".{safe_id}.{uuid.uuid4().hex}.tmp.xlsx"
+    try:
+        with pd.ExcelWriter(temporary_file, engine="openpyxl") as writer:
+            for sheet_name, df in sheets:
+                _raise_if_canceled(is_canceled)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+        _raise_if_canceled(is_canceled)
+        os.replace(temporary_file, out_file)
+    finally:
+        if temporary_file.exists():
+            try:
+                temporary_file.unlink()
+            except OSError as exc:
+                logger.warning("Could not remove unfinished temporary export '%s': %s", temporary_file, exc)
 
     return out_file
 
@@ -582,12 +695,29 @@ def _load_and_export_dataset_task(
     """
     import gc
 
-    from monstim_signals.io.repositories import DatasetRepository
+    from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository
 
     ds_folder = expt_folder / ds_id
     if not ds_folder.is_dir():
         logger.error("Dataset folder not found for '%s/%s' at '%s' - skipping.", expt_name, ds_id, ds_folder)
         return None, f"Not found: {ds_id}"
+
+    if is_canceled and is_canceled():
+        return None, f"Canceled: {ds_id}"
+
+    if config.completed_only:
+        try:
+            experiment_metadata = ExperimentRepository(expt_folder).get_metadata()
+        except Exception as exc:
+            logger.warning("Could not verify completion status for experiment '%s': %s", expt_name, exc)
+            return None, f"Completion status unavailable: {ds_id}"
+        if experiment_metadata.get("is_completed") is not True:
+            logger.info("Bulk export: skipping dataset '%s/%s' because its experiment is not complete.", expt_name, ds_id)
+            return None, f"Incomplete experiment: {ds_id}"
+        dataset_metadata = next((item for item in experiment_metadata.get("datasets", []) if item.get("id") == ds_id), None)
+        if dataset_metadata is None or dataset_metadata.get("is_completed") is not True:
+            logger.info("Bulk export: skipping incomplete or unknown dataset '%s/%s'.", expt_name, ds_id)
+            return None, f"Incomplete dataset: {ds_id}"
 
     # Check before starting the (potentially slow) load
     if is_canceled and is_canceled():
@@ -620,9 +750,12 @@ def _load_and_export_dataset_task(
 
     out_path: str | None = None
     try:
-        out_file = _write_object_export(dataset, expt_name, ds_id, config)
+        out_file = _write_object_export(dataset, expt_name, ds_id, config, is_canceled=is_canceled)
         out_path = str(out_file)
         logger.info("Wrote: %s", out_file)
+    except BulkExportCanceled:
+        logger.info("Bulk export: canceled while preparing '%s/%s'.", expt_name, ds_id)
+        return None, f"Canceled: {ds_id}"
     except Exception as exc:
         logger.error("Export error for dataset '%s/%s': %s", expt_name, ds_id, exc)
     finally:
@@ -689,6 +822,8 @@ def run_bulk_export(
         tasks: list[tuple[str, str, Path]] = []
         max_dataset_recordings = 0
         for expt_name, ds_ids in config.selected_objects.items():
+            if is_canceled and is_canceled():
+                return written_files
             expt_path_str = config.experiment_paths.get(expt_name)
             if not expt_path_str:
                 logger.error("No path found for experiment '%s' - skipping.", expt_name)
@@ -697,8 +832,12 @@ def run_bulk_export(
                 continue
             expt_folder = Path(expt_path_str)
             for ds_id in ds_ids:
+                if is_canceled and is_canceled():
+                    return written_files
                 ds_folder = expt_folder / ds_id
-                max_dataset_recordings = max(max_dataset_recordings, _count_dataset_recording_files(ds_folder))
+                max_dataset_recordings = max(max_dataset_recordings, _count_dataset_recording_files(ds_folder, is_canceled=is_canceled))
+                if is_canceled and is_canceled():
+                    return written_files
                 tasks.append((expt_name, ds_id, expt_folder))
 
         max_workers = _auto_max_workers(len(tasks), max_dataset_recordings=max_dataset_recordings)
@@ -740,21 +879,26 @@ def run_bulk_export(
                         break
                     future_map[executor.submit(_parallel_task, task)] = task
 
-                for fut in concurrent.futures.as_completed(future_map):
+                pending = set(future_map)
+                while pending:
                     if is_canceled and is_canceled():
-                        # cancel_futures=True drops queued (not-yet-started) futures;
-                        # already-running tasks will complete their current step then
-                        # see is_canceled() and exit early.
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        logger.info("Bulk export: parallel export canceled by user.")
+                        for future in pending:
+                            future.cancel()
+                        logger.info("Bulk export: parallel export canceled; waiting for active tasks to reach a safe stop.")
                         break
-                    try:
-                        result = fut.result()
-                        if result:
-                            written_files.append(result)
-                    except Exception as exc:
-                        expt_n, ds, _ = future_map[fut]
-                        logger.error("Unhandled error for dataset '%s/%s': %s", expt_n, ds, exc)
+                    done, pending = concurrent.futures.wait(
+                        pending,
+                        timeout=0.1,
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+                    for fut in done:
+                        try:
+                            result = fut.result()
+                            if result:
+                                written_files.append(result)
+                        except Exception as exc:
+                            expt_n, ds, _ = future_map[fut]
+                            logger.error("Unhandled error for dataset '%s/%s': %s", expt_n, ds, exc)
             finally:
                 # Ensure threads are cleaned up whether we finished, broke, or raised
                 executor.shutdown(wait=True)
@@ -803,9 +947,16 @@ def run_bulk_export(
                     progress_callback(current + 1, total_objects, f"Error loading: {expt_name}")
                 continue
             try:
-                out_file = _write_object_export(experiment, expt_name, expt_name, config)
-                written_files.append(str(out_file))
-                logger.info("Wrote: %s", out_file)
+                _raise_if_canceled(is_canceled)
+                if config.completed_only and not getattr(experiment, "is_completed", False):
+                    logger.info("Bulk export: skipping experiment '%s' because it is not complete.", expt_name)
+                else:
+                    out_file = _write_object_export(experiment, expt_name, expt_name, config, is_canceled=is_canceled)
+                    written_files.append(str(out_file))
+                    logger.info("Wrote: %s", out_file)
+            except BulkExportCanceled:
+                logger.info("Bulk export: canceled while preparing experiment '%s'.", expt_name)
+                break
             except Exception as exc:
                 logger.error("Export error for experiment '%s': %s", expt_name, exc)
             finally:
