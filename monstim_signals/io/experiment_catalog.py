@@ -373,17 +373,26 @@ def refresh_session_annotations(session_paths: list[Path]) -> None:
 
 def refresh_dataset_annotation(dataset_path: Path) -> None:
     """Synchronize one saved dataset annotation without rebuilding the catalog."""
-    dataset_path = dataset_path.resolve()
-    catalog = ExperimentCatalog(dataset_path.parent)
+    refresh_dataset_annotations([dataset_path])
+
+
+def refresh_dataset_annotations(dataset_paths: list[Path]) -> None:
+    """Synchronize saved dataset annotations in one catalog transaction."""
+    if not dataset_paths:
+        return
+    resolved_paths = [dataset_path.resolve() for dataset_path in dataset_paths]
+    catalog = ExperimentCatalog(resolved_paths[0].parent)
     if not catalog.is_usable():
         return
-    annotation_path = dataset_path / "dataset.annot.json"
-    annotation_size, annotation_mtime = _file_fingerprint(annotation_path)
+    updates = []
+    for dataset_path in resolved_paths:
+        if dataset_path.parent != catalog.experiment_path:
+            raise ValueError("All datasets in a catalog refresh must belong to one experiment")
+        annotation_path = dataset_path / "dataset.annot.json"
+        annotation_size, annotation_mtime = _file_fingerprint(annotation_path)
+        updates.append((_read_text_if_exists(annotation_path), annotation_size, annotation_mtime, str(dataset_path)))
     with catalog.connect() as connection:
-        connection.execute(
-            "UPDATE datasets SET annot_json = ?, annot_size = ?, annot_mtime = ? WHERE path = ?",
-            (_read_text_if_exists(annotation_path), annotation_size, annotation_mtime, str(dataset_path)),
-        )
+        connection.executemany("UPDATE datasets SET annot_json = ?, annot_size = ?, annot_mtime = ? WHERE path = ?", updates)
 
 
 def relocate_catalog_paths(experiment_path: Path, old_prefix: Path, new_prefix: Path) -> bool:

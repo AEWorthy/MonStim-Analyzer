@@ -213,6 +213,7 @@ class _DatasetStatus:
     display_name: str
     is_completed: bool | None
     is_excluded: bool = False
+    incomplete_active_session_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -259,7 +260,30 @@ def _dataset_completion_summary(datasets: list[_DatasetStatus]) -> str:
     parts = [f"{complete} complete", f"{incomplete} incomplete"]
     if unknown:
         parts.append(f"{unknown} unknown")
+    incomplete_session_datasets = sum(bool(ds.incomplete_active_session_ids) for ds in datasets)
+    if incomplete_session_datasets:
+        noun = "dataset has" if incomplete_session_datasets == 1 else "datasets have"
+        parts.append(f"{incomplete_session_datasets} {noun} incomplete sessions")
     return ", ".join(parts)
+
+
+def _incomplete_session_warning(status: _DatasetStatus) -> QLabel | None:
+    """Return an actionable badge when active sessions would be skipped.
+
+    Dataset exclusion is deliberately ignored here: excluded sessions are
+    already intentionally omitted from every export.  The badge only reports
+    sessions that remain active but lack their own completion marker.
+    """
+    session_ids = status.incomplete_active_session_ids
+    if not session_ids:
+        return None
+    label = QLabel(f"{len(session_ids)} session{'s' if len(session_ids) != 1 else ''} incomplete")
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    label.setStyleSheet(
+        "QLabel { border: 1px solid #d97706; border-radius: 7px; padding: 1px 7px; font-weight: 600; color: #92400e; background: #fef3c7; }"
+    )
+    label.setToolTip("Completed data only will omit these non-excluded sessions until they are marked complete: " + ", ".join(session_ids))
+    return label
 
 
 class _ExperimentGroup(QWidget):
@@ -298,14 +322,9 @@ class _ExperimentGroup(QWidget):
         self._expt_cb = QCheckBox(expt_name)
         self._expt_cb.setTristate(False)
         self._expt_cb.setChecked(False)
+        self._expt_cb.setToolTip(f"Dataset completion summary: {_dataset_completion_summary(datasets)}")
         self._expt_cb.stateChanged.connect(self._on_expt_checked)
         header_layout.addWidget(self._expt_cb, 1)
-
-        self._dataset_summary_lbl = QLabel(_dataset_completion_summary(datasets))
-        self._dataset_summary_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._dataset_summary_lbl.setStyleSheet("QLabel { color: #555555; }")
-        self._dataset_summary_lbl.setToolTip("Dataset completion summary for this experiment")
-        header_layout.addWidget(self._dataset_summary_lbl)
 
         self._expt_status_lbl = _make_completion_badge(experiment_completed, "Experiment status", self)
         header_layout.addWidget(self._expt_status_lbl)
@@ -334,6 +353,10 @@ class _ExperimentGroup(QWidget):
             cb.stateChanged.connect(self._on_child_changed)
             row_layout.addWidget(cb, 1)
             row_layout.addWidget(_make_completion_badge(ds_status.is_completed, "Dataset status", row))
+
+            incomplete_sessions_warning = _incomplete_session_warning(ds_status)
+            if incomplete_sessions_warning is not None:
+                row_layout.addWidget(incomplete_sessions_warning)
 
             if ds_status.is_excluded:
                 excluded_lbl = QLabel("Excluded")
@@ -537,7 +560,7 @@ class BulkExportDialog(QDialog):
         self._cb_completed_only = QCheckBox("Completed data only")
         self._cb_completed_only.setToolTip(
             "Export only data explicitly marked Complete at every level: experiments, datasets, and sessions. "
-            "Incomplete or unknown experiment cards and dataset rows are hidden."
+            "Incomplete or unknown experiment cards and dataset rows are hidden. Dataset warnings identify active sessions that would be omitted."
         )
         self._cb_completed_only.toggled.connect(self._on_completed_only_changed)
         self._cb_completed_only.toggled.connect(self._refresh_readiness)
@@ -775,6 +798,7 @@ class BulkExportDialog(QDialog):
                         display_name=str(ds_meta.get("formatted_name") or ds_id),
                         is_completed=bool(ds_meta.get("is_completed", False)),
                         is_excluded=ds_id in excluded_ids,
+                        incomplete_active_session_ids=tuple(ds_meta.get("incomplete_active_session_ids") or ()),
                     )
                 )
 

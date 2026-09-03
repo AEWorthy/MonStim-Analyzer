@@ -8,6 +8,9 @@ This module ensures:
 """
 
 import inspect
+import json
+from dataclasses import asdict
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -40,6 +43,7 @@ EXPECTED_COMMANDS = {
     "DeleteDatasetCommand",
     "ToggleDatasetInclusionCommand",
     "ToggleCompletionStatusCommand",
+    "SetChildCompletionStatusCommand",
     "EditDatasetMetadataCommand",
 }
 
@@ -334,6 +338,91 @@ class TestToggleCompletionStatusCommand:
         # Verify annotation file was restored
         annot_data = json.loads(annot_path.read_text())
         assert annot_data["is_completed"] is False
+
+
+class TestSetChildCompletionStatusCommand:
+    def test_marks_all_dataset_sessions_and_restores_each_prior_status(self, monkeypatch, tmp_path):
+        from monstim_signals.core import SessionAnnot
+
+        def make_session(session_id: str, completed: bool):
+            folder = tmp_path / session_id
+            folder.mkdir()
+            annot = SessionAnnot.create_empty()
+            annot.is_completed = completed
+            annotation_path = folder / "session.annot.json"
+            annotation_path.write_text(json.dumps(asdict(annot)))
+
+            class Session:
+                def __init__(self):
+                    self.id = session_id
+                    self.repo = SimpleNamespace(folder=folder, session_js=annotation_path)
+                    self.annot = annot
+
+                @property
+                def is_completed(self):
+                    return self.annot.is_completed
+
+            return Session()
+
+        sessions = [make_session("S1", False), make_session("S2", True)]
+
+        def save_many(items):
+            for item in items:
+                item.repo.session_js.write_text(json.dumps(asdict(item.annot)))
+
+        monkeypatch.setattr("monstim_signals.io.repositories.SessionRepository.save_many", save_many)
+        gui = SimpleNamespace(data_selection_widget=Mock())
+        dataset = SimpleNamespace(id="Dataset", _all_sessions=sessions)
+        command = commands.SetChildCompletionStatusCommand(gui, "dataset", dataset, True)
+
+        assert command.has_changes
+        command.execute()
+        assert [session.is_completed for session in sessions] == [True, True]
+        assert json.loads(sessions[0].repo.session_js.read_text())["is_completed"] is True
+
+        command.undo()
+        assert [session.is_completed for session in sessions] == [False, True]
+        assert json.loads(sessions[0].repo.session_js.read_text())["is_completed"] is False
+
+    def test_marks_all_experiment_datasets(self, tmp_path):
+        from monstim_signals.core import DatasetAnnot
+
+        def make_dataset(dataset_id: str, completed: bool):
+            folder = tmp_path / dataset_id
+            folder.mkdir()
+            annot = DatasetAnnot.create_empty()
+            annot.is_completed = completed
+            annotation_path = folder / "dataset.annot.json"
+            annotation_path.write_text(json.dumps(asdict(annot)))
+
+            class Dataset:
+                def __init__(self):
+                    self.id = dataset_id
+                    self.repo = SimpleNamespace(folder=folder, dataset_js=annotation_path)
+                    self.annot = annot
+
+                @property
+                def is_completed(self):
+                    return self.annot.is_completed
+
+            return Dataset()
+
+        datasets = [make_dataset("D1", True), make_dataset("D2", True)]
+        gui = SimpleNamespace(data_selection_widget=Mock())
+        experiment = SimpleNamespace(
+            id="Experiment",
+            _all_datasets=datasets,
+            annot=SimpleNamespace(excluded_datasets=["D2"]),
+        )
+        command = commands.SetChildCompletionStatusCommand(gui, "experiment", experiment, False)
+
+        assert command.has_changes
+        command.execute()
+        assert [dataset.is_completed for dataset in datasets] == [False, True]
+        assert json.loads(datasets[1].repo.dataset_js.read_text())["is_completed"] is True
+
+        command.undo()
+        assert [dataset.is_completed for dataset in datasets] == [False, True]
 
 
 # Mark untestable commands

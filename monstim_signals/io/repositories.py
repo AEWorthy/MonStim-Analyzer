@@ -756,6 +756,27 @@ class DatasetRepository:
             # Get session folders without loading them
             session_folders = sorted((p for p in self.folder.iterdir() if p.is_dir()), key=_path_name_sort_key)
             session_names = [folder.name for folder in session_folders]
+            excluded_session_ids = set(dataset_annot.excluded_sessions)
+            incomplete_active_session_ids: list[str] = []
+            for session_folder in session_folders:
+                if session_folder.name in excluded_session_ids:
+                    continue
+                session_annot_file = session_folder / "session.annot.json"
+                try:
+                    if not session_annot_file.exists():
+                        # A session without an annotation has never been marked
+                        # complete, so surface it as an actionable omission.
+                        incomplete_active_session_ids.append(session_folder.name)
+                        continue
+                    session_annot = SessionAnnot.from_dict(json.loads(session_annot_file.read_text()))
+                    if session_annot.is_completed is not True:
+                        incomplete_active_session_ids.append(session_folder.name)
+                except OSError, json.JSONDecodeError, TypeError, ValueError:
+                    logger.warning(
+                        "Could not determine completion status for session '%s'; treating it as incomplete.",
+                        session_folder,
+                    )
+                    incomplete_active_session_ids.append(session_folder.name)
 
             # Construct formatted name like the Dataset domain object does
             if dataset_annot.date and dataset_annot.animal_id and dataset_annot.condition:
@@ -771,6 +792,8 @@ class DatasetRepository:
                 "session_names": session_names,
                 "is_completed": dataset_annot.is_completed,
                 "excluded_sessions": dataset_annot.excluded_sessions,
+                "active_session_count": len(session_folders) - len(excluded_session_ids.intersection(session_names)),
+                "incomplete_active_session_ids": incomplete_active_session_ids,
                 "data_version": dataset_annot.data_version,
                 "animal_id": dataset_annot.animal_id,
                 "date": dataset_annot.date,
@@ -789,6 +812,8 @@ class DatasetRepository:
                 "session_names": [],
                 "is_completed": False,
                 "excluded_sessions": [],
+                "active_session_count": 0,
+                "incomplete_active_session_ids": [],
                 "data_version": "unknown",
                 "animal_id": "unknown",
                 "date": "unknown",

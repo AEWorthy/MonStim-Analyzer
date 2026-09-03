@@ -22,7 +22,7 @@ Use exports to move an analysis result into a spreadsheet, statistics workflow, 
 
 **Data Export Level** controls what one output workbook represents. **Dataset** writes one workbook for each selected animal replicate; its summary values aggregate that dataset's active sessions. **Experiment** writes one workbook for each selected experiment; its summary values aggregate the active datasets and sessions within it. Longform output remains one row per recording, channel, latency window, and method at either level.
 
-**Completed data only** is a strict data filter, not just a chooser convenience. When selected, exports include only experiments, datasets, and sessions each marked **Complete**. Incomplete or unknown experiment cards and dataset rows are hidden, and data at any incomplete level cannot contribute to the export.
+**Completed data only** is a strict data filter, not just a chooser convenience. When selected, exports include only experiments, datasets, and sessions each marked **Complete**. Incomplete or unknown experiment cards and dataset rows are hidden, and data at any incomplete level cannot contribute to the export. The selector flags a dataset with active sessions that are still incomplete (excluded sessions do not count), names them in a tooltip, and the export log records the sessions omitted for that reason.
 
 ## Canceling an export
 

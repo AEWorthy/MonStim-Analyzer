@@ -37,6 +37,7 @@ from monstim_gui.commands import (
     RestoreDatasetCommand,
     RestoreRecordingCommand,
     RestoreSessionCommand,
+    SetChildCompletionStatusCommand,
 )
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.core.ui_theme import apply_application_theme
@@ -554,6 +555,28 @@ class MonstimGUI(QMainWindow):
         )
         if ok and dataset_id:
             self.restore_dataset(dataset_id)
+
+    def set_child_completion_status(self, parent_level: str, completed: bool):
+        """Set every active dataset/session child of the current parent complete or incomplete."""
+        parent_object = self.current_experiment if parent_level == "experiment" else self.current_dataset
+        child_label = "datasets" if parent_level == "experiment" else "sessions"
+        if parent_object is None:
+            QMessageBox.warning(self, "No data selected", f"Please select a {parent_level} first.")
+            return
+
+        command = SetChildCompletionStatusCommand(self, parent_level, parent_object, completed)
+        if not command.has_changes:
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"All {child_label} are already marked {state}.", 5000)
+            return
+
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            self.command_invoker.execute(command)
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"Marked {len(command._children)} active {child_label} {state}.", 5000)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     # Menu bar functions
     def manage_latency_windows(self, level: str):
