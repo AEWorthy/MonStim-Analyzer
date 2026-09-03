@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIntValidator
+from PySide6.QtGui import QIntValidator, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QStyle,
+    QStyleOptionButton,
     QVBoxLayout,
     QWidget,
 )
@@ -42,6 +44,40 @@ class OptionToggleButton(QPushButton):
         self.setToolTip(tooltip)
         self.setProperty("plotOptionToggle", True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+
+class ChannelCheckBox(QCheckBox):
+    """Channel checkbox with a visible check mark for the themed indicator."""
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.isChecked():
+            return
+
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        indicator = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, self)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(
+            QPen(
+                Qt.GlobalColor.white,
+                2,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+        )
+        left = indicator.left() + indicator.width() * 0.27
+        mid = indicator.top() + indicator.height() * 0.55
+        right = indicator.right() - indicator.width() * 0.22
+        painter.drawLine(left, mid, indicator.left() + indicator.width() * 0.46, indicator.bottom() - indicator.height() * 0.24)
+        painter.drawLine(
+            indicator.left() + indicator.width() * 0.46,
+            indicator.bottom() - indicator.height() * 0.24,
+            right,
+            indicator.top() + indicator.height() * 0.25,
+        )
 
 
 class StableOptionGrid(QWidget):
@@ -100,6 +136,8 @@ class StableOptionGrid(QWidget):
 
 # Base class for plot options
 class BasePlotOptions(QWidget):
+    OPTION_SECTION_SPACING = 5
+
     def __init__(self, parent: PlotWidget):
         super().__init__(parent)
         self.gui_main = parent.parent
@@ -124,7 +162,6 @@ class BasePlotOptions(QWidget):
     def create_toggle_grid(self) -> StableOptionGrid:
         self.toggle_grid = StableOptionGrid(self)
         self.layout.addWidget(self.toggle_grid)
-        self.layout.addSpacing(5)
         return self.toggle_grid
 
     def add_toggle(self, key: str, text: str, tooltip: str) -> OptionToggleButton:
@@ -167,10 +204,8 @@ class ChannelSelectorWidget(QGroupBox):
         grid.setSpacing(2)  # Minimal spacing between checkboxes
         grid.setContentsMargins(2, 2, 2, 2)  # Minimal padding to minimize space
 
-        # Keep the selector at its natural width instead of stretching it across
-        # the options panel.  This leaves only the intended spacing between the
-        # channel checkboxes when the panel is wider than the selector.
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        # Match the width of the other settings boxes in the options panel.
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.checkboxes: list[QCheckBox] = []
 
@@ -180,8 +215,12 @@ class ChannelSelectorWidget(QGroupBox):
             return
 
         total = (max_ch + 5) // 6 * 6  # Round up to the nearest multiple of 6
+        for col in range(6):
+            grid.setColumnStretch(col, 1)
         for idx in range(total):
-            cb = QCheckBox(f"{idx}")
+            cb = ChannelCheckBox(f"{idx}")
+            cb.setObjectName("plotChannelSelector")
+            cb.setProperty("channelIndex", idx)
             cb.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             # Only enable the ones your data actually has
             cb.setEnabled(idx < max_ch)
@@ -339,7 +378,9 @@ class SingleEMGRecordingOptions(BasePlotOptions):
         options_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.layout.insertWidget(0, options_widget)
+        self.layout.addSpacing(self.OPTION_SECTION_SPACING)
         self.layout.addWidget(self.recording_cycler)
+        self.layout.addSpacing(self.OPTION_SECTION_SPACING)
         self.layout.addWidget(self.channel_selector)
 
     def _on_all_windows_toggled(self, state):

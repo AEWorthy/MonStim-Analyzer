@@ -2,7 +2,14 @@ from types import SimpleNamespace
 
 from PySide6.QtWidgets import QSizePolicy, QVBoxLayout, QWidget
 
-from monstim_gui.plotting.plot_options import ChannelSelectorWidget, EMGOptions, StableOptionGrid
+from monstim_gui.plotting.plot_options import (
+    BasePlotOptions,
+    ChannelCheckBox,
+    ChannelSelectorWidget,
+    EMGOptions,
+    SingleEMGRecordingOptions,
+    StableOptionGrid,
+)
 
 
 class _PlotParent(QWidget):
@@ -29,9 +36,12 @@ def test_channel_selector_uses_natural_horizontal_width(qapplication):
     parent.show()
     qapplication.processEvents()
 
-    assert selector.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Preferred
-    assert selector.width() < parent.width()
+    assert selector.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
+    assert selector.width() == parent.layout().contentsRect().width()
     assert all(cb.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Fixed for cb in selector.checkboxes)
+    assert all(cb.objectName() == "plotChannelSelector" for cb in selector.checkboxes)
+    assert all(cb.property("channelIndex") == i for i, cb in enumerate(selector.checkboxes))
+    assert all(isinstance(cb, ChannelCheckBox) for cb in selector.checkboxes)
 
 
 def test_plot_option_grid_packs_sparse_options_in_canonical_order(qapplication):
@@ -82,3 +92,34 @@ def test_emg_option_toggle_preserves_flag_legend_dependency(qapplication):
     options.all_windows_checkbox.setChecked(True)
     assert options.latency_legend_checkbox.isEnabled()
     assert options.latency_legend_checkbox.isChecked()
+
+
+def test_recording_cycler_and_channel_selector_use_option_section_spacing(qapplication):
+    gui_main = SimpleNamespace(
+        plot_widget=SimpleNamespace(view="session"),
+        current_session=SimpleNamespace(num_channels=6),
+    )
+    parent = _PlotParent(gui_main)
+    options = SingleEMGRecordingOptions(parent)
+
+    cycler_index = options.layout.indexOf(options.recording_cycler)
+    selector_index = options.layout.indexOf(options.channel_selector)
+    spacer = options.layout.itemAt(cycler_index + 1).spacerItem()
+
+    assert selector_index == cycler_index + 2
+    assert spacer is not None
+    assert spacer.sizeHint().height() == BasePlotOptions.OPTION_SECTION_SPACING
+
+
+def test_channel_selector_follows_plot_options_without_extra_section_spacing(qapplication):
+    gui_main = SimpleNamespace(
+        plot_widget=SimpleNamespace(view="session"),
+        current_session=SimpleNamespace(num_channels=6),
+    )
+    parent = _PlotParent(gui_main)
+    options = EMGOptions(parent)
+
+    toggle_index = options.layout.indexOf(options.toggle_grid)
+    selector_index = options.layout.indexOf(options.channel_selector)
+
+    assert selector_index == toggle_index + 1

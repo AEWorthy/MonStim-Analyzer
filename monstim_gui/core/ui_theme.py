@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect
-from PySide6.QtGui import QColor, QPainter, QPolygon
+from PySide6.QtGui import QColor, QPainter, QPalette, QPolygon
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -46,6 +46,34 @@ APPLICATION_STYLESHEET = """
         padding: 0 4px;
     }
     QGroupBox::indicator { width: 18px; height: 18px; }
+    QCheckBox#plotChannelSelector {
+        spacing: 5px;
+        padding: 2px 5px 2px 2px;
+        color: #cbd4dc;
+        border: 1px solid transparent;
+        border-radius: 4px;
+    }
+    QCheckBox#plotChannelSelector:hover {
+        color: #ffffff;
+        background: #30363d;
+        border-color: #4a5159;
+    }
+    QCheckBox#plotChannelSelector::indicator {
+        width: 18px;
+        height: 18px;
+        border: 1px solid #65717c;
+        border-radius: 5px;
+        background: #27292c;
+    }
+    QCheckBox#plotChannelSelector::indicator:checked {
+        border-color: #9bc4dc;
+        background: #6d9fbe;
+    }
+    QCheckBox#plotChannelSelector:disabled { color: #717a82; }
+    QCheckBox#plotChannelSelector::indicator:disabled {
+        border-color: #4a5159;
+        background: #25282b;
+    }
     QGroupBox#collapsibleSidebarSection {
         margin-top: 0;
         padding-top: 30px;
@@ -78,7 +106,7 @@ APPLICATION_STYLESHEET = """
     QTabBar::tab:selected {
         color: #ffffff;
         background: #2c333a;
-        border-bottom-color: #e7785b;
+        border-bottom-color: #6d9fbe;
     }
     QTabBar::tab:hover:!selected { background: rgba(255, 255, 255, 0.06); color: #ffffff; }
     QComboBox, QAbstractSpinBox, QLineEdit, QTextEdit, QPlainTextEdit {
@@ -98,7 +126,7 @@ APPLICATION_STYLESHEET = """
         font-weight: 600;
     }
     QPushButton:hover { background: #41464b; border-color: #65717c; }
-    QPushButton:default { border-color: #e7785b; }
+    QPushButton:default { border-color: #6d9fbe; }
     QPushButton[plotOptionToggle="true"] {
         min-height: 20px;
         padding: 4px 8px;
@@ -250,6 +278,12 @@ def apply_application_theme(application: QApplication | None = None) -> None:
     # Install the proxy before the application stylesheet.  Qt then wraps it
     # in its stylesheet style, while spinbox geometry and native primitives
     # continue to flow through this proxy.
+    palette = application.palette()
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#6d9fbe"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    if hasattr(QPalette.ColorRole, "Accent"):
+        palette.setColor(QPalette.ColorRole.Accent, QColor("#6d9fbe"))
+    application.setPalette(palette)
     application.setStyle(SpinBoxControlStyle(application.style()))
     application.setStyleSheet(f"{application.styleSheet()}\n{APPLICATION_STYLESHEET}")
     application.setProperty("monstim_theme_applied", True)

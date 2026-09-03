@@ -3,17 +3,17 @@ import logging
 logger = logging.getLogger(__name__)
 from typing import TYPE_CHECKING
 
-from PySide6.QtGui import QValidator
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QValidator
 from PySide6.QtWidgets import (
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
-    QWidget,
 )
 
 from monstim_signals.core import get_main_window
@@ -71,6 +71,33 @@ class CustomSpinBox(QSpinBox):
             return str(self.value())
 
 
+def _chevron_icon(points: tuple[tuple[float, float], ...]) -> QIcon:
+    """Create a small, crisp navigation chevron for the recording cycler."""
+    icon_size = QSize(16, 16)
+    pixmap = QPixmap(icon_size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    path = QPainterPath()
+    path.moveTo(*points[0])
+    for point in points[1:]:
+        path.lineTo(*point)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(
+        QPen(
+            QColor("#cbd4dc"),
+            1.8,
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
+            Qt.PenJoinStyle.RoundJoin,
+        )
+    )
+    painter.drawPath(path)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class RecordingCyclerWidget(QGroupBox):
     def __init__(self, parent):
         super().__init__("Recording Cycler", parent)
@@ -84,16 +111,45 @@ class RecordingCyclerWidget(QGroupBox):
         # Set size policy to be fixed height
         self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
 
-        self.layout = QGridLayout()  # type: QGridLayout
-        self.layout.setSpacing(6)  # Increased spacing for better appearance
-        self.layout.setContentsMargins(8, 8, 8, 8)  # Increased padding to prevent border clipping
-        self.setLayout(self.layout)
-
-        self.prev_button = QPushButton("<--")
-        self.next_button = QPushButton("-->")
+        self.prev_button = QToolButton()
+        self.prev_button.setIcon(_chevron_icon(((10.5, 3.5), (5.5, 8.0), (10.5, 12.5))))
+        self.prev_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.prev_button.setToolTip("Previous recording")
+        self.prev_button.setAccessibleName("Previous recording")
+        self.next_button = QToolButton()
+        self.next_button.setIcon(_chevron_icon(((5.5, 3.5), (10.5, 8.0), (5.5, 12.5))))
+        self.next_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.next_button.setToolTip("Next recording")
+        self.next_button.setAccessibleName("Next recording")
         self.exclude_button = QPushButton("Exclude")
         self.recording_spinbox = CustomSpinBox()
         self.step_size = CustomSpinBox()
+
+        # Use full-width navigation buttons instead of text glyphs.  Qt draws
+        # QToolButton arrows as centered control primitives, so their visual
+        # position is independent of font metrics and DPI.
+        for button in (self.prev_button, self.next_button):
+            button.setAutoRaise(False)
+            button.setIconSize(QSize(16, 16))
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            button.setStyleSheet(
+                "QToolButton { padding: 0px; color: #cbd4dc; background: #2b2f33; "
+                "border: 1px solid #4a5159; border-radius: 4px; }"
+                "QToolButton:hover { color: #ffffff; background: #394149; border-color: #65717c; }"
+                "QToolButton:pressed { background: #304b5d; border-color: #6d9fbe; }"
+                "QToolButton:disabled { color: #717a82; background: #25282b; border-color: #373c41; }"
+            )
+        self.exclude_button.setProperty("plotOptionToggle", True)
+
+        control_height = self.exclude_button.sizeHint().height()
+        for control in (
+            self.prev_button,
+            self.next_button,
+            self.exclude_button,
+            self.recording_spinbox,
+            self.step_size,
+        ):
+            control.setFixedHeight(control_height)
 
         # Set up the recording spinbox
         self.recording_spinbox.setMinimum(0)
@@ -126,13 +182,15 @@ class RecordingCyclerWidget(QGroupBox):
         vbox = QVBoxLayout()
         vbox.addLayout(hbox1)
         vbox.addLayout(hbox2)
-        vbox.setSpacing(3)
-        vbox.setContentsMargins(8, 8, 8, 8)
-
-        # Replace grid layout with vbox
-        QWidget().setLayout(self.layout)  # Clear existing layout
+        vbox.setSpacing(4)
+        # Keep the controls close to the group-box title.  The group box
+        # already reserves space for its frame/title, so an additional 8 px
+        # top margin makes the first row look unnecessarily detached.
         self.layout = vbox
-        self.setLayout(self.layout)
+        self.setLayout(vbox)
+        # QGroupBox applies its default margins during setLayout(); set the
+        # compact margins afterward so the first row stays close to the title.
+        vbox.setContentsMargins(8, 0, 8, 8)
 
         self.prev_button.clicked.connect(self.on_previous)
         self.next_button.clicked.connect(self.on_next)
@@ -182,10 +240,12 @@ class RecordingCyclerWidget(QGroupBox):
         logger.info(f"Current excluded recordings: {self.gui.current_session.excluded_recordings}")
         if selected_recording_id in self.gui.current_session.excluded_recordings:
             self.exclude_button.setText("Exclude")
+            self.exclude_button.setToolTip("Click to exclude this recording from plots")
             self.gui.restore_recording(selected_recording_id)
             logger.info(f"Restored recording ID {selected_recording_id}")
         else:
             self.exclude_button.setText("Include")
+            self.exclude_button.setToolTip("Click to include this recording in plots")
             self.gui.exclude_recording(selected_recording_id)
             logger.info(f"Excluded recording ID {selected_recording_id}")
 
@@ -209,8 +269,10 @@ class RecordingCyclerWidget(QGroupBox):
                 self.exclude_button.setEnabled(True)
                 if rec_id in self.gui.current_session.excluded_recordings:
                     self.exclude_button.setText("Include")
+                    self.exclude_button.setToolTip("Click to include this recording in plots")
                 else:
                     self.exclude_button.setText("Exclude")
+                    self.exclude_button.setToolTip("Click to exclude this recording from plots")
             else:
                 # Out-of-range index: disable exclude button defensively
                 self.exclude_button.setEnabled(False)
