@@ -254,7 +254,19 @@ def _completed_only_export_scope(obj: Dataset | Experiment, enabled: bool) -> It
         if annot is None or not hasattr(annot, "excluded_sessions"):
             continue
         original = list(annot.excluded_sessions)
-        incomplete_session_ids = [session.id for session in getattr(dataset, "_all_sessions", []) if not getattr(session, "is_completed", False)]
+        originally_excluded_ids = set(original)
+        incomplete_session_ids = [
+            session.id
+            for session in getattr(dataset, "_all_sessions", [])
+            if session.id not in originally_excluded_ids and not getattr(session, "is_completed", False)
+        ]
+        if incomplete_session_ids:
+            logger.warning(
+                "Completed data only: omitting %d incomplete non-excluded session(s) from dataset '%s': %s",
+                len(incomplete_session_ids),
+                getattr(dataset, "id", "<unknown>"),
+                ", ".join(incomplete_session_ids),
+            )
         annot.excluded_sessions[:] = list(dict.fromkeys([*original, *incomplete_session_ids]))
         original_session_exclusions.append((dataset, original))
         invalidate = getattr(dataset, "invalidate_aggregate_results", None)

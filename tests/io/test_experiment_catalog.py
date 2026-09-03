@@ -49,6 +49,28 @@ def test_experiment_repository_uses_catalog_without_json_index(tmp_path: Path):
         loaded.close()
 
 
+def test_dataset_metadata_reports_only_incomplete_nonexcluded_sessions(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    dataset = create_minimal_dataset_folder(experiment, dataset_name="Dataset", session_name="Included", num_recordings=1)
+    included_annot = dataset / "Included" / "session.annot.json"
+    included_data = json.loads(included_annot.read_text())
+    included_data["is_completed"] = False
+    included_annot.write_text(json.dumps(included_data))
+
+    excluded = create_minimal_session_folder(dataset, session_name="Excluded", num_recordings=1)
+    excluded_annot = excluded / "session.annot.json"
+    excluded_data = json.loads(excluded_annot.read_text())
+    excluded_data["is_completed"] = False
+    excluded_annot.write_text(json.dumps(excluded_data))
+    (dataset / "dataset.annot.json").write_text(json.dumps({"excluded_sessions": ["Excluded"]}))
+
+    metadata = DatasetRepository(dataset).get_metadata()
+
+    assert metadata["active_session_count"] == 1
+    assert metadata["incomplete_active_session_ids"] == ["Included"]
+
+
 def test_saved_recording_annotation_updates_existing_catalog(tmp_path: Path):
     experiment = tmp_path / "Experiment"
     experiment.mkdir()

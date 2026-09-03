@@ -1444,6 +1444,121 @@ class ToggleCompletionStatusCommand(Command):
         return f"Marked {self.level} '{self.target_id}' as {action}"
 
 
+class SetChildCompletionStatusCommand(Command):
+    """Set completion for every active direct child of the current experiment/dataset.
+
+    This intentionally does not change the parent status: a user may want to
+    finish child curation before deciding whether the containing dataset or
+    experiment is itself complete.  One command owns the whole operation so
+    Undo restores each child's prior status together.
+    """
+
+    def __init__(self, gui, parent_level: str, parent_object, new_status: bool):
+        if parent_level not in {"experiment", "dataset"}:
+            raise ValueError("Child completion can only be set from an experiment or dataset")
+
+        self.gui = gui
+        self.parent_level = parent_level
+        self.parent_id = parent_object.id
+        self.new_status = bool(new_status)
+        self.child_level = "dataset" if parent_level == "experiment" else "session"
+        children = list(getattr(parent_object, "_all_datasets" if parent_level == "experiment" else "_all_sessions", []))
+        excluded_ids = set(
+            getattr(
+                getattr(parent_object, "annot", None),
+                "excluded_datasets" if parent_level == "experiment" else "excluded_sessions",
+                [],
+            )
+        )
+        children = [child for child in children if getattr(child, "id", None) not in excluded_ids]
+        self._children = [child for child in children if bool(getattr(child, "is_completed", False)) != self.new_status]
+        self._old_statuses = {id(child): bool(getattr(child, "is_completed", False)) for child in self._children}
+        action = "Complete" if self.new_status else "Mark Incomplete"
+        self.command_name = f"{action} all {self.child_level}s in {parent_level} '{self.parent_id}'"
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self._children)
+
+    def _persist(self, statuses: dict[int, bool]) -> None:
+        """Apply and persist statuses, rolling back partial annotation writes on failure."""
+        from dataclasses import asdict
+        from datetime import UTC, datetime
+
+        from monstim_signals.io.experiment_catalog import refresh_dataset_annotations, refresh_session_annotations
+        from monstim_signals.io.repositories import SessionRepository
+
+        repositories = [getattr(child, "repo", None) for child in self._children]
+        if any(repository is None for repository in repositories):
+            raise RuntimeError(f"A {self.child_level} cannot be saved because it has no repository")
+        annotation_paths = [
+            repository.session_js if self.child_level == "session" else repository.dataset_js for repository in repositories
+        ]
+        original_contents = {path: path.read_bytes() for path in annotation_paths}
+        previous_statuses = {id(child): bool(getattr(child, "is_completed", False)) for child in self._children}
+
+        changed: list[object] = []
+        try:
+            for child in self._children:
+                child.annot.is_completed = statuses[id(child)]
+                changed.append(child)
+
+            if self.child_level == "session":
+                SessionRepository.save_many(changed)
+            else:
+                dataset_paths = []
+                for dataset in changed:
+                    repository = getattr(dataset, "repo", None)
+                    if repository is None:
+                        raise RuntimeError(f"Dataset '{dataset.id}' cannot be saved because it has no repository")
+                    dataset.annot.date_modified = datetime.now(UTC).isoformat(timespec="seconds")
+                    repository.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
+                    dataset_paths.append(repository.folder)
+                refresh_dataset_annotations(dataset_paths)
+        except Exception:
+            for child in changed:
+                child.annot.is_completed = previous_statuses[id(child)]
+            for path, contents in original_contents.items():
+                try:
+                    path.write_bytes(contents)
+                except OSError:
+                    logger.exception("Could not restore completion annotation after failed batch update: %s", path)
+            try:
+                if self.child_level == "session":
+                    refresh_session_annotations([repository.folder for repository in repositories])
+                else:
+                    refresh_dataset_annotations([repository.folder for repository in repositories])
+            except Exception:
+                logger.exception("Could not refresh catalog after rolling back child completion statuses")
+            raise
+
+    def _refresh_ui(self) -> None:
+        widget = getattr(self.gui, "data_selection_widget", None)
+        if widget is None:
+            return
+        update_one = getattr(widget, "update_completion_status", None)
+        if callable(update_one):
+            update_one(self.child_level)
+        update_all = getattr(widget, "update_all_completion_statuses", None)
+        if callable(update_all):
+            update_all()
+
+    def execute(self):
+        if not self.has_changes:
+            return
+        self._persist({id(child): self.new_status for child in self._children})
+        self._refresh_ui()
+
+    def undo(self):
+        if not self.has_changes:
+            return
+        self._persist(self._old_statuses)
+        self._refresh_ui()
+
+    def get_description(self) -> str:
+        return self.command_name
+
+
 class EditDatasetMetadataCommand(Command):
     """Command to edit dataset metadata (date, animal ID, condition) with optional folder rename."""
 

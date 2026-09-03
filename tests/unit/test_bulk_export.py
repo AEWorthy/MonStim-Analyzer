@@ -217,7 +217,7 @@ class TestBulkExportConfig:
         assert cfg.experiment_paths == {}
 
 
-def test_completed_only_export_scope_filters_and_restores_dataset_sessions():
+def test_completed_only_export_scope_filters_and_restores_dataset_sessions(caplog):
     from monstim_gui.managers.bulk_export_manager import _completed_only_export_scope
 
     class Session:
@@ -247,6 +247,28 @@ def test_completed_only_export_scope_filters_and_restores_dataset_sessions():
 
     assert dataset.annot.excluded_sessions == ["already-excluded"]
     assert dataset.invalidations == 2
+    assert "omitting 1 incomplete non-excluded session(s)" in caplog.text
+
+
+def test_completed_only_scope_does_not_warn_about_an_already_excluded_session(caplog):
+    from monstim_gui.managers.bulk_export_manager import _completed_only_export_scope
+
+    class Session:
+        id = "already-excluded"
+        is_completed = False
+
+    class Dataset:
+        def __init__(self):
+            self._all_sessions = [Session()]
+            self.annot = SimpleNamespace(excluded_sessions=["already-excluded"])
+
+        def invalidate_aggregate_results(self):
+            pass
+
+    with _completed_only_export_scope(Dataset(), True):
+        pass
+
+    assert "Completed data only: omitting" not in caplog.text
 
 
 def test_completed_only_export_scope_filters_and_restores_experiment_datasets():

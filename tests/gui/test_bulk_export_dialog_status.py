@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QGroupBox, QSpinBox, QSplitter, QTabWidget, QWidget
+from PySide6.QtWidgets import QGroupBox, QLabel, QSpinBox, QSplitter, QTabWidget, QWidget
 
 pytestmark = pytest.mark.unit
 
@@ -25,7 +25,7 @@ def test_experiment_group_displays_status_and_exports_dataset_ids():
     group._dataset_cbs[0].setChecked(True)
 
     assert group._expt_status_lbl.text() == "Incomplete"
-    assert group._dataset_summary_lbl.text() == "1 complete, 0 incomplete"
+    assert group._expt_cb.toolTip() == "Dataset completion summary: 1 complete, 0 incomplete"
     assert group.selected_dataset_ids == ["DS_FOLDER_ID"]
 
 
@@ -87,6 +87,7 @@ def test_discover_experiment_status_reads_completion_metadata(monkeypatch, tmp_p
                         "id": "DS1",
                         "formatted_name": "Dataset One",
                         "is_completed": True,
+                        "incomplete_active_session_ids": ["S02"],
                     },
                     {
                         "id": "DS2",
@@ -104,6 +105,29 @@ def test_discover_experiment_status_reads_completion_metadata(monkeypatch, tmp_p
     assert [ds.dataset_id for ds in status.datasets] == ["DS1", "DS2"]
     assert [ds.is_completed for ds in status.datasets] == [True, False]
     assert status.datasets[1].is_excluded is True
+    assert status.datasets[0].incomplete_active_session_ids == ("S02",)
+
+
+def test_experiment_group_flags_incomplete_active_sessions():
+    from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
+
+    group = _ExperimentGroup(
+        "Experiment A",
+        True,
+        [
+            _DatasetStatus(
+                dataset_id="DS1",
+                display_name="Dataset One",
+                is_completed=True,
+                incomplete_active_session_ids=("S02", "S03"),
+            )
+        ],
+    )
+
+    warnings = [label for label in group.findChildren(QLabel) if "sessions incomplete" in label.text()]
+    assert len(warnings) == 1
+    assert "S02, S03" in warnings[0].toolTip()
+    assert "1 dataset has incomplete sessions" in group._expt_cb.toolTip()
 
 
 def test_bulk_export_dialog_does_not_expose_worker_count():

@@ -119,6 +119,17 @@ class MenuBar(QMenuBar):
         change_names_action.triggered.connect(lambda: self.parent.change_channel_names("experiment"))
         change_names_action.setStatusTip("Rename channels throughout the current experiment")
         experiment_menu.addSeparator()
+        complete_datasets_action = experiment_menu.addAction("Mark All Datasets Complete")
+        complete_datasets_action.triggered.connect(lambda: self.parent.set_child_completion_status("experiment", True))
+        complete_datasets_action.setStatusTip(
+            "Mark every active dataset in the current experiment complete; excluded datasets and sessions are unchanged"
+        )
+        incomplete_datasets_action = experiment_menu.addAction("Mark All Datasets Incomplete")
+        incomplete_datasets_action.triggered.connect(lambda: self.parent.set_child_completion_status("experiment", False))
+        incomplete_datasets_action.setStatusTip(
+            "Mark every active dataset in the current experiment incomplete; excluded datasets and sessions are unchanged"
+        )
+        experiment_menu.addSeparator()
         reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
         reload_experiment_action.setStatusTip("Restore the current experiment to its original state")
@@ -142,6 +153,13 @@ class MenuBar(QMenuBar):
         edit_metadata_action = dataset_menu.addAction("Edit Metadata")
         edit_metadata_action.triggered.connect(self.parent.data_manager.edit_dataset_metadata)
         edit_metadata_action.setStatusTip("Edit metadata for the current dataset")
+        dataset_menu.addSeparator()
+        complete_sessions_action = dataset_menu.addAction("Mark All Sessions Complete")
+        complete_sessions_action.triggered.connect(lambda: self.parent.set_child_completion_status("dataset", True))
+        complete_sessions_action.setStatusTip("Mark every active session in the current dataset complete; excluded sessions are unchanged")
+        incomplete_sessions_action = dataset_menu.addAction("Mark All Sessions Incomplete")
+        incomplete_sessions_action.triggered.connect(lambda: self.parent.set_child_completion_status("dataset", False))
+        incomplete_sessions_action.setStatusTip("Mark every active session in the current dataset incomplete; excluded sessions are unchanged")
         dataset_menu.addSeparator()
         reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
