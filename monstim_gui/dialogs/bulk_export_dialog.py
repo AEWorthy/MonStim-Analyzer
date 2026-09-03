@@ -280,9 +280,13 @@ def _incomplete_session_warning(status: _DatasetStatus) -> QLabel | None:
     label = QLabel(f"{len(session_ids)} session{'s' if len(session_ids) != 1 else ''} incomplete")
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setStyleSheet(
-        "QLabel { border: 1px solid #d97706; border-radius: 7px; padding: 1px 7px; font-weight: 600; color: #92400e; background: #fef3c7; }"
+        "QLabel { border: 1px solid #d97706; border-radius: 7px; padding: 1px 7px; "
+        "font-weight: 600; color: #92400e; background: #fef3c7; }"
     )
-    label.setToolTip("Completed data only will omit these non-excluded sessions until they are marked complete: " + ", ".join(session_ids))
+    label.setToolTip(
+        "Completed data only will omit these non-excluded sessions until they are marked complete: "
+        + ", ".join(session_ids)
+    )
     return label
 
 
