@@ -50,3 +50,15 @@ def test_manual_include_and_exclude_preserve_selected_recordings(qapplication):
 
     assert set(editor.manual_decisions.values()) == {False}
     assert len(editor.manual_decisions) == 2
+
+
+def test_automatic_preview_preserves_exclusion_added_after_dialog_open(qapplication):
+    editor = make_editor()
+    editor.current_session.excluded_recordings.add("rec-1")
+
+    editor.update_preview()
+
+    states = {entry["recording"].id: entry for entry in editor._last_recordings_data}
+    assert states["rec-1"]["currently_excluded"] is True
+    assert states["rec-1"]["will_exclude"] is True
+    assert states["rec-1"]["status"] == "Existing exclusion"

@@ -139,6 +139,11 @@ class RecordingCyclerWidget(QGroupBox):
         self.exclude_button.clicked.connect(self.on_exclude)
         self.recording_spinbox.valueChanged.connect(self.on_recording_changed)
 
+        # The initial recording value does not emit ``valueChanged`` when the
+        # widget is created.  Synchronize the button immediately so a newly
+        # selected Single EMG plot reflects the current recording's state.
+        self._refresh_exclude_button(self.recording_spinbox.value())
+
     def reset_max_recordings(self):
         if not self.gui or not self.gui.current_session:
             self.max_recording_idxs = 0
@@ -201,6 +206,7 @@ class RecordingCyclerWidget(QGroupBox):
             # Translate index -> recording id before checking exclusion list
             if 0 <= recording_index < len(self.gui.current_session.all_recordings):
                 rec_id = self.gui.current_session.all_recordings[recording_index].id
+                self.exclude_button.setEnabled(True)
                 if rec_id in self.gui.current_session.excluded_recordings:
                     self.exclude_button.setText("Include")
                 else:

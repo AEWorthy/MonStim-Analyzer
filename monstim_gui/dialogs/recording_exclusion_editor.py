@@ -1274,7 +1274,13 @@ class RecordingExclusionEditor(QDialog):
                 current_status = recording.id in session.excluded_recordings
                 initial_excluded = self.initial_exclusion_states.setdefault(key, current_status)
                 manual_decision = self.manual_decisions.get(key)
-                will_exclude = manual_decision if manual_decision is not None else (initial_excluded or evaluation["flagged"])
+                # Automatic criteria are additive: an exclusion that was
+                # present when the dialog opened, or that appeared while the
+                # dialog was open, must not become an inclusion merely because
+                # the current criteria do not flag that recording.  An
+                # explicit Mark Included decision remains the only override.
+                existing_exclusion = initial_excluded or current_status
+                will_exclude = manual_decision if manual_decision is not None else (existing_exclusion or evaluation["flagged"])
 
                 if will_exclude:
                     self.preview_excluded_recordings.add(f"{session.id}:{recording.id}")
@@ -1283,7 +1289,7 @@ class RecordingExclusionEditor(QDialog):
                     status = "Manual exclude"
                 elif manual_decision is False:
                     status = "Manual include"
-                elif initial_excluded:
+                elif existing_exclusion:
                     status = "Existing exclusion"
                 elif will_exclude:
                     status = "Will exclude"
