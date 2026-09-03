@@ -8,6 +8,7 @@ These tests cover critical user experience components that were previously untes
 - Analysis profile merging with global configuration
 """
 
+import json
 import os
 import shutil
 import tempfile
@@ -713,6 +714,57 @@ class TestApplicationState:
         # Disable a feature
         app_state.set_setting("track_recent_files", False)
         assert app_state.should_track_recent_files() is False
+
+    @patch("monstim_gui.core.application_state.QSettings")
+    def test_plot_state_round_trip_and_tracking_preference(self, mock_qsettings):
+        mock_qsettings.return_value = self.mock_settings
+        app_state = ApplicationState()
+        state = {
+            "view": "dataset",
+            "last_plot_type": {"dataset": "M-max"},
+            "last_options": {"dataset": {"M-max": {"method": "rms", "channel_indices": [0, 2]}}},
+            "channel_selection": [0, 2],
+        }
+
+        assert app_state.should_track_plot_options() is True
+        app_state.save_plot_state(state)
+
+        stored = json.loads(self.settings_storage["PlotState/state"])
+        assert stored["version"] == 1
+        assert app_state.get_plot_state() == stored
+
+        app_state.set_setting("track_plot_options", False)
+        app_state.save_plot_state({"view": "experiment"})
+        assert app_state.get_plot_state() == {}
+        assert json.loads(self.settings_storage["PlotState/state"])["view"] == "dataset"
+
+    @patch("monstim_gui.core.application_state.QSettings")
+    def test_plot_state_ignores_malformed_or_unsupported_payload(self, mock_qsettings):
+        mock_qsettings.return_value = self.mock_settings
+        app_state = ApplicationState()
+
+        self.settings_storage["PlotState/state"] = "not json"
+        assert app_state.get_plot_state() == {}
+
+        self.settings_storage["PlotState/state"] = json.dumps({"version": 99, "view": "session"})
+        assert app_state.get_plot_state() == {}
+
+    @patch("monstim_gui.core.application_state.QSettings")
+    def test_clear_all_tracked_data_removes_plot_state(self, mock_qsettings):
+        mock_qsettings.return_value = self.mock_settings
+
+        def mock_remove(key):
+            for stored_key in list(self.settings_storage):
+                if stored_key == key or stored_key.startswith(f"{key}/"):
+                    del self.settings_storage[stored_key]
+
+        self.mock_settings.remove.side_effect = mock_remove
+        app_state = ApplicationState()
+        app_state.save_plot_state({"view": "session"})
+
+        app_state.clear_all_tracked_data()
+
+        assert "PlotState/state" not in self.settings_storage
 
     @patch("monstim_gui.core.application_state.QSettings")
     def test_session_restoration_with_mock_gui(self, mock_qsettings):

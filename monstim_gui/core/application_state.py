@@ -5,10 +5,11 @@ Application state management using QSettings.
 Handles UI state and user preferences that should persist across sessions.
 """
 
+import json
 import logging
 import os
 from os import cpu_count
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QSettings, Qt
 
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 # Settings version for migration tracking
 # Increment this when making breaking changes to settings structure
 SETTINGS_VERSION = 1
+PLOT_STATE_VERSION = 1
 
 logger = logging.getLogger(__name__)
 
@@ -503,6 +505,48 @@ class ApplicationState:
         """Check if analysis profile tracking is enabled."""
         return self.get_preference("track_analysis_profiles", True)
 
+    def should_track_plot_options(self) -> bool:
+        """Check whether plot-control choices should survive application restarts."""
+        return self.get_preference("track_plot_options", True)
+
+    # === PLOT CONTROL STATE ===
+    def save_plot_state(self, state: dict[str, Any]) -> None:
+        """Persist a JSON-safe snapshot of the plot-control state.
+
+        Plot state is UI convenience data only.  It deliberately lives in
+        QSettings rather than analysis configuration or experiment metadata.
+        """
+        if not self.should_track_plot_options():
+            return
+        try:
+            payload = {"version": PLOT_STATE_VERSION, **state}
+            self.settings.setValue("PlotState/state", json.dumps(payload, separators=(",", ":"), sort_keys=True))
+            self.settings.sync()
+        except TypeError, ValueError:
+            logger.warning("Refusing to save non-serializable plot state", exc_info=True)
+
+    def get_plot_state(self) -> dict[str, Any]:
+        """Return the saved plot state, or an empty state when it is unavailable.
+
+        The caller validates views, plot names, and option keys against its
+        currently installed plot widgets, which lets renamed/removed controls
+        fall back to their normal defaults.
+        """
+        if not self.should_track_plot_options():
+            return {}
+        raw_state = self.settings.value("PlotState/state", "", type=str)
+        if not raw_state:
+            return {}
+        try:
+            state = json.loads(raw_state)
+        except TypeError, ValueError, json.JSONDecodeError:
+            logger.warning("Ignoring malformed saved plot state")
+            return {}
+        if not isinstance(state, dict) or state.get("version") != PLOT_STATE_VERSION:
+            logger.warning("Ignoring unsupported saved plot state")
+            return {}
+        return state
+
     def should_use_opengl_acceleration(self) -> bool:
         """Check if OpenGL acceleration should be used."""
         return self.get_preference("use_opengl_acceleration", False)
@@ -612,6 +656,9 @@ class ApplicationState:
         # Clear profile data
         self.settings.remove("RecentProfiles")
 
+        # Clear plot-control snapshots
+        self.settings.remove("PlotState")
+
         self.settings.sync()
         logger.info("All tracked user data cleared (preferences preserved)")
 
@@ -641,6 +688,7 @@ class ApplicationState:
         preferences = {k: self.settings.value(k) for k in all_keys if k.startswith("ProgramPreferences/")}
         recent_files = {k: self.settings.value(k) for k in all_keys if k.startswith("RecentFiles/")}
         recent_profiles = {k: self.settings.value(k) for k in all_keys if k.startswith("RecentProfiles/")}
+        plot_state = {k: self.settings.value(k) for k in all_keys if k.startswith("PlotState/")}
 
         return {
             "version": self.settings.value("SettingsVersion", None, type=int),
@@ -654,6 +702,7 @@ class ApplicationState:
             "preferences": preferences,
             "recent_files": recent_files,
             "recent_profiles": recent_profiles,
+            "plot_state": plot_state,
             "session_restore_enabled": self.should_track_session_restoration(),
         }
 

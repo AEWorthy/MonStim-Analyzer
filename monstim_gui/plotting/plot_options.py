@@ -143,7 +143,7 @@ class BasePlotOptions(QWidget):
         self.gui_main = parent.parent
         self.layout: QVBoxLayout = QVBoxLayout(self)
         self.layout.setSpacing(2)  # Minimal spacing between widgets
-        self.layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins to reduce blank space
+        self.layout.setContentsMargins(8, 0, 8, 8)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.create_options()
 
@@ -156,7 +156,7 @@ class BasePlotOptions(QWidget):
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(2)  # Reduced vertical spacing for tighter layout
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)  # Keep everything on one row
-        form.setContentsMargins(2, 2, 2, 2)  # No margins for tight layout
+        form.setContentsMargins(0, 0, 0, 0)
         return form
 
     def create_toggle_grid(self) -> StableOptionGrid:

@@ -154,6 +154,14 @@ class ProgramSettingsDialog(QDialog):
         )
         layout.addRow("Track recent files:", self.recent_files_checkbox)
 
+        # Plot-control tracking
+        self.plot_options_tracking_checkbox = QCheckBox()
+        self.plot_options_tracking_checkbox.setToolTip(
+            "Remember the selected data level, plot type, and plot options between launches. "
+            "Disable to start with the standard plot controls without deleting the saved choices."
+        )
+        layout.addRow("Remember plot options:", self.plot_options_tracking_checkbox)
+
         return group
 
     def create_ui_scaling_group(self):
@@ -420,6 +428,7 @@ class ProgramSettingsDialog(QDialog):
         self.profile_tracking_checkbox.setChecked(self.app_state.should_track_analysis_profiles())
         self.path_tracking_checkbox.setChecked(self.app_state.should_track_import_export_paths())
         self.recent_files_checkbox.setChecked(self.app_state.should_track_recent_files())
+        self.plot_options_tracking_checkbox.setChecked(self.app_state.should_track_plot_options())
 
     def save_settings(self, *, notify: bool = True):
         """Save the current setting values."""
@@ -451,6 +460,7 @@ class ProgramSettingsDialog(QDialog):
         self.app_state.set_setting("track_analysis_profiles", self.profile_tracking_checkbox.isChecked())
         self.app_state.set_setting("track_import_export_paths", self.path_tracking_checkbox.isChecked())
         self.app_state.set_setting("track_recent_files", self.recent_files_checkbox.isChecked())
+        self.app_state.set_setting("track_plot_options", self.plot_options_tracking_checkbox.isChecked())
 
         # Check if settings that require restart have changed
         restart_required = False
@@ -515,6 +525,7 @@ class ProgramSettingsDialog(QDialog):
             self.profile_tracking_checkbox.setChecked(True)
             self.path_tracking_checkbox.setChecked(True)
             self.recent_files_checkbox.setChecked(True)
+            self.plot_options_tracking_checkbox.setChecked(True)
 
             logger.info("Program settings reset to defaults")
 
@@ -528,6 +539,7 @@ class ProgramSettingsDialog(QDialog):
             "• Analysis profile selections\n"
             "• Import/export folder paths\n"
             "• Recent files list\n"
+            "• Saved plot options\n"
             "• All other tracking data\n\n"
             "Are you sure you want to continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,

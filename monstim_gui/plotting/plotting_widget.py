@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.application_state import app_state
 from ..core.responsive_widgets import ResponsiveComboBox, ResponsiveScrollArea
 from ..core.ui_theme import install_wheel_change_guard
 from ..widgets.collapsible_group_box import CollapsibleGroupBox
@@ -91,7 +92,7 @@ class PlotWidget(CollapsibleGroupBox):
         self.options_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.options_content = QWidget()
         self.options_layout = QVBoxLayout(self.options_content)
-        self.options_layout.setContentsMargins(2, 2, 2, 2)
+        self.options_layout.setContentsMargins(0, 0, 0, 0)
         self.options_layout.setSpacing(2)  # keep minimal spacing between widgets
         self.options_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align content to top
 
@@ -99,12 +100,11 @@ class PlotWidget(CollapsibleGroupBox):
 
         # Layout for the group box
         options_box_layout = QVBoxLayout(self.options_box)
-        options_box_layout.setContentsMargins(2, 2, 2, 2)  # Minimal margins
+        options_box_layout.setContentsMargins(0, 0, 0, 0)
         options_box_layout.addWidget(self.options_scroll)
 
-        # Let the options panel take the remaining vertical space.  This keeps
-        # the plot buttons anchored at the bottom while allowing the panel to
-        # grow as its containing window grows.
+        # Let the panel grow with the sidebar, while its content remains
+        # top-packed inside the scroll area.
         self.layout.addWidget(self.options_box, 1)
 
         # Create the buttons for plotting and extracting data
@@ -141,12 +141,62 @@ class PlotWidget(CollapsibleGroupBox):
             "experiment": {plot_type: {} for plot_type in self.plot_options["experiment"]},
         }
 
-        # Persistent channel selection that carries across view and plot type changes
+        # The active selection remains available to related tools, but each
+        # plot type owns its saved channel selection in ``last_options``.
         self.persistent_channel_selection = []
+
+        self._restore_persisted_plot_state()
 
         # Initialize plot types and options
         self.update_plot_types()
         self.update_plot_options()
+
+    def _restore_persisted_plot_state(self) -> None:
+        """Restore valid saved plot controls before creating the option widget."""
+        state = app_state.get_plot_state()
+        if not state:
+            return
+
+        saved_types = state.get("last_plot_type", {})
+        if isinstance(saved_types, dict):
+            for view, plot_type in saved_types.items():
+                if view in self.plot_options and isinstance(plot_type, str) and plot_type in self.plot_options[view]:
+                    self.last_plot_type[view] = plot_type
+
+        saved_options = state.get("last_options", {})
+        if isinstance(saved_options, dict):
+            for view, options_by_type in saved_options.items():
+                if view not in self.plot_options or not isinstance(options_by_type, dict):
+                    continue
+                for plot_type, options in options_by_type.items():
+                    if plot_type in self.plot_options[view] and isinstance(options, dict):
+                        self.last_options[view][plot_type] = copy.deepcopy(options)
+
+        view = state.get("view")
+        if view not in self.plot_options:
+            return
+        self.view = view
+        radio = {"session": self.session_radio, "dataset": self.dataset_radio, "experiment": self.experiment_radio}[view]
+        for button in (self.session_radio, self.dataset_radio, self.experiment_radio):
+            button.blockSignals(True)
+        radio.setChecked(True)
+        for button in (self.session_radio, self.dataset_radio, self.experiment_radio):
+            button.blockSignals(False)
+
+    def _persist_plot_state(self) -> None:
+        """Save a complete UI-only plot snapshot after a user control change."""
+        if not self.current_option_widget:
+            return
+        plot_type = self.plot_type_combo.currentText()
+        if plot_type:
+            self.last_options[self.view][plot_type] = copy.deepcopy(self.current_option_widget.get_options())
+        app_state.save_plot_state(
+            {
+                "view": self.view,
+                "last_plot_type": copy.deepcopy(self.last_plot_type),
+                "last_options": copy.deepcopy(self.last_options),
+            }
+        )
 
     def _guard_plot_option_wheels(self) -> None:
         """Keep scrolling the options pane from changing plot controls."""
@@ -158,6 +208,12 @@ class PlotWidget(CollapsibleGroupBox):
 
     def save_current_channel_selection(self):
         """Save the current channel selection to persistent storage."""
+        if self.current_option_widget and hasattr(self.current_option_widget, "channel_selector"):
+            self.persistent_channel_selection = self.current_option_widget.channel_selector.get_selected_channels()
+            self._persist_plot_state()
+
+    def _refresh_active_channel_selection(self) -> None:
+        """Expose the active plot's channels without sharing them between plots."""
         if self.current_option_widget and hasattr(self.current_option_widget, "channel_selector"):
             self.persistent_channel_selection = self.current_option_widget.channel_selector.get_selected_channels()
 
@@ -178,6 +234,7 @@ class PlotWidget(CollapsibleGroupBox):
             current_options = self.current_option_widget.get_options()
             # Deep copy to avoid later mutation
             self.last_options[self.view][plot_type] = copy.deepcopy(current_options)
+            self._persist_plot_state()
         except Exception as e:
             logger.debug(f"Failed to save current options: {e}")
 
@@ -260,8 +317,9 @@ class PlotWidget(CollapsibleGroupBox):
         # Save current options for the current view and plot type before changing
         if self.current_option_widget and self.view:
             try:
-                # Save the current channel selection to persistent storage
-                self.save_current_channel_selection()
+                # Keep the active selection available to related tools without
+                # writing it under a plot type that is in the process of changing.
+                self._refresh_active_channel_selection()
 
                 current_plot_type = self.plot_type_combo.currentText()
                 if current_plot_type:
@@ -294,6 +352,7 @@ class PlotWidget(CollapsibleGroupBox):
 
         # Update the plot options
         self.update_plot_options()
+        self._persist_plot_state()
 
     def on_plot_type_changed(self):
         plot_type = self.plot_type_combo.currentText()
@@ -312,8 +371,9 @@ class PlotWidget(CollapsibleGroupBox):
         # Save current options for the PREVIOUS plot type before changing
         if self.current_option_widget and previous_plot_type:
             try:
-                # Save the current channel selection to persistent storage
-                self.save_current_channel_selection()
+                # The combo already reports the new type here while this is
+                # still the previous type's widget.  Do not persist yet.
+                self._refresh_active_channel_selection()
 
                 current_options = self.current_option_widget.get_options()
                 # Deep copy to ensure no reference sharing
@@ -324,6 +384,7 @@ class PlotWidget(CollapsibleGroupBox):
         # Update the last plot type and refresh the options widget
         self.last_plot_type[self.view] = plot_type
         self.update_plot_options()
+        self._persist_plot_state()
 
     def on_data_selection_changed(self):
         """Called when the underlying data (session/dataset) changes.
@@ -357,26 +418,12 @@ class PlotWidget(CollapsibleGroupBox):
                         default_options = self.current_option_widget.get_options()
                         filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
 
-                        # Use persistent channel selection instead of view-specific selection
-                        if "channel_indices" in filtered_options and hasattr(self, "persistent_channel_selection"):
-                            filtered_options["channel_indices"] = self.persistent_channel_selection
-
                         self.current_option_widget.set_options(filtered_options)
                     except Exception as e:
                         logger.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
-                else:
-                    # Apply persistent channel selection even if no other saved options exist
-                    if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
-                        # If persistent selection is empty (first load), populate with all available channels
-                        if not self.persistent_channel_selection:
-                            all_channels = self.current_option_widget.channel_selector.get_selected_channels()
-                            if all_channels:  # Only update if there are channels available
-                                self.persistent_channel_selection = all_channels
-                                logger.debug(f"First load: auto-selected all {len(all_channels)} channels")
-                        else:
-                            self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
                 # Connect channel selection updates for real-time persistence
+                self._refresh_active_channel_selection()
                 self.connect_channel_selection_updates()
 
                 # Connect option change signals so modifications are saved immediately
@@ -427,26 +474,12 @@ class PlotWidget(CollapsibleGroupBox):
                     default_options = self.current_option_widget.get_options()
                     filtered_options = {k: v for k, v in saved_options.items() if k in default_options}
 
-                    # Use persistent channel selection instead of view-specific selection
-                    if "channel_indices" in filtered_options and hasattr(self, "persistent_channel_selection"):
-                        filtered_options["channel_indices"] = self.persistent_channel_selection
-
                     self.current_option_widget.set_options(filtered_options)
                 except Exception as e:
                     logger.warning(f"Failed to restore options for {self.view} - {plot_type}: {e}")
-            else:
-                # Apply persistent channel selection even if no other saved options exist
-                if hasattr(self, "persistent_channel_selection") and hasattr(self.current_option_widget, "channel_selector"):
-                    # If persistent selection is empty (first load), populate with all available channels
-                    if not self.persistent_channel_selection:
-                        all_channels = self.current_option_widget.channel_selector.get_selected_channels()
-                        if all_channels:  # Only update if there are channels available
-                            self.persistent_channel_selection = all_channels
-                            logger.debug(f"First load: auto-selected all {len(all_channels)} channels")
-                    else:
-                        self.current_option_widget.channel_selector.set_selected_channels(self.persistent_channel_selection)
 
             # Connect channel selection updates for real-time persistence
+            self._refresh_active_channel_selection()
             self.connect_channel_selection_updates()
 
             # Connect option change signals so modifications are saved immediately
