@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 APPLICATION_STYLESHEET = """
-    QMainWindow { background: #1f2022; }
+    QMainWindow { background: #20252b; }
     QWidget#mainSidebar {
         background: #242629;
         border: 1px solid #3c434b;
@@ -24,9 +24,9 @@ APPLICATION_STYLESHEET = """
     }
     QSplitter#mainContentSplitter::handle:horizontal {
         width: 6px;
-        background: #1f2022;
+        background: #20252b;
     }
-    QSplitter#mainContentSplitter::handle:horizontal:hover { background: #566673; }
+    QSplitter#mainContentSplitter::handle:horizontal:hover { background: #4c86b8; }
     QWidget#profileSelectorRow {
         background: #2a3036;
         border: 1px solid #3c434b;
@@ -66,8 +66,8 @@ APPLICATION_STYLESHEET = """
         background: #27292c;
     }
     QCheckBox#plotChannelSelector::indicator:checked {
-        border-color: #9bc4dc;
-        background: #6d9fbe;
+        border-color: #f0a15a;
+        background: #e07a3f;
     }
     QCheckBox#plotChannelSelector:disabled { color: #717a82; }
     QCheckBox#plotChannelSelector::indicator:disabled {
@@ -106,7 +106,7 @@ APPLICATION_STYLESHEET = """
     QTabBar::tab:selected {
         color: #ffffff;
         background: #2c333a;
-        border-bottom-color: #6d9fbe;
+        border-bottom-color: #e07a3f;
     }
     QTabBar::tab:hover:!selected { background: rgba(255, 255, 255, 0.06); color: #ffffff; }
     QComboBox, QAbstractSpinBox, QLineEdit, QTextEdit, QPlainTextEdit {
@@ -118,6 +118,8 @@ APPLICATION_STYLESHEET = """
     QComboBox:hover, QAbstractSpinBox:hover, QLineEdit:hover, QTextEdit:hover {
         border-color: #59646f;
     }
+    QComboBox:focus, QAbstractSpinBox:focus, QLineEdit:focus, QTextEdit:focus,
+    QPlainTextEdit:focus { border-color: #f0a15a; }
     QPushButton {
         padding: 5px 12px;
         border: 1px solid #4a5159;
@@ -126,7 +128,7 @@ APPLICATION_STYLESHEET = """
         font-weight: 600;
     }
     QPushButton:hover { background: #41464b; border-color: #65717c; }
-    QPushButton:default { border-color: #6d9fbe; }
+    QPushButton:default { border-color: #e07a3f; }
     QPushButton[plotOptionToggle="true"] {
         min-height: 20px;
         padding: 4px 8px;
@@ -142,10 +144,10 @@ APPLICATION_STYLESHEET = """
     }
     QPushButton[plotOptionToggle="true"]:checked {
         color: #ffffff;
-        background: #304b5d;
-        border-color: #6d9fbe;
+        background: #633b26;
+        border-color: #e07a3f;
     }
-    QPushButton[plotOptionToggle="true"]:checked:hover { background: #385b70; }
+    QPushButton[plotOptionToggle="true"]:checked:hover { background: #79482d; }
     QPushButton[plotOptionToggle="true"]:disabled {
         color: #717a82;
         background: #25282b;
@@ -160,7 +162,7 @@ APPLICATION_STYLESHEET = """
         padding: 5px;
     }
     QTreeView::item:selected, QTreeWidget::item:selected, QTableView::item:selected,
-    QTableWidget::item:selected, QListWidget::item:selected { background: #304b5d; }
+    QTableWidget::item:selected, QListWidget::item:selected { background: #633b26; }
     QHeaderView::section {
         padding: 6px;
         border: 0;
@@ -168,11 +170,68 @@ APPLICATION_STYLESHEET = """
         background: #303338;
         font-weight: 700;
     }
-    QMenuBar, QStatusBar { background: #242629; }
+    QMenuBar, QStatusBar { background: #242629; color: #e6e0db; }
     QMenuBar::item { padding: 6px 10px; }
-    QMenuBar::item:selected, QMenu::item:selected { background: #304b5d; }
-    QToolTip { border: 1px solid #65717c; padding: 5px; }
+    QMenuBar::item:selected { background: #633b26; }
+    QMenu {
+        background: #242629;
+        color: #e6e0db;
+        border: 1px solid #3c434b;
+        padding: 4px;
+    }
+    QMenu::item { padding: 6px 24px 6px 12px; }
+    QMenu::item:selected { color: #ffffff; background: #633b26; }
+    QMenu::item:disabled { color: #8d9296; }
+    QMenu::separator { height: 1px; background: #3c434b; margin: 4px 8px; }
+    QToolTip { border: 1px solid #f0a15a; padding: 5px; }
 """
+
+
+def _application_palette(base_palette: QPalette) -> QPalette:
+    """Return MonStim's fixed dark palette, independent of the OS appearance."""
+    palette = QPalette(base_palette)
+    colors = {
+        QPalette.ColorRole.Window: "#20252b",
+        QPalette.ColorRole.WindowText: "#e6e0db",
+        QPalette.ColorRole.Base: "#27292c",
+        QPalette.ColorRole.AlternateBase: "#2c3035",
+        QPalette.ColorRole.ToolTipBase: "#34302d",
+        QPalette.ColorRole.ToolTipText: "#fff7f0",
+        QPalette.ColorRole.Text: "#e6e0db",
+        QPalette.ColorRole.Button: "#34373a",
+        QPalette.ColorRole.ButtonText: "#e6e0db",
+        QPalette.ColorRole.BrightText: "#fff7f0",
+        QPalette.ColorRole.Light: "#59646f",
+        QPalette.ColorRole.Midlight: "#4a5159",
+        QPalette.ColorRole.Mid: "#3c434b",
+        QPalette.ColorRole.Dark: "#1f2022",
+        QPalette.ColorRole.Shadow: "#151719",
+        QPalette.ColorRole.Highlight: "#e07a3f",
+        QPalette.ColorRole.HighlightedText: "#ffffff",
+        QPalette.ColorRole.Link: "#4c86b8",
+        QPalette.ColorRole.LinkVisited: "#f0a15a",
+        QPalette.ColorRole.PlaceholderText: "#9ca3a8",
+    }
+    for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+        for role, color in colors.items():
+            palette.setColor(color_group, role, QColor(color))
+
+    disabled_colors = {
+        QPalette.ColorRole.WindowText: "#8d9296",
+        QPalette.ColorRole.Text: "#8d9296",
+        QPalette.ColorRole.ButtonText: "#8d9296",
+        QPalette.ColorRole.Highlight: "#684936",
+        QPalette.ColorRole.HighlightedText: "#c3bdb8",
+        QPalette.ColorRole.Link: "#7897ad",
+        QPalette.ColorRole.PlaceholderText: "#70777c",
+    }
+    for role, color in disabled_colors.items():
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(color))
+    if hasattr(QPalette.ColorRole, "Accent"):
+        for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+            palette.setColor(color_group, QPalette.ColorRole.Accent, QColor("#e07a3f"))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Accent, QColor("#684936"))
+    return palette
 
 
 class SpinBoxControlStyle(QProxyStyle):
@@ -271,19 +330,14 @@ def install_wheel_change_guard(root: QWidget, guard: WheelChangeGuard | None = N
 
 
 def apply_application_theme(application: QApplication | None = None) -> None:
-    """Append the shared visual language without discarding an existing theme."""
+    """Apply MonStim's dark theme consistently across OS appearance modes."""
     application = application or QApplication.instance()
     if application is None or application.property("monstim_theme_applied"):
         return
     # Install the proxy before the application stylesheet.  Qt then wraps it
     # in its stylesheet style, while spinbox geometry and native primitives
     # continue to flow through this proxy.
-    palette = application.palette()
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#6d9fbe"))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
-    if hasattr(QPalette.ColorRole, "Accent"):
-        palette.setColor(QPalette.ColorRole.Accent, QColor("#6d9fbe"))
-    application.setPalette(palette)
+    application.setPalette(_application_palette(application.palette()))
     application.setStyle(SpinBoxControlStyle(application.style()))
     application.setStyleSheet(f"{application.styleSheet()}\n{APPLICATION_STYLESHEET}")
     application.setProperty("monstim_theme_applied", True)

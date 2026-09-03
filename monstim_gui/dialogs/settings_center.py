@@ -149,11 +149,11 @@ class SettingsCenter(QDialog):
             QLineEdit { padding: 5px 7px; }
             QListWidget#settingsNavigation { background: transparent; border: 0; padding: 4px 8px; outline: 0; }
             QListWidget#settingsNavigation::item { padding: 9px 10px; margin: 2px 0; border-radius: 4px; font-weight: 600; }
-            QListWidget#settingsNavigation::item:selected { background: #304553; border-left: 3px solid #6d9fbe; padding-left: 7px; }
+            QListWidget#settingsNavigation::item:selected { background: #633b26; border-left: 3px solid #e07a3f; padding-left: 7px; }
             QListWidget#settingsNavigation::item:hover:!selected { background: rgba(255, 255, 255, 0.06); }
             QTabWidget::pane { border: 1px solid #3c434b; border-radius: 6px; top: -1px; }
             QTabBar::tab { padding: 8px 14px; margin-right: 2px; border: 0; border-bottom: 3px solid transparent; font-weight: 600; color: #bfc7cf; }
-            QTabBar::tab:selected { color: #ffffff; background: #2c333a; border-bottom-color: #6d9fbe; }
+            QTabBar::tab:selected { color: #ffffff; background: #2c333a; border-bottom-color: #e07a3f; }
             QTabBar::tab:hover:!selected { color: #ffffff; background: rgba(255, 255, 255, 0.06); }
             QGroupBox { font-weight: 700; border: 1px solid #3c434b; border-radius: 6px; margin-top: 12px; padding-top: 8px; }
             QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
@@ -162,7 +162,7 @@ class SettingsCenter(QDialog):
             QLabel#pageDescription, QLabel#profileLibraryDescription, QLabel#profileLibraryStatus { color: #aeb7c1; }
             QTreeWidget#profileLibraryTable { border: 1px solid #3c434b; border-radius: 5px; }
             QTreeWidget#profileLibraryTable::item { padding: 7px 5px; }
-            QTreeWidget#profileLibraryTable::item:selected { background: #304553; }
+            QTreeWidget#profileLibraryTable::item:selected { background: #633b26; }
             """
         )
         self._build_ui()
