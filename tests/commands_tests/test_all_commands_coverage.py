@@ -422,7 +422,8 @@ class TestSetChildCompletionStatusCommand:
         assert json.loads(datasets[1].repo.dataset_js.read_text())["is_completed"] is True
 
         command.undo()
-        assert [dataset.is_completed for dataset in datasets] == [False, True]
+        assert [dataset.is_completed for dataset in datasets] == [True, True]
+        assert json.loads(datasets[0].repo.dataset_js.read_text())["is_completed"] is True
 
 
 # Mark untestable commands
