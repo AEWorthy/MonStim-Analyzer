@@ -1,17 +1,17 @@
-numpy==2.5.0
+numpy==2.5.2
 openpyxl>=3.1
-pandas==3.0.3
+pandas==3.0.5
 matplotlib>=3.10
-scipy==1.18.0
+scipy==1.18.1
 h5py==3.16.0
 PyYAML==6.0.3
-packaging==26.2
-traitlets==5.15.1
-pillow==12.2.0
+packaging==26.3
+traitlets==5.16.1
+pillow==12.3.0
 pyqtgraph==0.14.0
 
 # Pip-only packages (from environment.yml pip subsection)
-Markdown==3.10.2
+Markdown==3.10.3
 python_markdown_math==0.9
 pytest==9.1.1
 setuptools==82.0.1
