@@ -717,19 +717,27 @@ def _load_and_export_dataset_task(
     if is_canceled and is_canceled():
         return None, f"Canceled: {ds_id}"
 
-    if config.completed_only:
-        try:
-            experiment_metadata = ExperimentRepository(expt_folder).get_metadata()
-        except Exception as exc:
+    try:
+        experiment_metadata = ExperimentRepository(expt_folder).get_metadata()
+    except Exception as exc:
+        if config.completed_only:
             logger.warning("Could not verify completion status for experiment '%s': %s", expt_name, exc)
             return None, f"Completion status unavailable: {ds_id}"
-        if experiment_metadata.get("is_completed") is not True:
-            logger.info("Bulk export: skipping dataset '%s/%s' because its experiment is not complete.", expt_name, ds_id)
-            return None, f"Incomplete experiment: {ds_id}"
-        dataset_metadata = next((item for item in experiment_metadata.get("datasets", []) if item.get("id") == ds_id), None)
-        if dataset_metadata is None or dataset_metadata.get("is_completed") is not True:
-            logger.info("Bulk export: skipping incomplete or unknown dataset '%s/%s'.", expt_name, ds_id)
-            return None, f"Incomplete dataset: {ds_id}"
+        logger.warning("Could not verify exclusion status for experiment '%s': %s", expt_name, exc)
+        return None, f"Exclusion status unavailable: {ds_id}"
+    else:
+        if ds_id in set(experiment_metadata.get("excluded_datasets") or []):
+            logger.info("Bulk export: skipping excluded dataset '%s/%s'.", expt_name, ds_id)
+            return None, f"Excluded dataset: {ds_id}"
+
+        if config.completed_only:
+            if experiment_metadata.get("is_completed") is not True:
+                logger.info("Bulk export: skipping dataset '%s/%s' because its experiment is not complete.", expt_name, ds_id)
+                return None, f"Incomplete experiment: {ds_id}"
+            dataset_metadata = next((item for item in experiment_metadata.get("datasets", []) if item.get("id") == ds_id), None)
+            if dataset_metadata is None or dataset_metadata.get("is_completed") is not True:
+                logger.info("Bulk export: skipping incomplete or unknown dataset '%s/%s'.", expt_name, ds_id)
+                return None, f"Incomplete dataset: {ds_id}"
 
     # Check before starting the (potentially slow) load
     if is_canceled and is_canceled():

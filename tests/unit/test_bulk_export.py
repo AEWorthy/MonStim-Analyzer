@@ -929,6 +929,40 @@ class TestRunBulkExport:
         assert out_path is None
         assert message == "Incomplete dataset: ."
 
+    def test_dataset_level_skips_excluded_complete_dataset(self, monkeypatch, tmp_path):
+        import monstim_signals.io.repositories as repos_mod
+        from monstim_gui.managers.bulk_export_manager import _load_and_export_dataset_task
+
+        class FakeExperimentRepo:
+            def __init__(self, folder):
+                pass
+
+            def get_metadata(self):
+                return {
+                    "is_completed": True,
+                    "excluded_datasets": ["DS1"],
+                    "datasets": [{"id": "DS1", "is_completed": True}],
+                }
+
+        class UnexpectedDatasetRepo:
+            def __init__(self, folder):
+                raise AssertionError("Excluded data must be rejected before loading the dataset")
+
+        monkeypatch.setattr(repos_mod, "ExperimentRepository", FakeExperimentRepo)
+        monkeypatch.setattr(repos_mod, "DatasetRepository", UnexpectedDatasetRepo)
+        (tmp_path / "DS1").mkdir()
+        config = _make_config(
+            data_level="dataset",
+            selected_objects={"Expt1": ["DS1"]},
+            output_path=str(tmp_path),
+            experiment_paths={"Expt1": str(tmp_path)},
+        )
+
+        out_path, message = _load_and_export_dataset_task("Expt1", "DS1", tmp_path, config)
+
+        assert out_path is None
+        assert message == "Excluded dataset: DS1"
+
     def test_dataset_level_writes_files(self, tmp_path, monkeypatch):
         from monstim_gui.managers import bulk_export_manager
 
@@ -948,6 +982,15 @@ class TestRunBulkExport:
         import monstim_signals.io.repositories as repos_mod
 
         monkeypatch.setattr(repos_mod, "DatasetRepository", FakeDatasetRepo)
+
+        class FakeExperimentRepo:
+            def __init__(self, folder):
+                pass
+
+            def get_metadata(self):
+                return {"excluded_datasets": [], "datasets": [{"id": "DS1", "is_completed": True}]}
+
+        monkeypatch.setattr(repos_mod, "ExperimentRepository", FakeExperimentRepo)
 
         # Create a fake DS1 sub-folder so the folder existence check passes
         (tmp_path / "DS1").mkdir()

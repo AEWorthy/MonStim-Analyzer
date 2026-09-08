@@ -350,6 +350,9 @@ class _ExperimentGroup(QWidget):
             cb = QCheckBox(ds_status.display_name)
             cb.setToolTip(ds_status.dataset_id)
             cb.setChecked(False)
+            # Exclusion is an unconditional export boundary, unlike completion
+            # status which is optionally filtered by the dialog setting.
+            cb.setEnabled(not ds_status.is_excluded)
             cb.stateChanged.connect(self._on_child_changed)
             row_layout.addWidget(cb, 1)
             row_layout.addWidget(_make_completion_badge(ds_status.is_completed, "Dataset status", row))
@@ -442,7 +445,7 @@ class _ExperimentGroup(QWidget):
             is_visible = experiment_is_visible and (not enabled or status.is_completed is True)
             row = self._dataset_row_by_cb[cb]
             row.setVisible(is_visible)
-            if not is_visible and cb.isChecked():
+            if (not is_visible or status.is_excluded) and cb.isChecked():
                 cb.blockSignals(True)
                 cb.setChecked(False)
                 cb.blockSignals(False)
@@ -450,8 +453,10 @@ class _ExperimentGroup(QWidget):
 
     def _visible_dataset_cbs(self) -> list[QCheckBox]:
         if not self._completed_only:
-            return list(self._dataset_cbs)
-        return [cb for cb in self._dataset_cbs if self._dataset_status_by_cb[cb].is_completed is True]
+            return [cb for cb in self._dataset_cbs if not self._dataset_status_by_cb[cb].is_excluded]
+        return [
+            cb for cb in self._dataset_cbs if self._dataset_status_by_cb[cb].is_completed is True and not self._dataset_status_by_cb[cb].is_excluded
+        ]
 
     @property
     def selected_dataset_ids(self) -> list[str]:

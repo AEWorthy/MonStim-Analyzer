@@ -53,6 +53,26 @@ def test_completed_only_filter_limits_experiment_checkbox_selection():
     assert group.selected_dataset_ids == ["DS_COMPLETE"]
 
 
+def test_excluded_complete_dataset_cannot_be_selected_for_export():
+    from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
+
+    group = _ExperimentGroup(
+        "Experiment A",
+        True,
+        [
+            _DatasetStatus(dataset_id="DS_ACTIVE", display_name="Active dataset", is_completed=True),
+            _DatasetStatus(dataset_id="DS_EXCLUDED", display_name="Excluded dataset", is_completed=True, is_excluded=True),
+        ],
+    )
+
+    excluded_cb = group._dataset_cbs[1]
+    assert not excluded_cb.isEnabled()
+    group._expt_cb.setChecked(True)
+
+    assert group.selected_dataset_ids == ["DS_ACTIVE"]
+    assert not excluded_cb.isChecked()
+
+
 def test_completed_only_filter_hides_incomplete_experiment_card_and_clears_selection():
     from monstim_gui.dialogs.bulk_export_dialog import _DatasetStatus, _ExperimentGroup
 
