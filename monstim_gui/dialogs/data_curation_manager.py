@@ -65,6 +65,7 @@ def auto_refresh(method):
 
     @wraps(method)
     def wrapper(self, *args, **kwargs):
+        refresh_generation = getattr(self, "_data_refresh_generation", 0)
         try:
             # For PyQt signal connections, filter out unexpected boolean arguments
             # that can be passed by clicked signals.  A boolean is only spurious
@@ -87,13 +88,13 @@ def auto_refresh(method):
 
             result = method(self, *filtered_args, **kwargs)
             # Only refresh if the method completed successfully and auto-refresh is not suppressed
-            if not getattr(self, "_suppress_autorefresh", False):
+            if not getattr(self, "_suppress_autorefresh", False) and getattr(self, "_data_refresh_generation", 0) == refresh_generation:
                 self.load_data()
             return result
         except Exception as e:
             # If there was an error, still refresh to ensure UI consistency
             try:
-                if not getattr(self, "_suppress_autorefresh", False):
+                if not getattr(self, "_suppress_autorefresh", False) and getattr(self, "_data_refresh_generation", 0) == refresh_generation:
                     self.load_data()
             except Exception as refresh_error:
                 logger.error(f"Failed to refresh data after error in {method.__name__}: {refresh_error}")
@@ -472,12 +473,14 @@ class DataCurationManager(QDialog):
         self.undo_last_button.setToolTip("No changes to undo")
         button_layout.addWidget(self.undo_last_button)
 
-        # Undo all and close buttons
+        # Changes are applied immediately. Keep explicit undo controls beside
+        # the plain close action for the current dialog session.
         self.cancel_button = QPushButton("Undo All Changes")
         self.cancel_button.clicked.connect(self.cancel_all_changes)
         button_layout.addWidget(self.cancel_button)
 
-        self.close_button = QPushButton("Done")
+        self.close_button = QPushButton("Close")
+        self.close_button.setToolTip("Close the data manager; completed actions are already saved")
         self.close_button.clicked.connect(self.accept)
         button_layout.addWidget(self.close_button)
 
@@ -2561,7 +2564,10 @@ class DataCurationManager(QDialog):
                 QMessageBox.information(self, "Experiment Deleted", f"Experiment '{exp_name}' has been permanently deleted.")
             except Exception as e:
                 QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{e!s}")
-                raise  # Let decorator handle the refresh
+                # Do not re-raise a recoverable filesystem error from this Qt
+                # slot: it would escape to sys.excepthook and terminate the app.
+                # Returning still lets ``auto_refresh`` restore the curation UI.
+                logger.exception("Failed to delete experiment '%s'", exp_name)
 
     @auto_refresh
     def undo_last_change(self):
@@ -2634,74 +2640,15 @@ class DataCurationManager(QDialog):
         # Keep dialog open for user to resolve
 
     def accept(self):
-        """On close via Done, prompt to apply/undo if there are pending changes."""
-        if getattr(self, "session_commands", None):
-            choice = self._confirm_close_with_pending_changes()
-            if choice == "cancel":
-                return  # keep dialog open
-            if choice == "undo":
-                # Undo all then close
-                try:
-                    for cmd in reversed(self.session_commands):
-                        try:
-                            cmd.undo()
-                        except Exception as e:
-                            logger.exception("Undo failed during close: %s", e)
-                    self.session_commands.clear()
-                    self._changes_made = False
-                except Exception as e:
-                    # Suppress unexpected errors during undo to avoid crashing the dialog,
-                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
-                    logger.exception("Unexpected error during undo-all in accept(): %s", e)
-
-        # Emit change signal if there were changes this session
+        """Close the dialog; every data operation has already been applied."""
         if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()
 
         super().accept()
 
     def reject(self):
-        """Intercept window close to confirm pending changes before exiting."""
-        if getattr(self, "session_commands", None):
-            choice = self._confirm_close_with_pending_changes()
-            if choice == "cancel":
-                return  # abort close
-            if choice == "undo":
-                try:
-                    for cmd in reversed(self.session_commands):
-                        try:
-                            cmd.undo()
-                        except Exception as e:
-                            logger.exception("Undo failed during close: %s", e)
-                    self.session_commands.clear()
-                    self._changes_made = False
-                except Exception:
-                    # Suppress unexpected errors during undo to avoid crashing the dialog,
-                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
-                    logger.exception("Unexpected error during undo-all in reject()")
-
+        """Close from the window controls without prompting about saved changes."""
         if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()
 
         super().reject()
-
-    def _confirm_close_with_pending_changes(self) -> str:
-        """Prompt the user when there are pending changes. Returns 'keep', 'undo', or 'cancel'."""
-        try:
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle("Pending Changes")
-            msg.setText("You have changes from this session. What would you like to do?")
-            keep_btn = msg.addButton("Keep Changes and Close", QMessageBox.ButtonRole.AcceptRole)
-            undo_btn = msg.addButton("Undo All and Close", QMessageBox.ButtonRole.DestructiveRole)
-            _ = msg.addButton(QMessageBox.StandardButton.Cancel)
-            msg.exec()
-            clicked = msg.clickedButton()
-            if clicked == keep_btn:
-                return "keep"
-            if clicked == undo_btn:
-                return "undo"
-            return "cancel"
-        except Exception:
-            # Fallback: cancel if prompt fails
-            return "cancel"

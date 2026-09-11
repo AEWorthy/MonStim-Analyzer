@@ -937,7 +937,7 @@ class MoveDatasetCommand(Command):
         """Move the dataset immediately."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
-            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to move dataset: {e!s}")
             raise Exception(f"Failed to move dataset: {e!s}") from e
@@ -946,7 +946,7 @@ class MoveDatasetCommand(Command):
         """Move the dataset back to original location."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
-            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to undo dataset move: {e!s}")
             raise Exception(f"Failed to undo dataset move: {e!s}") from e
@@ -993,7 +993,7 @@ class MoveDatasetsCommand(Command):
                 logger.debug(f"Processed {len(self._succeeded)} dataset moves.")
 
             affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
-            _refresh_data_views(self.gui, *affected)
+            _refresh_data_views(self.gui, *affected, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to execute batched dataset moves: {e!s}")
@@ -1021,7 +1021,7 @@ class MoveDatasetsCommand(Command):
                     QApplication.processEvents()
 
             affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
-            _refresh_data_views(self.gui, *affected)
+            _refresh_data_views(self.gui, *affected, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to undo batched dataset moves: {e!s}")
@@ -1140,13 +1140,13 @@ class RenameExperimentCommand(Command):
         """Rename the experiment immediately."""
         # Let exceptions from data_manager propagate with their original messages
         self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
-        _refresh_data_views(self.gui, self.new_name)
+        _refresh_data_views(self.gui, self.new_name, rebuild_catalogs=False)
 
     def undo(self):
         """Rename back to original name."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
-            _refresh_data_views(self.gui, self.old_name)
+            _refresh_data_views(self.gui, self.old_name, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to undo experiment rename: {e!s}")
             raise Exception(f"Failed to undo experiment rename: {e!s}") from e
@@ -1682,7 +1682,8 @@ class EditDatasetMetadataCommand(Command):
 
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
-            _refresh_data_views(self.gui)
+            experiment_id = getattr(getattr(self.gui, "current_experiment", None), "id", None)
+            _refresh_data_views(self.gui, experiment_id, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to apply dataset metadata changes: {e}", exc_info=True)
@@ -1695,7 +1696,8 @@ class EditDatasetMetadataCommand(Command):
 
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
-            _refresh_data_views(self.gui)
+            experiment_id = getattr(getattr(self.gui, "current_experiment", None), "id", None)
+            _refresh_data_views(self.gui, experiment_id, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to undo dataset metadata changes: {e!s}", exc_info=True)

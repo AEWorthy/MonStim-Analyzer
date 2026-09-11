@@ -403,12 +403,29 @@ def relocate_catalog_paths(experiment_path: Path, old_prefix: Path, new_prefix: 
     affected rows rather than requiring a full source traversal.
     """
     catalog = ExperimentCatalog(experiment_path)
-    if not catalog.is_usable():
+    # A dataset/session rename leaves the catalog root unchanged, so the
+    # normal usability check is sufficient.  An experiment rename moves the
+    # catalog sidecar itself, however, and its stored root still names the old
+    # experiment until this transaction updates it.  Accept precisely that
+    # transitional state; do not treat an unrelated or corrupt cache as valid.
+    if not catalog.path.is_file():
         return False
     old_text = str(old_prefix.resolve())
     new_text = str(new_prefix.resolve())
     if old_text == new_text:
         return True
+    try:
+        with catalog.connect() as connection:
+            schema = connection.execute("SELECT value FROM catalog_meta WHERE key = 'schema_version'").fetchone()
+            root = connection.execute("SELECT value FROM catalog_meta WHERE key = 'experiment_path'").fetchone()
+    except sqlite3.Error:
+        logger.warning("Catalog %s is unreadable and cannot be relocated", catalog.path, exc_info=True)
+        return False
+    if schema is None or schema["value"] != str(CATALOG_SCHEMA_VERSION) or root is None:
+        return False
+    stored_root = Path(root["value"])
+    if stored_root != catalog.experiment_path and stored_root != Path(old_text):
+        return False
     prefix_like = f"{old_text}%"
     with catalog.connect() as connection:
         for table, columns in (
@@ -427,3 +444,87 @@ def relocate_catalog_paths(experiment_path: Path, old_prefix: Path, new_prefix: 
         )
         connection.execute("UPDATE catalog_meta SET value = ? WHERE key = 'experiment_path'", (str(catalog.experiment_path),))
     return True
+
+
+def transfer_catalog_dataset(
+    source_experiment: Path,
+    destination_experiment: Path,
+    source_dataset: Path,
+    destination_dataset: Path,
+) -> bool:
+    """Transfer one dataset's cached rows between experiment catalogs.
+
+    The dataset has already moved on disk when this function is called.  Both
+    catalogs retain the pre-move row data, so this copies the affected rows to
+    the destination with their new absolute paths and then removes them from
+    the source.  It does not inspect recordings or open HDF5 files.
+
+    A cache is non-authoritative: callers must invalidate both catalogs if
+    this returns ``False`` or raises after either catalog was modified.
+    """
+    source_catalog = ExperimentCatalog(source_experiment)
+    destination_catalog = ExperimentCatalog(destination_experiment)
+    if not source_catalog.is_usable() or not destination_catalog.is_usable():
+        return False
+
+    source_text = str(source_dataset.resolve())
+    destination_text = str(destination_dataset.resolve())
+    source_like = f"{source_text}%"
+
+    try:
+        with source_catalog.connect() as connection:
+            dataset_rows = connection.execute("SELECT * FROM datasets WHERE path = ?", (source_text,)).fetchall()
+            session_rows = connection.execute(
+                "SELECT * FROM sessions WHERE dataset_path = ? OR path LIKE ?",
+                (source_text, source_like),
+            ).fetchall()
+            recording_rows = connection.execute(
+                "SELECT * FROM recordings WHERE session_path LIKE ? OR raw_path LIKE ?",
+                (source_like, source_like),
+            ).fetchall()
+        if len(dataset_rows) != 1:
+            return False
+
+        def relocated(row: sqlite3.Row, columns: tuple[str, ...]) -> tuple:
+            return tuple(
+                value.replace(source_text, destination_text, 1) if column in columns and isinstance(value, str) else value
+                for column, value in zip(row.keys(), row, strict=True)
+            )
+
+        with destination_catalog.connect() as connection:
+            # A stale destination cache can retain a row for a dataset that
+            # no longer exists on disk. The pre-move filesystem conflict check
+            # guarantees this prefix is available for the transferred dataset.
+            destination_like = f"{destination_text}%"
+            connection.execute(
+                "DELETE FROM recordings WHERE session_path LIKE ? OR raw_path LIKE ?",
+                (destination_like, destination_like),
+            )
+            connection.execute("DELETE FROM sessions WHERE dataset_path = ? OR path LIKE ?", (destination_text, f"{destination_text}%"))
+            connection.execute("DELETE FROM datasets WHERE path = ?", (destination_text,))
+            connection.executemany("INSERT INTO datasets VALUES (?, ?, ?, ?, ?, ?)", [relocated(row, ("path",)) for row in dataset_rows])
+            connection.executemany(
+                "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [relocated(row, ("path", "dataset_path")) for row in session_rows],
+            )
+            connection.executemany(
+                "INSERT INTO recordings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [relocated(row, ("stem", "session_path", "raw_path")) for row in recording_rows],
+            )
+            connection.execute(
+                "INSERT INTO catalog_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (DIRECTORY_SIGNATURE_KEY, _directory_signature(destination_catalog.experiment_path)),
+            )
+
+        with source_catalog.connect() as connection:
+            connection.execute("DELETE FROM recordings WHERE session_path LIKE ? OR raw_path LIKE ?", (source_like, source_like))
+            connection.execute("DELETE FROM sessions WHERE dataset_path = ? OR path LIKE ?", (source_text, source_like))
+            connection.execute("DELETE FROM datasets WHERE path = ?", (source_text,))
+            connection.execute(
+                "INSERT INTO catalog_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (DIRECTORY_SIGNATURE_KEY, _directory_signature(source_catalog.experiment_path)),
+            )
+        return True
+    except OSError, sqlite3.Error:
+        logger.warning("Could not transfer catalog rows for %s", source_dataset, exc_info=True)
+        return False

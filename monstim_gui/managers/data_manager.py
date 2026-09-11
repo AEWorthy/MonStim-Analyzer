@@ -133,6 +133,10 @@ class DataManager:
         data_curation_manager = getattr(self.gui, "_data_curation_manager", None)
         if data_curation_manager is not None:
             data_curation_manager.load_data()
+            # Context-menu actions are decorated to refresh after returning.
+            # This refresh already covered the dialog, so let that decorator
+            # avoid a second complete tree scan.
+            data_curation_manager._data_refresh_generation = getattr(data_curation_manager, "_data_refresh_generation", 0) + 1
 
     def _create_progress_dialog(self, message: str, title: str) -> QProgressDialog:
         """Create the standard modal progress dialog used by long operations."""
@@ -728,6 +732,10 @@ class DataManager:
 
                 # Use the robust rename_experiment_by_id method
                 self.rename_experiment_by_id(old_name, new_name)
+                self.refresh_data_views(
+                    Path(self.gui.expts_dict[new_name]),
+                    rebuild_catalogs=False,
+                )
 
                 self.gui.status_bar.showMessage("Experiment renamed successfully.", 5000)
                 logger.info(f"Experiment renamed from '{old_name}' to '{new_name}' successfully.")
@@ -751,33 +759,11 @@ class DataManager:
             )
             if delete == QMessageBox.StandardButton.Yes:
                 current_expt_id = self.gui.current_experiment.id
-                current_expt_path = os.path.join(self.gui.output_path, current_expt_id)
-
-                # Close the experiment and all associated data
-                self.gui.current_experiment.close()
-                self.gui.current_experiment = None
-                self.gui.current_dataset = None
-                self.gui.current_session = None
-
-                # Use retry mechanism for robust deletion
                 try:
-                    import gc
-                    import time
-
-                    gc.collect()
-
-                    max_retries = 3
-                    for retry in range(max_retries):
-                        try:
-                            shutil.rmtree(current_expt_path)
-                            logger.info(f"Deleted experiment folder: {current_expt_path}.")
-                            break
-                        except (OSError, PermissionError) as e:
-                            if retry < max_retries - 1:
-                                logger.warning(f"Failed to delete '{current_expt_id}' on attempt {retry + 1}: {e}. Retrying...")
-                                time.sleep(0.5)
-                            else:
-                                raise e
+                    # Keep this entry point on the same lock-safe deletion path
+                    # as the data-curation manager.
+                    self.delete_experiment_by_id(current_expt_id)
+                    self.refresh_data_views(rebuild_catalogs=False)
                 except Exception as e:
                     QMessageBox.critical(
                         self.gui,
@@ -788,9 +774,6 @@ class DataManager:
                     logger.exception(f"Failed to delete experiment '{current_expt_id}'")
                     return
 
-                # After deleting experiment, refresh the list and reset selections
-                if hasattr(self.gui, "data_selection_widget"):
-                    self.gui.data_selection_widget.refresh()
                 self.gui.status_bar.showMessage("Experiment deleted successfully.", 5000)
 
     # ------------------------------------------------------------------
@@ -1831,6 +1814,11 @@ class DataManager:
 
         logger.info("Closing all data.")
 
+        # Cache preparation may retain HDF5 handles for sessions that are no
+        # longer selected. Stop it before closing the hierarchy so it cannot
+        # keep an experiment directory locked on Windows.
+        self._cancel_cache_warmup()
+
         # Close current data hierarchy
         if self.gui.current_session:
             self.gui.current_session.close()
@@ -1935,7 +1923,7 @@ class DataManager:
             logger.exception(f"Failed to delete experiment {exp_id}: {e}")
             raise Exception(f"Failed to delete experiment '{exp_id}': {e!s}") from e
 
-    def rename_experiment_by_id(self, old_name: str, new_name: str):
+    def rename_experiment_by_id(self, old_name: str, new_name: str) -> bool:
         """Rename an experiment by ID, regardless of what's currently selected."""
         import shutil
         from pathlib import Path
@@ -1979,9 +1967,16 @@ class DataManager:
             # Rename the directory
             shutil.move(str(old_exp_path), str(new_exp_path))
 
-            # The sidecar moves with the directory, but its cached paths no
-            # longer describe the renamed experiment.  Force a clean rebuild.
-            self._invalidate_catalogs(new_exp_path)
+            # The catalog sidecar moves with the experiment.  Relocating its
+            # absolute paths is a short SQLite transaction, unlike rebuilding
+            # every recording cache synchronously on the GUI thread.
+            from monstim_signals.io.experiment_catalog import relocate_catalog_paths
+
+            catalog_relocated = relocate_catalog_paths(new_exp_path, old_exp_path, new_exp_path)
+            if not catalog_relocated:
+                # A missing/unusable cache is rebuilt lazily if this
+                # experiment is opened later; never use stale paths.
+                self._invalidate_catalogs(new_exp_path)
 
             # Update GUI experiment dictionary
             del self.gui.expts_dict[old_name]
@@ -2002,18 +1997,8 @@ class DataManager:
 
             app_state.migrate_renamed_selection("experiment", old_name, new_name)
 
-            # Refresh UI to reflect the changes
-            self.unpack_existing_experiments()
-            if hasattr(self.gui, "data_selection_widget"):
-                try:
-                    logger.debug(f"Updating data_selection_widget after rename from '{old_name}' to '{new_name}'")
-                    self.gui.data_selection_widget.update(levels=("experiment",))
-                    logger.debug("data_selection_widget updated successfully")
-                except Exception as widget_error:
-                    logger.error(f"Failed to update data_selection_widget after rename: {widget_error}", exc_info=True)
-                    # Non-critical UI update failure, continue
-
             logger.info(f"Renamed experiment '{old_name}' to '{new_name}'")
+            return catalog_relocated
 
         except (ValueError, FileExistsError) as e:
             # Re-raise validation errors with their original type for better error handling
@@ -2030,7 +2015,7 @@ class DataManager:
         from_exp: str,
         to_exp: str,
         close_open_data: bool = True,
-    ):
+    ) -> bool:
         """Move a dataset from one experiment to another."""
         from pathlib import Path
 
@@ -2058,9 +2043,16 @@ class DataManager:
 
             # Move the dataset folder
             shutil.move(str(source_path), str(dest_path))
-            self._invalidate_catalogs(from_exp_path, to_exp_path)
+            from monstim_signals.io.experiment_catalog import transfer_catalog_dataset
+
+            catalog_transferred = transfer_catalog_dataset(from_exp_path, to_exp_path, source_path, dest_path)
+            if not catalog_transferred:
+                # The caches are optional. Discard incomplete/stale state and
+                # let the normal experiment loader rebuild lazily if needed.
+                self._invalidate_catalogs(from_exp_path, to_exp_path)
 
             logger.info(f"Moved dataset {dataset_name} from {from_exp} to {to_exp}")
+            return catalog_transferred
 
         except Exception as e:
             logger.exception(f"Failed to move dataset {dataset_name}: {e}")

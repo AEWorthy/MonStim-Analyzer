@@ -4,11 +4,13 @@ from pathlib import Path
 from monstim_signals.core.utils import load_config
 from monstim_signals.io.experiment_catalog import (
     CATALOG_FILENAME,
+    ExperimentCatalog,
     build_catalog,
     ensure_catalog,
     invalidate_catalogs,
     recording_stem,
     relocate_catalog_paths,
+    transfer_catalog_dataset,
 )
 from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository, RecordingRepository, SessionRepository
 from tests.helpers import create_minimal_dataset_folder, create_minimal_session_folder
@@ -99,6 +101,50 @@ def test_catalog_relocates_a_renamed_dataset_without_rebuild(tmp_path: Path):
     assert catalog.dataset_paths() == [new_dataset]
     assert catalog.session_paths(new_dataset) == [new_dataset / "RX02"]
     assert catalog.recordings(new_dataset / "RX02")[0].stem.parent == new_dataset / "RX02"
+
+
+def test_catalog_relocates_a_renamed_experiment_without_rebuild(tmp_path: Path):
+    old_experiment = tmp_path / "OldExperiment"
+    old_experiment.mkdir()
+    old_dataset = create_minimal_dataset_folder(old_experiment, dataset_name="Dataset", num_recordings=1)
+    build_catalog(old_experiment)
+
+    new_experiment = tmp_path / "NewExperiment"
+    old_experiment.rename(new_experiment)
+
+    assert relocate_catalog_paths(new_experiment, old_experiment, new_experiment)
+    catalog = ExperimentCatalog(new_experiment)
+    new_dataset = new_experiment / old_dataset.name
+    assert catalog.is_usable()
+    assert catalog.dataset_paths() == [new_dataset]
+    assert catalog.session_paths(new_dataset) == [new_dataset / "RX02"]
+
+
+def test_catalog_transfers_a_moved_dataset_without_rebuild(tmp_path: Path):
+    source_experiment = tmp_path / "Source"
+    destination_experiment = tmp_path / "Destination"
+    source_experiment.mkdir()
+    destination_experiment.mkdir()
+    source_dataset = create_minimal_dataset_folder(source_experiment, dataset_name="Dataset", num_recordings=1)
+    build_catalog(source_experiment)
+    build_catalog(destination_experiment)
+
+    destination_dataset = destination_experiment / source_dataset.name
+    source_dataset.rename(destination_dataset)
+
+    assert transfer_catalog_dataset(source_experiment, destination_experiment, source_dataset, destination_dataset)
+    source_catalog = ExperimentCatalog(source_experiment)
+    destination_catalog = ExperimentCatalog(destination_experiment)
+    assert source_catalog.is_usable()
+    assert destination_catalog.is_usable()
+    assert source_catalog.dataset_paths() == []
+    assert destination_catalog.dataset_paths() == [destination_dataset]
+    assert destination_catalog.recordings(destination_dataset / "RX02")[0].stem.parent == destination_dataset / "RX02"
+
+    destination_dataset.rename(source_dataset)
+    assert transfer_catalog_dataset(destination_experiment, source_experiment, destination_dataset, source_dataset)
+    assert source_catalog.dataset_paths() == [source_dataset]
+    assert destination_catalog.dataset_paths() == []
 
 
 def test_catalog_invalidation_removes_cache_and_forces_rebuild(tmp_path: Path):

@@ -42,3 +42,43 @@ def test_refresh_data_views_does_not_scan_all_experiments_when_rebuild_disabled(
     DataManager(gui).refresh_data_views(rebuild_catalogs=False)
 
     assert built == []
+
+
+def test_delete_experiment_stops_cache_warmup_before_removing_files(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from monstim_gui.managers.data_manager import DataManager
+
+    experiment = tmp_path / "LockedExperiment"
+    experiment.mkdir()
+    calls = []
+
+    class Warmup:
+        def cancel_and_wait(self):
+            calls.append("cancel")
+
+    gui = SimpleNamespace(
+        output_path=str(tmp_path),
+        expts_dict={"LockedExperiment": str(experiment)},
+        expts_dict_keys=["LockedExperiment"],
+        current_experiment=None,
+        current_dataset=None,
+        current_session=None,
+        cache_warmup=Warmup(),
+        set_current_experiment=lambda _value: None,
+        set_current_dataset=lambda _value: None,
+        set_current_session=lambda _value: None,
+    )
+
+    def remove(path):
+        assert calls == ["cancel"]
+        calls.append("remove")
+        Path(path).rmdir()
+
+    monkeypatch.setattr("monstim_gui.managers.data_manager.shutil.rmtree", remove)
+    monkeypatch.setattr(DataManager, "_invalidate_catalogs", staticmethod(lambda *_paths: None))
+
+    DataManager(gui).delete_experiment_by_id("LockedExperiment")
+
+    assert calls == ["cancel", "remove"]
+    assert "LockedExperiment" not in gui.expts_dict
