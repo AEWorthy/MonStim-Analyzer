@@ -605,6 +605,9 @@ class DataCurationManager(QDialog):
                 self.restore_selected_button,
                 self.mark_complete_button,
                 self.mark_incomplete_button,
+                self.move_selected_button,
+                self.copy_selected_button,
+                self.delete_selected_button,
             ]
         )
         selected_commands_button = QToolButton()
@@ -613,21 +616,6 @@ class DataCurationManager(QDialog):
         selected_commands_button.setMenu(selected_menu)
         selected_commands_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         command_layout.addWidget(selected_commands_button)
-
-        organize_menu = QMenu(self)
-        organize_menu.addActions(
-            [
-                self.move_selected_button,
-                self.copy_selected_button,
-                self.delete_selected_button,
-            ]
-        )
-        organize_button = QToolButton()
-        organize_button.setText("Organize")
-        organize_button.setToolTip("Move, copy, or delete checked datasets")
-        organize_button.setMenu(organize_menu)
-        organize_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        command_layout.addWidget(organize_button)
 
         # QToolButton's native minimum can be disproportionately wide on
         # high-DPI Windows styles.  Deliberate compact widths keep this command
@@ -639,7 +627,6 @@ class DataCurationManager(QDialog):
             (self.select_all_button, 70),
             (self.clear_selection_button, 60),
             (selected_commands_button, 125),
-            (organize_button, 80),
         ):
             button.setFixedWidth(width)
         command_layout.addStretch()
@@ -2034,10 +2021,11 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def set_selected_datasets_included(self, include):
         """Batch include or exclude checked datasets using undoable commands."""
-        from monstim_gui.commands import BatchCommand, ToggleDatasetInclusionCommand
+        from monstim_gui.commands import BatchCommand, ToggleDatasetInclusionCommand, _refresh_data_views
 
         selected = self._selected_dataset_data()
         commands = []
+        affected_experiment_ids = []
         for data in selected:
             metadata = data["metadata"]
             commands.append(
@@ -2046,11 +2034,21 @@ class DataCurationManager(QDialog):
                     data["experiment_id"],
                     metadata["id"],
                     exclude=not include,
+                    refresh_views=False,
                 )
             )
+            if data["experiment_id"] not in affected_experiment_ids:
+                affected_experiment_ids.append(data["experiment_id"])
         if commands:
             action = "Restore" if include else "Exclude"
-            command = BatchCommand(f"{action} {len(commands)} dataset(s)", commands)
+            command = BatchCommand(
+                f"{action} {len(commands)} dataset(s)",
+                commands,
+                # Inclusion only changes experiment.annot.json.  The catalog
+                # stores dataset/session/recording metadata, so rebuilding it
+                # here is unnecessary and was the source of long GUI freezes.
+                refresh_callback=lambda: _refresh_data_views(self.gui, *affected_experiment_ids, rebuild_catalogs=False),
+            )
             command.execute()
             self.session_commands.append(command)
             self._changes_made = True
@@ -2058,9 +2056,11 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def set_selected_datasets_completion(self, completed):
         """Set completion on checked datasets without changing child-session annotations."""
-        from monstim_gui.commands import BatchCommand, ToggleCompletionStatusCommand
+        from monstim_gui.commands import BatchCommand, ToggleCompletionStatusCommand, _refresh_data_views
+        from monstim_signals.io.experiment_catalog import refresh_dataset_annotations
 
         commands = []
+        dataset_paths_by_experiment = {}
         for data in self._selected_dataset_data():
             metadata = data["metadata"]
             if bool(metadata.get("is_completed")) == completed:
@@ -2073,12 +2073,21 @@ class DataCurationManager(QDialog):
                 experiment_id=data["experiment_id"],
                 new_status=completed,
                 dataset_path=Path(metadata["path"]),
+                refresh_catalog=False,
+                refresh_views=False,
             )
             commands.append(command)
+            dataset_paths_by_experiment.setdefault(data["experiment_id"], []).append(Path(metadata["path"]))
 
         if commands:
             action = "Mark Complete" if completed else "Mark Incomplete"
-            command = BatchCommand(f"{action} for {len(commands)} dataset(s)", commands)
+
+            def refresh_completion_batch():
+                for dataset_paths in dataset_paths_by_experiment.values():
+                    refresh_dataset_annotations(dataset_paths)
+                _refresh_data_views(self.gui, *dataset_paths_by_experiment, rebuild_catalogs=False)
+
+            command = BatchCommand(f"{action} for {len(commands)} dataset(s)", commands, refresh_callback=refresh_completion_batch)
             command.execute()
             self.session_commands.append(command)
             self._changes_made = True
@@ -2131,7 +2140,7 @@ class DataCurationManager(QDialog):
         """Copy selected datasets to another experiment immediately."""
         from PySide6.QtWidgets import QInputDialog
 
-        from monstim_gui.commands import BatchCommand, CopyDatasetCommand
+        from monstim_gui.commands import BatchCommand, CopyDatasetCommand, _refresh_data_views
 
         # Get selected datasets
         selected_datasets = []
@@ -2152,6 +2161,10 @@ class DataCurationManager(QDialog):
         target_exp, ok = QInputDialog.getItem(self, "Copy Datasets", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
+            # Close domain objects once before the batch.  Each copy needs
+            # exclusive filesystem access, but closing and garbage-collecting
+            # before every selected dataset adds avoidable UI stalls.
+            self.gui.data_manager.close_all_data()
             commands = [
                 CopyDatasetCommand(
                     self.gui,
@@ -2159,10 +2172,17 @@ class DataCurationManager(QDialog):
                     data["metadata"]["formatted_name"],
                     data["experiment_id"],
                     target_exp,
+                    close_data=False,
                 )
                 for data in selected_datasets
             ]
-            command = BatchCommand(f"Copy {len(commands)} dataset(s) to '{target_exp}'", commands)
+            for command_item in commands:
+                command_item.refresh_views = False
+            command = BatchCommand(
+                f"Copy {len(commands)} dataset(s) to '{target_exp}'",
+                commands,
+                refresh_callback=lambda: _refresh_data_views(self.gui, target_exp, rebuild_catalogs=False),
+            )
             try:
                 command.execute()
             except Exception as exc:
@@ -2203,7 +2223,7 @@ class DataCurationManager(QDialog):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            from monstim_gui.commands import DeleteDatasetCommand
+            from monstim_gui.commands import DeleteDatasetCommand, _refresh_data_views
 
             successful_deletions = 0
             errors = []
@@ -2216,6 +2236,7 @@ class DataCurationManager(QDialog):
                         ds_metadata["id"],
                         ds_metadata.get("formatted_name", ds_metadata["id"]),
                         ds_data["experiment_id"],
+                        refresh_views=False,
                     )
                     cmd.execute()
                     self.session_commands.append(cmd)
@@ -2225,6 +2246,8 @@ class DataCurationManager(QDialog):
 
             if successful_deletions > 0:
                 self._changes_made = True  # Mark that changes were made
+                affected_experiment_ids = {data["experiment_id"] for data in selected_datasets if data["experiment_id"] in self.gui.expts_dict}
+                _refresh_data_views(self.gui, *affected_experiment_ids, rebuild_catalogs=False)
 
             if errors:
                 error_msg = "\n".join(errors)

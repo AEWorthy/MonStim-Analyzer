@@ -451,8 +451,10 @@ def transfer_catalog_dataset(
     destination_experiment: Path,
     source_dataset: Path,
     destination_dataset: Path,
+    *,
+    remove_source: bool = True,
 ) -> bool:
-    """Transfer one dataset's cached rows between experiment catalogs.
+    """Transfer or copy one dataset's cached rows between experiment catalogs.
 
     The dataset has already moved on disk when this function is called.  Both
     catalogs retain the pre-move row data, so this copies the affected rows to
@@ -516,15 +518,81 @@ def transfer_catalog_dataset(
                 (DIRECTORY_SIGNATURE_KEY, _directory_signature(destination_catalog.experiment_path)),
             )
 
-        with source_catalog.connect() as connection:
-            connection.execute("DELETE FROM recordings WHERE session_path LIKE ? OR raw_path LIKE ?", (source_like, source_like))
-            connection.execute("DELETE FROM sessions WHERE dataset_path = ? OR path LIKE ?", (source_text, source_like))
-            connection.execute("DELETE FROM datasets WHERE path = ?", (source_text,))
-            connection.execute(
-                "INSERT INTO catalog_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (DIRECTORY_SIGNATURE_KEY, _directory_signature(source_catalog.experiment_path)),
-            )
+        if remove_source:
+            with source_catalog.connect() as connection:
+                connection.execute("DELETE FROM recordings WHERE session_path LIKE ? OR raw_path LIKE ?", (source_like, source_like))
+                connection.execute("DELETE FROM sessions WHERE dataset_path = ? OR path LIKE ?", (source_text, source_like))
+                connection.execute("DELETE FROM datasets WHERE path = ?", (source_text,))
+                connection.execute(
+                    "INSERT INTO catalog_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (DIRECTORY_SIGNATURE_KEY, _directory_signature(source_catalog.experiment_path)),
+                )
         return True
     except OSError, sqlite3.Error:
         logger.warning("Could not transfer catalog rows for %s", source_dataset, exc_info=True)
+        return False
+
+
+def copy_catalog_dataset(
+    source_experiment: Path,
+    destination_experiment: Path,
+    source_dataset: Path,
+    destination_dataset: Path,
+) -> bool:
+    """Add a copied dataset to an existing destination catalog without a rebuild.
+
+    The copy's recording metadata is identical to its source.  Transfer the
+    already-cached rows, then replace the copied dataset annotation because a
+    same-experiment duplicate can adjust its display metadata on disk.
+    """
+    if not transfer_catalog_dataset(source_experiment, destination_experiment, source_dataset, destination_dataset, remove_source=False):
+        return False
+
+    destination_dataset = destination_dataset.resolve()
+    catalog = ExperimentCatalog(destination_experiment)
+    try:
+        annotation_path = destination_dataset / "dataset.annot.json"
+        annotation_size, annotation_mtime = _file_fingerprint(annotation_path)
+        with catalog.connect() as connection:
+            connection.execute(
+                "UPDATE datasets SET id = ?, sort_name = ?, annot_json = ?, annot_size = ?, annot_mtime = ? WHERE path = ?",
+                (
+                    destination_dataset.name,
+                    destination_dataset.name.casefold(),
+                    _read_text_if_exists(annotation_path),
+                    annotation_size,
+                    annotation_mtime,
+                    str(destination_dataset),
+                ),
+            )
+        return True
+    except OSError, sqlite3.Error:
+        logger.warning("Could not update copied catalog row for %s", destination_dataset, exc_info=True)
+        return False
+
+
+def remove_catalog_dataset(experiment_path: Path, dataset_path: Path) -> bool:
+    """Remove one deleted dataset's rows from a usable catalog transactionally."""
+    experiment_path = experiment_path.resolve()
+    dataset_path = dataset_path.resolve()
+    catalog = ExperimentCatalog(experiment_path)
+    if not catalog.is_usable():
+        return False
+    if dataset_path.parent != experiment_path:
+        raise ValueError(f"Dataset {dataset_path} does not belong to experiment {experiment_path}")
+
+    dataset_text = str(dataset_path)
+    dataset_like = f"{dataset_text}%"
+    try:
+        with catalog.connect() as connection:
+            connection.execute("DELETE FROM recordings WHERE session_path LIKE ? OR raw_path LIKE ?", (dataset_like, dataset_like))
+            connection.execute("DELETE FROM sessions WHERE dataset_path = ? OR path LIKE ?", (dataset_text, dataset_like))
+            connection.execute("DELETE FROM datasets WHERE path = ?", (dataset_text,))
+            connection.execute(
+                "INSERT INTO catalog_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (DIRECTORY_SIGNATURE_KEY, _directory_signature(experiment_path)),
+            )
+        return True
+    except OSError, sqlite3.Error:
+        logger.warning("Could not remove catalog rows for %s", dataset_path, exc_info=True)
         return False

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from PySide6.QtWidgets import QDialog
 
+from monstim_gui.commands import BatchCommand, Command
 from monstim_gui.dialogs.data_curation_manager import DataCurationManager, auto_refresh
 
 
@@ -92,16 +93,17 @@ def test_bulk_dataset_exclusion_keeps_false_include_argument(monkeypatch):
     created = []
 
     class FakeToggleCommand:
-        def __init__(self, gui, experiment_id, dataset_id, *, exclude):
-            created.append((experiment_id, dataset_id, exclude))
+        def __init__(self, gui, experiment_id, dataset_id, *, exclude, refresh_views=True):
+            created.append((experiment_id, dataset_id, exclude, refresh_views))
 
         def execute(self):
             pass
 
     class FakeBatchCommand:
-        def __init__(self, name, commands):
+        def __init__(self, name, commands, *, refresh_callback=None):
             self.name = name
             self.commands = commands
+            self.refresh_callback = refresh_callback
 
         def execute(self):
             pass
@@ -122,8 +124,30 @@ def test_bulk_dataset_exclusion_keeps_false_include_argument(monkeypatch):
 
     DataCurationManager.set_selected_datasets_included(manager, False)
 
-    assert created == [("exp", "ds-1", True), ("exp", "ds-2", True)]
+    assert created == [("exp", "ds-1", True, False), ("exp", "ds-2", True, False)]
     assert manager.session_commands[0].name == "Exclude 2 dataset(s)"
+
+
+def test_batch_command_runs_one_refresh_after_execute_and_undo():
+    events = []
+
+    class TrackedCommand(Command):
+        def execute(self):
+            events.append("execute")
+
+        def undo(self):
+            events.append("undo")
+
+    command = BatchCommand(
+        "Batch",
+        [TrackedCommand(), TrackedCommand()],
+        refresh_callback=lambda: events.append("refresh"),
+    )
+
+    command.execute()
+    command.undo()
+
+    assert events == ["execute", "execute", "refresh", "undo", "undo", "refresh"]
 
 
 def test_failed_context_deletion_is_reported_without_escaping_qt_slot(monkeypatch):

@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 from monstim_signals.core.utils import load_config
@@ -6,10 +7,12 @@ from monstim_signals.io.experiment_catalog import (
     CATALOG_FILENAME,
     ExperimentCatalog,
     build_catalog,
+    copy_catalog_dataset,
     ensure_catalog,
     invalidate_catalogs,
     recording_stem,
     relocate_catalog_paths,
+    remove_catalog_dataset,
     transfer_catalog_dataset,
 )
 from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository, RecordingRepository, SessionRepository
@@ -145,6 +148,34 @@ def test_catalog_transfers_a_moved_dataset_without_rebuild(tmp_path: Path):
     assert transfer_catalog_dataset(destination_experiment, source_experiment, destination_dataset, source_dataset)
     assert source_catalog.dataset_paths() == [source_dataset]
     assert destination_catalog.dataset_paths() == []
+
+
+def test_catalog_adds_and_removes_a_copied_dataset_without_rebuild(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    source_dataset = create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=1)
+    destination_dataset = experiment / "Dataset_copy"
+    shutil.copytree(source_dataset, destination_dataset)
+    copied_annotation = json.loads((destination_dataset / "dataset.annot.json").read_text())
+    copied_annotation["condition"] = "copy"
+    (destination_dataset / "dataset.annot.json").write_text(json.dumps(copied_annotation))
+    build_catalog(experiment)
+
+    # Start from a catalog that predates the copied directory, as it would in
+    # the curation workflow.
+    shutil.rmtree(destination_dataset)
+    build_catalog(experiment)
+    shutil.copytree(source_dataset, destination_dataset)
+    (destination_dataset / "dataset.annot.json").write_text(json.dumps(copied_annotation))
+
+    assert copy_catalog_dataset(experiment, experiment, source_dataset, destination_dataset)
+    catalog = ExperimentCatalog(experiment)
+    assert catalog.dataset_paths() == [source_dataset, destination_dataset]
+    assert catalog.recordings(destination_dataset / "RX02")[0].stem.parent == destination_dataset / "RX02"
+
+    shutil.rmtree(destination_dataset)
+    assert remove_catalog_dataset(experiment, destination_dataset)
+    assert catalog.dataset_paths() == [source_dataset]
 
 
 def test_catalog_invalidation_removes_cache_and_forces_rebuild(tmp_path: Path):

@@ -2157,7 +2157,13 @@ class DataManager:
                         suffix = dest_path.name[len(dataset_folder_name) :]
                         annotation["condition"] = f"{annotation['condition']}{suffix}"
                     annotation_path.write_text(json.dumps(annotation, indent=2))
-            self._invalidate_catalogs(to_exp_path)
+            from monstim_signals.io.experiment_catalog import copy_catalog_dataset
+
+            if not copy_catalog_dataset(from_exp_path, to_exp_path, source_path, dest_path):
+                # A missing or unusable cache is never authoritative.  Drop it
+                # and let the normal loader rebuild lazily instead of risking
+                # stale discovery results.
+                self._invalidate_catalogs(to_exp_path)
 
             logger.info(f"Copied dataset {dataset_name} from {from_exp} to {to_exp} as {dest_path.name}")
 
@@ -2217,7 +2223,10 @@ class DataManager:
             if dataset_path.exists():
                 # Delete the dataset folder
                 shutil.rmtree(dataset_path)
-                self._invalidate_catalogs(exp_path)
+                from monstim_signals.io.experiment_catalog import remove_catalog_dataset
+
+                if not remove_catalog_dataset(exp_path, dataset_path):
+                    self._invalidate_catalogs(exp_path)
                 logger.info(f"Deleted dataset folder: {dataset_path}")
             else:
                 logger.warning(f"Dataset folder not found for deletion: {dataset_path}")

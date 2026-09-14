@@ -50,12 +50,23 @@ class Command(abc.ABC):
 
 
 class BatchCommand:
-    """Group already-compatible commands into one atomic undo-history entry."""
+    """Group already-compatible commands into one atomic undo-history entry.
 
-    def __init__(self, command_name: str, commands: list[Command]):
+    ``refresh_callback`` is deliberately owned by the batch rather than its
+    children.  Some disk-backed child commands would otherwise refresh the
+    full application after every item, which makes a large batch appear to
+    hang the UI even though the underlying annotation writes are quick.
+    """
+
+    def __init__(self, command_name: str, commands: list[Command], *, refresh_callback=None):
         self.command_name = command_name
         self.commands = list(commands)
         self._executed: list[Command] = []
+        self._refresh_callback = refresh_callback
+
+    def _refresh(self) -> None:
+        if self._refresh_callback is not None:
+            self._refresh_callback()
 
     def execute(self):
         self._executed.clear()
@@ -67,11 +78,16 @@ class BatchCommand:
             for command in reversed(self._executed):
                 command.undo()
             self._executed.clear()
+            self._refresh()
             raise
+        self._refresh()
 
     def undo(self):
-        for command in reversed(self._executed or self.commands):
-            command.undo()
+        try:
+            for command in reversed(self._executed or self.commands):
+                command.undo()
+        finally:
+            self._refresh()
 
     def get_description(self) -> str:
         return self.command_name
@@ -1032,7 +1048,18 @@ class MoveDatasetsCommand(Command):
 
 
 class CopyDatasetCommand(Command):
-    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str | None = None):
+    def __init__(
+        self,
+        gui,
+        dataset_id: str,
+        dataset_name: str,
+        from_exp: str,
+        to_exp: str,
+        new_name: str | None = None,
+        *,
+        refresh_views: bool = True,
+        close_data: bool = True,
+    ):
         self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
         self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
@@ -1041,6 +1068,8 @@ class CopyDatasetCommand(Command):
         self.to_exp = to_exp
         self.new_name = new_name  # Optional new name for the copied dataset
         self.copied_folder_name = None  # Will be set after execution
+        self.refresh_views = refresh_views
+        self.close_data = close_data
 
     def execute(self):
         """Copy the dataset immediately."""
@@ -1051,7 +1080,14 @@ class CopyDatasetCommand(Command):
             to_exp_path = Path(self.gui.expts_dict[self.to_exp])
             original_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
 
-            self.gui.data_manager.copy_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp, self.new_name)
+            self.gui.data_manager.copy_dataset(
+                self.dataset_id,
+                self.dataset_name,
+                self.from_exp,
+                self.to_exp,
+                self.new_name,
+                close_data=self.close_data,
+            )
 
             self.finalize_copy(original_datasets)
         except Exception as e:
@@ -1071,14 +1107,16 @@ class CopyDatasetCommand(Command):
         added_datasets = new_datasets - original_datasets
         self.copied_folder_name = next(iter(added_datasets), self.new_name or self.dataset_id)
 
-        _refresh_data_views(self.gui, self.to_exp)
+        if self.refresh_views:
+            _refresh_data_views(self.gui, self.to_exp, rebuild_catalogs=False)
 
     def undo(self):
         """Delete the copied dataset."""
         try:
             if self.copied_folder_name:
                 self.gui.data_manager.delete_dataset(self.copied_folder_name, self.copied_folder_name, self.to_exp)
-                _refresh_data_views(self.gui, self.to_exp)
+                if self.refresh_views:
+                    _refresh_data_views(self.gui, self.to_exp, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to undo dataset copy: {e!s}")
             raise Exception(f"Failed to undo dataset copy: {e!s}") from e
@@ -1158,17 +1196,19 @@ class RenameExperimentCommand(Command):
 class DeleteDatasetCommand(Command):
     """Delete a dataset from an experiment. This operation is irreversible; undo will show a warning."""
 
-    def __init__(self, gui, dataset_id: str, dataset_name: str, exp_id: str):
+    def __init__(self, gui, dataset_id: str, dataset_name: str, exp_id: str, *, refresh_views: bool = True):
         self.command_name = f"Delete Dataset '{dataset_name}' in '{exp_id}'"
         self.gui = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.exp_id = exp_id
+        self.refresh_views = refresh_views
 
     def execute(self):
         try:
             self.gui.data_manager.delete_dataset(self.dataset_id, self.dataset_name, self.exp_id)
-            _refresh_data_views(self.gui, self.exp_id)
+            if self.refresh_views:
+                _refresh_data_views(self.gui, self.exp_id, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to delete dataset: {e!s}")
             raise Exception(f"Failed to delete dataset: {e!s}") from e
@@ -1188,13 +1228,14 @@ class DeleteDatasetCommand(Command):
 class ToggleDatasetInclusionCommand(Command):
     """Include or exclude a dataset at the experiment level by updating ExperimentAnnot.excluded_datasets."""
 
-    def __init__(self, gui, exp_id: str, dataset_id: str, exclude: bool):
+    def __init__(self, gui, exp_id: str, dataset_id: str, exclude: bool, *, refresh_views: bool = True):
         action = "Exclude" if exclude else "Include"
         self.command_name = f"{action} Dataset '{dataset_id}' in '{exp_id}'"
         self.gui = gui
         self.exp_id = exp_id
         self.dataset_id = dataset_id
         self.exclude = exclude
+        self.refresh_views = refresh_views
         self._prev_was_excluded = None
 
     def _apply(self, set_excluded: bool):
@@ -1233,7 +1274,8 @@ class ToggleDatasetInclusionCommand(Command):
             logger.exception(f"Failed to update dataset inclusion: {e!s}")
             raise Exception(f"Failed to update dataset inclusion: {e!s}") from e
 
-        _refresh_data_views(self.gui, self.exp_id)
+        if self.refresh_views:
+            _refresh_data_views(self.gui, self.exp_id, rebuild_catalogs=False)
 
     def execute(self):
         self._apply(self.exclude)
@@ -1259,7 +1301,18 @@ class ToggleCompletionStatusCommand(Command):
     persistence to ensure undo/redo works reliably across selection changes.
     """
 
-    def __init__(self, gui, level: str, target_object, *, experiment_id: str | None = None, new_status: bool | None = None, dataset_path=None):
+    def __init__(
+        self,
+        gui,
+        level: str,
+        target_object,
+        *,
+        experiment_id: str | None = None,
+        new_status: bool | None = None,
+        dataset_path=None,
+        refresh_catalog: bool = True,
+        refresh_views: bool = True,
+    ):
         """
         Args:
             gui: The main GUI instance
@@ -1272,6 +1325,8 @@ class ToggleCompletionStatusCommand(Command):
         self.old_status = getattr(target_object, "is_completed", False)
         self.new_status = not self.old_status if new_status is None else new_status
         self.dataset_path = Path(dataset_path) if dataset_path is not None else None
+        self.refresh_catalog = refresh_catalog
+        self.refresh_views = refresh_views
 
         # Store hierarchy IDs for reliable lookup from disk
         if level == "experiment":
@@ -1360,9 +1415,10 @@ class ToggleCompletionStatusCommand(Command):
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
-                    from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
+                    if self.refresh_catalog:
+                        from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
 
-                    refresh_dataset_annotation(dataset_path)
+                        refresh_dataset_annotation(dataset_path)
 
                     # Update in-memory dataset object if present
                     try:
@@ -1424,7 +1480,7 @@ class ToggleCompletionStatusCommand(Command):
                     return
 
             # Refresh UI if the affected object is currently visible
-            if hasattr(self.gui, "data_selection_widget"):
+            if self.refresh_views and hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update_completion_status(self.level)
                 self.gui.data_selection_widget.update_all_completion_statuses()
 
