@@ -64,6 +64,46 @@ def test_automatic_preview_preserves_exclusion_added_after_dialog_open(qapplicat
     assert states["rec-1"]["status"] == "Existing exclusion"
 
 
+def test_changing_apply_scope_rebuilds_the_recording_preview(qapplication):
+    parent = QWidget()
+    first_session = DummySession()
+    second_session = DummySession()
+    second_session.id = "session-2"
+    second_session.recordings = [DummyRecording("rec-3")]
+    parent.current_session = first_session
+    parent.current_dataset = type("Dataset", (), {"sessions": [first_session, second_session]})()
+    parent.current_experiment = None
+    parent.status_bar = None
+
+    editor = RecordingExclusionEditor(parent)
+    assert editor.recordings_table.rowCount() == 2
+
+    editor.level_combo.setCurrentIndex(editor.level_combo.findData("dataset"))
+
+    assert editor.recordings_table.rowCount() == 3
+    assert {entry["session_id"] for entry in editor._last_recordings_data} == {"session-1", "session-2"}
+
+
+def test_manual_decisions_do_not_rebuild_the_full_preview(monkeypatch, qapplication):
+    editor = make_editor()
+    calls = 0
+    original_update_preview = editor.update_preview
+
+    def tracked_update_preview():
+        nonlocal calls
+        calls += 1
+        return original_update_preview()
+
+    monkeypatch.setattr(editor, "update_preview", tracked_update_preview)
+    editor.recordings_table.selectAll()
+
+    editor.toggle_selected_exclusions()
+
+    assert calls == 0
+    assert set(editor.manual_decisions.values()) == {True}
+    assert "Pending exclusion: 2" in editor.summary_label.text()
+
+
 def test_editor_show_does_not_schedule_a_post_paint_position_nudge(monkeypatch, qapplication):
     """The first visible editor frame must already be in its final position."""
     import monstim_gui.dialogs.recording_exclusion_editor as editor_module

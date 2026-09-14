@@ -5,6 +5,7 @@ from PySide6.QtGui import QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QSpinBox, QStyle, QStyleOptionSpinBox, QWidget
 
+from monstim_gui.core.keyboard_shortcuts import SHORTCUT_DEFINITIONS, default_shortcuts, normalize_shortcuts
 from monstim_gui.core.ui_theme import (
     APPLICATION_STYLESHEET,
     SpinBoxControlStyle,
@@ -130,3 +131,27 @@ def test_settings_center_uses_the_warm_application_selection_colors(tmp_path):
     assert "#304553" not in stylesheet
     assert "#6d9fbe" not in stylesheet
     center.close()
+
+
+def test_keyboard_shortcut_defaults_are_unique_and_include_plot_without_extraction():
+    shortcuts = normalize_shortcuts(default_shortcuts())
+
+    assert len(set(shortcuts.values())) == len(SHORTCUT_DEFINITIONS)
+    assert shortcuts["plot"] == "Ctrl+P"
+    assert shortcuts["plot_extract"] == "Ctrl+Shift+P"
+    assert shortcuts["next_session"] == "Alt+1"
+    assert shortcuts["previous_session"] == "Alt+Shift+1"
+    assert shortcuts["complete_session"] == "Ctrl+1"
+    assert shortcuts["incomplete_session"] == "Ctrl+Shift+1"
+
+
+def test_keyboard_shortcut_preferences_reject_duplicate_assignments():
+    shortcuts = default_shortcuts()
+    shortcuts["next_session"] = shortcuts["previous_session"]
+
+    try:
+        normalize_shortcuts(shortcuts)
+    except ValueError as error:
+        assert "assigned more than once" in str(error)
+    else:
+        raise AssertionError("duplicate shortcuts must be rejected")

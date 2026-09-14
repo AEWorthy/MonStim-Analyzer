@@ -188,9 +188,10 @@ class RecordingExclusionEditor(QDialog):
 
         main_layout.addLayout(button_layout)
 
-        # Criteria changes are staged.  Requiring an explicit Preview keeps
-        # large-scope curation responsive while values are being edited.
-        self.level_combo.currentTextChanged.connect(self._mark_preview_stale)
+        # A scope change changes which recordings the user is reviewing, so it
+        # must immediately replace the table.  Other criteria remain staged:
+        # evaluating them can require waveform analysis across the whole scope.
+        self.level_combo.currentIndexChanged.connect(self._update_preview_for_level_change)
         self._configure_tooltips()
 
     @staticmethod
@@ -824,6 +825,11 @@ class RecordingExclusionEditor(QDialog):
         self.apply_button.setEnabled(False)
         self.summary_label.setText("Criteria changed. Click Preview to update the review.")
 
+    def _update_preview_for_level_change(self, *_args) -> None:
+        """Replace the review when its session scope changes."""
+        self._clear_preview_caches()
+        self.update_preview()
+
     def _mark_preview_current(self) -> None:
         """Record that the visible review corresponds to the current settings."""
         self._preview_is_stale = False
@@ -1397,16 +1403,7 @@ class RecordingExclusionEditor(QDialog):
         self.recordings_table.setSortingEnabled(True)
         self.recordings_table.sortItems(self._sort_column, self._sort_order)
 
-        # Update summary
-        total_recordings = len(recordings_data)
-        currently_excluded = sum(1 for d in recordings_data if d["currently_excluded"])
-        will_exclude = sum(1 for d in recordings_data if d["will_exclude"])
-
-        summary_text = f"Total recordings: {total_recordings} | "
-        summary_text += f"Currently excluded: {currently_excluded} | "
-        summary_text += f"Pending exclusion: {will_exclude} | Range: {self.range_combo.currentText()}"
-
-        self.summary_label.setText(summary_text)
+        self._update_preview_summary()
         self._apply_preview_filter()
         self._mark_preview_current()
 
@@ -1481,6 +1478,80 @@ class RecordingExclusionEditor(QDialog):
             elif mode == "included":
                 show = not data["currently_excluded"] and not data["will_exclude"]
             self.recordings_table.setRowHidden(row, not show)
+
+    def _update_preview_summary(self) -> None:
+        """Refresh summary text from the already evaluated preview entries."""
+        recordings_data = getattr(self, "_last_recordings_data", [])
+        total_recordings = len(recordings_data)
+        currently_excluded = sum(1 for data in recordings_data if data["currently_excluded"])
+        will_exclude = sum(1 for data in recordings_data if data["will_exclude"])
+        self.summary_label.setText(
+            f"Total recordings: {total_recordings} | "
+            f"Currently excluded: {currently_excluded} | "
+            f"Pending exclusion: {will_exclude} | Range: {self.range_combo.currentText()}"
+        )
+
+    def _refresh_staged_decision_rows(self, entries: list[dict[str, Any]]) -> None:
+        """Update manually changed rows without rebuilding a large preview.
+
+        Manual include/exclude only changes staged state.  Re-running
+        ``update_preview`` here previously recalculated and repainted every
+        recording in the selected experiment, even though all quality results
+        and sparklines were unchanged.
+        """
+        changed_entry_ids = {id(entry) for entry in entries}
+        rows_by_data_index = {}
+        for row in range(self.recordings_table.rowCount()):
+            id_item = self.recordings_table.item(row, 1)
+            data_index = id_item.data(Qt.ItemDataRole.UserRole) if id_item is not None else None
+            if isinstance(data_index, int):
+                rows_by_data_index[data_index] = row
+
+        for data_index, entry in enumerate(self._last_recordings_data):
+            if id(entry) not in changed_entry_ids:
+                continue
+
+            recording = entry["recording"]
+            session = entry["session"]
+            key = self._recording_key(recording, session)
+            current_status = entry["currently_excluded"]
+            existing_exclusion = self.initial_exclusion_states.setdefault(key, current_status) or current_status
+            manual_decision = self.manual_decisions.get(key)
+            will_exclude = manual_decision if manual_decision is not None else (existing_exclusion or entry["evaluation"]["flagged"])
+
+            entry["manual_decision"] = manual_decision
+            entry["will_exclude"] = bool(will_exclude)
+            if manual_decision is True:
+                entry["status"] = "Manual exclude"
+            elif manual_decision is False:
+                entry["status"] = "Manual include"
+            elif existing_exclusion:
+                entry["status"] = "Existing exclusion"
+            elif will_exclude:
+                entry["status"] = "Will exclude"
+            else:
+                entry["status"] = "Included"
+
+            preview_key = f"{session.id}:{recording.id}"
+            if will_exclude:
+                self.preview_excluded_recordings.add(preview_key)
+            else:
+                self.preview_excluded_recordings.discard(preview_key)
+
+            # Rows may be sorted, so locate the visual row through the stable
+            # data index stored on its recording-ID item.
+            row = rows_by_data_index.get(data_index)
+            if row is not None:
+                status_item = self.recordings_table.item(row, 4)
+                if status_item is not None:
+                    status_item.setText(entry["status"])
+                for column in range(self.recordings_table.columnCount()):
+                    item = self.recordings_table.item(row, column)
+                    if item is not None:
+                        self._style_preview_item(item, entry)
+
+        self._update_preview_summary()
+        self._apply_preview_filter()
 
     def _selected_entries(self) -> list[dict[str, Any]]:
         if not hasattr(self, "_last_recordings_data") or not self._last_recordings_data:
@@ -1607,7 +1678,7 @@ class RecordingExclusionEditor(QDialog):
             return
         for entry in entries:
             self.manual_decisions[self._recording_key(entry["recording"], entry["session"])] = exclude
-        self.update_preview()
+        self._refresh_staged_decision_rows(entries)
 
     def _clear_selected_manual_decisions(self):
         entries = self._selected_entries()
@@ -1616,7 +1687,7 @@ class RecordingExclusionEditor(QDialog):
             return
         for entry in entries:
             self.manual_decisions.pop(self._recording_key(entry["recording"], entry["session"]), None)
-        self.update_preview()
+        self._refresh_staged_decision_rows(entries)
 
     def toggle_selected_exclusions(self):
         """Stage an explicit exclusion for the selected rows."""

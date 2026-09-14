@@ -38,7 +38,9 @@ from monstim_gui.commands import (
     RestoreRecordingCommand,
     RestoreSessionCommand,
     SetChildCompletionStatusCommand,
+    ToggleCompletionStatusCommand,
 )
+from monstim_gui.core.keyboard_shortcuts import KeyboardShortcutController
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.core.ui_theme import apply_application_theme
 from monstim_gui.dialogs import (
@@ -130,6 +132,7 @@ class MonstimGUI(QMainWindow):
         self._recenter_window()
 
         self.command_invoker = CommandInvoker(self)
+        self.keyboard_shortcuts = KeyboardShortcutController(self)
         # Initialize undo/redo menu state
         self.menu_bar.update_undo_redo_labels()
 
@@ -577,6 +580,44 @@ class MonstimGUI(QMainWindow):
             self.status_bar.showMessage(f"Marked {len(command._children)} active {child_label} {state}.", 5000)
         finally:
             QApplication.restoreOverrideCursor()
+
+    def step_data_selection(self, level: str, direction: int) -> None:
+        """Move one visible selection at a requested data hierarchy level."""
+        combos = {
+            "experiment": self.data_selection_widget.experiment_combo,
+            "dataset": self.data_selection_widget.dataset_combo,
+            "session": self.data_selection_widget.session_combo,
+        }
+        combo = combos[level]
+        current_index = combo.currentIndex()
+        target_index = current_index + direction
+        if not combo.isEnabled() or current_index < 0 or not 0 <= target_index < combo.count():
+            edge = "first" if direction < 0 else "last"
+            self.status_bar.showMessage(f"Already at the {edge} available {level}.", 3000)
+            return
+        combo.setCurrentIndex(target_index)
+
+    def set_current_completion_status(self, level: str, completed: bool) -> None:
+        """Set completion for the selected hierarchy object as one undoable action."""
+        selected = {
+            "experiment": self.current_experiment,
+            "dataset": self.current_dataset,
+            "session": self.current_session,
+        }[level]
+        if selected is None:
+            self.status_bar.showMessage(f"Select a {level} before changing completion status.", 5000)
+            return
+        if bool(getattr(selected, "is_completed", False)) == completed:
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"Selected {level} is already marked {state}.", 3000)
+            return
+        try:
+            self.command_invoker.execute(ToggleCompletionStatusCommand(self, level, selected, new_status=completed))
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"Marked selected {level} {state}.", 5000)
+        except (OSError, ValueError, RuntimeError) as error:
+            logger.exception("Could not update %s completion status", level)
+            QMessageBox.critical(self, "Completion status not changed", str(error))
 
     # Menu bar functions
     def manage_latency_windows(self, level: str):
