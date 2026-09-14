@@ -1168,6 +1168,9 @@ class DataManager:
                     self.load_dataset(0, auto_load_first_session=True)
 
             self.gui.plot_widget.on_data_selection_changed()
+            keyboard_shortcuts = getattr(self.gui, "keyboard_shortcuts", None)
+            if keyboard_shortcuts is not None:
+                keyboard_shortcuts.on_experiment_load_finished()
 
             # Provide informative status message based on experiment content
             if experiment.datasets:
@@ -1209,6 +1212,9 @@ class DataManager:
 
     def _on_experiment_load_error(self, error_message):
         """Handle experiment loading error."""
+        keyboard_shortcuts = getattr(self.gui, "keyboard_shortcuts", None)
+        if keyboard_shortcuts is not None:
+            keyboard_shortcuts.on_experiment_load_failed()
         QMessageBox.critical(self.gui, "Error", error_message)
         logger.error(f"Experiment loading error: {error_message}")
 
@@ -1270,6 +1276,9 @@ class DataManager:
 
     def _on_experiment_load_canceled(self):
         """Handle experiment loading cancellation."""
+        keyboard_shortcuts = getattr(self.gui, "keyboard_shortcuts", None)
+        if keyboard_shortcuts is not None:
+            keyboard_shortcuts.on_experiment_load_failed()
         # Check if loading actually completed successfully - if so, ignore this cancel signal
         if hasattr(self, "loading_completed_successfully") and self.loading_completed_successfully:
             logger.debug("Ignoring cancel signal - experiment loading completed successfully")

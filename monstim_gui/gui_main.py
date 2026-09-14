@@ -581,8 +581,12 @@ class MonstimGUI(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def step_data_selection(self, level: str, direction: int) -> None:
-        """Move one visible selection at a requested data hierarchy level."""
+    def step_data_selection(self, level: str, direction: int) -> bool:
+        """Move one visible selection at a requested data hierarchy level.
+
+        Returns whether a new item was selected, so keyboard navigation can
+        optionally redraw the current plot only after a successful change.
+        """
         combos = {
             "experiment": self.data_selection_widget.experiment_combo,
             "dataset": self.data_selection_widget.dataset_combo,
@@ -594,8 +598,9 @@ class MonstimGUI(QMainWindow):
         if not combo.isEnabled() or current_index < 0 or not 0 <= target_index < combo.count():
             edge = "first" if direction < 0 else "last"
             self.status_bar.showMessage(f"Already at the {edge} available {level}.", 3000)
-            return
+            return False
         combo.setCurrentIndex(target_index)
+        return combo.currentIndex() == target_index and combo.itemData(target_index, Qt.ItemDataRole.UserRole) is not None
 
     def set_current_completion_status(self, level: str, completed: bool) -> None:
         """Set completion for the selected hierarchy object as one undoable action."""

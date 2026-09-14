@@ -25,6 +25,8 @@ Use **Program** for application-specific behavior that never belongs to an analy
 
 Use **Keyboard shortcuts** to customize main-window controls for rapid data curation and plotting. The shortcut column always shows the currently assigned keys, so it serves as the authoritative, preference-aware shortcut reference. Click a field, press the desired key combination, then choose **Apply** or **OK**. Changes take effect immediately after applying and are remembered for future launches. Clear a field to disable its command; shortcuts must be unique. **Restore Shortcut Defaults** returns every command to the bindings below. The session, dataset, experiment, and Plot tooltips update to show customized navigation and plotting shortcuts.
 
+**Automatically plot after keyboard navigation** is enabled by default. When enabled, moving to a different session, dataset, or experiment with one of these shortcuts immediately runs the selected plot using the currently selected plot settings. It affects keyboard navigation only; selecting data with the mouse does not trigger a plot.
+
 | Command | Default | Behavior |
 | --- | --- | --- |
 | Previous session / dataset / experiment | `Alt+Shift+1` / `Alt+Shift+2` / `Alt+Shift+3` | Select the preceding item at that level. |

@@ -1,11 +1,11 @@
 """Regression coverage for reusable Settings Center controls."""
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QSettings, Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QSpinBox, QStyle, QStyleOptionSpinBox, QWidget
 
-from monstim_gui.core.keyboard_shortcuts import SHORTCUT_DEFINITIONS, default_shortcuts, normalize_shortcuts
+from monstim_gui.core.keyboard_shortcuts import SHORTCUT_DEFINITIONS, KeyboardShortcutController, default_shortcuts, normalize_shortcuts
 from monstim_gui.core.ui_theme import (
     APPLICATION_STYLESHEET,
     SpinBoxControlStyle,
@@ -155,3 +155,114 @@ def test_keyboard_shortcut_preferences_reject_duplicate_assignments():
         assert "assigned more than once" in str(error)
     else:
         raise AssertionError("duplicate shortcuts must be rejected")
+
+
+def test_keyboard_navigation_auto_plot_preference_defaults_to_enabled_and_persists(tmp_path):
+    settings = QSettings(str(tmp_path / "shortcuts.ini"), QSettings.Format.IniFormat)
+
+    assert KeyboardShortcutController.load_auto_plot_on_navigation(settings) is True
+
+    KeyboardShortcutController.save_preferences(default_shortcuts(), auto_plot_on_navigation=False, settings=settings)
+
+    assert KeyboardShortcutController.load_auto_plot_on_navigation(settings) is False
+
+
+def test_keyboard_navigation_plots_only_after_a_successful_selection_change():
+    class PlotController:
+        def __init__(self):
+            self.calls = 0
+
+        def plot_data(self):
+            self.calls += 1
+
+    class Gui:
+        def __init__(self, changed):
+            self.changed = changed
+            self.navigation_calls = []
+            self.plot_controller = PlotController()
+            self.current_experiment = object()
+
+        def step_data_selection(self, level, direction):
+            self.navigation_calls.append((level, direction))
+            return self.changed
+
+    controller = object.__new__(KeyboardShortcutController)
+    controller.gui = Gui(changed=True)
+    controller.auto_plot_on_navigation = True
+
+    controller._dispatch("next_session")
+
+    assert controller.gui.navigation_calls == [("session", 1)]
+    assert controller.gui.plot_controller.calls == 1
+
+    controller.gui.changed = False
+    controller._dispatch("previous_session")
+    controller.auto_plot_on_navigation = False
+    controller._dispatch("next_session")
+
+    assert controller.gui.plot_controller.calls == 1
+
+
+def test_keyboard_navigation_defers_plotting_until_an_experiment_finishes_loading():
+    class PlotController:
+        def __init__(self):
+            self.calls = 0
+
+        def plot_data(self):
+            self.calls += 1
+
+    class Gui:
+        current_experiment = None
+
+        def __init__(self):
+            self.plot_controller = PlotController()
+
+    controller = object.__new__(KeyboardShortcutController)
+    controller.gui = Gui()
+    controller.auto_plot_on_navigation = True
+    controller._plot_when_experiment_ready = False
+    controller._pending_experiment_id = None
+
+    controller._plot_after_navigation()
+
+    assert controller._plot_when_experiment_ready is True
+    assert controller.gui.plot_controller.calls == 0
+
+    controller.gui.current_experiment = object()
+    controller.on_experiment_load_finished()
+
+    assert controller.gui.plot_controller.calls == 1
+    assert controller._plot_when_experiment_ready is False
+
+
+def test_deferred_keyboard_plot_is_discarded_when_a_different_experiment_loads():
+    class PlotController:
+        def __init__(self):
+            self.calls = 0
+
+        def plot_data(self):
+            self.calls += 1
+
+    class ExperimentCombo:
+        @staticmethod
+        def currentData(_role):
+            return "requested-experiment"
+
+    class Gui:
+        current_experiment = None
+
+        def __init__(self):
+            self.plot_controller = PlotController()
+            self.data_selection_widget = type("Selection", (), {"experiment_combo": ExperimentCombo()})()
+
+    controller = object.__new__(KeyboardShortcutController)
+    controller.gui = Gui()
+    controller.auto_plot_on_navigation = True
+    controller._plot_when_experiment_ready = False
+    controller._pending_experiment_id = None
+
+    controller._plot_after_navigation()
+    controller.gui.current_experiment = type("Experiment", (), {"id": "different-experiment"})()
+    controller.on_experiment_load_finished()
+
+    assert controller.gui.plot_controller.calls == 0

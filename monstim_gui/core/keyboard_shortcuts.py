@@ -35,6 +35,8 @@ SHORTCUT_DEFINITIONS = (
 
 SHORTCUTS_BY_KEY = {definition.key: definition for definition in SHORTCUT_DEFINITIONS}
 SETTINGS_GROUP = "KeyboardShortcuts"
+AUTO_PLOT_ON_NAVIGATION_KEY = "auto_plot_on_navigation"
+DEFAULT_AUTO_PLOT_ON_NAVIGATION = True
 LEGACY_DEFAULT_SHORTCUTS = {
     "complete_session": "Ctrl+Alt+1",
     "incomplete_session": "Ctrl+Alt+Shift+1",
@@ -73,6 +75,9 @@ class KeyboardShortcutController:
     def __init__(self, gui):
         self.gui = gui
         self._shortcuts: dict[str, QShortcut] = {}
+        self.auto_plot_on_navigation = self.load_auto_plot_on_navigation()
+        self._plot_when_experiment_ready = False
+        self._pending_experiment_id: str | None = None
         self.apply(self.load())
 
     @staticmethod
@@ -107,17 +112,37 @@ class KeyboardShortcutController:
 
     @staticmethod
     def save(shortcuts: dict[str, str], settings=None) -> dict[str, str]:
+        return KeyboardShortcutController.save_preferences(shortcuts, settings=settings)
+
+    @staticmethod
+    def load_auto_plot_on_navigation(settings=None) -> bool:
+        """Return whether keyboard navigation should immediately redraw the plot."""
+        settings = settings or QSettings()
+        settings.beginGroup(SETTINGS_GROUP)
+        enabled = settings.value(AUTO_PLOT_ON_NAVIGATION_KEY, DEFAULT_AUTO_PLOT_ON_NAVIGATION, type=bool)
+        settings.endGroup()
+        return enabled
+
+    @staticmethod
+    def save_preferences(
+        shortcuts: dict[str, str],
+        auto_plot_on_navigation: bool = DEFAULT_AUTO_PLOT_ON_NAVIGATION,
+        settings=None,
+    ) -> dict[str, str]:
         settings = settings or QSettings()
         normalized = normalize_shortcuts(shortcuts)
         settings.beginGroup(SETTINGS_GROUP)
         for key, value in normalized.items():
             settings.setValue(key, value)
+        settings.setValue(AUTO_PLOT_ON_NAVIGATION_KEY, bool(auto_plot_on_navigation))
         settings.endGroup()
         settings.sync()
         return normalized
 
-    def apply(self, shortcuts: dict[str, str]) -> None:
+    def apply(self, shortcuts: dict[str, str], auto_plot_on_navigation: bool | None = None) -> None:
         normalized = normalize_shortcuts(shortcuts)
+        if auto_plot_on_navigation is not None:
+            self.auto_plot_on_navigation = bool(auto_plot_on_navigation)
         for definition in SHORTCUT_DEFINITIONS:
             shortcut = self._shortcuts.get(definition.key)
             if shortcut is None:
@@ -154,7 +179,9 @@ class KeyboardShortcutController:
         if key.startswith("previous_") or key.startswith("next_"):
             level = key.removeprefix("previous_").removeprefix("next_")
             direction = -1 if key.startswith("previous_") else 1
-            self.gui.step_data_selection(level, direction)
+            changed = self.gui.step_data_selection(level, direction)
+            if changed and self.auto_plot_on_navigation:
+                self._plot_after_navigation()
         elif key.startswith("complete_") or key.startswith("incomplete_"):
             level = key.removeprefix("complete_").removeprefix("incomplete_")
             self.gui.set_current_completion_status(level, key.startswith("complete_"))
@@ -162,3 +189,32 @@ class KeyboardShortcutController:
             self.gui.plot_controller.plot_data()
         elif key == "plot_extract":
             self.gui.plot_controller.get_raw_data()
+
+    def _plot_after_navigation(self) -> None:
+        """Plot now, or wait for an asynchronously loading experiment."""
+        if self.gui.current_experiment is None:
+            self._plot_when_experiment_ready = True
+            selection = getattr(self.gui, "data_selection_widget", None)
+            experiment_combo = getattr(selection, "experiment_combo", None)
+            if experiment_combo is not None:
+                self._pending_experiment_id = experiment_combo.currentData(Qt.ItemDataRole.UserRole)
+            return
+        self.gui.plot_controller.plot_data()
+
+    def on_experiment_load_finished(self) -> None:
+        """Render a keyboard-requested plot after its experiment is ready."""
+        if not self._plot_when_experiment_ready:
+            return
+        self._plot_when_experiment_ready = False
+        expected_experiment_id = self._pending_experiment_id
+        self._pending_experiment_id = None
+        current_experiment = self.gui.current_experiment
+        if expected_experiment_id and getattr(current_experiment, "id", None) != expected_experiment_id:
+            return
+        if self.auto_plot_on_navigation and current_experiment is not None:
+            self.gui.plot_controller.plot_data()
+
+    def on_experiment_load_failed(self) -> None:
+        """Discard a deferred plot when its requested experiment did not load."""
+        self._plot_when_experiment_ready = False
+        self._pending_experiment_id = None

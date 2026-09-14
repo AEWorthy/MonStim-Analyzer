@@ -11,6 +11,7 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -37,7 +38,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from monstim_gui.core.keyboard_shortcuts import SHORTCUT_DEFINITIONS, KeyboardShortcutController, default_shortcuts, normalize_shortcuts
+from monstim_gui.core.keyboard_shortcuts import (
+    DEFAULT_AUTO_PLOT_ON_NAVIGATION,
+    SHORTCUT_DEFINITIONS,
+    KeyboardShortcutController,
+    default_shortcuts,
+    normalize_shortcuts,
+)
 from monstim_gui.dialogs.preferences import LatencyWindowPresetEditor, MWaveWindowNamesEditor
 from monstim_gui.dialogs.program_settings import ProgramSettingsDialog
 from monstim_gui.io.config_repository import ConfigRepository
@@ -291,6 +298,13 @@ class SettingsCenter(QDialog):
             self.shortcut_editors[definition.key] = editor
         table.resizeRowsToContents()
         layout.addWidget(table, 1)
+        self.auto_plot_on_keyboard_navigation = QCheckBox("Automatically plot after keyboard navigation", page)
+        self.auto_plot_on_keyboard_navigation.setObjectName("autoPlotOnKeyboardNavigation")
+        self.auto_plot_on_keyboard_navigation.setChecked(KeyboardShortcutController.load_auto_plot_on_navigation())
+        self.auto_plot_on_keyboard_navigation.setToolTip(
+            "When enabled, keyboard navigation immediately runs the selected plot using the currently selected plot settings."
+        )
+        layout.addWidget(self.auto_plot_on_keyboard_navigation)
         defaults = QPushButton("Restore Shortcut Defaults", page)
         defaults.setToolTip("Restore all keyboard shortcuts on this page to their standard values.")
         defaults.clicked.connect(self._reset_shortcut_defaults)
@@ -300,7 +314,8 @@ class SettingsCenter(QDialog):
             None,
             None,
             table,
-            "keyboard shortcuts hotkeys data selection previous next session dataset experiment complete incomplete plot extract defaults",
+            "keyboard shortcuts hotkeys data selection previous next session dataset experiment complete incomplete "
+            "plot extract auto plot navigation defaults",
         )
         return page
 
@@ -789,10 +804,11 @@ class SettingsCenter(QDialog):
             shortcut_draft = normalize_shortcuts(self._shortcut_draft())
             ResolvedConfig(global_draft)
             self.config_repo.write_config(global_draft)
-            KeyboardShortcutController.save(shortcut_draft)
+            auto_plot_on_navigation = self.auto_plot_on_keyboard_navigation.isChecked()
+            KeyboardShortcutController.save_preferences(shortcut_draft, auto_plot_on_navigation)
             controller = getattr(self.parent(), "keyboard_shortcuts", None)
             if controller is not None:
-                controller.apply(shortcut_draft)
+                controller.apply(shortcut_draft, auto_plot_on_navigation)
             self.profile_manager.migrate_legacy_profiles()
             for path in self._deleted_profiles:
                 self.profile_manager.delete_profile(path)
@@ -821,6 +837,7 @@ class SettingsCenter(QDialog):
             self.program_page.reset_to_defaults()
         elif index == 1:
             self._reset_shortcut_defaults()
+            self.auto_plot_on_keyboard_navigation.setChecked(DEFAULT_AUTO_PLOT_ON_NAVIGATION)
         elif index == 2:
             for field in self.global_fields.values():
                 field.reset()
