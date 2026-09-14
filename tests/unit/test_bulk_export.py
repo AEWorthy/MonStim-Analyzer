@@ -379,6 +379,38 @@ class TestAutoMaxWorkers:
 
 
 class TestBulkExportSessionProcessing:
+    def test_force_and_length_filtering_uses_acquisition_relative_stimulus_onset(self):
+        """Zero-delay Motor Length trials retain finite force and length traces."""
+        from monstim_signals.domain.session import Session
+
+        class DummyRecording:
+            id = "R0"
+            meta = SimpleNamespace(num_channels=2)
+
+            def raw_view(self):
+                return np.array(
+                    [
+                        [10.0, 20.0],
+                        [12.0, 22.0],
+                        [14.0, 24.0],
+                    ]
+                )
+
+            def close(self):
+                pass
+
+        session = Session.__new__(Session)
+        session.annot = SimpleNamespace(channels=[SimpleNamespace(invert=False), SimpleNamespace(invert=False)])
+        session.channel_types = ["force", "length"]
+        session.scan_rate = 1_000
+        session.stim_delay = 0.0
+        session.stim_start = 2.0
+
+        filtered = session._compute_signal_recording(DummyRecording(), "filtered")
+
+        np.testing.assert_allclose(filtered, [[-1.0, -1.0], [1.0, 1.0], [3.0, 3.0]])
+        assert np.all(np.isfinite(filtered))
+
     def test_filtered_recordings_close_raw_handles_when_configured(self):
         from monstim_signals.domain.session import Session
 

@@ -585,7 +585,7 @@ class Session:
             channel_data = raw_data[:, channel]
             channel_type = self.channel_types[channel].lower()
             if channel_type in ("force", "length"):
-                filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_delay)
+                filtered = correct_emg_to_baseline(channel_data, self.scan_rate, self.stim_start)
             elif channel_type == "emg":
                 filtered = butter_bandpass_filter(
                     channel_data,

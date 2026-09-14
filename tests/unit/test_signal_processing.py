@@ -237,6 +237,15 @@ class TestFiltering:
         expected_correction = offset_signal - original_baseline_mean
         np.testing.assert_array_almost_equal(corrected, expected_correction, decimal=10)
 
+    def test_correct_emg_to_baseline_without_pre_stimulus_samples_preserves_signal(self):
+        """A zero-length baseline must not turn an entire channel into NaN."""
+        signal_without_baseline = np.array([1.0, 2.0, 3.0])
+
+        corrected = correct_emg_to_baseline(signal_without_baseline, self.fs, baseline_end_ms=0)
+
+        np.testing.assert_array_equal(corrected, signal_without_baseline)
+        assert np.all(np.isfinite(corrected))
+
     def test_filter_edge_cases(self):
         """Test filter behavior with edge cases."""
         # Very short signal
