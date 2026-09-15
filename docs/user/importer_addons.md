@@ -36,7 +36,13 @@ Importer API 2.x uses this normalized contract. Older direct-write add-ons are i
 
 ## Request an importer
 
-Open a feature request and provide, when permitted:
+[:octicons-issue-opened-16: Request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml){ .md-button .md-button--primary }
+
+You do not need to know GitHub or programming to use this form. Select the button, sign in or create a free GitHub account if prompted, answer the first three short questions, and submit it. The form asks only for the acquisition system, file type, and what you want to do; every other detail is optional.
+
+If you cannot use GitHub, email [aeworthy@emory.edu](mailto:aeworthy@emory.edu) with the subject **Importer request** and the same three details. Do not send identifiable or restricted research data by email unless a private transfer route has been agreed.
+
+The form also provides space for any of the following, when permitted:
 
 - acquisition system/software and version;
 - representative de-identified source files and folder layout;

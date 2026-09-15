@@ -77,7 +77,7 @@ For detailed topics, see the [Help Library](docs/user/index.md), especially [Get
 
 ## Other acquisition systems
 
-MonStim directly imports MonStim V3D/V3H CSV exports. Data from other acquisition systems require a reviewed importer add-on because channel, timing, stimulus, and hierarchy metadata must be mapped explicitly. See [Importer add-ons](docs/user/importer_addons.md); do not rename unrelated files to look like MonStim CSVs.
+MonStim directly imports MonStim V3D/V3H CSV exports. Data from other acquisition systems require a reviewed importer add-on because channel, timing, stimulus, and hierarchy metadata must be mapped explicitly. See [Importer add-ons](docs/user/importer_addons.md) or [request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml); the request form is intended for researchers and does not require programming experience. Do not rename unrelated files to look like MonStim CSVs.
 
 ## Running from source
 

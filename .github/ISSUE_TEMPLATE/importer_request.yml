@@ -1,0 +1,65 @@
+name: Request a data importer
+description: Ask for MonStim support for a new acquisition system, file format, or data source
+title: "[Importer request]: "
+labels: ["enhancement", "needs-triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for telling us about your data. You do not need programming experience to use this form. Just answer the questions as best as you can. We will review whether an importer add-on can safely support your source.
+
+        Please do not attach identifiable, restricted, or sensitive research data to this public issue. We can arrange a private transfer if sample files are needed.
+
+  - type: input
+    id: acquisition_system
+    attributes:
+      label: What system or software produced your data?
+      description: Include the product name and version if you know them.
+      placeholder: "For example: ADInstruments LabChart 8, Spike2, a custom MATLAB script, or a recording system from my core facility"
+    validations:
+      required: true
+
+  - type: input
+    id: file_format
+    attributes:
+      label: What kind of files do you have?
+      description: File extensions or a short description are enough.
+      placeholder: "For example: .abf files, CSV files, TDMS files, or one folder per animal"
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow_goal
+    attributes:
+      label: What would you like to do with these data in MonStim?
+      description: Tell us the analysis or workflow you need. A sentence or two is fine.
+      placeholder: "I would like to import EMG recordings, review traces, calculate H-reflexes, and export the results."
+    validations:
+      required: true
+
+  - type: textarea
+    id: data_details
+    attributes:
+      label: Helpful details (optional)
+      description: "If you know any of these, they help us assess the request: EMG channels, sampling rate, units, stimulus/trigger information, or how files are organized. You can leave this blank."
+      placeholder: |
+        - Signals/channels:
+        - Sampling rate and units:
+        - Stimulus or trigger information:
+        - Typical folder or file layout:
+
+  - type: textarea
+    id: sample_availability
+    attributes:
+      label: Can you share a de-identified example later? (optional)
+      description: Do not upload sensitive data here. Just let us know whether a safe example, file-format guide, or screenshot may be available if we request it.
+      placeholder: "I can share a de-identified example later, or I can ask the vendor/core facility for format documentation."
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I understand that this is a public issue and will not attach identifiable or restricted research data.
+          required: true

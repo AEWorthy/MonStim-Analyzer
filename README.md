@@ -20,7 +20,7 @@ MonStim Analyzer is a desktop application for importing, reviewing, analyzing, v
 | Source | Status | Next step |
 | --- | --- | --- |
 | MonStim V3D/V3H CSV exports | Supported | Follow the [Quick Start](QUICKSTART.md). |
-| Another acquisition system or custom stream | Not directly supported | Read [Importer add-ons](docs/user/importer_addons.md) or [request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new/choose). |
+| Another acquisition system or custom stream | Not directly supported | Read [Importer add-ons](docs/user/importer_addons.md) or [request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml). |
 | macOS/Linux packaged application | Not currently distributed | Windows is the supported binary platform; source development is documented separately. |
 
 ## Start here
@@ -42,7 +42,7 @@ MonStim Analyzer is a desktop application for importing, reviewing, analyzing, v
 
 ## Support and contribution
 
-Use the provided issue forms for bugs, documentation, performance, and feature requests. A useful report includes the MonStim version, Windows version, active profile, selected level, exact steps, and a redacted error report when appropriate. Do not upload identifiable research data.
+Use the provided issue forms for bugs, documentation, performance, feature requests, and [importer requests](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml). The importer form is designed for researchers and does not require programming experience. A useful bug report includes the MonStim version, Windows version, active profile, selected level, exact steps, and a redacted error report when appropriate. Do not upload identifiable research data.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for source setup and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 

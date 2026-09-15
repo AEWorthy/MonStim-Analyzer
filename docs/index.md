@@ -9,7 +9,7 @@ MonStim Analyzer helps researchers import MonStim V3 recordings, review data qua
 
 ## Before you import
 
-MonStim directly supports CSV exports from the MonStim V3D and V3H LabVIEW acquisition formats. It does not infer arbitrary proprietary or custom acquisition layouts. If your data come from another system, use an approved importer add-on or [request compatibility](user/importer_addons.md).
+MonStim directly supports CSV exports from the MonStim V3D and V3H LabVIEW acquisition formats. It does not infer arbitrary proprietary or custom acquisition layouts. If your data come from another system, use an approved importer add-on or [request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml).
 
 ## A defensible workflow
 
