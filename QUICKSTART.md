@@ -1,4 +1,4 @@
-# MonStim Analyzer 0.6.0 — Quick Start Guide
+# MonStim Analyzer 0.7.0 — Quick Start Guide
 
 This guide gets a new user from an installed copy of MonStim Analyzer to a first reviewed plot. For the complete workflow and feature reference, open **Help > Show Help** in the application or read [Using MonStim Analyzer](docs/user/using_monstim.md).
 
@@ -8,7 +8,7 @@ This guide gets a new user from an installed copy of MonStim Analyzer to a first
 2. Extract the complete archive to a location where you can keep the application data.
 3. Launch the MonStim Analyzer executable in the extracted folder. Keep the files in that folder together; do not move only the executable.
 
-The first launch may take longer than later launches and Windows may show a warning because the release is not code-signed. The application currently reports itself as **v0.6.0 (beta)**. macOS distribution is not currently available.
+The first launch may take longer than later launches and Windows may show a warning because the release is not code-signed. Download only from the official release and verify its published `SHA256SUMS.txt` checksum. The public **v0.7.0 (beta)** release reports that version; development builds may report a newer version. macOS distribution is not currently available.
 
 ## First analysis
 
@@ -74,6 +74,10 @@ The **Reports** panel provides Session, Dataset, Experiment, and M-max reports. 
 When reporting a problem, include the MonStim version, operating system, active profile, data level, exact steps, and any error message. Do not include identifiable data unless appropriate.
 
 For detailed topics, see the [Help Library](docs/user/index.md), especially [Getting started](docs/user/getting_started.md), [Experiment import](docs/user/importing_experiments.md), [Latency windows](docs/user/latency_windows.md), [Settings Center](docs/user/settings_center.md), and [Troubleshooting](docs/user/troubleshooting.md).
+
+## Other acquisition systems
+
+MonStim directly imports MonStim V3D/V3H CSV exports. Data from other acquisition systems require a reviewed importer add-on because channel, timing, stimulus, and hierarchy metadata must be mapped explicitly. See [Importer add-ons](docs/user/importer_addons.md); do not rename unrelated files to look like MonStim CSVs.
 
 ## Running from source
 

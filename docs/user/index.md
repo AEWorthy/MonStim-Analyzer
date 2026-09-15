@@ -10,6 +10,8 @@ This is the in-app reference for MonStim Analyzer. Links open in the same help w
 - [Troubleshooting](troubleshooting.md) — symptoms, checks, and recovery steps.
 - [Application guide](using_monstim.md) — fuller feature and menu reference.
 - [Experiment import](importing_experiments.md) — required folder and file layout.
+- [Importer add-ons](importer_addons.md) — safely detect and import supported non-MonStim acquisition streams.
+- [Updating MonStim](updates.md) — signed updates, download choices, rollback, and data protection.
 - [Analysis profiles](analysis_profiles.md) — save and reuse analysis choices.
 - [Settings Center](settings_center.md) — program behavior, global analysis defaults, and profile management.
 

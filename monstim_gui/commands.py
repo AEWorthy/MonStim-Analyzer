@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _refresh_data_views(gui, *experiment_ids):
+def _refresh_data_views(gui, *experiment_ids, rebuild_catalogs=True):
     """Refresh real GUI views while remaining compatible with command unit mocks."""
     data_manager = getattr(gui, "data_manager", None)
     refresh = getattr(data_manager, "refresh_data_views", None)
@@ -24,7 +24,7 @@ def _refresh_data_views(gui, *experiment_ids):
     if not callable(refresh) or not isinstance(experiments, dict):
         return
     paths = [Path(experiments[experiment_id]) for experiment_id in experiment_ids if experiment_id in experiments]
-    refresh(*paths)
+    refresh(*paths, rebuild_catalogs=rebuild_catalogs)
 
 
 def _cancel_cache_warmup(gui) -> None:
@@ -50,12 +50,23 @@ class Command(abc.ABC):
 
 
 class BatchCommand:
-    """Group already-compatible commands into one atomic undo-history entry."""
+    """Group already-compatible commands into one atomic undo-history entry.
 
-    def __init__(self, command_name: str, commands: list[Command]):
+    ``refresh_callback`` is deliberately owned by the batch rather than its
+    children.  Some disk-backed child commands would otherwise refresh the
+    full application after every item, which makes a large batch appear to
+    hang the UI even though the underlying annotation writes are quick.
+    """
+
+    def __init__(self, command_name: str, commands: list[Command], *, refresh_callback=None):
         self.command_name = command_name
         self.commands = list(commands)
         self._executed: list[Command] = []
+        self._refresh_callback = refresh_callback
+
+    def _refresh(self) -> None:
+        if self._refresh_callback is not None:
+            self._refresh_callback()
 
     def execute(self):
         self._executed.clear()
@@ -67,11 +78,16 @@ class BatchCommand:
             for command in reversed(self._executed):
                 command.undo()
             self._executed.clear()
+            self._refresh()
             raise
+        self._refresh()
 
     def undo(self):
-        for command in reversed(self._executed or self.commands):
-            command.undo()
+        try:
+            for command in reversed(self._executed or self.commands):
+                command.undo()
+        finally:
+            self._refresh()
 
     def get_description(self) -> str:
         return self.command_name
@@ -105,8 +121,12 @@ class CommandInvoker:
 
     def undo(self):
         if self.history:
-            command = self.history.pop()
+            # Do not remove history until persistence has succeeded.  This is
+            # particularly important for disk-backed commands: a failed undo
+            # remains available for the user to retry.
+            command = self.history[-1]
             command.undo()
+            self.history.pop()
             self.redo_stack.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
             try:
@@ -116,8 +136,10 @@ class CommandInvoker:
 
     def redo(self):
         if self.redo_stack:
-            command = self.redo_stack.pop()
+            # Likewise retain a failed redo in its original stack.
+            command = self.redo_stack[-1]
             command.execute()
+            self.redo_stack.pop()
             self.history.append(command)
             self.parent.menu_bar.update_undo_redo_labels()
             try:
@@ -773,16 +795,25 @@ class BulkRecordingExclusionCommand(Command):
         self.gui: MonstimGUI = gui
         self.changes = changes
         self._previous_curation: dict[tuple[int, str], dict | None] = {}
+        self._state_before_execute: dict[int, tuple[object, list[str], dict]] = {}
 
     def execute(self):
         """Apply all changes and persist each affected session only once."""
+        if not self._supports_batched_persistence():
+            self._execute_legacy()
+            return
+        changed_sessions = []
+        self._state_before_execute = {}
         try:
-            if not self._supports_batched_persistence():
-                self._execute_legacy()
-                return
-            changed_sessions = []
             for session_change in self.changes:
                 session = session_change["session"]
+                session_key = id(session)
+                if session_key not in self._state_before_execute:
+                    self._state_before_execute[session_key] = (
+                        session,
+                        list(session.annot.excluded_recordings),
+                        copy.deepcopy(session.annot.recording_curation),
+                    )
                 excluded = set(session.annot.excluded_recordings)
                 for change in session_change["changes"]:
                     recording_id = change["recording_id"]
@@ -793,7 +824,7 @@ class BulkRecordingExclusionCommand(Command):
                         excluded.discard(recording_id)
                     curation = change.get("curation")
                     if curation is not None:
-                        key = (id(session), recording_id)
+                        key = (session_key, recording_id)
                         if key not in self._previous_curation:
                             previous = session.annot.recording_curation.get(recording_id)
                             self._previous_curation[key] = dict(previous) if previous is not None else None
@@ -802,11 +833,20 @@ class BulkRecordingExclusionCommand(Command):
                 session.invalidate_selection_results()
                 changed_sessions.append(session)
 
+            # Let persistence errors reach CommandInvoker and the editor.  Catching
+            # them here previously made a failed Apply look successful: the invoker
+            # added the command to undo history and the dialog closed regardless.
             self._save_sessions(changed_sessions)
-            self.gui.data_selection_widget.sync_combo_selections()
-
-        except Exception as e:
-            QMessageBox.critical(self.gui, "Error", f"Failed to apply bulk exclusions: {e!s}")
+        except Exception:
+            # Keep the live model aligned with the dialog if the save failed, so
+            # the user can safely retry instead of needing a second Apply to
+            # reconcile an unpersisted in-memory mutation.
+            for session, excluded, curation in self._state_before_execute.values():
+                session.annot.excluded_recordings = excluded
+                session.annot.recording_curation = curation
+                session.invalidate_selection_results()
+            raise
+        self.gui.data_selection_widget.sync_combo_selections()
 
     def _supports_batched_persistence(self) -> bool:
         return all(isinstance(change["session"].annot.excluded_recordings, list) for change in self.changes)
@@ -833,39 +873,32 @@ class BulkRecordingExclusionCommand(Command):
 
     def undo(self):
         """Reverse all changes with the same batched persistence path."""
-        try:
-            if not self._supports_batched_persistence():
-                self._undo_legacy()
-                return
-            changed_sessions = []
-            for session_change in reversed(self.changes):
-                session = session_change["session"]
-                excluded = set(session.annot.excluded_recordings)
-                for change in reversed(session_change["changes"]):
-                    recording_id = change["recording_id"]
-                    should_exclude = change["exclude"]
-                    if should_exclude:
-                        excluded.discard(recording_id)
+        if not self._supports_batched_persistence():
+            self._undo_legacy()
+            return
+        changed_sessions = []
+        for session_change in reversed(self.changes):
+            session = session_change["session"]
+            excluded = set(session.annot.excluded_recordings)
+            for change in reversed(session_change["changes"]):
+                recording_id = change["recording_id"]
+                should_exclude = change["exclude"]
+                if should_exclude:
+                    excluded.discard(recording_id)
+                else:
+                    excluded.add(recording_id)
+                if change.get("curation") is not None:
+                    previous = self._previous_curation.get((id(session), recording_id))
+                    if previous is None:
+                        session.annot.recording_curation.pop(recording_id, None)
                     else:
-                        excluded.add(recording_id)
-                    if change.get("curation") is not None:
-                        previous = self._previous_curation.get((id(session), recording_id))
-                        if previous is None:
-                            session.annot.recording_curation.pop(recording_id, None)
-                        else:
-                            session.annot.recording_curation[recording_id] = previous
-                session.annot.excluded_recordings = sorted(excluded)
-                session.invalidate_selection_results()
-                changed_sessions.append(session)
+                        session.annot.recording_curation[recording_id] = previous
+            session.annot.excluded_recordings = sorted(excluded)
+            session.invalidate_selection_results()
+            changed_sessions.append(session)
 
-            self.gui.data_selection_widget.sync_combo_selections()
-            self._save_sessions(changed_sessions)
-            self.gui.data_selection_widget.sync_combo_selections()
-            self.gui.data_selection_widget.sync_combo_selections()
-
-        except Exception as e:
-            logger.error(f"Failed to undo bulk exclusions: {e!s}")
-            QMessageBox.critical(self.gui, "Error", f"Failed to undo bulk exclusions: {e!s}")
+        self._save_sessions(changed_sessions)
+        self.gui.data_selection_widget.sync_combo_selections()
 
     def _undo_legacy(self) -> None:
         for session_change in reversed(self.changes):
@@ -920,7 +953,7 @@ class MoveDatasetCommand(Command):
         """Move the dataset immediately."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp)
-            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to move dataset: {e!s}")
             raise Exception(f"Failed to move dataset: {e!s}") from e
@@ -929,7 +962,7 @@ class MoveDatasetCommand(Command):
         """Move the dataset back to original location."""
         try:
             self.gui.data_manager.move_dataset(self.dataset_id, self.dataset_name, self.to_exp, self.from_exp)
-            _refresh_data_views(self.gui, self.from_exp, self.to_exp)
+            _refresh_data_views(self.gui, self.from_exp, self.to_exp, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to undo dataset move: {e!s}")
             raise Exception(f"Failed to undo dataset move: {e!s}") from e
@@ -976,7 +1009,7 @@ class MoveDatasetsCommand(Command):
                 logger.debug(f"Processed {len(self._succeeded)} dataset moves.")
 
             affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
-            _refresh_data_views(self.gui, *affected)
+            _refresh_data_views(self.gui, *affected, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to execute batched dataset moves: {e!s}")
@@ -1004,7 +1037,7 @@ class MoveDatasetsCommand(Command):
                     QApplication.processEvents()
 
             affected = {exp_id for _, _, from_exp, to_exp in self._succeeded for exp_id in (from_exp, to_exp)}
-            _refresh_data_views(self.gui, *affected)
+            _refresh_data_views(self.gui, *affected, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to undo batched dataset moves: {e!s}")
@@ -1015,7 +1048,18 @@ class MoveDatasetsCommand(Command):
 
 
 class CopyDatasetCommand(Command):
-    def __init__(self, gui, dataset_id: str, dataset_name: str, from_exp: str, to_exp: str, new_name: str | None = None):
+    def __init__(
+        self,
+        gui,
+        dataset_id: str,
+        dataset_name: str,
+        from_exp: str,
+        to_exp: str,
+        new_name: str | None = None,
+        *,
+        refresh_views: bool = True,
+        close_data: bool = True,
+    ):
         self.command_name = f"Copy '{dataset_name}' from '{from_exp}' to '{to_exp}'"
         self.gui: MonstimGUI = gui
         self.dataset_id = dataset_id
@@ -1024,6 +1068,8 @@ class CopyDatasetCommand(Command):
         self.to_exp = to_exp
         self.new_name = new_name  # Optional new name for the copied dataset
         self.copied_folder_name = None  # Will be set after execution
+        self.refresh_views = refresh_views
+        self.close_data = close_data
 
     def execute(self):
         """Copy the dataset immediately."""
@@ -1034,7 +1080,14 @@ class CopyDatasetCommand(Command):
             to_exp_path = Path(self.gui.expts_dict[self.to_exp])
             original_datasets = {f.name for f in to_exp_path.iterdir() if f.is_dir()}
 
-            self.gui.data_manager.copy_dataset(self.dataset_id, self.dataset_name, self.from_exp, self.to_exp, self.new_name)
+            self.gui.data_manager.copy_dataset(
+                self.dataset_id,
+                self.dataset_name,
+                self.from_exp,
+                self.to_exp,
+                self.new_name,
+                close_data=self.close_data,
+            )
 
             self.finalize_copy(original_datasets)
         except Exception as e:
@@ -1054,14 +1107,16 @@ class CopyDatasetCommand(Command):
         added_datasets = new_datasets - original_datasets
         self.copied_folder_name = next(iter(added_datasets), self.new_name or self.dataset_id)
 
-        _refresh_data_views(self.gui, self.to_exp)
+        if self.refresh_views:
+            _refresh_data_views(self.gui, self.to_exp, rebuild_catalogs=False)
 
     def undo(self):
         """Delete the copied dataset."""
         try:
             if self.copied_folder_name:
                 self.gui.data_manager.delete_dataset(self.copied_folder_name, self.copied_folder_name, self.to_exp)
-                _refresh_data_views(self.gui, self.to_exp)
+                if self.refresh_views:
+                    _refresh_data_views(self.gui, self.to_exp, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to undo dataset copy: {e!s}")
             raise Exception(f"Failed to undo dataset copy: {e!s}") from e
@@ -1091,7 +1146,10 @@ class DeleteExperimentCommand(Command):
             # For now, we'll use the existing delete method from data manager
             # Note: This is irreversible, so undo will show a warning
             self.gui.data_manager.delete_experiment_by_id(self.exp_name)
-            _refresh_data_views(self.gui)
+            # The deleted experiment has no catalog left to rebuild.  Rebuilding
+            # every remaining experiment here makes deletion block the GUI for
+            # minutes on large data collections.
+            _refresh_data_views(self.gui, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to delete experiment: {e!s}")
             raise Exception(f"Failed to delete experiment: {e!s}") from e
@@ -1120,13 +1178,13 @@ class RenameExperimentCommand(Command):
         """Rename the experiment immediately."""
         # Let exceptions from data_manager propagate with their original messages
         self.gui.data_manager.rename_experiment_by_id(self.old_name, self.new_name)
-        _refresh_data_views(self.gui, self.new_name)
+        _refresh_data_views(self.gui, self.new_name, rebuild_catalogs=False)
 
     def undo(self):
         """Rename back to original name."""
         try:
             self.gui.data_manager.rename_experiment_by_id(self.new_name, self.old_name)
-            _refresh_data_views(self.gui, self.old_name)
+            _refresh_data_views(self.gui, self.old_name, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to undo experiment rename: {e!s}")
             raise Exception(f"Failed to undo experiment rename: {e!s}") from e
@@ -1138,17 +1196,19 @@ class RenameExperimentCommand(Command):
 class DeleteDatasetCommand(Command):
     """Delete a dataset from an experiment. This operation is irreversible; undo will show a warning."""
 
-    def __init__(self, gui, dataset_id: str, dataset_name: str, exp_id: str):
+    def __init__(self, gui, dataset_id: str, dataset_name: str, exp_id: str, *, refresh_views: bool = True):
         self.command_name = f"Delete Dataset '{dataset_name}' in '{exp_id}'"
         self.gui = gui
         self.dataset_id = dataset_id
         self.dataset_name = dataset_name
         self.exp_id = exp_id
+        self.refresh_views = refresh_views
 
     def execute(self):
         try:
             self.gui.data_manager.delete_dataset(self.dataset_id, self.dataset_name, self.exp_id)
-            _refresh_data_views(self.gui, self.exp_id)
+            if self.refresh_views:
+                _refresh_data_views(self.gui, self.exp_id, rebuild_catalogs=False)
         except Exception as e:
             logger.exception(f"Failed to delete dataset: {e!s}")
             raise Exception(f"Failed to delete dataset: {e!s}") from e
@@ -1168,13 +1228,14 @@ class DeleteDatasetCommand(Command):
 class ToggleDatasetInclusionCommand(Command):
     """Include or exclude a dataset at the experiment level by updating ExperimentAnnot.excluded_datasets."""
 
-    def __init__(self, gui, exp_id: str, dataset_id: str, exclude: bool):
+    def __init__(self, gui, exp_id: str, dataset_id: str, exclude: bool, *, refresh_views: bool = True):
         action = "Exclude" if exclude else "Include"
         self.command_name = f"{action} Dataset '{dataset_id}' in '{exp_id}'"
         self.gui = gui
         self.exp_id = exp_id
         self.dataset_id = dataset_id
         self.exclude = exclude
+        self.refresh_views = refresh_views
         self._prev_was_excluded = None
 
     def _apply(self, set_excluded: bool):
@@ -1213,7 +1274,8 @@ class ToggleDatasetInclusionCommand(Command):
             logger.exception(f"Failed to update dataset inclusion: {e!s}")
             raise Exception(f"Failed to update dataset inclusion: {e!s}") from e
 
-        _refresh_data_views(self.gui, self.exp_id)
+        if self.refresh_views:
+            _refresh_data_views(self.gui, self.exp_id, rebuild_catalogs=False)
 
     def execute(self):
         self._apply(self.exclude)
@@ -1239,7 +1301,18 @@ class ToggleCompletionStatusCommand(Command):
     persistence to ensure undo/redo works reliably across selection changes.
     """
 
-    def __init__(self, gui, level: str, target_object, *, experiment_id: str | None = None, new_status: bool | None = None, dataset_path=None):
+    def __init__(
+        self,
+        gui,
+        level: str,
+        target_object,
+        *,
+        experiment_id: str | None = None,
+        new_status: bool | None = None,
+        dataset_path=None,
+        refresh_catalog: bool = True,
+        refresh_views: bool = True,
+    ):
         """
         Args:
             gui: The main GUI instance
@@ -1252,6 +1325,8 @@ class ToggleCompletionStatusCommand(Command):
         self.old_status = getattr(target_object, "is_completed", False)
         self.new_status = not self.old_status if new_status is None else new_status
         self.dataset_path = Path(dataset_path) if dataset_path is not None else None
+        self.refresh_catalog = refresh_catalog
+        self.refresh_views = refresh_views
 
         # Store hierarchy IDs for reliable lookup from disk
         if level == "experiment":
@@ -1340,9 +1415,10 @@ class ToggleCompletionStatusCommand(Command):
                     annot.is_completed = status
                     annot_file.write_text(json.dumps(asdict(annot), indent=2))
 
-                    from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
+                    if self.refresh_catalog:
+                        from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
 
-                    refresh_dataset_annotation(dataset_path)
+                        refresh_dataset_annotation(dataset_path)
 
                     # Update in-memory dataset object if present
                     try:
@@ -1404,7 +1480,7 @@ class ToggleCompletionStatusCommand(Command):
                     return
 
             # Refresh UI if the affected object is currently visible
-            if hasattr(self.gui, "data_selection_widget"):
+            if self.refresh_views and hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update_completion_status(self.level)
                 self.gui.data_selection_widget.update_all_completion_statuses()
 
@@ -1422,6 +1498,119 @@ class ToggleCompletionStatusCommand(Command):
     def get_description(self) -> str:
         action = "completed" if self.new_status else "marked incomplete"
         return f"Marked {self.level} '{self.target_id}' as {action}"
+
+
+class SetChildCompletionStatusCommand(Command):
+    """Set completion for every active direct child of the current experiment/dataset.
+
+    This intentionally does not change the parent status: a user may want to
+    finish child curation before deciding whether the containing dataset or
+    experiment is itself complete.  One command owns the whole operation so
+    Undo restores each child's prior status together.
+    """
+
+    def __init__(self, gui, parent_level: str, parent_object, new_status: bool):
+        if parent_level not in {"experiment", "dataset"}:
+            raise ValueError("Child completion can only be set from an experiment or dataset")
+
+        self.gui = gui
+        self.parent_level = parent_level
+        self.parent_id = parent_object.id
+        self.new_status = bool(new_status)
+        self.child_level = "dataset" if parent_level == "experiment" else "session"
+        children = list(getattr(parent_object, "_all_datasets" if parent_level == "experiment" else "_all_sessions", []))
+        excluded_ids = set(
+            getattr(
+                getattr(parent_object, "annot", None),
+                "excluded_datasets" if parent_level == "experiment" else "excluded_sessions",
+                [],
+            )
+        )
+        children = [child for child in children if getattr(child, "id", None) not in excluded_ids]
+        self._children = [child for child in children if bool(getattr(child, "is_completed", False)) != self.new_status]
+        self._old_statuses = {id(child): bool(getattr(child, "is_completed", False)) for child in self._children}
+        action = "Complete" if self.new_status else "Mark Incomplete"
+        self.command_name = f"{action} all {self.child_level}s in {parent_level} '{self.parent_id}'"
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self._children)
+
+    def _persist(self, statuses: dict[int, bool]) -> None:
+        """Apply and persist statuses, rolling back partial annotation writes on failure."""
+        from dataclasses import asdict
+        from datetime import UTC, datetime
+
+        from monstim_signals.io.experiment_catalog import refresh_dataset_annotations, refresh_session_annotations
+        from monstim_signals.io.repositories import SessionRepository
+
+        repositories = [getattr(child, "repo", None) for child in self._children]
+        if any(repository is None for repository in repositories):
+            raise RuntimeError(f"A {self.child_level} cannot be saved because it has no repository")
+        annotation_paths = [repository.session_js if self.child_level == "session" else repository.dataset_js for repository in repositories]
+        original_contents = {path: path.read_bytes() for path in annotation_paths}
+        previous_statuses = {id(child): bool(getattr(child, "is_completed", False)) for child in self._children}
+
+        changed: list[object] = []
+        try:
+            for child in self._children:
+                child.annot.is_completed = statuses[id(child)]
+                changed.append(child)
+
+            if self.child_level == "session":
+                SessionRepository.save_many(changed)
+            else:
+                dataset_paths = []
+                for dataset in changed:
+                    repository = getattr(dataset, "repo", None)
+                    if repository is None:
+                        raise RuntimeError(f"Dataset '{dataset.id}' cannot be saved because it has no repository")
+                    dataset.annot.date_modified = datetime.now(UTC).isoformat(timespec="seconds")
+                    repository.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
+                    dataset_paths.append(repository.folder)
+                refresh_dataset_annotations(dataset_paths)
+        except Exception:
+            for child in changed:
+                child.annot.is_completed = previous_statuses[id(child)]
+            for path, contents in original_contents.items():
+                try:
+                    path.write_bytes(contents)
+                except OSError:
+                    logger.exception("Could not restore completion annotation after failed batch update: %s", path)
+            try:
+                if self.child_level == "session":
+                    refresh_session_annotations([repository.folder for repository in repositories])
+                else:
+                    refresh_dataset_annotations([repository.folder for repository in repositories])
+            except Exception:
+                logger.exception("Could not refresh catalog after rolling back child completion statuses")
+            raise
+
+    def _refresh_ui(self) -> None:
+        widget = getattr(self.gui, "data_selection_widget", None)
+        if widget is None:
+            return
+        update_one = getattr(widget, "update_completion_status", None)
+        if callable(update_one):
+            update_one(self.child_level)
+        update_all = getattr(widget, "update_all_completion_statuses", None)
+        if callable(update_all):
+            update_all()
+
+    def execute(self):
+        if not self.has_changes:
+            return
+        self._persist({id(child): self.new_status for child in self._children})
+        self._refresh_ui()
+
+    def undo(self):
+        if not self.has_changes:
+            return
+        self._persist(self._old_statuses)
+        self._refresh_ui()
+
+    def get_description(self) -> str:
+        return self.command_name
 
 
 class EditDatasetMetadataCommand(Command):
@@ -1549,7 +1738,8 @@ class EditDatasetMetadataCommand(Command):
 
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
-            _refresh_data_views(self.gui)
+            experiment_id = getattr(getattr(self.gui, "current_experiment", None), "id", None)
+            _refresh_data_views(self.gui, experiment_id, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to apply dataset metadata changes: {e}", exc_info=True)
@@ -1562,7 +1752,8 @@ class EditDatasetMetadataCommand(Command):
 
             if hasattr(self.gui, "data_selection_widget"):
                 self.gui.data_selection_widget.update(levels=("dataset", "session"))
-            _refresh_data_views(self.gui)
+            experiment_id = getattr(getattr(self.gui, "current_experiment", None), "id", None)
+            _refresh_data_views(self.gui, experiment_id, rebuild_catalogs=False)
 
         except Exception as e:
             logger.exception(f"Failed to undo dataset metadata changes: {e!s}", exc_info=True)

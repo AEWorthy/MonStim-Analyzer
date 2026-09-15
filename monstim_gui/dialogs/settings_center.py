@@ -7,9 +7,11 @@ from pathlib import Path
 
 import yaml
 from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -35,6 +38,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from monstim_gui.core.keyboard_shortcuts import (
+    DEFAULT_AUTO_PLOT_ON_NAVIGATION,
+    SHORTCUT_DEFINITIONS,
+    KeyboardShortcutController,
+    default_shortcuts,
+    normalize_shortcuts,
+)
 from monstim_gui.dialogs.preferences import LatencyWindowPresetEditor, MWaveWindowNamesEditor
 from monstim_gui.dialogs.program_settings import ProgramSettingsDialog
 from monstim_gui.io.config_repository import ConfigRepository
@@ -149,11 +159,11 @@ class SettingsCenter(QDialog):
             QLineEdit { padding: 5px 7px; }
             QListWidget#settingsNavigation { background: transparent; border: 0; padding: 4px 8px; outline: 0; }
             QListWidget#settingsNavigation::item { padding: 9px 10px; margin: 2px 0; border-radius: 4px; font-weight: 600; }
-            QListWidget#settingsNavigation::item:selected { background: #304553; border-left: 3px solid #e7785b; padding-left: 7px; }
+            QListWidget#settingsNavigation::item:selected { background: #633b26; border-left: 3px solid #e07a3f; padding-left: 7px; }
             QListWidget#settingsNavigation::item:hover:!selected { background: rgba(255, 255, 255, 0.06); }
             QTabWidget::pane { border: 1px solid #3c434b; border-radius: 6px; top: -1px; }
             QTabBar::tab { padding: 8px 14px; margin-right: 2px; border: 0; border-bottom: 3px solid transparent; font-weight: 600; color: #bfc7cf; }
-            QTabBar::tab:selected { color: #ffffff; background: #2c333a; border-bottom-color: #e7785b; }
+            QTabBar::tab:selected { color: #ffffff; background: #2c333a; border-bottom-color: #e07a3f; }
             QTabBar::tab:hover:!selected { color: #ffffff; background: rgba(255, 255, 255, 0.06); }
             QGroupBox { font-weight: 700; border: 1px solid #3c434b; border-radius: 6px; margin-top: 12px; padding-top: 8px; }
             QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
@@ -162,7 +172,7 @@ class SettingsCenter(QDialog):
             QLabel#pageDescription, QLabel#profileLibraryDescription, QLabel#profileLibraryStatus { color: #aeb7c1; }
             QTreeWidget#profileLibraryTable { border: 1px solid #3c434b; border-radius: 5px; }
             QTreeWidget#profileLibraryTable::item { padding: 7px 5px; }
-            QTreeWidget#profileLibraryTable::item:selected { background: #304553; }
+            QTreeWidget#profileLibraryTable::item:selected { background: #633b26; }
             """
         )
         self._build_ui()
@@ -182,16 +192,18 @@ class SettingsCenter(QDialog):
         self.pages = QStackedWidget(self)
         for label, page in (
             ("Program", self._build_program_page()),
+            ("Keyboard shortcuts", self._build_keyboard_shortcuts_page()),
             ("Global Analysis", self._build_global_page()),
             ("Profiles", self._build_profiles_page()),
         ):
             self.navigation.addItem(label)
             self.pages.addWidget(page)
         self.navigation.item(0).setToolTip("Application appearance, loading performance, saved-state tracking, and recovery.")
-        self.navigation.item(1).setToolTip("Global defaults used by every analysis profile unless a profile overrides a setting.")
-        self.navigation.item(2).setToolTip("Create, edit, import, export, and manage named analysis-profile overrides.")
+        self.navigation.item(1).setToolTip("Customize main-window data-selection, completion, and plotting shortcuts.")
+        self.navigation.item(2).setToolTip("Global defaults used by every analysis profile unless a profile overrides a setting.")
+        self.navigation.item(3).setToolTip("Create, edit, import, export, and manage named analysis-profile overrides.")
         self._register_search_target(
-            2,
+            3,
             None,
             None,
             None,
@@ -240,6 +252,79 @@ class SettingsCenter(QDialog):
             for index, text in enumerate(terms):
                 self._register_search_target(0, tabs, index, None, text)
         return scroll
+
+    def _build_keyboard_shortcuts_page(self) -> QWidget:
+        page = QWidget(self)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(8)
+        layout.addWidget(
+            self._page_heading(
+                "Keyboard shortcuts",
+                "Power-user controls for the main window. Click a shortcut field and press a new key combination; changes take effect when applied.",
+                page,
+            )
+        )
+        note = QLabel(
+            "Shortcuts apply only while the main window is active. Empty a field to disable that command. "
+            "Each assigned shortcut must be unique; Restore Defaults returns this page to MonStim's standard bindings.",
+            page,
+        )
+        note.setWordWrap(True)
+        note.setProperty("sectionNote", True)
+        layout.addWidget(note)
+        table = QTableWidget(len(SHORTCUT_DEFINITIONS), 3, page)
+        table.setObjectName("keyboardShortcutTable")
+        table.setHorizontalHeaderLabels(("Command", "Shortcut", "What it does"))
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.shortcut_editors: dict[str, QKeySequenceEdit] = {}
+        current = KeyboardShortcutController.load()
+        for row, definition in enumerate(SHORTCUT_DEFINITIONS):
+            label = QTableWidgetItem(definition.label)
+            label.setToolTip(definition.description)
+            description = QTableWidgetItem(definition.description)
+            description.setToolTip(definition.description)
+            table.setItem(row, 0, label)
+            table.setItem(row, 2, description)
+            editor = QKeySequenceEdit(QKeySequence(current[definition.key]), table)
+            editor.setClearButtonEnabled(True)
+            editor.setToolTip(f"Default: {definition.default}. Press a new shortcut, or use the clear button to disable this command.")
+            table.setCellWidget(row, 1, editor)
+            self.shortcut_editors[definition.key] = editor
+        table.resizeRowsToContents()
+        layout.addWidget(table, 1)
+        self.auto_plot_on_keyboard_navigation = QCheckBox("Automatically plot after keyboard navigation", page)
+        self.auto_plot_on_keyboard_navigation.setObjectName("autoPlotOnKeyboardNavigation")
+        self.auto_plot_on_keyboard_navigation.setChecked(KeyboardShortcutController.load_auto_plot_on_navigation())
+        self.auto_plot_on_keyboard_navigation.setToolTip(
+            "When enabled, keyboard navigation immediately runs the selected plot using the currently selected plot settings."
+        )
+        layout.addWidget(self.auto_plot_on_keyboard_navigation)
+        defaults = QPushButton("Restore Shortcut Defaults", page)
+        defaults.setToolTip("Restore all keyboard shortcuts on this page to their standard values.")
+        defaults.clicked.connect(self._reset_shortcut_defaults)
+        layout.addWidget(defaults, 0, Qt.AlignmentFlag.AlignLeft)
+        self._register_search_target(
+            1,
+            None,
+            None,
+            table,
+            "keyboard shortcuts hotkeys data selection previous next session dataset experiment complete incomplete "
+            "plot extract auto plot navigation defaults",
+        )
+        return page
+
+    def _shortcut_draft(self) -> dict[str, str]:
+        return {key: editor.keySequence().toString(QKeySequence.SequenceFormat.PortableText) for key, editor in self.shortcut_editors.items()}
+
+    def _reset_shortcut_defaults(self) -> None:
+        for key, value in default_shortcuts().items():
+            self.shortcut_editors[key].setKeySequence(QKeySequence(value))
 
     @staticmethod
     def _page_heading(title: str, description: str, parent: QWidget) -> QWidget:
@@ -716,8 +801,14 @@ class SettingsCenter(QDialog):
         self._save_current_profile_draft()
         try:
             global_draft = self._global_draft()
+            shortcut_draft = normalize_shortcuts(self._shortcut_draft())
             ResolvedConfig(global_draft)
             self.config_repo.write_config(global_draft)
+            auto_plot_on_navigation = self.auto_plot_on_keyboard_navigation.isChecked()
+            KeyboardShortcutController.save_preferences(shortcut_draft, auto_plot_on_navigation)
+            controller = getattr(self.parent(), "keyboard_shortcuts", None)
+            if controller is not None:
+                controller.apply(shortcut_draft, auto_plot_on_navigation)
             self.profile_manager.migrate_legacy_profiles()
             for path in self._deleted_profiles:
                 self.profile_manager.delete_profile(path)
@@ -745,9 +836,12 @@ class SettingsCenter(QDialog):
         if index == 0:
             self.program_page.reset_to_defaults()
         elif index == 1:
+            self._reset_shortcut_defaults()
+            self.auto_plot_on_keyboard_navigation.setChecked(DEFAULT_AUTO_PLOT_ON_NAVIGATION)
+        elif index == 2:
             for field in self.global_fields.values():
                 field.reset()
-        elif index == 2 and self._current_profile_path:
+        elif index == 3 and self._current_profile_path:
             record = next((item for item in self._records if item.path == self._current_profile_path), None)
             if record:
                 self._profile_drafts[self._current_profile_path] = copy.deepcopy(record.data)

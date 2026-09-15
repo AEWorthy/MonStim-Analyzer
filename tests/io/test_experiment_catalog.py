@@ -1,14 +1,19 @@
 import json
+import shutil
 from pathlib import Path
 
 from monstim_signals.core.utils import load_config
 from monstim_signals.io.experiment_catalog import (
     CATALOG_FILENAME,
+    ExperimentCatalog,
     build_catalog,
+    copy_catalog_dataset,
     ensure_catalog,
     invalidate_catalogs,
     recording_stem,
     relocate_catalog_paths,
+    remove_catalog_dataset,
+    transfer_catalog_dataset,
 )
 from monstim_signals.io.repositories import DatasetRepository, ExperimentRepository, RecordingRepository, SessionRepository
 from tests.helpers import create_minimal_dataset_folder, create_minimal_session_folder
@@ -49,6 +54,28 @@ def test_experiment_repository_uses_catalog_without_json_index(tmp_path: Path):
         loaded.close()
 
 
+def test_dataset_metadata_reports_only_incomplete_nonexcluded_sessions(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    dataset = create_minimal_dataset_folder(experiment, dataset_name="Dataset", session_name="Included", num_recordings=1)
+    included_annot = dataset / "Included" / "session.annot.json"
+    included_data = json.loads(included_annot.read_text())
+    included_data["is_completed"] = False
+    included_annot.write_text(json.dumps(included_data))
+
+    excluded = create_minimal_session_folder(dataset, session_name="Excluded", num_recordings=1)
+    excluded_annot = excluded / "session.annot.json"
+    excluded_data = json.loads(excluded_annot.read_text())
+    excluded_data["is_completed"] = False
+    excluded_annot.write_text(json.dumps(excluded_data))
+    (dataset / "dataset.annot.json").write_text(json.dumps({"excluded_sessions": ["Excluded"]}))
+
+    metadata = DatasetRepository(dataset).get_metadata()
+
+    assert metadata["active_session_count"] == 1
+    assert metadata["incomplete_active_session_ids"] == ["Included"]
+
+
 def test_saved_recording_annotation_updates_existing_catalog(tmp_path: Path):
     experiment = tmp_path / "Experiment"
     experiment.mkdir()
@@ -77,6 +104,78 @@ def test_catalog_relocates_a_renamed_dataset_without_rebuild(tmp_path: Path):
     assert catalog.dataset_paths() == [new_dataset]
     assert catalog.session_paths(new_dataset) == [new_dataset / "RX02"]
     assert catalog.recordings(new_dataset / "RX02")[0].stem.parent == new_dataset / "RX02"
+
+
+def test_catalog_relocates_a_renamed_experiment_without_rebuild(tmp_path: Path):
+    old_experiment = tmp_path / "OldExperiment"
+    old_experiment.mkdir()
+    old_dataset = create_minimal_dataset_folder(old_experiment, dataset_name="Dataset", num_recordings=1)
+    build_catalog(old_experiment)
+
+    new_experiment = tmp_path / "NewExperiment"
+    old_experiment.rename(new_experiment)
+
+    assert relocate_catalog_paths(new_experiment, old_experiment, new_experiment)
+    catalog = ExperimentCatalog(new_experiment)
+    new_dataset = new_experiment / old_dataset.name
+    assert catalog.is_usable()
+    assert catalog.dataset_paths() == [new_dataset]
+    assert catalog.session_paths(new_dataset) == [new_dataset / "RX02"]
+
+
+def test_catalog_transfers_a_moved_dataset_without_rebuild(tmp_path: Path):
+    source_experiment = tmp_path / "Source"
+    destination_experiment = tmp_path / "Destination"
+    source_experiment.mkdir()
+    destination_experiment.mkdir()
+    source_dataset = create_minimal_dataset_folder(source_experiment, dataset_name="Dataset", num_recordings=1)
+    build_catalog(source_experiment)
+    build_catalog(destination_experiment)
+
+    destination_dataset = destination_experiment / source_dataset.name
+    source_dataset.rename(destination_dataset)
+
+    assert transfer_catalog_dataset(source_experiment, destination_experiment, source_dataset, destination_dataset)
+    source_catalog = ExperimentCatalog(source_experiment)
+    destination_catalog = ExperimentCatalog(destination_experiment)
+    assert source_catalog.is_usable()
+    assert destination_catalog.is_usable()
+    assert source_catalog.dataset_paths() == []
+    assert destination_catalog.dataset_paths() == [destination_dataset]
+    assert destination_catalog.recordings(destination_dataset / "RX02")[0].stem.parent == destination_dataset / "RX02"
+
+    destination_dataset.rename(source_dataset)
+    assert transfer_catalog_dataset(destination_experiment, source_experiment, destination_dataset, source_dataset)
+    assert source_catalog.dataset_paths() == [source_dataset]
+    assert destination_catalog.dataset_paths() == []
+
+
+def test_catalog_adds_and_removes_a_copied_dataset_without_rebuild(tmp_path: Path):
+    experiment = tmp_path / "Experiment"
+    experiment.mkdir()
+    source_dataset = create_minimal_dataset_folder(experiment, dataset_name="Dataset", num_recordings=1)
+    destination_dataset = experiment / "Dataset_copy"
+    shutil.copytree(source_dataset, destination_dataset)
+    copied_annotation = json.loads((destination_dataset / "dataset.annot.json").read_text())
+    copied_annotation["condition"] = "copy"
+    (destination_dataset / "dataset.annot.json").write_text(json.dumps(copied_annotation))
+    build_catalog(experiment)
+
+    # Start from a catalog that predates the copied directory, as it would in
+    # the curation workflow.
+    shutil.rmtree(destination_dataset)
+    build_catalog(experiment)
+    shutil.copytree(source_dataset, destination_dataset)
+    (destination_dataset / "dataset.annot.json").write_text(json.dumps(copied_annotation))
+
+    assert copy_catalog_dataset(experiment, experiment, source_dataset, destination_dataset)
+    catalog = ExperimentCatalog(experiment)
+    assert catalog.dataset_paths() == [source_dataset, destination_dataset]
+    assert catalog.recordings(destination_dataset / "RX02")[0].stem.parent == destination_dataset / "RX02"
+
+    shutil.rmtree(destination_dataset)
+    assert remove_catalog_dataset(experiment, destination_dataset)
+    assert catalog.dataset_paths() == [source_dataset]
 
 
 def test_catalog_invalidation_removes_cache_and_forces_rebuild(tmp_path: Path):

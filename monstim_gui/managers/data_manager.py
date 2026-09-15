@@ -24,11 +24,13 @@ from PySide6.QtWidgets import (
 
 from monstim_gui.core.application_state import app_state
 from monstim_gui.io.experiment_loader import AllCatalogsRebuildThread, CatalogRebuildThread, ExperimentLoadingThread
+from monstim_gui.plugins import MIN_AUTO_DETECTION_CONFIDENCE, PluginError, installed_manifests, load_plugin
 from monstim_signals.core import get_config_path, get_data_path, get_log_dir
 from monstim_signals.io.csv_importer import (
     GUIExptImportingThread,
     MultiExptImportingThread,
 )
+from monstim_signals.io.normalized_import import CanonicalImportError, write_transactional_experiment
 
 if TYPE_CHECKING:
     from monstim_signals import Experiment
@@ -36,6 +38,45 @@ if TYPE_CHECKING:
     from ..gui_main import MonstimGUI
 
 logger = logging.getLogger(__name__)
+
+
+class AddonImportThread(QThread):
+    """Run an approved importer without blocking the GUI."""
+
+    progress = Signal(int)
+    completed = Signal()
+    failed = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, plugin, source: Path, output: Path, parent=None):
+        super().__init__(parent)
+        self.plugin = plugin
+        self.source = source
+        self.output = output
+        self._cancel_requested = False
+
+    def cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            self.plugin.validate_source(self.source)
+            normalized = self.plugin.normalize_experiment(self.source, lambda: self._cancel_requested)
+            write_transactional_experiment(
+                normalized,
+                self.output,
+                progress_callback=self.progress.emit,
+                is_canceled=lambda: self._cancel_requested,
+            )
+            (self.canceled if self._cancel_requested else self.completed).emit()
+        except InterruptedError:
+            self.canceled.emit()
+        except CanonicalImportError as exc:
+            logger.warning("Importer add-on returned invalid canonical data: %s", exc)
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            logger.exception("Importer add-on failed")
+            self.failed.emit(str(exc))
 
 
 class DatasetCopyThread(QThread):
@@ -103,13 +144,12 @@ class DataManager:
         if coordinator is not None:
             coordinator.cancel_and_wait()
 
-    def refresh_data_views(self, *experiment_paths: Path) -> None:
-        """Rebuild affected catalogs and refresh both application data views."""
+    def refresh_data_views(self, *experiment_paths: Path, rebuild_catalogs: bool = True) -> None:
+        """Refresh both application data views, rebuilding selected catalogs when needed."""
         self._cancel_cache_warmup()
-        from monstim_signals.io.experiment_catalog import build_catalog
 
         paths = [Path(path) for path in experiment_paths if path]
-        if not paths:
+        if rebuild_catalogs and not paths:
             paths = [Path(self.gui.expts_dict[exp_id]) for exp_id in self.gui.expts_dict_keys]
 
         current = getattr(self.gui, "current_experiment", None)
@@ -120,9 +160,12 @@ class DataManager:
             if callable(close):
                 close(force_gc=False)
 
-        for path in paths:
-            if path.exists():
-                build_catalog(path)
+        if rebuild_catalogs:
+            from monstim_signals.io.experiment_catalog import build_catalog
+
+            for path in paths:
+                if path.exists():
+                    build_catalog(path)
 
         self.unpack_existing_experiments()
         data_selection_widget = getattr(self.gui, "data_selection_widget", None)
@@ -131,6 +174,10 @@ class DataManager:
         data_curation_manager = getattr(self.gui, "_data_curation_manager", None)
         if data_curation_manager is not None:
             data_curation_manager.load_data()
+            # Context-menu actions are decorated to refresh after returning.
+            # This refresh already covered the dialog, so let that decorator
+            # avoid a second complete tree scan.
+            data_curation_manager._data_refresh_generation = getattr(data_curation_manager, "_data_refresh_generation", 0) + 1
 
     def _create_progress_dialog(self, message: str, title: str) -> QProgressDialog:
         """Create the standard modal progress dialog used by long operations."""
@@ -286,6 +333,83 @@ class DataManager:
 
     # ------------------------------------------------------------------
     # import experiment from CSVs
+    def import_with_addon(self):
+        """Detect an enabled importer for a chosen file/folder, asking only when ambiguous."""
+        records = [(manifest, path) for manifest, path, compatible in installed_manifests() if compatible]
+        if not records:
+            QMessageBox.information(
+                self.gui,
+                "No importer add-ons installed",
+                "Install an official importer ZIP in Help > Manage Importer Add-ons before importing another data stream.",
+            )
+            return
+        source_kind, accepted = QInputDialog.getItem(self.gui, "Import using Add-on", "Source type:", ["File", "Folder"], 0, False)
+        if not accepted:
+            return
+        initial = app_state.get_last_import_path() or str(get_data_path())
+        if source_kind == "Folder":
+            selected = QFileDialog.getExistingDirectory(self.gui, "Select source folder", initial)
+        else:
+            selected, _ = QFileDialog.getOpenFileName(self.gui, "Select source file", initial, "All files (*)")
+        if not selected:
+            return
+        source = Path(selected)
+        expected_kind = "directory" if source_kind == "Folder" else "file"
+        candidates = []
+        for manifest, path in records:
+            if manifest.source_kind != expected_kind:
+                continue
+            try:
+                plugin = load_plugin(manifest, path)
+                confidence = int(plugin.probe_source(source))
+                if confidence > 0:
+                    candidates.append((confidence, manifest, plugin))
+            except PluginError, OSError, ValueError:
+                logger.debug("Add-on %s did not recognize %s", manifest.id, source, exc_info=True)
+        if not candidates:
+            QMessageBox.information(
+                self.gui,
+                "No compatible importer detected",
+                "No enabled importer recognized this source. Check the source type, install the required official add-on, or contact support.",
+            )
+            return
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        confidence, manifest, plugin = candidates[0]
+        tied = [item for item in candidates if item[0] == confidence]
+        needs_choice = len(tied) > 1 or confidence < MIN_AUTO_DETECTION_CONFIDENCE
+        if needs_choice:
+            choices = candidates if confidence < MIN_AUTO_DETECTION_CONFIDENCE else tied
+            labels = [f"{item[1].name} ({item[1].version})" for item in choices]
+            prompt = "Multiple importers recognized this source:" if len(tied) > 1 else "No importer recognized this source with high confidence:"
+            label, accepted = QInputDialog.getItem(self.gui, "Choose importer", prompt, labels, 0, False)
+            if not accepted:
+                return
+            _confidence, manifest, plugin = choices[labels.index(label)]
+        experiment_name, accepted = QInputDialog.getText(self.gui, "Imported experiment name", "Name:", text=source.stem)
+        if not accepted or not experiment_name.strip():
+            return
+        output = Path(self.gui.output_path) / experiment_name.strip()
+        if output.exists():
+            QMessageBox.warning(self.gui, "Experiment already exists", "Choose a new experiment name; add-on imports never overwrite managed data.")
+            return
+        app_state.save_last_import_path(str(source.parent))
+        dialog = QProgressDialog(f"Importing with {manifest.name}…", "Cancel", 0, 100, self.gui)
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.show()
+        self.addon_import_thread = AddonImportThread(plugin, source, output, self.gui)
+        self.addon_import_thread.progress.connect(dialog.setValue)
+        self.addon_import_thread.completed.connect(dialog.close)
+        self.addon_import_thread.completed.connect(self._on_import_finished)
+        self.addon_import_thread.completed.connect(lambda: self.gui.status_bar.showMessage("Add-on import completed.", 5000))
+        self.addon_import_thread.canceled.connect(dialog.close)
+        self.addon_import_thread.canceled.connect(
+            lambda: self.gui.status_bar.showMessage("Add-on import canceled; inspect the destination before reuse.", 7000)
+        )
+        self.addon_import_thread.failed.connect(dialog.close)
+        self.addon_import_thread.failed.connect(lambda message: QMessageBox.critical(self.gui, "Add-on import failed", message))
+        dialog.canceled.connect(self.addon_import_thread.cancel)
+        self.addon_import_thread.start()
+
     def import_expt_data(self):
         logger.info("Importing new experiment data from CSV files.")
 
@@ -726,6 +850,10 @@ class DataManager:
 
                 # Use the robust rename_experiment_by_id method
                 self.rename_experiment_by_id(old_name, new_name)
+                self.refresh_data_views(
+                    Path(self.gui.expts_dict[new_name]),
+                    rebuild_catalogs=False,
+                )
 
                 self.gui.status_bar.showMessage("Experiment renamed successfully.", 5000)
                 logger.info(f"Experiment renamed from '{old_name}' to '{new_name}' successfully.")
@@ -749,33 +877,11 @@ class DataManager:
             )
             if delete == QMessageBox.StandardButton.Yes:
                 current_expt_id = self.gui.current_experiment.id
-                current_expt_path = os.path.join(self.gui.output_path, current_expt_id)
-
-                # Close the experiment and all associated data
-                self.gui.current_experiment.close()
-                self.gui.current_experiment = None
-                self.gui.current_dataset = None
-                self.gui.current_session = None
-
-                # Use retry mechanism for robust deletion
                 try:
-                    import gc
-                    import time
-
-                    gc.collect()
-
-                    max_retries = 3
-                    for retry in range(max_retries):
-                        try:
-                            shutil.rmtree(current_expt_path)
-                            logger.info(f"Deleted experiment folder: {current_expt_path}.")
-                            break
-                        except (OSError, PermissionError) as e:
-                            if retry < max_retries - 1:
-                                logger.warning(f"Failed to delete '{current_expt_id}' on attempt {retry + 1}: {e}. Retrying...")
-                                time.sleep(0.5)
-                            else:
-                                raise e
+                    # Keep this entry point on the same lock-safe deletion path
+                    # as the data-curation manager.
+                    self.delete_experiment_by_id(current_expt_id)
+                    self.refresh_data_views(rebuild_catalogs=False)
                 except Exception as e:
                     QMessageBox.critical(
                         self.gui,
@@ -786,9 +892,6 @@ class DataManager:
                     logger.exception(f"Failed to delete experiment '{current_expt_id}'")
                     return
 
-                # After deleting experiment, refresh the list and reset selections
-                if hasattr(self.gui, "data_selection_widget"):
-                    self.gui.data_selection_widget.refresh()
                 self.gui.status_bar.showMessage("Experiment deleted successfully.", 5000)
 
     # ------------------------------------------------------------------
@@ -1183,6 +1286,9 @@ class DataManager:
                     self.load_dataset(0, auto_load_first_session=True)
 
             self.gui.plot_widget.on_data_selection_changed()
+            keyboard_shortcuts = getattr(self.gui, "keyboard_shortcuts", None)
+            if keyboard_shortcuts is not None:
+                keyboard_shortcuts.on_experiment_load_finished()
 
             # Provide informative status message based on experiment content
             if experiment.datasets:
@@ -1224,6 +1330,9 @@ class DataManager:
 
     def _on_experiment_load_error(self, error_message):
         """Handle experiment loading error."""
+        keyboard_shortcuts = getattr(self.gui, "keyboard_shortcuts", None)
+        if keyboard_shortcuts is not None:
+            keyboard_shortcuts.on_experiment_load_failed()
         QMessageBox.critical(self.gui, "Error", error_message)
         logger.error(f"Experiment loading error: {error_message}")
 
@@ -1285,6 +1394,9 @@ class DataManager:
 
     def _on_experiment_load_canceled(self):
         """Handle experiment loading cancellation."""
+        keyboard_shortcuts = getattr(self.gui, "keyboard_shortcuts", None)
+        if keyboard_shortcuts is not None:
+            keyboard_shortcuts.on_experiment_load_failed()
         # Check if loading actually completed successfully - if so, ignore this cancel signal
         if hasattr(self, "loading_completed_successfully") and self.loading_completed_successfully:
             logger.debug("Ignoring cancel signal - experiment loading completed successfully")
@@ -1829,6 +1941,11 @@ class DataManager:
 
         logger.info("Closing all data.")
 
+        # Cache preparation may retain HDF5 handles for sessions that are no
+        # longer selected. Stop it before closing the hierarchy so it cannot
+        # keep an experiment directory locked on Windows.
+        self._cancel_cache_warmup()
+
         # Close current data hierarchy
         if self.gui.current_session:
             self.gui.current_session.close()
@@ -1933,7 +2050,7 @@ class DataManager:
             logger.exception(f"Failed to delete experiment {exp_id}: {e}")
             raise Exception(f"Failed to delete experiment '{exp_id}': {e!s}") from e
 
-    def rename_experiment_by_id(self, old_name: str, new_name: str):
+    def rename_experiment_by_id(self, old_name: str, new_name: str) -> bool:
         """Rename an experiment by ID, regardless of what's currently selected."""
         import shutil
         from pathlib import Path
@@ -1977,9 +2094,16 @@ class DataManager:
             # Rename the directory
             shutil.move(str(old_exp_path), str(new_exp_path))
 
-            # The sidecar moves with the directory, but its cached paths no
-            # longer describe the renamed experiment.  Force a clean rebuild.
-            self._invalidate_catalogs(new_exp_path)
+            # The catalog sidecar moves with the experiment.  Relocating its
+            # absolute paths is a short SQLite transaction, unlike rebuilding
+            # every recording cache synchronously on the GUI thread.
+            from monstim_signals.io.experiment_catalog import relocate_catalog_paths
+
+            catalog_relocated = relocate_catalog_paths(new_exp_path, old_exp_path, new_exp_path)
+            if not catalog_relocated:
+                # A missing/unusable cache is rebuilt lazily if this
+                # experiment is opened later; never use stale paths.
+                self._invalidate_catalogs(new_exp_path)
 
             # Update GUI experiment dictionary
             del self.gui.expts_dict[old_name]
@@ -2000,18 +2124,8 @@ class DataManager:
 
             app_state.migrate_renamed_selection("experiment", old_name, new_name)
 
-            # Refresh UI to reflect the changes
-            self.unpack_existing_experiments()
-            if hasattr(self.gui, "data_selection_widget"):
-                try:
-                    logger.debug(f"Updating data_selection_widget after rename from '{old_name}' to '{new_name}'")
-                    self.gui.data_selection_widget.update(levels=("experiment",))
-                    logger.debug("data_selection_widget updated successfully")
-                except Exception as widget_error:
-                    logger.error(f"Failed to update data_selection_widget after rename: {widget_error}", exc_info=True)
-                    # Non-critical UI update failure, continue
-
             logger.info(f"Renamed experiment '{old_name}' to '{new_name}'")
+            return catalog_relocated
 
         except (ValueError, FileExistsError) as e:
             # Re-raise validation errors with their original type for better error handling
@@ -2028,7 +2142,7 @@ class DataManager:
         from_exp: str,
         to_exp: str,
         close_open_data: bool = True,
-    ):
+    ) -> bool:
         """Move a dataset from one experiment to another."""
         from pathlib import Path
 
@@ -2056,9 +2170,16 @@ class DataManager:
 
             # Move the dataset folder
             shutil.move(str(source_path), str(dest_path))
-            self._invalidate_catalogs(from_exp_path, to_exp_path)
+            from monstim_signals.io.experiment_catalog import transfer_catalog_dataset
+
+            catalog_transferred = transfer_catalog_dataset(from_exp_path, to_exp_path, source_path, dest_path)
+            if not catalog_transferred:
+                # The caches are optional. Discard incomplete/stale state and
+                # let the normal experiment loader rebuild lazily if needed.
+                self._invalidate_catalogs(from_exp_path, to_exp_path)
 
             logger.info(f"Moved dataset {dataset_name} from {from_exp} to {to_exp}")
+            return catalog_transferred
 
         except Exception as e:
             logger.exception(f"Failed to move dataset {dataset_name}: {e}")
@@ -2163,7 +2284,13 @@ class DataManager:
                         suffix = dest_path.name[len(dataset_folder_name) :]
                         annotation["condition"] = f"{annotation['condition']}{suffix}"
                     annotation_path.write_text(json.dumps(annotation, indent=2))
-            self._invalidate_catalogs(to_exp_path)
+            from monstim_signals.io.experiment_catalog import copy_catalog_dataset
+
+            if not copy_catalog_dataset(from_exp_path, to_exp_path, source_path, dest_path):
+                # A missing or unusable cache is never authoritative.  Drop it
+                # and let the normal loader rebuild lazily instead of risking
+                # stale discovery results.
+                self._invalidate_catalogs(to_exp_path)
 
             logger.info(f"Copied dataset {dataset_name} from {from_exp} to {to_exp} as {dest_path.name}")
 
@@ -2223,7 +2350,10 @@ class DataManager:
             if dataset_path.exists():
                 # Delete the dataset folder
                 shutil.rmtree(dataset_path)
-                self._invalidate_catalogs(exp_path)
+                from monstim_signals.io.experiment_catalog import remove_catalog_dataset
+
+                if not remove_catalog_dataset(exp_path, dataset_path):
+                    self._invalidate_catalogs(exp_path)
                 logger.info(f"Deleted dataset folder: {dataset_path}")
             else:
                 logger.warning(f"Dataset folder not found for deletion: {dataset_path}")

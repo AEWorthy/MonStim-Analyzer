@@ -21,6 +21,7 @@ and drag-and-drop dataset organization between experiments.
 # - Duplicate detection & merge assistant: find likely duplicate datasets and offer safe merge options.
 # - Tagging and saved views: let users tag datasets and save filterable views for recurring workflows.
 
+import inspect
 import logging
 import shlex
 from functools import wraps
@@ -64,27 +65,36 @@ def auto_refresh(method):
 
     @wraps(method)
     def wrapper(self, *args, **kwargs):
+        refresh_generation = getattr(self, "_data_refresh_generation", 0)
         try:
             # For PyQt signal connections, filter out unexpected boolean arguments
-            # that can be passed by clicked signals ONLY if:
-            # 1. There's exactly one argument
-            # 2. That argument is a boolean
-            # This prevents filtering out legitimate boolean parameters when multiple args exist
+            # that can be passed by clicked signals.  A boolean is only spurious
+            # when the wrapped method has no required positional arguments.  Some
+            # callbacks intentionally pass a boolean (for example, include=False
+            # for the bulk exclusion action), so filtering every single boolean
+            # breaks those callbacks.
             filtered_args = args
-            if len(args) == 1 and isinstance(args[0], bool):
-                # This is likely a spurious signal argument (e.g., from clicked signal)
-                # that should be filtered out
+            required_positional = [
+                parameter
+                for parameter in inspect.signature(method).parameters.values()
+                if parameter.name != "self"
+                and parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                and parameter.default is inspect.Parameter.empty
+            ]
+            if len(args) == 1 and isinstance(args[0], bool) and not required_positional:
+                # This is the checked state emitted by a Qt signal connected to a
+                # no-argument method, rather than an argument intended by the caller.
                 filtered_args = ()
 
             result = method(self, *filtered_args, **kwargs)
             # Only refresh if the method completed successfully and auto-refresh is not suppressed
-            if not getattr(self, "_suppress_autorefresh", False):
+            if not getattr(self, "_suppress_autorefresh", False) and getattr(self, "_data_refresh_generation", 0) == refresh_generation:
                 self.load_data()
             return result
         except Exception as e:
             # If there was an error, still refresh to ensure UI consistency
             try:
-                if not getattr(self, "_suppress_autorefresh", False):
+                if not getattr(self, "_suppress_autorefresh", False) and getattr(self, "_data_refresh_generation", 0) == refresh_generation:
                     self.load_data()
             except Exception as refresh_error:
                 logger.error(f"Failed to refresh data after error in {method.__name__}: {refresh_error}")
@@ -463,12 +473,14 @@ class DataCurationManager(QDialog):
         self.undo_last_button.setToolTip("No changes to undo")
         button_layout.addWidget(self.undo_last_button)
 
-        # Undo all and close buttons
+        # Changes are applied immediately. Keep explicit undo controls beside
+        # the plain close action for the current dialog session.
         self.cancel_button = QPushButton("Undo All Changes")
         self.cancel_button.clicked.connect(self.cancel_all_changes)
         button_layout.addWidget(self.cancel_button)
 
-        self.close_button = QPushButton("Done")
+        self.close_button = QPushButton("Close")
+        self.close_button.setToolTip("Close the data manager; completed actions are already saved")
         self.close_button.clicked.connect(self.accept)
         button_layout.addWidget(self.close_button)
 
@@ -593,6 +605,9 @@ class DataCurationManager(QDialog):
                 self.restore_selected_button,
                 self.mark_complete_button,
                 self.mark_incomplete_button,
+                self.move_selected_button,
+                self.copy_selected_button,
+                self.delete_selected_button,
             ]
         )
         selected_commands_button = QToolButton()
@@ -601,21 +616,6 @@ class DataCurationManager(QDialog):
         selected_commands_button.setMenu(selected_menu)
         selected_commands_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         command_layout.addWidget(selected_commands_button)
-
-        organize_menu = QMenu(self)
-        organize_menu.addActions(
-            [
-                self.move_selected_button,
-                self.copy_selected_button,
-                self.delete_selected_button,
-            ]
-        )
-        organize_button = QToolButton()
-        organize_button.setText("Organize")
-        organize_button.setToolTip("Move, copy, or delete checked datasets")
-        organize_button.setMenu(organize_menu)
-        organize_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        command_layout.addWidget(organize_button)
 
         # QToolButton's native minimum can be disproportionately wide on
         # high-DPI Windows styles.  Deliberate compact widths keep this command
@@ -627,7 +627,6 @@ class DataCurationManager(QDialog):
             (self.select_all_button, 70),
             (self.clear_selection_button, 60),
             (selected_commands_button, 125),
-            (organize_button, 80),
         ):
             button.setFixedWidth(width)
         command_layout.addStretch()
@@ -2022,10 +2021,11 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def set_selected_datasets_included(self, include):
         """Batch include or exclude checked datasets using undoable commands."""
-        from monstim_gui.commands import BatchCommand, ToggleDatasetInclusionCommand
+        from monstim_gui.commands import BatchCommand, ToggleDatasetInclusionCommand, _refresh_data_views
 
         selected = self._selected_dataset_data()
         commands = []
+        affected_experiment_ids = []
         for data in selected:
             metadata = data["metadata"]
             commands.append(
@@ -2034,11 +2034,21 @@ class DataCurationManager(QDialog):
                     data["experiment_id"],
                     metadata["id"],
                     exclude=not include,
+                    refresh_views=False,
                 )
             )
+            if data["experiment_id"] not in affected_experiment_ids:
+                affected_experiment_ids.append(data["experiment_id"])
         if commands:
             action = "Restore" if include else "Exclude"
-            command = BatchCommand(f"{action} {len(commands)} dataset(s)", commands)
+            command = BatchCommand(
+                f"{action} {len(commands)} dataset(s)",
+                commands,
+                # Inclusion only changes experiment.annot.json.  The catalog
+                # stores dataset/session/recording metadata, so rebuilding it
+                # here is unnecessary and was the source of long GUI freezes.
+                refresh_callback=lambda: _refresh_data_views(self.gui, *affected_experiment_ids, rebuild_catalogs=False),
+            )
             command.execute()
             self.session_commands.append(command)
             self._changes_made = True
@@ -2046,9 +2056,11 @@ class DataCurationManager(QDialog):
     @auto_refresh
     def set_selected_datasets_completion(self, completed):
         """Set completion on checked datasets without changing child-session annotations."""
-        from monstim_gui.commands import BatchCommand, ToggleCompletionStatusCommand
+        from monstim_gui.commands import BatchCommand, ToggleCompletionStatusCommand, _refresh_data_views
+        from monstim_signals.io.experiment_catalog import refresh_dataset_annotations
 
         commands = []
+        dataset_paths_by_experiment = {}
         for data in self._selected_dataset_data():
             metadata = data["metadata"]
             if bool(metadata.get("is_completed")) == completed:
@@ -2061,12 +2073,21 @@ class DataCurationManager(QDialog):
                 experiment_id=data["experiment_id"],
                 new_status=completed,
                 dataset_path=Path(metadata["path"]),
+                refresh_catalog=False,
+                refresh_views=False,
             )
             commands.append(command)
+            dataset_paths_by_experiment.setdefault(data["experiment_id"], []).append(Path(metadata["path"]))
 
         if commands:
             action = "Mark Complete" if completed else "Mark Incomplete"
-            command = BatchCommand(f"{action} for {len(commands)} dataset(s)", commands)
+
+            def refresh_completion_batch():
+                for dataset_paths in dataset_paths_by_experiment.values():
+                    refresh_dataset_annotations(dataset_paths)
+                _refresh_data_views(self.gui, *dataset_paths_by_experiment, rebuild_catalogs=False)
+
+            command = BatchCommand(f"{action} for {len(commands)} dataset(s)", commands, refresh_callback=refresh_completion_batch)
             command.execute()
             self.session_commands.append(command)
             self._changes_made = True
@@ -2119,7 +2140,7 @@ class DataCurationManager(QDialog):
         """Copy selected datasets to another experiment immediately."""
         from PySide6.QtWidgets import QInputDialog
 
-        from monstim_gui.commands import BatchCommand, CopyDatasetCommand
+        from monstim_gui.commands import BatchCommand, CopyDatasetCommand, _refresh_data_views
 
         # Get selected datasets
         selected_datasets = []
@@ -2140,6 +2161,10 @@ class DataCurationManager(QDialog):
         target_exp, ok = QInputDialog.getItem(self, "Copy Datasets", "Select target experiment:", available_experiments, 0, False)
 
         if ok and target_exp:
+            # Close domain objects once before the batch.  Each copy needs
+            # exclusive filesystem access, but closing and garbage-collecting
+            # before every selected dataset adds avoidable UI stalls.
+            self.gui.data_manager.close_all_data()
             commands = [
                 CopyDatasetCommand(
                     self.gui,
@@ -2147,10 +2172,17 @@ class DataCurationManager(QDialog):
                     data["metadata"]["formatted_name"],
                     data["experiment_id"],
                     target_exp,
+                    close_data=False,
                 )
                 for data in selected_datasets
             ]
-            command = BatchCommand(f"Copy {len(commands)} dataset(s) to '{target_exp}'", commands)
+            for command_item in commands:
+                command_item.refresh_views = False
+            command = BatchCommand(
+                f"Copy {len(commands)} dataset(s) to '{target_exp}'",
+                commands,
+                refresh_callback=lambda: _refresh_data_views(self.gui, target_exp, rebuild_catalogs=False),
+            )
             try:
                 command.execute()
             except Exception as exc:
@@ -2191,7 +2223,7 @@ class DataCurationManager(QDialog):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            from monstim_gui.commands import DeleteDatasetCommand
+            from monstim_gui.commands import DeleteDatasetCommand, _refresh_data_views
 
             successful_deletions = 0
             errors = []
@@ -2204,6 +2236,7 @@ class DataCurationManager(QDialog):
                         ds_metadata["id"],
                         ds_metadata.get("formatted_name", ds_metadata["id"]),
                         ds_data["experiment_id"],
+                        refresh_views=False,
                     )
                     cmd.execute()
                     self.session_commands.append(cmd)
@@ -2213,6 +2246,8 @@ class DataCurationManager(QDialog):
 
             if successful_deletions > 0:
                 self._changes_made = True  # Mark that changes were made
+                affected_experiment_ids = {data["experiment_id"] for data in selected_datasets if data["experiment_id"] in self.gui.expts_dict}
+                _refresh_data_views(self.gui, *affected_experiment_ids, rebuild_catalogs=False)
 
             if errors:
                 error_msg = "\n".join(errors)
@@ -2552,7 +2587,10 @@ class DataCurationManager(QDialog):
                 QMessageBox.information(self, "Experiment Deleted", f"Experiment '{exp_name}' has been permanently deleted.")
             except Exception as e:
                 QMessageBox.critical(self, "Deletion Failed", f"Failed to delete experiment:\n{e!s}")
-                raise  # Let decorator handle the refresh
+                # Do not re-raise a recoverable filesystem error from this Qt
+                # slot: it would escape to sys.excepthook and terminate the app.
+                # Returning still lets ``auto_refresh`` restore the curation UI.
+                logger.exception("Failed to delete experiment '%s'", exp_name)
 
     @auto_refresh
     def undo_last_change(self):
@@ -2625,74 +2663,15 @@ class DataCurationManager(QDialog):
         # Keep dialog open for user to resolve
 
     def accept(self):
-        """On close via Done, prompt to apply/undo if there are pending changes."""
-        if getattr(self, "session_commands", None):
-            choice = self._confirm_close_with_pending_changes()
-            if choice == "cancel":
-                return  # keep dialog open
-            if choice == "undo":
-                # Undo all then close
-                try:
-                    for cmd in reversed(self.session_commands):
-                        try:
-                            cmd.undo()
-                        except Exception as e:
-                            logger.exception("Undo failed during close: %s", e)
-                    self.session_commands.clear()
-                    self._changes_made = False
-                except Exception as e:
-                    # Suppress unexpected errors during undo to avoid crashing the dialog,
-                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
-                    logger.exception("Unexpected error during undo-all in accept(): %s", e)
-
-        # Emit change signal if there were changes this session
+        """Close the dialog; every data operation has already been applied."""
         if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()
 
         super().accept()
 
     def reject(self):
-        """Intercept window close to confirm pending changes before exiting."""
-        if getattr(self, "session_commands", None):
-            choice = self._confirm_close_with_pending_changes()
-            if choice == "cancel":
-                return  # abort close
-            if choice == "undo":
-                try:
-                    for cmd in reversed(self.session_commands):
-                        try:
-                            cmd.undo()
-                        except Exception as e:
-                            logger.exception("Undo failed during close: %s", e)
-                    self.session_commands.clear()
-                    self._changes_made = False
-                except Exception:
-                    # Suppress unexpected errors during undo to avoid crashing the dialog,
-                    # but log them for diagnostics. User is not notified here because individual undo failures are already logged above.
-                    logger.exception("Unexpected error during undo-all in reject()")
-
+        """Close from the window controls without prompting about saved changes."""
         if getattr(self, "_changes_made", False):
             self.data_structure_changed.emit()
 
         super().reject()
-
-    def _confirm_close_with_pending_changes(self) -> str:
-        """Prompt the user when there are pending changes. Returns 'keep', 'undo', or 'cancel'."""
-        try:
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Icon.Warning)
-            msg.setWindowTitle("Pending Changes")
-            msg.setText("You have changes from this session. What would you like to do?")
-            keep_btn = msg.addButton("Keep Changes and Close", QMessageBox.ButtonRole.AcceptRole)
-            undo_btn = msg.addButton("Undo All and Close", QMessageBox.ButtonRole.DestructiveRole)
-            _ = msg.addButton(QMessageBox.StandardButton.Cancel)
-            msg.exec()
-            clicked = msg.clickedButton()
-            if clicked == keep_btn:
-                return "keep"
-            if clicked == undo_btn:
-                return "undo"
-            return "cancel"
-        except Exception:
-            # Fallback: cancel if prompt fails
-            return "cancel"

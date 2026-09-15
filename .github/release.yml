@@ -1,0 +1,10 @@
+changelog:
+  categories:
+    - title: "User-facing improvements"
+      labels: ["enhancement", "documentation"]
+    - title: "Bug fixes"
+      labels: ["bug"]
+    - title: "Performance"
+      labels: ["performance"]
+    - title: "Other changes"
+      labels: ["*"]

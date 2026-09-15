@@ -15,6 +15,7 @@ dependencies:
   - packaging=26.*
   - traitlets=5.15.*
   - pillow=12.2.*
+  - cryptography>=46.0
   - pyside6=6.9.*
   - pyqtgraph=0.14.*
   - pip
@@ -22,4 +23,4 @@ dependencies:
       - Markdown==3.10
       - python_markdown_math==0.9
       - pytest==9.1.0
-      - setuptools==82.0.1
+      - setuptools==84.0.0

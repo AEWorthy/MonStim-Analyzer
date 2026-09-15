@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use MonStim Analyzer in academic work, please cite it using this record."
+type: software
+title: "MonStim Analyzer"
+version: "0.7.0"
+date-released: 2026-09-15
+authors:
+  - family-names: Worthy
+    given-names: Andrew
+url: "https://github.com/AEWorthy/MonStim-Analyzer"
+license: "PolyForm-Noncommercial-1.0.0"

@@ -19,9 +19,8 @@ Thank you for your interest in contributing to MonStim Analyzer! This project ai
 ## Development Setup
 
 ### Prerequisites
-- Python 3.8 or later
+- The `monstim` Conda environment (Python 3.14, PySide6, and scientific dependencies)
 - Git for version control
-- PySide6 and scientific computing libraries
 
 ### Installation Steps
 
@@ -31,15 +30,16 @@ Thank you for your interest in contributing to MonStim Analyzer! This project ai
    cd MonStim-Analyzer
    ```
 
-2. **Create a virtual environment:**
+2. **Create the supported Conda environment:**
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   conda env create -f environment.yml
+   conda activate monstim
    ```
 
 3. **Install dependencies:**
    ```bash
-   pip install -r requirements.txt
+   python -m pip install -r requirements.txt
+   python -m pip install -e . --no-deps
    ```
 
 4. **Test your setup:**
@@ -109,8 +109,8 @@ We welcome code contributions that:
 
 ### Testing Requirements
 
-- **Automated tests** with pytest (see [Testing Guide](docs/testing.md))
-- **Manual testing** on multiple operating systems
+- **Automated tests** with pytest (see [Testing Guide](docs/developer/testing.md))
+- **Manual testing** on supported Windows builds; source portability checks are welcome
 - **Test with various data sizes** (small and large datasets)
 - **Verify UI scaling** on different DPI settings
 - **Test error handling** with invalid inputs

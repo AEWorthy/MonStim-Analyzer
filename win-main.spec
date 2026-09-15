@@ -7,6 +7,7 @@
 import os
 import sys
 import shutil
+import json
 from PyInstaller.config import CONF
 from PyInstaller.utils.hooks import collect_data_files
 
@@ -30,7 +31,7 @@ datas += collect_data_files('scipy')
 datas += collect_data_files('matplotlib')
 datas += collect_data_files('PySide6')
 
-hiddenimports = ['numpy', 'scipy', 'matplotlib', 'PySide6']
+hiddenimports = ['numpy', 'scipy', 'matplotlib', 'PySide6', 'cryptography.hazmat.primitives.asymmetric.ed25519']
 
 a = Analysis( # type: ignore  # noqa: F821
     ['main.py'],
@@ -78,10 +79,40 @@ exe = EXE( # type: ignore
     icon='assets/icon.ico'
 )
 
+# The updater is intentionally a separate, minimal executable. It waits for
+# MonStim to exit, selects an already verified staged version, and restarts it;
+# it never has access to managed experiment data.
+updater_a = Analysis( # type: ignore  # noqa: F821
+    ['updater_main.py'],
+    pathex=[os.path.dirname(os.path.abspath('updater_main.py'))],
+    binaries=[],
+    datas=[],
+    hiddenimports=['cryptography.hazmat.primitives.asymmetric.ed25519'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=1,
+)
+updater_pyz = PYZ(updater_a.pure) # type: ignore
+updater_exe = EXE( # type: ignore
+    updater_pyz,
+    updater_a.scripts,
+    updater_a.binaries,
+    name='MonStim Updater',
+    debug=False,
+    bootloader_ignore_signals=False,
+    upx=True,
+    console=False,
+    disable_windowed_traceback=True,
+)
+
 coll = COLLECT( # type: ignore
     exe,
     a.binaries,
     a.datas,
+    updater_exe,
     upx=True,
     upx_exclude=['PySide6', 'Qt6Core.dll', 'Qt6Widgets.dll'],
     name=DIST_NAME
@@ -91,3 +122,8 @@ coll = COLLECT( # type: ignore
 os.makedirs(CONF['distpath'], exist_ok=True)
 shutil.copy2('docs/user/using_monstim.md', os.path.join(CONF['distpath'], DIST_NAME, 'USER_GUIDE.md'))
 shutil.copy2('QUICKSTART.md', os.path.join(CONF['distpath'], DIST_NAME))
+shutil.copy2('license.txt', os.path.join(CONF['distpath'], DIST_NAME, 'LICENSE.txt'))
+shutil.copy2('NOTICE', os.path.join(CONF['distpath'], DIST_NAME, 'NOTICE.txt'))
+shutil.copy2('CITATION.cff', os.path.join(CONF['distpath'], DIST_NAME, 'CITATION.cff'))
+with open(os.path.join(CONF['distpath'], DIST_NAME, 'monstim-release.json'), 'w', encoding='utf-8') as f:
+    json.dump({'version': VERSION, 'executable': f'{EXE_NAME}.exe'}, f, indent=2)

@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import traceback
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -37,7 +38,11 @@ from monstim_gui.commands import (
     RestoreDatasetCommand,
     RestoreRecordingCommand,
     RestoreSessionCommand,
+    SetChildCompletionStatusCommand,
+    ToggleCompletionStatusCommand,
 )
+from monstim_gui.core.application_state import app_state
+from monstim_gui.core.keyboard_shortcuts import KeyboardShortcutController
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.core.ui_theme import apply_application_theme
 from monstim_gui.dialogs import (
@@ -129,12 +134,91 @@ class MonstimGUI(QMainWindow):
         self._recenter_window()
 
         self.command_invoker = CommandInvoker(self)
+        self.keyboard_shortcuts = KeyboardShortcutController(self)
         # Initialize undo/redo menu state
         self.menu_bar.update_undo_redo_labels()
 
     def schedule_initial_load(self, delay_ms: int = 100) -> None:
         """Restore the last session after the main window has had time to render."""
         QTimer.singleShot(delay_ms, self._restore_last_session)
+        QTimer.singleShot(delay_ms + 1500, self._check_official_addons)
+        QTimer.singleShot(delay_ms + 2500, self._check_application_updates)
+
+    def _check_application_updates(self) -> None:
+        """Check the signed application catalog daily without delaying startup."""
+        from monstim_gui.dialogs.update_manager import UpdateCheckThread
+        from monstim_gui.updates import update_check_due
+
+        last_checked = app_state.settings.value("Updates/catalog_checked_at", "", type=str)
+        if not update_check_due(last_checked):
+            return
+        app_state.settings.setValue("Updates/catalog_checked_at", datetime.now(UTC).isoformat())
+        app_state.settings.sync()
+        self._update_check_thread = UpdateCheckThread(self)
+        self._update_check_thread.complete.connect(self._on_application_update_check_complete)
+        self._update_check_thread.failed.connect(lambda message: logger.info("Application update check skipped: %s", message))
+        self._update_check_thread.start()
+
+    def _on_application_update_check_complete(self, release) -> None:
+        if release is None:
+            return
+        if not app_state.settings.value("Updates/auto_download", False, type=bool):
+            self.status_bar.showMessage(f"MonStim {release.version} is available. Open Help > Check for Updates…", 10000)
+            return
+        from monstim_gui.dialogs.update_manager import UpdateDownloadThread
+
+        self._update_download_thread = UpdateDownloadThread(release, self)
+
+        def show_downloaded_update(version: str) -> None:
+            self.status_bar.showMessage(
+                f"MonStim {version} was downloaded and verified. Open Help > Check for Updates… to install on restart.", 12000
+            )
+
+        self._update_download_thread.complete.connect(show_downloaded_update)
+        self._update_download_thread.failed.connect(lambda message: logger.warning("Automatic update download failed: %s", message))
+        self._update_download_thread.start()
+
+    def _check_official_addons(self) -> None:
+        """Check the signed official catalog at most once daily, without blocking startup."""
+        from monstim_gui.plugins import OfficialCatalogCheckThread, catalog_check_due
+
+        last_checked = app_state.settings.value("Addons/official_catalog_checked_at", "", type=str)
+        if not catalog_check_due(last_checked):
+            return
+        # Record the attempt before starting the worker: an offline computer
+        # should not retry on every launch and delay or clutter its logs.
+        app_state.settings.setValue("Addons/official_catalog_checked_at", datetime.now(UTC).isoformat())
+        app_state.settings.sync()
+        self._official_catalog_thread = OfficialCatalogCheckThread(self)
+        self._official_catalog_thread.catalog_available.connect(self._handle_official_catalog)
+        self._official_catalog_thread.catalog_unavailable.connect(lambda message: logger.info("Official add-on catalog check skipped: %s", message))
+        self._official_catalog_thread.start()
+
+    def _handle_official_catalog(self, catalog: dict) -> None:
+        from packaging.version import Version
+
+        from monstim_gui.plugins import OfficialUpdateThread, installed_manifests
+
+        installed = {manifest.id: manifest.version for manifest, _path, compatible in installed_manifests() if compatible}
+        updates = []
+        for item in catalog.get("plugins", []):
+            try:
+                is_complete = {"id", "name", "version", "asset_url", "sha256"} <= item.keys()
+                if not is_complete or item["id"] not in installed:
+                    continue
+                if Version(item["version"]) > Version(installed[item["id"]]):
+                    updates.append(item)
+            except TypeError, ValueError:
+                logger.warning("Ignoring malformed official add-on catalog entry: %r", item)
+        if not updates:
+            return
+        if not app_state.settings.value("Addons/auto_install_updates", False, type=bool):
+            self.status_bar.showMessage("Official importer updates are available. Open Help > Manage Importer Add-ons…", 10000)
+            return
+        self._official_update_thread = OfficialUpdateThread(updates, self)
+        self._official_update_thread.update_installed.connect(lambda message: self.status_bar.showMessage(message, 10000))
+        self._official_update_thread.update_failed.connect(lambda message: logger.warning("%s", message))
+        self._official_update_thread.start()
 
     def init_ui(self):
         widgets = setup_main_layout(self)
@@ -554,6 +638,71 @@ class MonstimGUI(QMainWindow):
         )
         if ok and dataset_id:
             self.restore_dataset(dataset_id)
+
+    def set_child_completion_status(self, parent_level: str, completed: bool):
+        """Set every active dataset/session child of the current parent complete or incomplete."""
+        parent_object = self.current_experiment if parent_level == "experiment" else self.current_dataset
+        child_label = "datasets" if parent_level == "experiment" else "sessions"
+        if parent_object is None:
+            QMessageBox.warning(self, "No data selected", f"Please select a {parent_level} first.")
+            return
+
+        command = SetChildCompletionStatusCommand(self, parent_level, parent_object, completed)
+        if not command.has_changes:
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"All {child_label} are already marked {state}.", 5000)
+            return
+
+        try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            self.command_invoker.execute(command)
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"Marked {len(command._children)} active {child_label} {state}.", 5000)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def step_data_selection(self, level: str, direction: int) -> bool:
+        """Move one visible selection at a requested data hierarchy level.
+
+        Returns whether a new item was selected, so keyboard navigation can
+        optionally redraw the current plot only after a successful change.
+        """
+        combos = {
+            "experiment": self.data_selection_widget.experiment_combo,
+            "dataset": self.data_selection_widget.dataset_combo,
+            "session": self.data_selection_widget.session_combo,
+        }
+        combo = combos[level]
+        current_index = combo.currentIndex()
+        target_index = current_index + direction
+        if not combo.isEnabled() or current_index < 0 or not 0 <= target_index < combo.count():
+            edge = "first" if direction < 0 else "last"
+            self.status_bar.showMessage(f"Already at the {edge} available {level}.", 3000)
+            return False
+        combo.setCurrentIndex(target_index)
+        return combo.currentIndex() == target_index and combo.itemData(target_index, Qt.ItemDataRole.UserRole) is not None
+
+    def set_current_completion_status(self, level: str, completed: bool) -> None:
+        """Set completion for the selected hierarchy object as one undoable action."""
+        selected = {
+            "experiment": self.current_experiment,
+            "dataset": self.current_dataset,
+            "session": self.current_session,
+        }[level]
+        if selected is None:
+            self.status_bar.showMessage(f"Select a {level} before changing completion status.", 5000)
+            return
+        if bool(getattr(selected, "is_completed", False)) == completed:
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"Selected {level} is already marked {state}.", 3000)
+            return
+        try:
+            self.command_invoker.execute(ToggleCompletionStatusCommand(self, level, selected, new_status=completed))
+            state = "complete" if completed else "incomplete"
+            self.status_bar.showMessage(f"Marked selected {level} {state}.", 5000)
+        except (OSError, ValueError, RuntimeError) as error:
+            logger.exception("Could not update %s completion status", level)
+            QMessageBox.critical(self, "Completion status not changed", str(error))
 
     # Menu bar functions
     def manage_latency_windows(self, level: str):

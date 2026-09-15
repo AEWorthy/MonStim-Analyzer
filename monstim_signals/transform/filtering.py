@@ -38,20 +38,24 @@ def butter_bandpass_filter(data: np.ndarray, fs: float, lowcut=100, highcut=3500
     return signal.filtfilt(b, a, data)
 
 
-def correct_emg_to_baseline(channel_recording: np.ndarray, scan_rate: float, stim_delay: float):
-    """Correct EMG absolute amplitude relative to pre-stim baseline amplitude by
-    subtracting the average pre-stimulus amplitude from the entire signal.
+def correct_emg_to_baseline(channel_recording: np.ndarray, scan_rate: float, baseline_end_ms: float):
+    """Correct a signal relative to its recorded pre-stimulus baseline.
 
     Args:
         channel_recording (array): The EMG signal to be corrected.
         scan_rate (float): The scanning rate of the signal.
-        stim_delay (float): The delay between stimulus and signal acquisition.
+        baseline_end_ms (float): The acquisition-relative time of stimulus
+            onset. Samples before this point form the baseline.
     Returns:
         array: The corrected EMG signal.
     """
-    # Baseline correction is not a latency-window measurement.  It covers the
-    # samples strictly before stimulus onset, so the sample at stim_delay does
-    # not influence the baseline estimate.
-    baseline_end_sample = int(stim_delay * scan_rate / 1000)
+    # Baseline correction is not a latency-window measurement. It covers the
+    # samples strictly before stimulus onset, so the onset sample itself does
+    # not influence the baseline estimate. A recording with no pre-stimulus
+    # samples cannot be baseline-corrected; preserve it rather than converting
+    # the complete channel to NaN through ``mean([])``.
+    baseline_end_sample = min(int(baseline_end_ms * scan_rate / 1000), len(channel_recording))
+    if baseline_end_sample <= 0:
+        return np.array(channel_recording, copy=True)
     baseline_emg = np.mean(channel_recording[:baseline_end_sample])
     return channel_recording - baseline_emg

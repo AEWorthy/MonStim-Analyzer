@@ -14,6 +14,8 @@ Open **Edit > Session/Dataset/Experiment > Manage Latency Windows**. The editor 
 
 Use **Session** while developing or checking timing. Use **Dataset** or **Experiment** only when you mean to replace every included child session's window set. If MonStim warns that child windows differ, applying is an intentional standardization action—not a harmless edit.
 
+![The latency-window editor shows the active synthetic session, the selected Session scope, two named windows, and per-channel M-wave start times before Apply is used.](../assets/latency-window-editor.png)
+
 ## Steps: create and edit a window
 
 Select a window to edit its name, color, duration, and start time. Names should describe the planned measurement (for example, `M-wave` or `H-reflex`) and be consistent across sessions you intend to compare.

@@ -10,6 +10,8 @@ Covers:
 
 from __future__ import annotations
 
+import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -33,6 +35,7 @@ def _make_config(
     selected_objects=None,
     experiment_paths=None,
     normalize_to_mmax=False,
+    completed_only=False,
 ):
     from monstim_gui.managers.bulk_export_manager import BulkExportConfig
 
@@ -45,6 +48,7 @@ def _make_config(
         output_path=output_path,
         experiment_paths=experiment_paths or {"Expt1": "/fake/path"},
         normalize_to_mmax=normalize_to_mmax,
+        completed_only=completed_only,
     )
 
 
@@ -171,6 +175,20 @@ class TestBulkExportConfig:
         assert cfg.channel_indices == [0, 1, 2]
         assert cfg.output_path == "/out"
 
+    def test_completed_only_defaults_to_false(self):
+        from monstim_gui.managers.bulk_export_manager import BulkExportConfig
+
+        cfg = BulkExportConfig(
+            data_level="dataset",
+            selected_objects={},
+            data_types=[],
+            methods=[],
+            channel_indices=[],
+            output_path="",
+        )
+
+        assert cfg.completed_only is False
+
     def test_construction_experiment_level(self):
         from monstim_gui.managers.bulk_export_manager import BulkExportConfig
 
@@ -197,6 +215,128 @@ class TestBulkExportConfig:
             output_path="",
         )
         assert cfg.experiment_paths == {}
+
+
+def test_completed_only_export_scope_filters_and_restores_dataset_sessions(caplog):
+    from monstim_gui.managers.bulk_export_manager import _completed_only_export_scope
+
+    class Session:
+        def __init__(self, session_id, completed):
+            self.id = session_id
+            self.is_completed = completed
+
+    class Dataset:
+        def __init__(self):
+            self._all_sessions = [Session("complete", True), Session("incomplete", False)]
+            self.annot = SimpleNamespace(excluded_sessions=["already-excluded"])
+            self.invalidations = 0
+
+        @property
+        def sessions(self):
+            excluded = set(self.annot.excluded_sessions)
+            return [session for session in self._all_sessions if session.id not in excluded]
+
+        def invalidate_aggregate_results(self):
+            self.invalidations += 1
+
+    dataset = Dataset()
+
+    with _completed_only_export_scope(dataset, True):
+        assert [session.id for session in dataset.sessions] == ["complete"]
+        assert dataset.annot.excluded_sessions == ["already-excluded", "incomplete"]
+
+    assert dataset.annot.excluded_sessions == ["already-excluded"]
+    assert dataset.invalidations == 2
+    assert "omitting 1 incomplete non-excluded session(s)" in caplog.text
+
+
+def test_completed_only_scope_does_not_warn_about_an_already_excluded_session(caplog):
+    from monstim_gui.managers.bulk_export_manager import _completed_only_export_scope
+
+    class Session:
+        id = "already-excluded"
+        is_completed = False
+
+    class Dataset:
+        def __init__(self):
+            self._all_sessions = [Session()]
+            self.annot = SimpleNamespace(excluded_sessions=["already-excluded"])
+
+        def invalidate_aggregate_results(self):
+            pass
+
+    with _completed_only_export_scope(Dataset(), True):
+        pass
+
+    assert "Completed data only: omitting" not in caplog.text
+
+
+def test_completed_only_export_scope_filters_and_restores_experiment_datasets():
+    from monstim_gui.managers.bulk_export_manager import _completed_only_export_scope
+
+    class Dataset:
+        def __init__(self, dataset_id, completed):
+            self.id = dataset_id
+            self.is_completed = completed
+            self._all_sessions = []
+            self.annot = SimpleNamespace(excluded_sessions=[])
+
+        def invalidate_aggregate_results(self):
+            pass
+
+    class Experiment:
+        def __init__(self):
+            self._all_datasets = [Dataset("complete", True), Dataset("incomplete", False)]
+            self.annot = SimpleNamespace(excluded_datasets=["already-excluded"])
+            self.is_completed = True
+
+        @property
+        def datasets(self):
+            excluded = set(self.annot.excluded_datasets)
+            return [dataset for dataset in self._all_datasets if dataset.id not in excluded]
+
+        def invalidate_aggregate_results(self):
+            pass
+
+    experiment = Experiment()
+
+    with _completed_only_export_scope(experiment, True):
+        assert [dataset.id for dataset in experiment.datasets] == ["complete"]
+
+    assert experiment.annot.excluded_datasets == ["already-excluded"]
+
+
+def test_completed_only_export_scope_excludes_an_incomplete_experiment():
+    from monstim_gui.managers.bulk_export_manager import _completed_only_export_scope
+
+    class Dataset:
+        def __init__(self):
+            self.id = "complete-dataset"
+            self.is_completed = True
+            self._all_sessions = []
+            self.annot = SimpleNamespace(excluded_sessions=[])
+
+        def invalidate_aggregate_results(self):
+            pass
+
+    class Experiment:
+        def __init__(self):
+            self._all_datasets = [Dataset()]
+            self.annot = SimpleNamespace(excluded_datasets=[])
+            self.is_completed = False
+
+        @property
+        def datasets(self):
+            excluded = set(self.annot.excluded_datasets)
+            return [dataset for dataset in self._all_datasets if dataset.id not in excluded]
+
+        def invalidate_aggregate_results(self):
+            pass
+
+    experiment = Experiment()
+
+    with _completed_only_export_scope(experiment, True):
+        assert experiment.datasets == []
 
 
 class TestAutoMaxWorkers:
@@ -239,6 +379,38 @@ class TestAutoMaxWorkers:
 
 
 class TestBulkExportSessionProcessing:
+    def test_force_and_length_filtering_uses_acquisition_relative_stimulus_onset(self):
+        """Zero-delay Motor Length trials retain finite force and length traces."""
+        from monstim_signals.domain.session import Session
+
+        class DummyRecording:
+            id = "R0"
+            meta = SimpleNamespace(num_channels=2)
+
+            def raw_view(self):
+                return np.array(
+                    [
+                        [10.0, 20.0],
+                        [12.0, 22.0],
+                        [14.0, 24.0],
+                    ]
+                )
+
+            def close(self):
+                pass
+
+        session = Session.__new__(Session)
+        session.annot = SimpleNamespace(channels=[SimpleNamespace(invert=False), SimpleNamespace(invert=False)])
+        session.channel_types = ["force", "length"]
+        session.scan_rate = 1_000
+        session.stim_delay = 0.0
+        session.stim_start = 2.0
+
+        filtered = session._compute_signal_recording(DummyRecording(), "filtered")
+
+        np.testing.assert_allclose(filtered, [[-1.0, -1.0], [1.0, 1.0], [3.0, 3.0]])
+        assert np.all(np.isfinite(filtered))
+
     def test_filtered_recordings_close_raw_handles_when_configured(self):
         from monstim_signals.domain.session import Session
 
@@ -612,6 +784,33 @@ class TestComputeMaxH:
 
 
 class TestWriteObjectExport:
+    def test_cancellation_preserves_existing_workbook_and_leaves_no_temp_file(self, tmp_path, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        config = _make_config(
+            data_types=["mmax"],
+            methods=["rms"],
+            channel_indices=[0],
+            output_path=str(tmp_path),
+        )
+        output_dir = tmp_path / "Expt1"
+        output_dir.mkdir()
+        final_file = output_dir / "DS1_bulk_export.xlsx"
+        final_file.write_bytes(b"previous complete export")
+        canceled = threading.Event()
+
+        def cancel_after_computation(*_args, **_kwargs):
+            canceled.set()
+            return pd.DataFrame({"channel": ["Ch0"], "mmax_rms": [1.0]})
+
+        monkeypatch.setitem(bulk_export_manager._DATA_TYPE_HANDLERS, "mmax", cancel_after_computation)
+
+        with pytest.raises(bulk_export_manager.BulkExportCanceled):
+            bulk_export_manager._write_object_export(_MockObj(n_channels=1), "Expt1", "DS1", config, is_canceled=canceled.is_set)
+
+        assert final_file.read_bytes() == b"previous complete export"
+        assert list(output_dir.glob("*.tmp.xlsx")) == []
+
     def test_creates_xlsx(self, tmp_path):
         from monstim_gui.managers.bulk_export_manager import _write_object_export
 
@@ -696,6 +895,106 @@ class TestWriteObjectExport:
 
 
 class TestRunBulkExport:
+    def test_parallel_cancellation_does_not_start_queued_dataset_tasks(self, monkeypatch):
+        from monstim_gui.managers import bulk_export_manager
+
+        canceled = threading.Event()
+        started = threading.Event()
+        completed_task_ids = []
+
+        def cooperative_task(_expt_name, dataset_id, _folder, _config, is_canceled=None):
+            completed_task_ids.append(dataset_id)
+            started.set()
+            while not is_canceled():
+                canceled.wait(0.01)
+            return None, f"Canceled: {dataset_id}"
+
+        monkeypatch.setattr(bulk_export_manager, "_auto_max_workers", lambda *_args, **_kwargs: 2)
+        monkeypatch.setattr(bulk_export_manager, "_count_dataset_recording_files", lambda *_args, **_kwargs: 0)
+        monkeypatch.setattr(bulk_export_manager, "_load_and_export_dataset_task", cooperative_task)
+        config = _make_config(
+            data_level="dataset",
+            selected_objects={"E1": ["DS1", "DS2", "DS3"]},
+            experiment_paths={"E1": "."},
+        )
+        result = []
+        thread = threading.Thread(target=lambda: result.extend(bulk_export_manager.run_bulk_export(config, is_canceled=canceled.is_set)))
+        thread.start()
+        assert started.wait(1.0)
+        canceled.set()
+        thread.join(2.0)
+
+        assert not thread.is_alive()
+        assert result == []
+        assert len(completed_task_ids) <= 2
+
+    def test_completed_only_skips_dataset_with_incomplete_parent_or_dataset(self, monkeypatch):
+        import monstim_signals.io.repositories as repos_mod
+        from monstim_gui.managers.bulk_export_manager import _load_and_export_dataset_task
+
+        class FakeExperimentRepo:
+            def __init__(self, folder):
+                pass
+
+            def get_metadata(self):
+                return {"is_completed": True, "datasets": [{"id": ".", "is_completed": False}]}
+
+        class UnexpectedDatasetRepo:
+            def __init__(self, folder):
+                raise AssertionError("Incomplete data must be rejected before loading the dataset")
+
+        monkeypatch.setattr(repos_mod, "ExperimentRepository", FakeExperimentRepo)
+        monkeypatch.setattr(repos_mod, "DatasetRepository", UnexpectedDatasetRepo)
+        config = _make_config(
+            data_level="dataset",
+            selected_objects={"Expt1": ["."]},
+            data_types=["mmax"],
+            methods=["rms"],
+            channel_indices=[0],
+            output_path=".",
+            experiment_paths={"Expt1": "."},
+            completed_only=True,
+        )
+
+        out_path, message = _load_and_export_dataset_task("Expt1", ".", Path("."), config)
+
+        assert out_path is None
+        assert message == "Incomplete dataset: ."
+
+    def test_dataset_level_skips_excluded_complete_dataset(self, monkeypatch, tmp_path):
+        import monstim_signals.io.repositories as repos_mod
+        from monstim_gui.managers.bulk_export_manager import _load_and_export_dataset_task
+
+        class FakeExperimentRepo:
+            def __init__(self, folder):
+                pass
+
+            def get_metadata(self):
+                return {
+                    "is_completed": True,
+                    "excluded_datasets": ["DS1"],
+                    "datasets": [{"id": "DS1", "is_completed": True}],
+                }
+
+        class UnexpectedDatasetRepo:
+            def __init__(self, folder):
+                raise AssertionError("Excluded data must be rejected before loading the dataset")
+
+        monkeypatch.setattr(repos_mod, "ExperimentRepository", FakeExperimentRepo)
+        monkeypatch.setattr(repos_mod, "DatasetRepository", UnexpectedDatasetRepo)
+        (tmp_path / "DS1").mkdir()
+        config = _make_config(
+            data_level="dataset",
+            selected_objects={"Expt1": ["DS1"]},
+            output_path=str(tmp_path),
+            experiment_paths={"Expt1": str(tmp_path)},
+        )
+
+        out_path, message = _load_and_export_dataset_task("Expt1", "DS1", tmp_path, config)
+
+        assert out_path is None
+        assert message == "Excluded dataset: DS1"
+
     def test_dataset_level_writes_files(self, tmp_path, monkeypatch):
         from monstim_gui.managers import bulk_export_manager
 
@@ -715,6 +1014,15 @@ class TestRunBulkExport:
         import monstim_signals.io.repositories as repos_mod
 
         monkeypatch.setattr(repos_mod, "DatasetRepository", FakeDatasetRepo)
+
+        class FakeExperimentRepo:
+            def __init__(self, folder):
+                pass
+
+            def get_metadata(self):
+                return {"excluded_datasets": [], "datasets": [{"id": "DS1", "is_completed": True}]}
+
+        monkeypatch.setattr(repos_mod, "ExperimentRepository", FakeExperimentRepo)
 
         # Create a fake DS1 sub-folder so the folder existence check passes
         (tmp_path / "DS1").mkdir()
