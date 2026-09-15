@@ -21,7 +21,7 @@ SPLASH_INFO = {
     "program_name": "MonStim EMG Analyzer",
     "version": f"v{VERSION} (beta)",
     "description": "Software for analyzing EMG data\nfrom LabView MonStim experiments.\n\n\nClick to dismiss...",
-    "copyright": "© 2024 Andrew Worthy",
+    "copyright": "© 2024–2026 Andrew Worthy",  # noqa: RUF001
 }
 
 logger = logging.getLogger(__name__)

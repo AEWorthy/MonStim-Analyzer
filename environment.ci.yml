@@ -15,6 +15,7 @@ dependencies:
   - packaging=26.*
   - traitlets=5.15.*
   - pillow=12.2.*
+  - cryptography>=46.0
   - pyside6=6.9.*
   - pyqtgraph=0.14.*
   - pip

@@ -135,6 +135,11 @@ def qt_message_handler(mode, context, message):
 
 def main(is_frozen: bool, app: QApplication | None = None) -> int:
     try:
+        if is_frozen:
+            from monstim_gui.updates import launch_selected_update
+
+            if launch_selected_update():
+                return 0
         if app is None:
             from monstim_gui.core.ui_scaling import setup_dpi_awareness
 

@@ -8,6 +8,8 @@ This guide is the shortest path from imported recordings to results that can be 
 
 Import an experiment, then confirm that **experiment**, **dataset**, and **session** identify the intended biological and acquisition units. Use [Experiment import](importing_experiments.md) for the required folder layout. A dataset does not guarantee that its sessions share identical latency windows.
 
+For a supported non-MonStim source, use **File > Import using Add-on…** instead. Select the source file or folder; MonStim checks enabled compatible add-ons and uses the only high-confidence match. It asks you to choose when recognition is ambiguous and refuses to overwrite an existing experiment. See [Importer add-ons](importer_addons.md).
+
 ## 2. Inspect a representative session
 
 Open a filtered EMG or Single EMG plot. Check the stimulus-aligned trace, channel identity, polarity, sampling rate, and response timing. Use raw traces to inspect acquisition; most amplitude methods operate on filtered, unrectified data.
@@ -32,4 +34,6 @@ Record the profile, window scope, amplitude method, exclusion rules, and exporte
 
 - [Analysis profiles](analysis_profiles.md)
 - [Exporting results](exporting_results.md)
+- [Importer add-ons](importer_addons.md)
+- [Updating MonStim](updates.md)
 - [Back to Help Library](index.md)

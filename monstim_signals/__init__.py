@@ -4,7 +4,7 @@
 from .version import DATA_VERSION
 
 # Package version
-__package_version__ = "0.6.0"
+__package_version__ = "0.7.0"
 
 # Metadata
 __title__ = "monstim_signals"

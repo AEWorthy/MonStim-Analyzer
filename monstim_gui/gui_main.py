@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import traceback
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ from monstim_gui.commands import (
     SetChildCompletionStatusCommand,
     ToggleCompletionStatusCommand,
 )
+from monstim_gui.core.application_state import app_state
 from monstim_gui.core.keyboard_shortcuts import KeyboardShortcutController
 from monstim_gui.core.splash import SPLASH_INFO
 from monstim_gui.core.ui_theme import apply_application_theme
@@ -139,6 +141,84 @@ class MonstimGUI(QMainWindow):
     def schedule_initial_load(self, delay_ms: int = 100) -> None:
         """Restore the last session after the main window has had time to render."""
         QTimer.singleShot(delay_ms, self._restore_last_session)
+        QTimer.singleShot(delay_ms + 1500, self._check_official_addons)
+        QTimer.singleShot(delay_ms + 2500, self._check_application_updates)
+
+    def _check_application_updates(self) -> None:
+        """Check the signed application catalog daily without delaying startup."""
+        from monstim_gui.dialogs.update_manager import UpdateCheckThread
+        from monstim_gui.updates import update_check_due
+
+        last_checked = app_state.settings.value("Updates/catalog_checked_at", "", type=str)
+        if not update_check_due(last_checked):
+            return
+        app_state.settings.setValue("Updates/catalog_checked_at", datetime.now(UTC).isoformat())
+        app_state.settings.sync()
+        self._update_check_thread = UpdateCheckThread(self)
+        self._update_check_thread.complete.connect(self._on_application_update_check_complete)
+        self._update_check_thread.failed.connect(lambda message: logger.info("Application update check skipped: %s", message))
+        self._update_check_thread.start()
+
+    def _on_application_update_check_complete(self, release) -> None:
+        if release is None:
+            return
+        if not app_state.settings.value("Updates/auto_download", False, type=bool):
+            self.status_bar.showMessage(f"MonStim {release.version} is available. Open Help > Check for Updates…", 10000)
+            return
+        from monstim_gui.dialogs.update_manager import UpdateDownloadThread
+
+        self._update_download_thread = UpdateDownloadThread(release, self)
+
+        def show_downloaded_update(version: str) -> None:
+            self.status_bar.showMessage(
+                f"MonStim {version} was downloaded and verified. Open Help > Check for Updates… to install on restart.", 12000
+            )
+
+        self._update_download_thread.complete.connect(show_downloaded_update)
+        self._update_download_thread.failed.connect(lambda message: logger.warning("Automatic update download failed: %s", message))
+        self._update_download_thread.start()
+
+    def _check_official_addons(self) -> None:
+        """Check the signed official catalog at most once daily, without blocking startup."""
+        from monstim_gui.plugins import OfficialCatalogCheckThread, catalog_check_due
+
+        last_checked = app_state.settings.value("Addons/official_catalog_checked_at", "", type=str)
+        if not catalog_check_due(last_checked):
+            return
+        # Record the attempt before starting the worker: an offline computer
+        # should not retry on every launch and delay or clutter its logs.
+        app_state.settings.setValue("Addons/official_catalog_checked_at", datetime.now(UTC).isoformat())
+        app_state.settings.sync()
+        self._official_catalog_thread = OfficialCatalogCheckThread(self)
+        self._official_catalog_thread.catalog_available.connect(self._handle_official_catalog)
+        self._official_catalog_thread.catalog_unavailable.connect(lambda message: logger.info("Official add-on catalog check skipped: %s", message))
+        self._official_catalog_thread.start()
+
+    def _handle_official_catalog(self, catalog: dict) -> None:
+        from packaging.version import Version
+
+        from monstim_gui.plugins import OfficialUpdateThread, installed_manifests
+
+        installed = {manifest.id: manifest.version for manifest, _path, compatible in installed_manifests() if compatible}
+        updates = []
+        for item in catalog.get("plugins", []):
+            try:
+                is_complete = {"id", "name", "version", "asset_url", "sha256"} <= item.keys()
+                if not is_complete or item["id"] not in installed:
+                    continue
+                if Version(item["version"]) > Version(installed[item["id"]]):
+                    updates.append(item)
+            except TypeError, ValueError:
+                logger.warning("Ignoring malformed official add-on catalog entry: %r", item)
+        if not updates:
+            return
+        if not app_state.settings.value("Addons/auto_install_updates", False, type=bool):
+            self.status_bar.showMessage("Official importer updates are available. Open Help > Manage Importer Add-ons…", 10000)
+            return
+        self._official_update_thread = OfficialUpdateThread(updates, self)
+        self._official_update_thread.update_installed.connect(lambda message: self.status_bar.showMessage(message, 10000))
+        self._official_update_thread.update_failed.connect(lambda message: logger.warning("%s", message))
+        self._official_update_thread.start()
 
     def init_ui(self):
         widgets = setup_main_layout(self)

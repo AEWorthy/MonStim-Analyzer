@@ -4,6 +4,8 @@
 
 Use exports to move an analysis result into a spreadsheet, statistics workflow, or figure pipeline. Exported values are only interpretable with the selections and analysis choices that produced them.
 
+![The Bulk Data Export dialog shows a selected synthetic experiment, output directory, data type, calculation method, channel, and the readiness summary required before Export is enabled.](../assets/bulk-export-dialog.png)
+
 ## Choose an export path
 
 - Use **Plot & Extract Data** when you want the data represented by the current plot.

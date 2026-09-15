@@ -33,6 +33,10 @@ class MenuBar(QMenuBar):
         import_multiple_action.triggered.connect(self.parent.data_manager.import_multiple_expt_data)
         import_multiple_action.setStatusTip("Import multiple experiments from disk")
 
+        import_addon_action = file_menu.addAction("Import using Add-on…")
+        import_addon_action.triggered.connect(self.parent.data_manager.import_with_addon)
+        import_addon_action.setStatusTip("Import a supported non-MonStim data stream using an installed official add-on")
+
         rename_experiment_action = file_menu.addAction("Rename Current Experiment")
         rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
         rename_experiment_action.setStatusTip("Change the name of the currently selected experiment")
@@ -243,6 +247,18 @@ class MenuBar(QMenuBar):
         save_report_action.triggered.connect(self.parent.data_manager.save_error_report)
         save_report_action.setStatusTip("Save diagnostic information for troubleshooting")
 
+        addon_action = help_menu.addAction("Manage Importer Add-ons…")
+        addon_action.triggered.connect(self.show_addon_manager)
+        addon_action.setStatusTip("Install, inspect, and diagnose official importer add-ons")
+
+        update_action = help_menu.addAction("Check for Updates…")
+        update_action.triggered.connect(self.show_update_manager)
+        update_action.setStatusTip("Check the signed official MonStim update catalog")
+
+        cite_action = help_menu.addAction("Copy Citation")
+        cite_action.triggered.connect(self.copy_citation)
+        cite_action.setStatusTip("Copy the recommended citation for MonStim Analyzer")
+
     def create_tools_menu(self):
         """Create clearly separated developer/recovery operations."""
         advanced_menu = QMenu("Tools", self)
@@ -251,6 +267,24 @@ class MenuBar(QMenuBar):
         rebuild_all_action = advanced_menu.addAction("Force Rebuild All Data Catalogs…")
         rebuild_all_action.triggered.connect(self._force_rebuild_all_catalogs)
         rebuild_all_action.setStatusTip("Re-scan every experiment and rebuild all catalogs; this may take a very long time")
+
+    def show_addon_manager(self):
+        from monstim_gui.dialogs import AddonManagerDialog
+
+        AddonManagerDialog(self.parent).exec()
+
+    def show_update_manager(self):
+        from monstim_gui.dialogs import UpdateManagerDialog
+
+        UpdateManagerDialog(self.parent).exec()
+
+    def copy_citation(self):
+        from PySide6.QtGui import QGuiApplication
+
+        from monstim_gui.provenance import citation_text
+
+        QGuiApplication.clipboard().setText(citation_text())
+        self.parent.status_bar.showMessage("MonStim citation copied to the clipboard.", 5000)
 
     # Edit menu functions
     def confirm_reload_session(self):

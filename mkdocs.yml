@@ -1,0 +1,63 @@
+site_name: MonStim Analyzer
+site_description: Reproducible EMG analysis and visualization for MonStim laboratory exports.
+site_url: https://AEWorthy.github.io/MonStim-Analyzer/
+repo_url: https://github.com/AEWorthy/MonStim-Analyzer
+repo_name: AEWorthy/MonStim-Analyzer
+theme:
+  name: material
+  logo: https://raw.githubusercontent.com/AEWorthy/MonStim-Analyzer/main/assets/logo.png
+  favicon: https://raw.githubusercontent.com/AEWorthy/MonStim-Analyzer/main/assets/icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: cyan
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: cyan
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+nav:
+  - Home: index.md
+  - Get started:
+      - Quick start: user/getting_started.md
+      - Import experiments: user/importing_experiments.md
+      - Importer add-ons: user/importer_addons.md
+      - Updating MonStim: user/updates.md
+      - Troubleshooting: user/troubleshooting.md
+  - Analyze and export:
+      - Analysis profiles: user/analysis_profiles.md
+      - Latency windows: user/latency_windows.md
+      - Exporting results: user/exporting_results.md
+      - How to cite MonStim: user/citing_monstim.md
+  - Methods:
+      - Analysis methods: science/analysis_methods.md
+      - EMG processing: science/emg_processing.md
+      - M-max estimation: science/mmax_estimation.md
+  - Developers:
+      - Architecture: developer/architecture.md
+      - Publishing releases: developer/releasing.md
+      - Testing: developer/testing.md
+      - Contributing: developer/contributing.md
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AEWorthy/MonStim-Analyzer
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/andrew-worthy
+    - icon: fontawesome/brands/google-scholar
+      link: https://scholar.google.com/citations?user=6g0k1
+    - icon: fontawesome/solid/globe
+      link: https://worthy-lab.org
+copyright: Copyright 2024–2026 Andrew Worthy. MonStim Analyzer is licensed under PolyForm Noncommercial 1.0.0.

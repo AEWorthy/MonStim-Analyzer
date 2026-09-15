@@ -24,11 +24,13 @@ from PySide6.QtWidgets import (
 
 from monstim_gui.core.application_state import app_state
 from monstim_gui.io.experiment_loader import AllCatalogsRebuildThread, CatalogRebuildThread, ExperimentLoadingThread
+from monstim_gui.plugins import MIN_AUTO_DETECTION_CONFIDENCE, PluginError, installed_manifests, load_plugin
 from monstim_signals.core import get_config_path, get_data_path, get_log_dir
 from monstim_signals.io.csv_importer import (
     GUIExptImportingThread,
     MultiExptImportingThread,
 )
+from monstim_signals.io.normalized_import import CanonicalImportError, write_transactional_experiment
 
 if TYPE_CHECKING:
     from monstim_signals import Experiment
@@ -36,6 +38,45 @@ if TYPE_CHECKING:
     from ..gui_main import MonstimGUI
 
 logger = logging.getLogger(__name__)
+
+
+class AddonImportThread(QThread):
+    """Run an approved importer without blocking the GUI."""
+
+    progress = Signal(int)
+    completed = Signal()
+    failed = Signal(str)
+    canceled = Signal()
+
+    def __init__(self, plugin, source: Path, output: Path, parent=None):
+        super().__init__(parent)
+        self.plugin = plugin
+        self.source = source
+        self.output = output
+        self._cancel_requested = False
+
+    def cancel(self):
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            self.plugin.validate_source(self.source)
+            normalized = self.plugin.normalize_experiment(self.source, lambda: self._cancel_requested)
+            write_transactional_experiment(
+                normalized,
+                self.output,
+                progress_callback=self.progress.emit,
+                is_canceled=lambda: self._cancel_requested,
+            )
+            (self.canceled if self._cancel_requested else self.completed).emit()
+        except InterruptedError:
+            self.canceled.emit()
+        except CanonicalImportError as exc:
+            logger.warning("Importer add-on returned invalid canonical data: %s", exc)
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            logger.exception("Importer add-on failed")
+            self.failed.emit(str(exc))
 
 
 class DatasetCopyThread(QThread):
@@ -292,6 +333,83 @@ class DataManager:
 
     # ------------------------------------------------------------------
     # import experiment from CSVs
+    def import_with_addon(self):
+        """Detect an enabled importer for a chosen file/folder, asking only when ambiguous."""
+        records = [(manifest, path) for manifest, path, compatible in installed_manifests() if compatible]
+        if not records:
+            QMessageBox.information(
+                self.gui,
+                "No importer add-ons installed",
+                "Install an official importer ZIP in Help > Manage Importer Add-ons before importing another data stream.",
+            )
+            return
+        source_kind, accepted = QInputDialog.getItem(self.gui, "Import using Add-on", "Source type:", ["File", "Folder"], 0, False)
+        if not accepted:
+            return
+        initial = app_state.get_last_import_path() or str(get_data_path())
+        if source_kind == "Folder":
+            selected = QFileDialog.getExistingDirectory(self.gui, "Select source folder", initial)
+        else:
+            selected, _ = QFileDialog.getOpenFileName(self.gui, "Select source file", initial, "All files (*)")
+        if not selected:
+            return
+        source = Path(selected)
+        expected_kind = "directory" if source_kind == "Folder" else "file"
+        candidates = []
+        for manifest, path in records:
+            if manifest.source_kind != expected_kind:
+                continue
+            try:
+                plugin = load_plugin(manifest, path)
+                confidence = int(plugin.probe_source(source))
+                if confidence > 0:
+                    candidates.append((confidence, manifest, plugin))
+            except PluginError, OSError, ValueError:
+                logger.debug("Add-on %s did not recognize %s", manifest.id, source, exc_info=True)
+        if not candidates:
+            QMessageBox.information(
+                self.gui,
+                "No compatible importer detected",
+                "No enabled importer recognized this source. Check the source type, install the required official add-on, or contact support.",
+            )
+            return
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        confidence, manifest, plugin = candidates[0]
+        tied = [item for item in candidates if item[0] == confidence]
+        needs_choice = len(tied) > 1 or confidence < MIN_AUTO_DETECTION_CONFIDENCE
+        if needs_choice:
+            choices = candidates if confidence < MIN_AUTO_DETECTION_CONFIDENCE else tied
+            labels = [f"{item[1].name} ({item[1].version})" for item in choices]
+            prompt = "Multiple importers recognized this source:" if len(tied) > 1 else "No importer recognized this source with high confidence:"
+            label, accepted = QInputDialog.getItem(self.gui, "Choose importer", prompt, labels, 0, False)
+            if not accepted:
+                return
+            _confidence, manifest, plugin = choices[labels.index(label)]
+        experiment_name, accepted = QInputDialog.getText(self.gui, "Imported experiment name", "Name:", text=source.stem)
+        if not accepted or not experiment_name.strip():
+            return
+        output = Path(self.gui.output_path) / experiment_name.strip()
+        if output.exists():
+            QMessageBox.warning(self.gui, "Experiment already exists", "Choose a new experiment name; add-on imports never overwrite managed data.")
+            return
+        app_state.save_last_import_path(str(source.parent))
+        dialog = QProgressDialog(f"Importing with {manifest.name}…", "Cancel", 0, 100, self.gui)
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.show()
+        self.addon_import_thread = AddonImportThread(plugin, source, output, self.gui)
+        self.addon_import_thread.progress.connect(dialog.setValue)
+        self.addon_import_thread.completed.connect(dialog.close)
+        self.addon_import_thread.completed.connect(self._on_import_finished)
+        self.addon_import_thread.completed.connect(lambda: self.gui.status_bar.showMessage("Add-on import completed.", 5000))
+        self.addon_import_thread.canceled.connect(dialog.close)
+        self.addon_import_thread.canceled.connect(
+            lambda: self.gui.status_bar.showMessage("Add-on import canceled; inspect the destination before reuse.", 7000)
+        )
+        self.addon_import_thread.failed.connect(dialog.close)
+        self.addon_import_thread.failed.connect(lambda message: QMessageBox.critical(self.gui, "Add-on import failed", message))
+        dialog.canceled.connect(self.addon_import_thread.cancel)
+        self.addon_import_thread.start()
+
     def import_expt_data(self):
         logger.info("Importing new experiment data from CSV files.")
 
