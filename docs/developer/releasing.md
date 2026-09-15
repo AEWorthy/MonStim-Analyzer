@@ -5,9 +5,8 @@ approved by the project maintainer. They are **not** Windows code-signing
 certificates: Windows may still show an unsigned-application warning.
 
 Keep both private-key files outside the repository, backed up in an encrypted
-location. A private key is like a durable stamp: anyone with a copy can
-authorize software under that catalog. The public key compiled into MonStim is
-safe to publish and is used only to check signatures.
+location. The public key compiled into MonStim is safe to publish and is used
+only to check signatures.
 
 ## Application releases
 

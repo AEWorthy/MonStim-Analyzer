@@ -23,4 +23,4 @@ dependencies:
       - Markdown==3.10
       - python_markdown_math==0.9
       - pytest==9.1.0
-      - setuptools==82.0.1
+      - setuptools==84.0.0

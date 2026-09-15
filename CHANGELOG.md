@@ -5,13 +5,36 @@ All notable changes to the MonStim Analyzer project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+
+## [0.7.0] - Unreleased
 
 ### Added
-- Public documentation-site, release, citation, provenance, and official importer-add-on foundations.
+- **Keyboard-driven data navigation**: Added configurable shortcuts for moving through experiments, datasets, and sessions, with an optional persisted setting to plot the newly selected data only after a successful load.
+- **Official importer add-ons**: Added a versioned external importer API, Add-on Manager, automatic source probing with a clear chooser for ambiguous inputs, manual/offline pack installation, compatibility and dependency preflight, diagnostics, rollback, and an end-to-end synthetic delimited-EMG example importer.
+- **Transactional normalized imports**: Added canonical experiment validation and staging for external importer output. A failed or cancelled import cannot overwrite an existing experiment or partially modify raw source data.
+- **Signed in-application updates**: Added the Update Manager, daily/background update checks, checksum- and Ed25519-verified download, side-by-side staging, explicit install approval, startup selection of the staged version, and rollback support.
+- **Release publishing safeguards**: Added application and plug-in catalog key-generation/signing tools, an automated local application-release catalog publisher, package-manifest validation, and generated `SHA256SUMS.txt` assets.
+- **Data provenance and citation support**: Added versioned export provenance sidecars, report citation/version footers, a Copy Citation action, `CITATION.cff`, and publication citation guidance.
+- **Documentation site and visual release materials**: Added the MkDocs Material GitHub Pages site, researcher-oriented README, release templates/checklists, social preview, synthetic screenshots, importer-request guidance, and in-program Help links for updates and add-ons.
+- **Data-management workflow improvements**: Added responsive selected-dataset batch actions for completion, exclusion, copying, moving, and deletion with one final refresh rather than per-item refreshes.
+- **Expanded export and curation controls**: Added clearer bulk-export status and selection controls, richer recording-exclusion editing, undoable curation operations, and clearer per-recording visual feedback.
 
 ### Changed
-- Future releases are licensed under PolyForm Noncommercial 1.0.0; historical releases retain their original license terms.
+- **Licensing and release policy**: Future releases are licensed under PolyForm Noncommercial 1.0.0; historical releases retain their original license terms. Added plain-language noncommercial/citation expectations and an official commercial-contact path.
+- **Application presentation**: Refined the shared scientific-software theme, plot-options organization, menu actions, dialogs, recording editor, and export dialog for clearer day-to-day workflows.
+- **Catalog-aware data operations**: Renames, moves, copies, and deletion now maintain affected catalog records surgically where possible, falling back safely to invalidation/rebuild only when necessary.
+- **Signal processing**: Corrected baseline handling for non-EMG signal types without changing EMG processing semantics.
+- **Public terminology and support guidance**: Standardized PySide6, Windows-beta, platform-support, installation, security, issue-form, and unsupported-data-stream wording.
+
+### Fixed
+- Prevented hidden or excluded datasets from being exported through the bulk exporter.
+- Fixed batch-command refresh behavior, data-manager synchronization, recording-editor selection/plotting edge cases, and curation workflow inconsistencies.
+- Guarded asynchronous navigation plotting so cancelled, failed, or superseded loads cannot plot stale data.
+- Preserved user experiments, exports, settings, profiles, and plug-ins outside the application-update staging area.
+
+### Testing and maintenance
+- Added focused coverage for importer manifests and installation failures, normalized transactional imports, signed update staging/activation, data-preservation guarantees, catalog mutation, keyboard navigation, export/curation behavior, and the release-catalog publisher.
+- Updated project and CI environment definitions, developer dependencies, packaging configuration, screenshot tooling, and release documentation.
 
 
 ## [0.6.0] - 2026-08-28
