@@ -1,0 +1,12 @@
+{
+  "id": "example-delimited-emg",
+  "name": "Example Delimited EMG Importer",
+  "version": "0.1.0",
+  "entry_point": "importer.py:PLUGIN",
+  "app_requires": ">=0.6,<0.8",
+  "api_requires": ">=2,<3",
+  "source_kind": "file",
+  "file_patterns": ["*.csv"],
+  "runtime_requirements": ["numpy", "h5py", "monstim-plugin-api"],
+  "description": "Reference importer for a simple time_ms, emg_1, stimulus_v CSV layout."
+}

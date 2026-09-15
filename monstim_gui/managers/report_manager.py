@@ -2,6 +2,7 @@ import logging
 
 from PySide6.QtWidgets import QMessageBox
 
+from monstim_gui.provenance import citation_text
 from monstim_signals.core import LatencyWindowNotFoundError, format_report
 
 logger = logging.getLogger(__name__)
@@ -13,13 +14,17 @@ class ReportManager:
     def __init__(self, gui):
         self.gui = gui
 
+    @staticmethod
+    def _with_provenance(report: str) -> str:
+        return f"{report}\n\nSoftware provenance\n{citation_text()}"
+
     def show_session_report(self):
         logger.debug("Showing session parameters report.")
         if self.gui.current_session:
             from ..dialogs import CopyableReportDialog
 
             report = self.gui.current_session.session_parameters()
-            report = format_report(report)
+            report = self._with_provenance(format_report(report))
             dialog = CopyableReportDialog("Session Report", report, self.gui)
             dialog.exec()
         else:
@@ -31,7 +36,7 @@ class ReportManager:
             from ..dialogs import CopyableReportDialog
 
             report = self.gui.current_dataset.dataset_parameters()
-            report = format_report(report)
+            report = self._with_provenance(format_report(report))
             dialog = CopyableReportDialog("Dataset Report", report, self.gui)
             dialog.exec()
         else:
@@ -43,7 +48,7 @@ class ReportManager:
             from ..dialogs import CopyableReportDialog
 
             report = self.gui.current_experiment.experiment_parameters()
-            report = format_report(report)
+            report = self._with_provenance(format_report(report))
             dialog = CopyableReportDialog("Experiment Report", report, self.gui)
             dialog.exec()
         else:
@@ -56,7 +61,7 @@ class ReportManager:
 
             try:
                 report = self.gui.current_session.m_max_report()
-                report = format_report(report)
+                report = self._with_provenance(format_report(report))
                 dialog = CopyableReportDialog("M-max Report (method = RMS)", report, self.gui)
                 dialog.exec()
             except ValueError as e:

@@ -6,6 +6,8 @@ The Recording Exclusion Editor helps you review and stage recording exclusions b
 
 Exclusion changes are applied as one undoable bulk action. Nothing changes in the data until you choose **Apply**.
 
+![The Recording Exclusion Editor preview uses synthetic recordings to show a stimulus-amplitude threshold, waveform snippets, pending exclusion status, and review controls before Apply.](../assets/recording-exclusion-editor.png)
+
 ## Before you begin
 
 Select a session and decide whether the intended review applies only there or to its dataset or experiment. Use the broadest scope only after checking a representative session.

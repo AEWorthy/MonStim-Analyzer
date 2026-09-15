@@ -33,6 +33,10 @@ class MenuBar(QMenuBar):
         import_multiple_action.triggered.connect(self.parent.data_manager.import_multiple_expt_data)
         import_multiple_action.setStatusTip("Import multiple experiments from disk")
 
+        import_addon_action = file_menu.addAction("Import using Add-on…")
+        import_addon_action.triggered.connect(self.parent.data_manager.import_with_addon)
+        import_addon_action.setStatusTip("Import a supported non-MonStim data stream using an installed official add-on")
+
         rename_experiment_action = file_menu.addAction("Rename Current Experiment")
         rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
         rename_experiment_action.setStatusTip("Change the name of the currently selected experiment")
@@ -119,6 +123,17 @@ class MenuBar(QMenuBar):
         change_names_action.triggered.connect(lambda: self.parent.change_channel_names("experiment"))
         change_names_action.setStatusTip("Rename channels throughout the current experiment")
         experiment_menu.addSeparator()
+        complete_datasets_action = experiment_menu.addAction("Mark All Datasets Complete")
+        complete_datasets_action.triggered.connect(lambda: self.parent.set_child_completion_status("experiment", True))
+        complete_datasets_action.setStatusTip(
+            "Mark every active dataset in the current experiment complete; excluded datasets and sessions are unchanged"
+        )
+        incomplete_datasets_action = experiment_menu.addAction("Mark All Datasets Incomplete")
+        incomplete_datasets_action.triggered.connect(lambda: self.parent.set_child_completion_status("experiment", False))
+        incomplete_datasets_action.setStatusTip(
+            "Mark every active dataset in the current experiment incomplete; excluded datasets and sessions are unchanged"
+        )
+        experiment_menu.addSeparator()
         reload_experiment_action = experiment_menu.addAction("Reload Current Experiment")
         reload_experiment_action.triggered.connect(self.confirm_reload_experiment)
         reload_experiment_action.setStatusTip("Restore the current experiment to its original state")
@@ -142,6 +157,13 @@ class MenuBar(QMenuBar):
         edit_metadata_action = dataset_menu.addAction("Edit Metadata")
         edit_metadata_action.triggered.connect(self.parent.data_manager.edit_dataset_metadata)
         edit_metadata_action.setStatusTip("Edit metadata for the current dataset")
+        dataset_menu.addSeparator()
+        complete_sessions_action = dataset_menu.addAction("Mark All Sessions Complete")
+        complete_sessions_action.triggered.connect(lambda: self.parent.set_child_completion_status("dataset", True))
+        complete_sessions_action.setStatusTip("Mark every active session in the current dataset complete; excluded sessions are unchanged")
+        incomplete_sessions_action = dataset_menu.addAction("Mark All Sessions Incomplete")
+        incomplete_sessions_action.triggered.connect(lambda: self.parent.set_child_completion_status("dataset", False))
+        incomplete_sessions_action.setStatusTip("Mark every active session in the current dataset incomplete; excluded sessions are unchanged")
         dataset_menu.addSeparator()
         reload_dataset_action = dataset_menu.addAction("Reload Current Dataset")
         reload_dataset_action.triggered.connect(self.confirm_reload_dataset)
@@ -225,6 +247,18 @@ class MenuBar(QMenuBar):
         save_report_action.triggered.connect(self.parent.data_manager.save_error_report)
         save_report_action.setStatusTip("Save diagnostic information for troubleshooting")
 
+        addon_action = help_menu.addAction("Manage Importer Add-ons…")
+        addon_action.triggered.connect(self.show_addon_manager)
+        addon_action.setStatusTip("Install, inspect, and diagnose official importer add-ons")
+
+        update_action = help_menu.addAction("Check for Updates…")
+        update_action.triggered.connect(self.show_update_manager)
+        update_action.setStatusTip("Check the signed official MonStim update catalog")
+
+        cite_action = help_menu.addAction("Copy Citation")
+        cite_action.triggered.connect(self.copy_citation)
+        cite_action.setStatusTip("Copy the recommended citation for MonStim Analyzer")
+
     def create_tools_menu(self):
         """Create clearly separated developer/recovery operations."""
         advanced_menu = QMenu("Tools", self)
@@ -233,6 +267,24 @@ class MenuBar(QMenuBar):
         rebuild_all_action = advanced_menu.addAction("Force Rebuild All Data Catalogs…")
         rebuild_all_action.triggered.connect(self._force_rebuild_all_catalogs)
         rebuild_all_action.setStatusTip("Re-scan every experiment and rebuild all catalogs; this may take a very long time")
+
+    def show_addon_manager(self):
+        from monstim_gui.dialogs import AddonManagerDialog
+
+        AddonManagerDialog(self.parent).exec()
+
+    def show_update_manager(self):
+        from monstim_gui.dialogs import UpdateManagerDialog
+
+        UpdateManagerDialog(self.parent).exec()
+
+    def copy_citation(self):
+        from PySide6.QtGui import QGuiApplication
+
+        from monstim_gui.provenance import citation_text
+
+        QGuiApplication.clipboard().setText(citation_text())
+        self.parent.status_bar.showMessage("MonStim citation copied to the clipboard.", 5000)
 
     # Edit menu functions
     def confirm_reload_session(self):

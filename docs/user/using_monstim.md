@@ -1,4 +1,4 @@
-# Using MonStim Analyzer 0.6.0
+# Using MonStim Analyzer 0.7.0
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Import an experiment and select a session. Inspect at least one raw and filtered
 
 ## Recommended workflow
 
-1. **Import and verify.** Use **File > Import an Experiment** for one experiment or **File > Import Multiple Experiments** for a parent folder containing several experiments. Confirm the experiment, dataset, and session selections after import.
+1. **Import and verify.** Use **File > Import an Experiment** for native MonStim V3D/V3H files, **File > Import Multiple Experiments** for a parent folder, or **File > Import using Add-on…** for a supported foreign stream. Add-on imports detect enabled compatible importers from the selected source and only activate a fully validated, non-overwriting result. Confirm the experiment, dataset, and session selections after import.
 2. **Inspect the signal.** Check a raw and filtered trace, channel identity, polarity, sampling rate, stimulus alignment, and response timing.
 3. **Set latency windows.** Open **Edit > Session > Manage Latency Windows** while developing or checking timing. Dataset and Experiment scopes copy the draft to every included child session and should be used only for deliberate standardization. See [Latency windows](latency_windows.md).
 4. **Select the analysis profile.** Use the main-window **Analysis Profile** selector to activate a profile. Use **File > Settings Center > Profiles** to create, duplicate, import, export, or edit profiles. See [Analysis profiles](analysis_profiles.md).
@@ -24,6 +24,7 @@ Import an experiment and select a session. Inspect at least one raw and filtered
 | Goal | Where to start |
 | --- | --- |
 | Import one or several experiments | **File > Import an Experiment** or **Import Multiple Experiments**; see [Experiment import](importing_experiments.md). |
+| Import a supported foreign data stream | **File > Import using Add-on…**; select a source file/folder and allow safe automatic detection; see [Importer add-ons](importer_addons.md). |
 | Change program behavior or analysis defaults | **File > Settings Center**; see [Settings Center](settings_center.md). |
 | Activate an analysis profile | Main-window **Analysis Profile** selector. |
 | Create or standardize timing windows | **Edit > Session/Dataset/Experiment > Manage Latency Windows**; see [Latency windows](latency_windows.md). |
@@ -36,6 +37,7 @@ Import an experiment and select a session. Inspect at least one raw and filtered
 | Refresh the experiment list | **File > Refresh Experiments list**. |
 | Repair the active experiment listing | **File > Force Rebuild Data Catalog**. |
 | Repair every experiment listing | **Tools > Force Rebuild All Data Catalogs…**; this can be expensive. |
+| Check or install a MonStim update | **Help > Check for Updates…**; see [Updating MonStim](updates.md). |
 | Save or undo edits | **File > Save Current Experiment**, **Edit > Undo**, and **Edit > Redo**. |
 
 ## Plots, reports, and levels
@@ -65,6 +67,8 @@ Catalog files are rebuildable listings of the managed data. Rebuild the active c
 ## Saving, help, and support
 
 Use **File > Save Current Experiment** after reviewing edits. Most editing actions are included in the normal undo history. Use **Help > Show Help** for this library, **Help > Open Log Folder** for application logs, and **Help > Save Error Report** for a support package.
+
+Use **Help > Manage Importer Add-ons…** to install an official importer ZIP, inspect compatibility, check official importer updates, or copy support diagnostics. Use **Help > Check for Updates…** to inspect a signed MonStim application update. You can opt in to automatic download of a verified compatible application update, but installation/restart always requires confirmation and does not alter research data, profiles, settings, or installed add-ons.
 
 A useful report includes the program version, operating system, selected profile, data level, exact steps, and a screenshot or error message. Do not include identifiable data unless it is appropriate to share.
 

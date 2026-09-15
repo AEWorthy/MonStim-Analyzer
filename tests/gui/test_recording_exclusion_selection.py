@@ -1,0 +1,135 @@
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QWidget
+
+from monstim_gui.dialogs.recording_exclusion_editor import RecordingExclusionEditor
+
+
+class DummyRecording:
+    def __init__(self, recording_id):
+        self.id = recording_id
+        self.stim_amplitude = 7.5
+        self.num_channels = 1
+        self.channel_types = ["emg"]
+
+
+class DummySession:
+    id = "session-1"
+
+    def __init__(self):
+        self.recordings = [DummyRecording("rec-1"), DummyRecording("rec-2")]
+        self.excluded_recordings = set()
+
+    def get_all_recordings(self, include_excluded=True):
+        return self.recordings
+
+
+def make_editor():
+    parent = QWidget()
+    parent.current_session = DummySession()
+    parent.current_dataset = None
+    parent.current_experiment = None
+    parent.status_bar = None
+    return RecordingExclusionEditor(parent)
+
+
+def test_manual_include_and_exclude_preserve_selected_recordings(qapplication):
+    editor = make_editor()
+    editor.recordings_table.selectAll()
+    assert len(editor._selected_entries()) == 2
+
+    QTest.mouseClick(editor.toggle_exclusion_button, Qt.MouseButton.LeftButton)
+    qapplication.processEvents()
+
+    assert set(editor.manual_decisions.values()) == {True}
+    assert len(editor.manual_decisions) == 2
+
+    editor.recordings_table.selectAll()
+    QTest.mouseClick(editor.include_button, Qt.MouseButton.LeftButton)
+    qapplication.processEvents()
+
+    assert set(editor.manual_decisions.values()) == {False}
+    assert len(editor.manual_decisions) == 2
+
+
+def test_automatic_preview_preserves_exclusion_added_after_dialog_open(qapplication):
+    editor = make_editor()
+    editor.current_session.excluded_recordings.add("rec-1")
+
+    editor.update_preview()
+
+    states = {entry["recording"].id: entry for entry in editor._last_recordings_data}
+    assert states["rec-1"]["currently_excluded"] is True
+    assert states["rec-1"]["will_exclude"] is True
+    assert states["rec-1"]["status"] == "Existing exclusion"
+
+
+def test_changing_apply_scope_rebuilds_the_recording_preview(qapplication):
+    parent = QWidget()
+    first_session = DummySession()
+    second_session = DummySession()
+    second_session.id = "session-2"
+    second_session.recordings = [DummyRecording("rec-3")]
+    parent.current_session = first_session
+    parent.current_dataset = type("Dataset", (), {"sessions": [first_session, second_session]})()
+    parent.current_experiment = None
+    parent.status_bar = None
+
+    editor = RecordingExclusionEditor(parent)
+    assert editor.recordings_table.rowCount() == 2
+
+    editor.level_combo.setCurrentIndex(editor.level_combo.findData("dataset"))
+
+    assert editor.recordings_table.rowCount() == 3
+    assert {entry["session_id"] for entry in editor._last_recordings_data} == {"session-1", "session-2"}
+
+
+def test_manual_decisions_do_not_rebuild_the_full_preview(monkeypatch, qapplication):
+    editor = make_editor()
+    calls = 0
+    original_update_preview = editor.update_preview
+
+    def tracked_update_preview():
+        nonlocal calls
+        calls += 1
+        return original_update_preview()
+
+    monkeypatch.setattr(editor, "update_preview", tracked_update_preview)
+    editor.recordings_table.selectAll()
+
+    editor.toggle_selected_exclusions()
+
+    assert calls == 0
+    assert set(editor.manual_decisions.values()) == {True}
+    assert "Pending exclusion: 2" in editor.summary_label.text()
+
+
+def test_editor_show_does_not_schedule_a_post_paint_position_nudge(monkeypatch, qapplication):
+    """The first visible editor frame must already be in its final position."""
+    import monstim_gui.dialogs.recording_exclusion_editor as editor_module
+
+    scheduled_callbacks = []
+    monkeypatch.setattr(
+        editor_module.QTimer,
+        "singleShot",
+        lambda delay, callback: scheduled_callbacks.append((delay, callback)),
+    )
+    editor = make_editor()
+
+    editor.show()
+    qapplication.processEvents()
+
+    assert scheduled_callbacks == []
+    editor.close()
+
+
+def test_detail_preview_is_positioned_entirely_on_the_editor_screen(qapplication):
+    editor = make_editor()
+    editor.show()
+    qapplication.processEvents()
+    preview = editor._create_detail_preview_dialog()
+
+    editor._position_detail_preview()
+
+    assert editor.screen().availableGeometry().contains(preview.frameGeometry())
+    editor.close()

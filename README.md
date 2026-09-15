@@ -1,44 +1,53 @@
+# MonStim Analyzer
 
-# MonStim Analyzer - EMG Analysis and Visualization Tool
+<p align="center"><img src="assets/logo.png" width="260" alt="MonStim Analyzer logo: an EMG waveform inside a monitor" /></p>
+<p align="center"><strong>Reproducible EMG analysis and visualization for MonStim laboratory exports.</strong></p>
+<p align="center"><a href="https://github.com/AEWorthy/MonStim-Analyzer/releases">Download for Windows</a> · <a href="QUICKSTART.md">Quick start</a> · <a href="https://AEWorthy.github.io/MonStim-Analyzer/">Documentation</a> · <a href="CITATION.cff">Cite MonStim</a></p>
 
-**Version:** 0.6.0 (beta)
+> **Current release: v0.7.0 (Windows beta).** Download only from official GitHub Releases. Windows may display a warning because binaries are not code-signed; verify the published SHA-256 checksum before running a release.
 
-This repository contains the source code for the MonStim EMG Analyzer GUI
-application and the supporting signal processing library. The tool provides
-utilities for importing, processing and visualizing electromyography (EMG) data
-collected with the custom 'MonStim-V3' LabView program created by William Goolsby for the Alvarez Lab at Emory.
+MonStim Analyzer is a desktop application for importing, reviewing, analyzing, visualizing, and exporting electrophysiology data recorded by the MonStim V3 LabVIEW acquisition program. It provides a traceable path from a recording hierarchy to plots and tabular results.
+
+## What MonStim does
+
+- Imports MonStim V3D and V3H CSV exports into an experiment > dataset > session > recording hierarchy.
+- Supports raw/filtered trace review, latency-window management, reflex and M-max analysis, recording exclusion, and bulk exports.
+- Keeps analysis context visible through profiles, diagnostic notices, reports, and export provenance sidecars.
+- Supports official importer add-ons for other streams that can map safely to MonStim’s managed format.
+
+## Is my data supported?
+
+| Source | Status | Next step |
+| --- | --- | --- |
+| MonStim V3D/V3H CSV exports | Supported | Follow the [Quick Start](QUICKSTART.md). |
+| Another acquisition system or custom stream | Not directly supported | Read [Importer add-ons](docs/user/importer_addons.md) or [request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new/choose). |
+| macOS/Linux packaged application | Not currently distributed | Windows is the supported binary platform; source development is documented separately. |
+
+## Start here
+
+1. Download the latest Windows release and extract the whole archive; do not move only the executable.
+2. Read the [Quick Start](QUICKSTART.md) and import a MonStim experiment folder.
+3. Inspect a raw and filtered session trace before changing windows or interpreting a summary.
+4. Keep the profile, latency windows, exclusions, amplitude method, and generated `.provenance.json` sidecar with exported results.
 
 ## Documentation
 
-- **[User Guide](docs/user/using_monstim.md)** - Complete usage workflow and feature reference
-- **[Quickstart Guide](QUICKSTART.md)** - Express installation and overview
-- **[Changelog](CHANGELOG.md)** - Version history and release notes
-- **[EMG Processing](docs/science/emg_processing.md)** - Signal processing and transformations
-- **[M-max Algorithm](docs/science/mmax_estimation.md)** - M-max detection and review
-- **[Recording Exclusion](docs/user/recording_exclusion_editor.md)** - Managing data quality and exclusions
-- **[Multi-Experiment Import](docs/user/importing_experiments.md)** - Batch import workflows
-- **[UI Scaling Guide](docs/user/ui_scaling_guide.md)** - Display configuration for different screen sizes
+- [Documentation site](https://AEWorthy.github.io/MonStim-Analyzer/) — searchable user, scientific, and developer documentation.
+- [Importing experiments](docs/user/importing_experiments.md) — expected source layout and first checks.
+- [Analysis methods](docs/science/analysis_methods.md) — formulas, units, and interpretation limits.
+- [Troubleshooting](docs/user/troubleshooting.md) — diagnostic notices and recovery steps.
+- [Importer add-ons](docs/user/importer_addons.md) — compatibility, installation, and support boundary.
+- [Updating MonStim](docs/user/updates.md) — signed update checks, staging, rollback, and data-safety guarantees.
+- [How to cite MonStim](docs/user/citing_monstim.md) — preferred software citation and provenance guidance.
 
-## Quick Start
+## Support and contribution
 
-See the **[Quickstart Guide](QUICKSTART.md)** for express installation instructions and a brief program overview. For full usage instructions, see the **[User Guide](docs/user/using_monstim.md)** and the in-app **Help > Show Help** library.
+Use the provided issue forms for bugs, documentation, performance, and feature requests. A useful report includes the MonStim version, Windows version, active profile, selected level, exact steps, and a redacted error report when appropriate. Do not upload identifiable research data.
 
-## Developer Quick Note
+See [CONTRIBUTING.md](CONTRIBUTING.md) for source setup and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-- When running locally for development or to execute tests, activate the `monstim` conda environment first:
+## Citation and license
 
-```pwsh
-conda activate monstim
-```
+If MonStim contributes to academic work, please cite it using [CITATION.cff](CITATION.cff) or **Help > Copy Citation**. Exports include a machine-readable provenance sidecar to make this information easy to retain.
 
-See `QUICKSTART.md` and the [Help Library](docs/user/index.md) for user documentation. Developer setup and testing instructions are maintained in the repository documentation.
-
-## Conda vs Pip and PyQt pinning
-
-- **PyQt (GUI) should be installed via Conda.** GUI packages are binary and platform-sensitive; Conda provides compatible builds for many platforms. Do not list `PySide6` in `requirements.txt` when you provide `pyqt` in `environment.yml`.
-- To pin the exact PyQt version used by developers and CI, we pin the conda package in `environment.yml` (example: `pyqt=6.10.0`). This ensures consistent GUI binaries across machines.
-- If you need a pip-only workflow, provide separate instructions and a `requirements-pip.txt` that pins `PySide6` explicitly (e.g. `PySide6==6.10.0`) and document that pip installs are not covered by the `monstim` conda environment.
-
-CI and tooling notes:
-- The repository's dependency consistency check understands the `pyqt` ↔ `PySide6` name mapping and will not fail when `pyqt` is provided by `environment.yml` and omitted from `requirements.txt`.
-- Use `tools/sync_env_from_requirements.py` or the GitHub Actions workflow to keep `environment.yml` and `requirements.txt` in sync when changing pinned versions.
+MonStim Analyzer is licensed under [PolyForm Noncommercial 1.0.0](LICENSE.md). Commercial use requires prior permission; see [NOTICE](NOTICE) and the license page.

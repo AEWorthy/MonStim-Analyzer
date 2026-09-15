@@ -1,3 +1,4 @@
 # Development tools and linters
 # Pin versions to ensure consistent formatting between local and CI
 ruff>=0.16.0
+mkdocs-material>=9.6
