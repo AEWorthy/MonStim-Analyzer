@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
 )
 
 from monstim_gui.core.application_state import app_state
-from monstim_gui.provenance import write_provenance_sidecar
 from monstim_signals.core import get_base_path
 
 # Normalize a few known method names to short suffixes
@@ -262,13 +261,6 @@ class DataFrameDialog(QDialog):
             # Save the directory for next time
             app_state.save_last_export_path(os.path.dirname(path))
             self.df.to_csv(path, index=True)
-            context = {
-                "plot_type": self.plot_type,
-                "data_level": self.data_level,
-                "plot_options": self.plot_options,
-                "dataframe_attributes": dict(self.df.attrs),
-            }
-            write_provenance_sidecar(path, context)
 
 
 if __name__ == "__main__":

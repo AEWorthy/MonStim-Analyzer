@@ -1,7 +1,9 @@
-# Developer guide
+# Developer documentation
 
-This section is for people changing MonStim. It describes the current codebase
-and its maintenance rules; it is not part of the normal user-help path.
+This section is for contributors, add-on authors, and anyone evaluating or
+changing MonStim's source code. It explains the current architecture and the
+contracts that changes must preserve. It is separate from the normal
+[application help](../user/index.md).
 
 ## Start here
 
@@ -15,8 +17,9 @@ and its maintenance rules; it is not part of the normal user-help path.
 - [Annotation data versions](data_versioning.md) — safe schema migrations.
 - [Application settings](qsettings_management.md) — QSettings keys, migrations, and recovery.
 
-## Documentation and releases
+## Documentation, settings, and releases
 
 - [Documentation maintenance](documentation.md) — topic layout, link rules, and packaged help.
+- [Publishing releases](releasing.md) — procedure for authorized project maintainers.
 
 For normal application use, return to the [Help Library](../user/index.md).

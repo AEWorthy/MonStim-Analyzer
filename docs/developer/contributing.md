@@ -2,15 +2,26 @@
 
 ## Purpose
 
-Use this guide when making a code or documentation change. It is intentionally practical: follow the existing domain model and verify the behavior a user will observe.
+This guide is for external contributors preparing a pull request or a
+documentation change. It introduces the project conventions that protect
+scientific behavior and the workflows researchers use.
 
 ## Local setup
 
-Run project commands in the `monstim` Conda environment:
+Create the supported environment from the repository root, then run project
+commands through it:
 
 ```powershell
+conda env create -f environment.yml
 conda run -n monstim python -m pytest <target>
 conda run -n monstim ruff check <paths>
+```
+
+For pytest runs on Windows, provide a new temporary directory outside the
+checkout and disable the cache provider. For example:
+
+```powershell
+conda run -n monstim python -m pytest <target> -q --basetemp C:\tmp\monstim-pytest-<run-id> -p no:cacheprovider
 ```
 
 ## Code boundaries

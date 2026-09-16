@@ -1,8 +1,12 @@
 # Publishing a signed MonStim release
 
-MonStim uses two Ed25519 signing keys. They prove that a catalog entry was
-approved by the project maintainer. They are **not** Windows code-signing
-certificates: Windows may still show an unsigned-application warning.
+This procedure is for authorized MonStim release maintainers. Contributors
+without access to the project's signing keys can prepare and test release
+artifacts, but should coordinate publication with a maintainer.
+
+MonStim uses two Ed25519 signing keys to prove that a catalog entry was
+approved by the project. They are **not** Windows code-signing certificates:
+Windows may still show an unsigned-application warning.
 
 Keep both private-key files outside the repository, backed up in an encrypted
 location. The public key compiled into MonStim is safe to publish and is used

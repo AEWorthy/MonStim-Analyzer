@@ -2,22 +2,27 @@
 
 ## Purpose
 
-Tests should demonstrate the behavior a change protects, not merely execute code. Use the `monstim` environment for every project command.
+Tests should demonstrate the behavior a change protects, not merely execute
+code. The commands below are intended for contributors working from a source
+checkout and use the supported `monstim` Conda environment.
 
 ## Run tests
 
 ```powershell
-# Focused test while developing
-conda run -n monstim python -m pytest tests/gui/test_help_navigation.py -q
+# Focused test while developing (use a new run ID each time on Windows)
+conda run -n monstim python -m pytest tests/gui/test_help_navigation.py -q --basetemp C:\tmp\monstim-pytest-<run-id> -p no:cacheprovider
 
 # Default suite (legacy tests remain excluded by pytest configuration)
-conda run -n monstim python -m pytest
+conda run -n monstim python -m pytest -q --basetemp C:\tmp\monstim-pytest-<run-id> -p no:cacheprovider
 
 # Include legacy-marked tests when intentionally checking them
-conda run -n monstim python -m pytest -m "legacy or not legacy"
+conda run -n monstim python -m pytest -m "legacy or not legacy" -q --basetemp C:\tmp\monstim-pytest-<run-id> -p no:cacheprovider
 ```
 
-Use `-k <expression>` or a precise node ID to narrow a failure. For GUI tests, keep the offscreen configuration used by the test suite and avoid relying on timing or a visible desktop.
+Replace `<run-id>` with a unique value, and remove only that exact temporary
+directory after a successful run. Use `-k <expression>` or a precise node ID
+to narrow a failure. For GUI tests, retain the offscreen configuration used by
+the test suite and avoid relying on timing or a visible desktop.
 
 ## Test design
 

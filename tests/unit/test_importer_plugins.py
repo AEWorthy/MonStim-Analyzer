@@ -15,7 +15,6 @@ from monstim_gui.plugins import (
     read_pack_manifest,
     verify_catalog,
 )
-from monstim_gui.provenance import write_provenance_sidecar
 
 
 def _manifest(**updates):
@@ -66,19 +65,6 @@ def test_rejects_path_traversal_archive(tmp_path):
 
     with pytest.raises(PluginError, match="unsafe path"):
         read_pack_manifest(pack)
-
-
-def test_export_provenance_is_a_separate_sidecar(tmp_path, monkeypatch):
-    monkeypatch.setenv("MONSTIM_PLUGIN_DIR", str(tmp_path / "user"))
-    output = tmp_path / "results.csv"
-    output.write_text("value\n1\n", encoding="utf-8")
-
-    sidecar = write_provenance_sidecar(output, {"plot_type": "Example"})
-
-    payload = json.loads(sidecar.read_text(encoding="utf-8"))
-    assert sidecar.name == "results.csv.provenance.json"
-    assert payload["analysis_context"]["plot_type"] == "Example"
-    assert payload["software"]["name"] == "MonStim Analyzer"
 
 
 def test_catalog_rejects_invalid_signature():

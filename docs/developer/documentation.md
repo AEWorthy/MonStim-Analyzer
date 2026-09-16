@@ -1,8 +1,10 @@
-# Documentation maintenance
+# Documentation contribution guide
 
 ## Purpose
 
-The in-app help library is a packaged set of Markdown files. Keep it accurate, navigable, and separate from maintainer references.
+The in-app help library is a packaged set of Markdown files. This guide
+explains how contributors can update it while keeping it accurate, navigable,
+and distinct from developer reference material.
 
 ## Layout
 
@@ -13,9 +15,12 @@ The in-app help library is a packaged set of Markdown files. Keep it accurate, n
 | `docs/developer` | Architecture, testing, persistence, and maintenance rules |
 | `docs/resources` | Shipped configuration and analysis-profile files |
 
-`docs/user/index.md` is the in-app help entry point. Use relative Markdown links between topics. The help repository accepts links only to Markdown files inside `docs`, including nested folders; do not link application source files as help topics.
+`docs/user/index.md` is the in-app help entry point. Use relative Markdown
+links between topics. The help repository accepts links only to Markdown files
+inside `docs`, including nested folders; application source files are not help
+topics.
 
-## Update a topic
+## Writing or updating a topic
 
 1. Start with a clear purpose and the user or developer task it supports.
 2. Describe the visible behavior or maintenance contract, not the history of how a feature was implemented.
@@ -25,9 +30,13 @@ The in-app help library is a packaged set of Markdown files. Keep it accurate, n
 
 ## Packaging and validation
 
-`win-main.spec` collects the complete `docs` tree. Keep configuration and bundled profiles beneath `docs/resources`; the user override `config-user.yml` is deliberately excluded from release data.
+`win-main.spec` collects the complete `docs` tree. Configuration and bundled
+profiles belong beneath `docs/resources`; the user override `config-user.yml`
+is deliberately excluded from release data.
 
-Run `tests/gui/test_help_navigation.py` after moving or linking topics. It verifies nested links and math-table rendering. Parse or build the PyInstaller spec in the release environment when packaging dependencies are available.
+After moving or linking topics, run `tests/gui/test_help_navigation.py`. It
+verifies nested links and math-table rendering. Parse or build the PyInstaller
+spec in a release environment when packaging dependencies are available.
 
 ## Related topics
 

@@ -1,6 +1,7 @@
 site_name: MonStim Analyzer
 site_description: Reproducible EMG analysis and visualization for MonStim laboratory exports.
-site_url: https://AEWorthy.github.io/MonStim-Analyzer/
+site_url: https://worthy-lab.org/MonStim-Analyzer/
+use_directory_urls: false
 repo_url: https://github.com/AEWorthy/MonStim-Analyzer
 repo_name: AEWorthy/MonStim-Analyzer
 theme:
@@ -54,10 +55,15 @@ nav:
       - EMG processing: science/emg_processing.md
       - M-max estimation: science/mmax_estimation.md
   - Developers:
-      - Architecture: developer/architecture.md
-      - Publishing releases: developer/releasing.md
-      - Testing: developer/testing.md
+      - Overview: developer/index.md
       - Contributing: developer/contributing.md
+      - Architecture: developer/architecture.md
+      - Commands and undo: developer/command_testing_strategy.md
+      - Annotation data versions: developer/data_versioning.md
+      - Application settings: developer/qsettings_management.md
+      - Documentation contribution guide: developer/documentation.md
+      - Testing: developer/testing.md
+      - Publishing releases: developer/releasing.md
 extra:
   social:
     - icon: fontawesome/brands/github
@@ -68,4 +74,5 @@ extra:
       link: https://scholar.google.com/citations?user=6g0k1
     - icon: fontawesome/solid/globe
       link: https://worthy-lab.org
+      name: Worthy Lab website
 copyright: Copyright 2024–2026 Andrew Worthy. MonStim Analyzer is licensed under PolyForm Noncommercial 1.0.0.

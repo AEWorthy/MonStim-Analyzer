@@ -2,7 +2,7 @@
 
 <p align="center"><img src="assets/logo.png" width="260" alt="MonStim Analyzer logo: an EMG waveform inside a monitor" /></p>
 <p align="center"><strong>Reproducible EMG analysis and visualization for MonStim laboratory exports.</strong></p>
-<p align="center"><a href="https://github.com/AEWorthy/MonStim-Analyzer/releases">Download for Windows</a> · <a href="QUICKSTART.md">Quick start</a> · <a href="https://AEWorthy.github.io/MonStim-Analyzer/">Documentation</a> · <a href="CITATION.cff">Cite MonStim</a></p>
+<p align="center"><a href="https://github.com/AEWorthy/MonStim-Analyzer/releases">Download for Windows</a> · <a href="QUICKSTART.md">Quick start</a> · <a href="https://worthy-lab.org/MonStim-Analyzer/">Documentation</a> · <a href="CITATION.cff">Cite MonStim</a> · <a href="https://worthy-lab.org/">Worthy Lab</a></p>
 
 > **Current release: v0.7.0 (Windows beta).** Download only from official GitHub Releases. Windows may display a warning because binaries are not code-signed; verify the published SHA-256 checksum before running a release.
 
@@ -12,7 +12,7 @@ MonStim Analyzer is a desktop application for importing, reviewing, analyzing, v
 
 - Imports MonStim V3D and V3H CSV exports into an experiment > dataset > session > recording hierarchy.
 - Supports raw/filtered trace review, latency-window management, reflex and M-max analysis, recording exclusion, and bulk exports.
-- Keeps analysis context visible through profiles, diagnostic notices, reports, and export provenance sidecars.
+- Keeps analysis context visible through profiles, diagnostic notices, and reports.
 - Supports official importer add-ons for other streams that can map safely to MonStim’s managed format.
 
 ## Is my data supported?
@@ -28,17 +28,18 @@ MonStim Analyzer is a desktop application for importing, reviewing, analyzing, v
 1. Download the latest Windows release and extract the whole archive; do not move only the executable.
 2. Read the [Quick Start](QUICKSTART.md) and import a MonStim experiment folder.
 3. Inspect a raw and filtered session trace before changing windows or interpreting a summary.
-4. Keep the profile, latency windows, exclusions, amplitude method, and generated `.provenance.json` sidecar with exported results.
+4. Keep the profile, latency windows, exclusions, and amplitude method with exported results.
 
 ## Documentation
 
-- [Documentation site](https://AEWorthy.github.io/MonStim-Analyzer/) — searchable user, scientific, and developer documentation.
+- [Documentation site](https://worthy-lab.org/MonStim-Analyzer/) — searchable user, scientific, and developer documentation.
 - [Importing experiments](docs/user/importing_experiments.md) — expected source layout and first checks.
 - [Analysis methods](docs/science/analysis_methods.md) — formulas, units, and interpretation limits.
 - [Troubleshooting](docs/user/troubleshooting.md) — diagnostic notices and recovery steps.
 - [Importer add-ons](docs/user/importer_addons.md) — compatibility, installation, and support boundary.
 - [Updating MonStim](docs/user/updates.md) — signed update checks, staging, rollback, and data-safety guarantees.
 - [How to cite MonStim](docs/user/citing_monstim.md) — preferred software citation and provenance guidance.
+- [Worthy Lab](https://worthy-lab.org/) — Andrew Worthy's CV, research background, and contact information.
 
 ## Support and contribution
 
