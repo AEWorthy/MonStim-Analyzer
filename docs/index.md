@@ -23,9 +23,12 @@ MonStim directly supports CSV exports from the MonStim V3D and V3H LabVIEW acqui
 4. Review diagnostic notices, exclusions, plot contribution counts, and missing values.
 5. Export results with the analysis settings needed to interpret them.
 
+![MonStim Analyzer displaying synthetic H-reflex EMG overlays for two muscles, with M-wave and H-reflex timing windows.](assets/demo/session-emg.png)
+
 ## Documentation by need
 
 - New to MonStim: [Getting started](https://worthy-lab.org/MonStim-Analyzer/user/getting_started.html) and [Importing experiments](user/importing_experiments.md).
+- Looking for the main application reference: [Using MonStim Analyzer](user/using_monstim.md).
 - Running analyses: [Analysis profiles](user/analysis_profiles.md), [Latency windows](user/latency_windows.md), and [Exporting results](user/exporting_results.md).
 - Understanding a method: [Analysis methods](science/analysis_methods.md), [EMG processing](science/emg_processing.md), and [M-max estimation](science/mmax_estimation.md).
 - Getting help: [Troubleshooting](user/troubleshooting.md), the in-app error-report tool, or an issue form.

@@ -30,6 +30,8 @@ Exclude recordings only with a documented reason. Review [Diagnostic notices](di
 
 Record the profile, window scope, amplitude method, exclusion rules, and exported-data identifier. MonStim saves annotation changes. For unexpected results, start with [Troubleshooting](troubleshooting.md) rather than changing several settings at once.
 
+For further reference on the main window, plot levels, reports, and common commands, see [Using MonStim Analyzer](using_monstim.md).
+
 ## Related topics
 
 - [Analysis profiles](analysis_profiles.md)

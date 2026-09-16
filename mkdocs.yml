@@ -45,6 +45,7 @@ nav:
       - Importer add-ons: user/importer_addons.md
       - Updating MonStim: user/updates.md
       - Troubleshooting: user/troubleshooting.md
+  - Using MonStim: user/using_monstim.md
   - Analyze and export:
       - Analysis profiles: user/analysis_profiles.md
       - Latency windows: user/latency_windows.md

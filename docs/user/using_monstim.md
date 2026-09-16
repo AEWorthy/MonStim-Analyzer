@@ -2,7 +2,7 @@
 
 ## Purpose
 
-MonStim organizes stimulation recordings as **experiment > dataset > session > recording**. Select the level you want to inspect or plot, then choose a plot type and its options. This guide describes the normal workflow and the main actions available in the current application; linked topics provide detailed instructions.
+MonStim organizes stimulation recordings as **experiment > dataset > session > recording**. Select the level you want to inspect or plot, then choose a plot type and its options. This guide describes the normal workflow and the main actions available in the current application; linked topics provide detailed instructions. If you are new to the workflow, begin with [Quick start](getting_started.md).
 
 ## Before you begin
 
@@ -10,14 +10,22 @@ Import an experiment and select a session. Inspect at least one raw and filtered
 
 ## Recommended workflow
 
-1. **Import and verify.** Use **File > Import an Experiment** for native MonStim V3D/V3H files, **File > Import Multiple Experiments** for a parent folder, or **File > Import using Add-on…** for a supported foreign stream. Add-on imports detect enabled compatible importers from the selected source and only activate a fully validated, non-overwriting result. Confirm the experiment, dataset, and session selections after import.
-2. **Inspect the signal.** Check a raw and filtered trace, channel identity, polarity, sampling rate, stimulus alignment, and response timing.
+1. **Import and verify.** Use **File > Import an Experiment** for native MonStim V3D/V3H files, **File > Import Multiple Experiments** for a parent folder, or **File > Import using Add-on…** for a supported foreign stream. Add-on imports detect enabled compatible importers from the selected source and only activate a fully validated, non-overwriting result. Confirm the experiment, dataset, and session selections after import. See [Import experiments](importing_experiments.md) and [Importer add-ons](importer_addons.md) for the detailed paths.
+2. **Inspect the signal.** Check a raw and filtered trace, channel identity, polarity, sampling rate, stimulus alignment, and response timing. See [EMG processing and transformations](../science/emg_processing.md) for what each displayed signal form means.
 3. **Set latency windows.** Open **Edit > Session > Manage Latency Windows** while developing or checking timing. Dataset and Experiment scopes copy the draft to every included child session and should be used only for deliberate standardization. See [Latency windows](latency_windows.md).
 4. **Select the analysis profile.** Use the main-window **Analysis Profile** selector to activate a profile. Use **File > Settings Center > Profiles** to create, duplicate, import, export, or edit profiles. See [Analysis profiles](analysis_profiles.md).
 5. **Choose the amplitude method.** Use the method specified by the analysis plan. Review the equations, units, and limitations in [Analysis methods](../science/analysis_methods.md).
 6. **Review quality and exclusions.** Read diagnostic notices and exclude recordings only with a documented reason. Use [Recording exclusion editor](recording_exclusion_editor.md) for previewed, reviewable bulk decisions.
 7. **Review M-max before normalization.** Confirm the M-wave window and method, then check whether the estimate came from a detected plateau or the high-stimulus fallback. See [M-max estimation and review](../science/mmax_estimation.md).
 8. **Plot, export, and document.** Inspect the plot or report, then retain the profile, method, windows, exclusions, bin size, and M-max choices with any export. See [Exporting results](exporting_results.md).
+
+## Detailed guides
+
+- [Analysis profiles](analysis_profiles.md) — activate, create, and reuse protocol-specific settings.
+- [Latency windows](latency_windows.md) — edit and apply session, dataset, or experiment timing windows safely.
+- [Recording exclusion editor](recording_exclusion_editor.md) and [Diagnostic notices](diagnostic_notices.md) — review data quality before excluding recordings.
+- [Exporting results](exporting_results.md) — export the plotted data or a structured bulk export with analysis context.
+- [Settings Center](settings_center.md) — configure program behavior, global analysis defaults, profiles, and shortcuts.
 
 ## Common tasks
 
@@ -51,6 +59,12 @@ The available plot types depend on the selected level. Typical uses include:
 | Experiment | Average reflex curves, M-max, maximum H-reflex, and Experiment Info. Report. |
 
 Plot options control the calculation method, channels, signal form, display flags, normalization, stimulus binning, and other plot-specific choices. Aggregate values can have different contribution counts when child sessions do not share the same named windows or exclusions. Review those counts before comparing curves.
+
+The following reproducible demo views use synthetic data only. A single-recording view makes response windows and selected extrema easy to review; the dataset view shows the expected M-wave recruitment and H-reflex rise-and-fall across stimulus intensity.
+
+![A synthetic single-recording view shows editable display controls, the recording cycler, M-wave and H-reflex windows, and selected extrema.](../assets/demo/single-recording.png)
+
+![Synthetic dataset-level recruitment curves show M-wave saturation and H-reflex recruitment across stimulus intensity.](../assets/demo/recruitment-curves.png)
 
 ## Latency-window and M-wave rules
 
