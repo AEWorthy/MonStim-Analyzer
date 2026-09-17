@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.7.1] - 2026-09-16
+## [0.7.1] - 2026-09-17
 
 ### Added
 - **Bundled synthetic protocol demos**: Added an opt-in installer for three native synthetic experiments: H-reflex recruitment, 100 Hz vibration, and stretch ramp-hold-release. New empty libraries are offered the demos once at startup, and they can also be installed later from **File > Install Demo Experiments…**. Installed demos use the normal managed-data folder, receive fresh local catalogs, and can be removed like any other experiment.
