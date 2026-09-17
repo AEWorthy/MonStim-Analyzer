@@ -5,6 +5,18 @@ All notable changes to the MonStim Analyzer project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-09-17
+
+### Fixed
+- **Windows updater packaging**: Rebuilt the bundled update helper as a self-contained executable. It no longer searches for `\\_internal\\_internal\\python314.dll` when launched from the main application's `_internal` directory.
+- **Update-package layout validation**: The release publisher now requires the updater and release manifest inside `_internal` and rejects duplicate root-level copies.
+
+### Upgrade note
+- **Manual install required from v0.7.1 and v0.7.2**: Those releases contain the affected updater executable, so they cannot automatically install this hotfix. Download and extract the v0.7.3 Windows ZIP manually, then launch the main MonStim executable. Future in-app updates from v0.7.3 use the repaired helper.
+
+### Testing and maintenance
+- Added regression coverage for the one-file updater specification, the internal helper launch path, and release-ZIP layout validation.
+
 
 ## [0.7.2] - 2026-09-17
 
@@ -353,4 +365,7 @@ Note: This is a patch release with incremental UX and stability improvements ove
 ---
 
 For detailed technical information, see the [User Guide](docs/readme.md) and other documentation in the `docs/` directory.
+
+
+
 

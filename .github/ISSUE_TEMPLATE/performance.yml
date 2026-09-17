@@ -96,7 +96,7 @@ body:
     attributes:
       label: MonStim Analyzer Version
       description: What version are you using?
-      placeholder: "v0.7.2 (beta)"
+      placeholder: "v0.7.3 (beta)"
     validations:
       required: true
 

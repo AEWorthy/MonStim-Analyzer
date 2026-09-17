@@ -108,10 +108,11 @@ updater_exe = EXE( # type: ignore
     updater_pyz,
     updater_a.scripts,
     updater_a.binaries,
-    # Keep the helper build product in PyInstaller's work directory. Its
-    # dependencies are collected below into the application's _internal
-    # directory, alongside the main application's dependencies.
-    exclude_binaries=True,
+    # ``base_library.zip`` (including ``encodings``) is collected as data.
+    # A one-file EXE must embed it instead of relying on a sibling directory.
+    updater_a.datas,
+    # This must remain a one-file executable.  The helper is installed inside
+    # the main application's _internal directory.
     name='MonStim Updater',
     debug=False,
     bootloader_ignore_signals=False,
@@ -121,18 +122,18 @@ updater_exe = EXE( # type: ignore
 )
 
 # Do not pass ``updater_exe`` directly to COLLECT: PyInstaller treats every EXE
-# argument as a user-facing root-level executable. Collect its executable and
-# dependencies as binary entries instead, which places them in ``_internal``.
-updater_internal_files = [
+# argument as a user-facing root-level executable.  The one-file helper has
+# its Python DLL and all other dependencies embedded, so collect only the EXE
+# as an internal binary; do not add ``updater_exe.dependencies`` here.
+updater_internal_file = [
     (os.path.basename(updater_exe.name), updater_exe.name, 'BINARY'),
-    *updater_exe.dependencies,
 ]
 
 coll = COLLECT( # type: ignore
     exe,
     a.binaries,
     a.datas,
-    updater_internal_files,
+    updater_internal_file,
     upx=True,
     upx_exclude=['PySide6', 'Qt6Core.dll', 'Qt6Widgets.dll'],
     name=DIST_NAME
@@ -151,9 +152,9 @@ shutil.copy2('LICENSE', os.path.join(internal_dir, 'LICENSE'))
 with open(os.path.join(internal_dir, 'monstim-release.json'), 'w', encoding='utf-8') as f:
     json.dump({'version': VERSION, 'executable': f'{EXE_NAME}.exe'}, f, indent=2)
 
-# PyInstaller 6 builds a standalone EXE into ``dist`` when it is configured as
-# a one-file target. Remove the exact legacy path left by earlier specs; the
-# helper now builds in ``build`` and is collected only under ``_internal``.
+# A one-file EXE is first emitted at PyInstaller's dist path.  It has already
+# been copied into the bundle's _internal directory above, so remove only this
+# known intermediate output.
 legacy_updater = os.path.join(CONF['distpath'], 'MonStim Updater.exe')
 if os.path.isfile(legacy_updater):
     os.remove(legacy_updater)
