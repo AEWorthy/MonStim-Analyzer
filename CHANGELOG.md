@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.7.2] - 2026-09-17
+
+### Fixed
+- **M-max regression coverage**: Replaced a self-skipping synthetic test with a recruitment curve containing a stable high-stimulus plateau, so the test verifies that M-max is calculated from the configured M-response window.
+- **Help-image regression coverage**: Made the responsive-image test wait for Qt's rendered image layout rather than relying on a fixed delay or platform-specific HTML serialization.
+
+### Testing and maintenance
+- Updated release-archive test fixtures and user-facing version references, citation metadata, issue-form placeholders, and release-publishing examples for 0.7.2.
+
+
 ## [0.7.1] - 2026-09-17
 
 ### Added
@@ -343,5 +353,4 @@ Note: This is a patch release with incremental UX and stability improvements ove
 ---
 
 For detailed technical information, see the [User Guide](docs/readme.md) and other documentation in the `docs/` directory.
-
 

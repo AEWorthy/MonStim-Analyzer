@@ -1,7 +1,8 @@
 """
 Domain M-max Selection Logic
 
-Purpose: Validate that Session.get_m_max behaves with latency windows and handles NoCalculableMmaxError.
+Purpose: Validate that Session.get_m_max uses a configured M-response window to
+calculate M-max from a recruitment curve with a stable plateau.
 Markers: unit (synthetic data), integration optional for real data.
 """
 
@@ -12,12 +13,10 @@ import pytest
 
 from monstim_signals.core import RecordingAnnot, RecordingMeta, SessionAnnot, StimCluster
 from monstim_signals.domain import Recording, Session
-from monstim_signals.transform.plateau import NoCalculableMmaxError
-
 pytestmark = pytest.mark.unit
 
 
-def make_session_with_synth_data(levels=(0.5, 1.0, 2.0), num_channels=1) -> Session:
+def make_session_with_synth_data(levels=(0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5), num_channels=1) -> Session:
     recs = []
     n = 1000
     t = np.linspace(0, 0.1, n)
@@ -49,10 +48,13 @@ def make_session_with_synth_data(levels=(0.5, 1.0, 2.0), num_channels=1) -> Sess
             pre_stim_acquired=20,
             post_stim_acquired=20,
         )
-        # Simple synthetic: scaled sine burst around 5-15ms
+        # M-wave recruitment rises through 2.0 V then remains at a stable
+        # plateau. Seven levels allow the plateau detector to validate the
+        # high-stimulus region.
         data = np.zeros((n, num_channels))
         burst = (t > 0.005) & (t < 0.015)
-        data[burst, 0] = np.sin(2 * np.pi * 1000 * t[burst]) * (v * 100.0)
+        response_scale = min(v, 2.0)
+        data[burst, 0] = np.sin(2 * np.pi * 1000 * t[burst]) * (response_scale * 100.0)
         recs.append(Recording(meta=meta, annot=RecordingAnnot.create_empty(), raw=data))
 
     annot = SessionAnnot.create_empty(num_channels)
@@ -71,11 +73,12 @@ def make_session_with_synth_data(levels=(0.5, 1.0, 2.0), num_channels=1) -> Sess
 def test_get_m_max_with_latency_window():
     sess = make_session_with_synth_data()
     try:
+        m_wave_amplitudes = sess.get_m_wave_amplitudes(method="rms", channel_index=0)
         mmax = sess.get_m_max(method="rms", channel_index=0)
-        assert isinstance(mmax, (int, float))
-        assert mmax >= 0
-    except NoCalculableMmaxError:
-        # Acceptable for synthetic shapes; the algorithm may decide it's not reliable
-        pytest.skip("No calculable M-max for synthetic data in this environment")
+        plateau_amplitude = max(m_wave_amplitudes)
+
+        assert m_wave_amplitudes[0] < plateau_amplitude
+        assert m_wave_amplitudes[-3:] == pytest.approx([plateau_amplitude] * 3)
+        assert mmax == pytest.approx(plateau_amplitude)
     finally:
         sess.close()

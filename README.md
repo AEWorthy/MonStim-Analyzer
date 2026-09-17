@@ -4,7 +4,7 @@
 <p align="center"><strong>Reproducible EMG curation, analysis, visualization, and export for MonStim laboratory exports.</strong></p>
 <p align="center"><a href="https://github.com/AEWorthy/MonStim-Analyzer/releases">Download for Windows</a> · <a href="QUICKSTART.md">Quick start</a> · <a href="https://worthy-lab.org/MonStim-Analyzer/">Documentation</a> · <a href="CITATION.cff">Cite MonStim</a> · <a href="https://worthy-lab.org/">Worthy Lab</a></p>
 
-> **Current release: v0.7.1 (Windows beta).** Download only from official GitHub Releases. Windows may display a warning because binaries are not code-signed; verify the published SHA-256 checksum before running a release.
+> **Current release: v0.7.2 (Windows beta).** Download only from official GitHub Releases. Windows may display a warning because binaries are not code-signed; verify the published SHA-256 checksum before running a release.
 
 MonStim Analyzer is a desktop application for importing, organizing, curating, analyzing, visualizing, and exporting electrophysiology data recorded by the MonStim V3 LabVIEW acquisition program. It provides a traceable path from a recording hierarchy to plots and tabular results. Use it as an all-in-one curation-to-plotting-and-export suite, or use it to structure and curate data before sending exports to your own analysis pipeline.
 

@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use MonStim Analyzer in academic work, please cite it using this record."
 type: software
 title: "MonStim Analyzer"
-version: "0.7.1"
+version: "0.7.2"
 date-released: 2026-09-15
 authors:
   - family-names: Worthy

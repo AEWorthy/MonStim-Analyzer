@@ -20,7 +20,7 @@ only to check signatures.
 3. From the repository root, run:
 
    ```powershell
-   .\tools\publish_release_catalog.ps1 -Version 0.7.1 -Archive "dist\MonStim_Analyzer_v0.7.1-WIN.zip"
+   .\tools\publish_release_catalog.ps1 -Version 0.7.2 -Archive "dist\MonStim_Analyzer_v0.7.2-WIN.zip"
    ```
 
    The command validates the ZIP's `monstim-release.json`, updater helper, and

@@ -1,6 +1,7 @@
 """In-app Markdown help navigation coverage."""
 
 import re
+import time
 from pathlib import Path
 
 import markdown
@@ -170,6 +171,35 @@ def test_fit_local_help_images_leaves_external_and_outside_docs_images_unchanged
     assert _fit_local_help_images(outside, docs_path, max_width=100) == outside
 
 
+def _rendered_image_widths(document, image_path: Path) -> list[int]:
+    """Return rendered widths for a particular local rich-text image.
+
+    QTextDocument's HTML serialization differs between Qt platform plugins,
+    whereas QTextImageFormat is the rendered state used for layout.
+    """
+    widths = []
+    block = document.begin()
+    while block.isValid():
+        iterator = block.begin()
+        while not iterator.atEnd():
+            image_format = iterator.fragment().charFormat().toImageFormat()
+            if image_format.isValid() and Path(QUrl(image_format.name()).toLocalFile()).resolve() == image_path:
+                widths.append(round(image_format.width()))
+            iterator += 1
+        block = block.next()
+    return widths
+
+
+def _wait_for_rendered_image_width(document, image_path: Path, expected_width: int, timeout_ms: int = 1_000) -> bool:
+    """Process Qt events until an asynchronously resized image reaches its target width."""
+    deadline = time.monotonic() + timeout_ms / 1_000
+    while expected_width not in _rendered_image_widths(document, image_path):
+        if time.monotonic() >= deadline:
+            return False
+        QTest.qWait(10)
+    return True
+
+
 def test_using_monstim_help_window_embeds_demo_images_from_bundled_docs():
     repository = HelpFileRepository(get_docs_path())
     dialog = HelpWindow(
@@ -179,20 +209,18 @@ def test_using_monstim_help_window_embeds_demo_images_from_bundled_docs():
     )
 
     try:
-        expected = (Path(get_docs_path()) / "assets" / "demo" / "single-recording.png").resolve().as_uri()
-        assert expected in dialog._html_template
+        image_path = (Path(get_docs_path()) / "assets" / "demo" / "single-recording.png").resolve()
+        assert image_path.as_uri() in dialog._html_template
         dialog.resize(450, 550)
         dialog.show()
-        QTest.qWait(75)
         expected_width = _available_help_image_width(dialog.text_browser.viewport().width())
-        assert f'width="{expected_width}"' in dialog.text_browser.document().toHtml()
+        assert _wait_for_rendered_image_width(dialog.text_browser.document(), image_path, expected_width)
         assert dialog.text_browser.horizontalScrollBar().maximum() == 0
 
         dialog.resize(800, 550)
-        QTest.qWait(75)
         resized_width = _available_help_image_width(dialog.text_browser.viewport().width())
         assert resized_width > expected_width
-        assert f'width="{resized_width}"' in dialog.text_browser.document().toHtml()
+        assert _wait_for_rendered_image_width(dialog.text_browser.document(), image_path, resized_width)
     finally:
         dialog.close()
 
