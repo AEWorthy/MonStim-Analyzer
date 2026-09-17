@@ -13,6 +13,7 @@ import pytest
 
 from monstim_signals.core import RecordingAnnot, RecordingMeta, SessionAnnot, StimCluster
 from monstim_signals.domain import Recording, Session
+
 pytestmark = pytest.mark.unit
 
 
