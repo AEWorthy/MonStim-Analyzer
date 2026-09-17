@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Analysis profiles let you save a consistent set of analysis preferences for a protocol or project. Use a profile to make deliberate choices repeatable; do not treat a profile name as evidence that its defaults are scientifically appropriate.
+Analysis profiles let you save a consistent set of analysis preferences for a protocol or project. Use a profile to make deliberate choices repeatable; do not treat a profile name as evidence that its defaults are appropriate or valid for your own data or protocol.
 
 ## Before you begin
 

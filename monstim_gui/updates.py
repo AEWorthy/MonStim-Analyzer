@@ -31,6 +31,7 @@ UPDATE_MANIFEST_URL = "https://AEWorthy.github.io/MonStim-Analyzer/updates.json"
 UPDATE_PUBLIC_KEY_B64 = "8eski4IH85R06ucPskWrInV08UeFt87nGMA2rw/0uo0="
 UPDATE_CHECK_INTERVAL = timedelta(days=1)
 MAX_RELEASE_BYTES = 2 * 1024 * 1024 * 1024
+RELEASE_MANIFEST_PATH = Path("_internal") / "monstim-release.json"
 
 
 class UpdateError(RuntimeError):
@@ -167,9 +168,12 @@ def _release_root(staging: Path) -> Path:
     marker = list(staging.rglob("monstim-release.json"))
     if len(marker) != 1:
         raise UpdateError("Update archive must contain exactly one monstim-release.json manifest.")
-    root = marker[0].parent
+    manifest_path = marker[0]
+    if manifest_path.parent.name != RELEASE_MANIFEST_PATH.parent.name:
+        raise UpdateError("Update archive release manifest must be stored in _internal.")
+    root = manifest_path.parent.parent
     try:
-        manifest = json.loads(marker[0].read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         executable = root / str(manifest["executable"])
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
         raise UpdateError("Update archive release manifest is invalid.") from exc
@@ -192,7 +196,7 @@ def stage_update(release: UpdateRelease, archive: Path) -> Path:
         with zipfile.ZipFile(archive) as zip_file:
             _safe_extract(zip_file, staging)
         release_root = _release_root(staging)
-        if json.loads((release_root / "monstim-release.json").read_text(encoding="utf-8"))["version"] != release.version:
+        if json.loads((release_root / RELEASE_MANIFEST_PATH).read_text(encoding="utf-8"))["version"] != release.version:
             raise UpdateError("Update archive version does not match the signed catalog.")
         os.replace(release_root, destination)
         if staging.exists():
@@ -237,7 +241,7 @@ def staged_executable(version: str) -> Path:
     """Return the release-declared executable for a staged version."""
     release_root = update_root() / "versions" / version
     try:
-        manifest = json.loads((release_root / "monstim-release.json").read_text(encoding="utf-8"))
+        manifest = json.loads((release_root / RELEASE_MANIFEST_PATH).read_text(encoding="utf-8"))
         executable = release_root / str(manifest["executable"])
     except (OSError, TypeError, KeyError, json.JSONDecodeError) as exc:
         raise UpdateError("Staged update is missing its release manifest.") from exc
@@ -250,7 +254,7 @@ def launch_staged_update(version: str, *, wait_pid: int) -> None:
     """Start the bundled helper; it activates a staged version only after exit."""
     if not getattr(sys, "frozen", False):
         raise UpdateError("Install-on-restart is available only in the packaged Windows application.")
-    helper = Path(sys.executable).parent / "MonStim Updater.exe"
+    helper = Path(sys.executable).parent / "_internal" / "MonStim Updater.exe"
     if not helper.is_file():
         raise UpdateError("This MonStim installation does not include the update helper.")
     subprocess.Popen([str(helper), "--version", version, "--wait-pid", str(wait_pid), "--restart"], close_fds=True)

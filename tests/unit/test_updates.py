@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from monstim_gui.updates import UpdateError, UpdateRelease, activate_update, stage_update, staged_executable, update_check_due
+import monstim_gui.updates as updates
+from monstim_gui.updates import UpdateError, UpdateRelease, activate_update, launch_staged_update, stage_update, staged_executable, update_check_due
 
 
 def test_update_check_is_due_once_daily():
@@ -50,7 +51,7 @@ def test_stage_update_keeps_user_data_outside_version_cache(tmp_path, monkeypatc
     with zipfile.ZipFile(archive, "w") as zip_file:
         zip_file.writestr("MonStim_Analyzer_v9.9.9-WIN/MonStim Analyzer v9.9.9.exe", b"test executable")
         zip_file.writestr(
-            "MonStim_Analyzer_v9.9.9-WIN/monstim-release.json",
+            "MonStim_Analyzer_v9.9.9-WIN/_internal/monstim-release.json",
             json.dumps({"version": "9.9.9", "executable": "MonStim Analyzer v9.9.9.exe"}),
         )
     release = UpdateRelease("9.9.9", "beta", "windows-x86_64", "https://invalid", hashlib.sha256(archive.read_bytes()).hexdigest(), "https://notes")
@@ -63,3 +64,20 @@ def test_stage_update_keeps_user_data_outside_version_cache(tmp_path, monkeypatc
     assert staged_executable("9.9.9").is_file()
     assert staged.name == "9.9.9"
     assert user_data.read_text(encoding="utf-8") == "do not modify"
+
+
+def test_launch_staged_update_uses_internal_helper(tmp_path, monkeypatch):
+    executable = tmp_path / "MonStim Analyzer.exe"
+    helper = tmp_path / "_internal" / "MonStim Updater.exe"
+    helper.parent.mkdir()
+    helper.write_bytes(b"updater")
+    executable.write_bytes(b"application")
+    launched: list[list[str]] = []
+
+    monkeypatch.setattr(updates.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(updates.sys, "executable", str(executable))
+    monkeypatch.setattr(updates.subprocess, "Popen", lambda args, **_kwargs: launched.append(args))
+
+    launch_staged_update("9.9.9", wait_pid=123)
+
+    assert launched == [[str(helper), "--version", "9.9.9", "--wait-pid", "123", "--restart"]]

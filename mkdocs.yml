@@ -1,5 +1,5 @@
 site_name: MonStim Analyzer
-site_description: Reproducible EMG analysis and visualization for MonStim laboratory exports.
+site_description: Reproducible EMG curation, analysis, visualization, and export for MonStim laboratory exports.
 site_url: https://worthy-lab.org/MonStim-Analyzer/
 use_directory_urls: false
 repo_url: https://github.com/AEWorthy/MonStim-Analyzer
@@ -36,11 +36,16 @@ markdown_extensions:
       permalink: true
 extra_javascript:
   - javascripts/mathjax.js
+  - javascripts/home-carousel.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+extra_css:
+  - stylesheets/home-carousel.css
 nav:
   - Home: index.md
+  - License: licensing.md
   - Get started:
       - Quick start: user/getting_started.md
+      - Understanding the data hierarchy: user/data_hierarchy.md
       - Import experiments: user/importing_experiments.md
       - Importer add-ons: user/importer_addons.md
       - Updating MonStim: user/updates.md

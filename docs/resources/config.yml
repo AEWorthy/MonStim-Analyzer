@@ -2,8 +2,8 @@
 
 # Basic Parameters.
 bin_size: 0.01 # bins for stimulus voltages (in V). default is 0.01.
-time_window: 8.0 # window of EMG time to plot (in ms). default is 8-10.
-pre_stim_time: 2.0 # amount of pre-stimulus data to plot (in ms). default is 2.0.
+time_window: 1000.0 # post-stimulus display/analysis window (ms); covers the longest bundled synthetic recording.
+pre_stim_time: 250.0 # pre-stimulus display/analysis window (ms); covers the bundled synthetic baseline.
 default_method: 'rms' # (str) default method for EMG analysis. default is 'rms'.
 default_channel_names: # (list) default channel names for EMG analysis. default is ['LG', 'TA'].
   - 'LG'
@@ -31,7 +31,7 @@ butter_filter_args: # dict for butter_bandpass_filter() function. default is bel
 m_max_args: # dict for get_avg_mmax() function. default is below.
   max_window_size: 15 # (int) maximum floating window size for M-max detection (in datapoints).
   min_window_size: 2 # (int) minimum floating window size for M-max detection (in datapoints).
-  threshold: 0.3  # (float) standard deviation threshold for M-max detection, default is 0.3.
+  threshold: 0.15  # (float) maximum plateau SD as a fraction of the curve's robust amplitude, default is 0.15.
   validation_tolerance: 1.05  # (float) tolerance factor for plateau validation (e.g., 1.05 = 5% above plateau mean), default is 1.05.
   savgol_window_ratio: 0.25 # (float) fraction of the signal used for Savitzky-Golay smoothing, default is 0.25.
 

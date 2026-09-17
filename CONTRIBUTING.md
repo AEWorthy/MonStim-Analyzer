@@ -196,7 +196,7 @@ Before submitting a PR, please test:
 
 ## License
 
-By contributing to MonStim Analyzer, you agree that your contributions will be licensed under the same [BSD 2-Clause License](LICENSE) that covers the project.
+By contributing to MonStim Analyzer, you agree that your contributions will be licensed under the same [PolyForm Noncommercial 1.0.0 License](LICENSE) that covers the project.
 
 ---
 

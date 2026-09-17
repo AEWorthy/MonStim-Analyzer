@@ -1,4 +1,4 @@
-# MonStim Analyzer 0.7.0 — Quick Start Guide
+# MonStim Analyzer 0.7.1 — Quick Start Guide
 
 This guide gets a new user from an installed copy of MonStim Analyzer to a first reviewed plot. For the complete workflow and feature reference, open **Help > Show Help** in the application or read [Using MonStim Analyzer](docs/user/using_monstim.md).
 
@@ -8,7 +8,7 @@ This guide gets a new user from an installed copy of MonStim Analyzer to a first
 2. Extract the complete archive to a location where you can keep the application data.
 3. Launch the MonStim Analyzer executable in the extracted folder. Keep the files in that folder together; do not move only the executable.
 
-The first launch may take longer than later launches and Windows may show a warning because the release is not code-signed. Download only from the official release and verify its published `SHA256SUMS.txt` checksum. The public **v0.7.0 (beta)** release reports that version; development builds may report a newer version. macOS distribution is not currently available.
+The first launch may take longer than later launches and Windows may show a warning because the release is not code-signed. Download only from the official release and verify its published `SHA256SUMS.txt` checksum. The public **v0.7.1 (beta)** release reports that version; development builds may report a newer version. macOS distribution is not currently available.
 
 ## First analysis
 

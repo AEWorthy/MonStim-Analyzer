@@ -1,0 +1,191 @@
+.demo-carousel {
+  margin: 1.75rem auto 2.5rem;
+  max-width: 75rem;
+}
+
+.demo-carousel__viewport {
+  background: #111827;
+  border: 1px solid color-mix(in srgb, var(--md-default-fg-color) 22%, transparent);
+  border-radius: 0.7rem;
+  box-shadow: 0 1rem 2.5rem color-mix(in srgb, #000 25%, transparent);
+  overflow: hidden;
+  position: relative;
+}
+
+.demo-carousel__slide {
+  box-sizing: border-box;
+  display: block;
+  margin: 0;
+  max-width: none;
+  position: relative;
+  width: 100%;
+}
+
+.demo-carousel__slide img {
+  display: block;
+  height: auto;
+  max-height: 44rem;
+  object-fit: contain;
+  width: 100%;
+}
+
+.demo-carousel__slide figcaption {
+  background: color-mix(in srgb, var(--md-code-bg-color) 92%, #0f172a);
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  box-sizing: border-box;
+  color: var(--md-default-fg-color--light);
+  display: block;
+  font-size: 0.95rem;
+  font-style: normal;
+  line-height: 1.5;
+  margin: 0;
+  padding: 1rem 1.35rem 1.1rem;
+  position: static;
+  width: 100%;
+}
+
+.demo-carousel__slide figcaption strong {
+  color: var(--md-default-fg-color);
+  display: block;
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
+  margin-bottom: 0.15rem;
+}
+
+.md-typeset .demo-carousel__slide,
+.md-typeset .demo-carousel__slide img,
+.md-typeset .demo-carousel__slide figcaption {
+  max-width: none;
+  width: 100%;
+}
+
+.demo-carousel.is-enhanced .demo-carousel__slide {
+  display: none;
+}
+
+.demo-carousel.is-enhanced .demo-carousel__slide.is-active {
+  display: block;
+}
+
+.demo-carousel__controls {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: space-between;
+  pointer-events: none;
+  position: absolute;
+}
+
+.demo-carousel__button {
+  align-items: center;
+  background: rgb(15 23 42 / 72%);
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 2rem;
+  height: 2.75rem;
+  justify-content: center;
+  line-height: 1;
+  margin: 0 0.85rem;
+  padding: 0 0 0.18rem;
+  pointer-events: auto;
+  transition: background-color 150ms ease, transform 150ms ease;
+  width: 2.75rem;
+}
+
+.demo-carousel__button:hover {
+  background: var(--md-primary-fg-color);
+  transform: scale(1.06);
+}
+
+.demo-carousel__button:focus-visible {
+  outline: 0.18rem solid var(--md-accent-fg-color);
+  outline-offset: 0.18rem;
+}
+
+.demo-carousel__status {
+  align-self: flex-start;
+  background: rgb(15 23 42 / 78%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  color: #f8fafc;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  margin: 0.9rem;
+  padding: 0.28rem 0.55rem;
+}
+
+.demo-carousel__autoplay {
+  bottom: 0;
+  height: 0.24rem;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.demo-carousel__progress {
+  background: rgb(255 255 255 / 20%);
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+.demo-carousel__progress span {
+  animation: demo-carousel-progress 7s linear forwards;
+  background: var(--md-primary-fg-color);
+  display: block;
+  height: 100%;
+  transform-origin: left;
+  width: 100%;
+}
+
+.demo-carousel__autoplay.is-paused .demo-carousel__progress span {
+  animation-play-state: paused;
+}
+
+.demo-carousel__sr-status {
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
+@keyframes demo-carousel-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (max-width: 40em) {
+  .demo-carousel__slide figcaption {
+    font-size: 0.82rem;
+    padding: 0.8rem 0.95rem 0.9rem;
+  }
+
+  .demo-carousel__slide figcaption strong {
+    font-size: 0.95rem;
+  }
+
+  .demo-carousel__button {
+    font-size: 1.6rem;
+    height: 2.25rem;
+    margin: 0 0.5rem;
+    width: 2.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-carousel__button {
+    transition: none;
+  }
+
+  .demo-carousel__progress span {
+    animation: none;
+    transform: scaleX(0);
+  }
+}

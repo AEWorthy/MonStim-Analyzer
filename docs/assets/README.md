@@ -19,14 +19,27 @@ The same command also captures the real latency-window editor, Recording Exclusi
 
 ## Demo screenshots
 
-`tools.capture_marketing_screenshots` captures full application views using a deterministic, in-memory synthetic H-reflex experiment. It activates an in-memory **Demo H-reflex** profile with enough pre-/post-stimulus display time to show both the M-wave and delayed H-reflex. The plots and latency editor are the real MonStim UI; no researcher data or experiment files are read, and no user profile is created or modified.
+`tools.capture_demo_screenshots` captures full application views using deterministic, in-memory synthetic experiments. It includes H-reflex recruitment, a 100 Hz vibration train, and a stretch ramp-hold-release protocol. The plots and latency editor are the real MonStim UI; no researcher data or experiment files are read, and no user profile is created or modified.
 
 ```powershell
-conda run -n monstim python -m tools.capture_marketing_screenshots --all --output-dir docs/assets/demo
+conda run -n monstim python -m tools.capture_demo_screenshots --all --output-dir docs/assets/demo
 ```
 
-It produces `session-emg.png`, `single-recording.png`, `recruitment-curves.png`, and `latency-windows.png`. To regenerate one image after a UI change:
+It produces H-reflex EMG, individual-recording, reflex-curve, recruitment, M-max, and latency-window views plus vibration and stretch EMG views. The vibration and stretch captures intentionally hide PTT extrema; the stretch view includes TA, LG, force, and length. To regenerate one image after a UI change:
 
 ```powershell
-conda run -n monstim python -m tools.capture_marketing_screenshots --screen single-recording --output docs/assets/demo/single-recording.png
+conda run -n monstim python -m tools.capture_demo_screenshots --screen single-recording --output docs/assets/demo/single-recording.png
+```
+
+## Bundled protocol demos
+
+`tools.generate_demo_experiments` creates
+`docs/resources/demo_experiments/monstim-synthetic-protocol-demos.zip`. It
+contains three native, synthetic experiments: H-reflex recruitment, a 100 Hz
+vibration intensity series with TA/LG bulk EMG, and a stretch ramp-hold-release
+intensity series with TA, LG, force, and length. The archive intentionally
+contains no research data.
+
+```powershell
+conda run -n monstim python -m tools.generate_demo_experiments
 ```

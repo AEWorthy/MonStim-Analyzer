@@ -51,3 +51,25 @@ class HelpFileRepository:
         if target.suffix.lower() != ".md" or not target.is_file():
             return None
         return relative_target.as_posix(), unquote(parsed.fragment)
+
+    def resolve_help_asset(self, current_file: str, src: str) -> Path | None:
+        """Resolve a local Markdown asset beneath the bundled docs directory.
+
+        MkDocs gives relative image URLs a page-specific base URL. Qt rich text
+        does not, so the in-app renderer needs a checked absolute path instead.
+        External URLs, data URIs, missing files, and paths escaping ``docs`` are
+        deliberately left unresolved.
+        """
+        parsed = urlsplit(src)
+        if parsed.scheme or parsed.netloc or not parsed.path:
+            return None
+        try:
+            source = self._resolve_document_path(current_file)
+        except ValueError:
+            return None
+        target = (source.parent / unquote(parsed.path)).resolve()
+        try:
+            target.relative_to(self.docs_path)
+        except ValueError:
+            return None
+        return target if target.is_file() else None

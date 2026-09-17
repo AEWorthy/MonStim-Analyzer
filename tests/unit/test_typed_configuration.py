@@ -14,9 +14,16 @@ def _config():
         "default_method": "rms",
         "m_wave_window_names": ["M-wave", "M_response"],
         "butter_filter_args": {"lowcut": 100, "highcut": 3500, "order": 4},
-        "m_max_args": {"min_window_size": 2, "max_window_size": 15, "threshold": 0.3},
+        "m_max_args": {"min_window_size": 2, "max_window_size": 15, "threshold": 0.15},
         "subplot_adjust_args": {"left": 0.1, "right": 0.9},
     }
+
+
+def test_shipped_default_configuration_covers_the_full_synthetic_protocol_recording():
+    config = yaml.safe_load(Path("docs/resources/config.yml").read_text(encoding="utf-8"))
+
+    assert config["pre_stim_time"] == 250.0
+    assert config["time_window"] == 1000.0
 
 
 def test_profile_nested_values_deep_merge_and_yaml_is_cached(tmp_path: Path, monkeypatch):

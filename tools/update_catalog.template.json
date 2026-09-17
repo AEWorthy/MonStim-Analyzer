@@ -2,6 +2,15 @@
   "schema_version": "1.0",
   "releases": [
     {
+      "version": "0.7.1",
+      "channel": "beta",
+      "platform": "windows-x86_64",
+      "asset_url": "https://github.com/AEWorthy/MonStim-Analyzer/releases/download/v0.7.1/MonStim_Analyzer_v0.7.1-WIN.zip",
+      "sha256": "4dbd65254b9ea7ab3b4db994b372d6d15177229c09a8a225e8ab73fa9a2ededc",
+      "notes_url": "https://github.com/AEWorthy/MonStim-Analyzer/releases/tag/v0.7.1",
+      "minimum_updater_version": "0"
+    },
+    {
       "version": "0.7.0",
       "channel": "beta",
       "platform": "windows-x86_64",

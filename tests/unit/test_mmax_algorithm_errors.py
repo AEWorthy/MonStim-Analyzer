@@ -17,7 +17,7 @@ class TestMmaxAlgorithmErrorHandling:
     def test_no_calculable_mmax_error_creation(self):
         """Test that NoCalculableMmaxError can be created with custom message."""
         error = NoCalculableMmaxError()
-        assert "No calculable M-max" in str(error)
+        assert str(error) == "M-max unavailable: no plateau detected."
 
         custom_msg = "Custom error message"
         error_custom = NoCalculableMmaxError(custom_msg)
@@ -48,7 +48,7 @@ class TestMmaxAlgorithmErrorHandling:
         small_resp = np.array([10.0, 20.0])
         try:
             result = get_avg_mmax(small_stim, small_resp)
-            # The algorithm may succeed using fallback methods
+            # Insufficient data must not produce an automatic M-max.
             assert isinstance(result, (int, float))
             assert result > 0
         except NoCalculableMmaxError, ValueError, IndexError:

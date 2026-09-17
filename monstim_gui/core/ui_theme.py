@@ -17,6 +17,10 @@ from PySide6.QtWidgets import (
 
 APPLICATION_STYLESHEET = """
     QMainWindow { background: #20252b; }
+    QDialog#aboutDialog, QSplashScreen#splashScreen { background: #20252b; }
+    QLabel#applicationInfoTitle { color: #ffffff; font-weight: 700; }
+    QLabel#applicationInfoSecondary { color: #cbd4dc; }
+    QLabel#applicationInfoMuted { color: #9ca3a8; }
     QWidget#mainSidebar {
         background: #242629;
         border: 1px solid #3c434b;

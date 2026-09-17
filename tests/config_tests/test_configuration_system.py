@@ -46,7 +46,7 @@ class TestConfigRepository:
             "default_method": "rms",
             "default_channel_names": ["LG", "TA", "SOL"],
             "butter_filter_args": {"lowcut": 100, "highcut": 3500, "order": 4},
-            "m_max_args": {"max_window_size": 15, "min_window_size": 2, "threshold": 0.3, "validation_tolerance": 1.05},
+            "m_max_args": {"max_window_size": 15, "min_window_size": 2, "threshold": 0.15, "validation_tolerance": 1.05},
             "title_font_size": 16,
             "m_color": "tab:red",
             "h_color": "tab:blue",
@@ -812,7 +812,7 @@ class TestConfigurationIntegration:
             "pre_stim_time": 2.0,
             "default_method": "rms",
             "butter_filter_args": {"lowcut": 100, "highcut": 3500, "order": 4},
-            "m_max_args": {"max_window_size": 15, "min_window_size": 2, "threshold": 0.3, "validation_tolerance": 1.05},
+            "m_max_args": {"max_window_size": 15, "min_window_size": 2, "threshold": 0.15, "validation_tolerance": 1.05},
             "m_color": "tab:red",
             "h_color": "tab:blue",
         }

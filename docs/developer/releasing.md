@@ -20,10 +20,11 @@ only to check signatures.
 3. From the repository root, run:
 
    ```powershell
-   .\tools\publish_release_catalog.ps1 -Version 0.7.0 -Archive "dist\MonStim_Analyzer_v0.7.0-WIN.zip"
+   .\tools\publish_release_catalog.ps1 -Version 0.7.1 -Archive "dist\MonStim_Analyzer_v0.7.1-WIN.zip"
    ```
 
-   The command validates the ZIP's `monstim-release.json` and updater helper,
+   The command validates the ZIP's `monstim-release.json`, updater helper, and
+   required `docs/resources/demo_experiments/monstim-synthetic-protocol-demos.zip`,
    calculates SHA-256 itself, writes `SHA256SUMS.txt` beside the ZIP, replaces
    the matching source-catalog entry, and signs `docs/updates.json`. It does
    not send your private key anywhere.

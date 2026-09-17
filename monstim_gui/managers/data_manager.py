@@ -6,8 +6,9 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import traceback
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
 from monstim_gui.core.application_state import app_state
 from monstim_gui.io.experiment_loader import AllCatalogsRebuildThread, CatalogRebuildThread, ExperimentLoadingThread
 from monstim_gui.plugins import MIN_AUTO_DETECTION_CONFIDENCE, PluginError, installed_manifests, load_plugin
-from monstim_signals.core import get_config_path, get_data_path, get_log_dir
+from monstim_signals.core import get_config_path, get_data_path, get_docs_path, get_log_dir
 from monstim_signals.io.csv_importer import (
     GUIExptImportingThread,
     MultiExptImportingThread,
@@ -38,6 +39,14 @@ if TYPE_CHECKING:
     from ..gui_main import MonstimGUI
 
 logger = logging.getLogger(__name__)
+
+
+SYNTHETIC_DEMO_ARCHIVE = Path("resources/demo_experiments/monstim-synthetic-protocol-demos.zip")
+SYNTHETIC_DEMO_EXPERIMENT_IDS = (
+    "Synthetic H-reflex Recruitment",
+    "Synthetic 100Hz Vibration",
+    "Synthetic Stretch Ramp Hold Release",
+)
 
 
 class AddonImportThread(QThread):
@@ -143,6 +152,107 @@ class DataManager:
         coordinator = getattr(self.gui, "cache_warmup", None)
         if coordinator is not None:
             coordinator.cancel_and_wait()
+
+    @staticmethod
+    def bundled_synthetic_demo_archive() -> Path:
+        """Return the packaged archive of synthetic, native demo experiments."""
+        return Path(get_docs_path()) / SYNTHETIC_DEMO_ARCHIVE
+
+    def install_synthetic_demo_experiments(self, *, show_dialogs: bool = True) -> list[Path]:
+        """Install the packaged synthetic demos and build their local catalogs.
+
+        The archive is immutable application content.  Extraction always targets the
+        user's managed data folder, so installed demos behave like ordinary,
+        removable experiments and their derived catalogs contain valid local paths.
+        """
+        archive_path = self.bundled_synthetic_demo_archive()
+        if not archive_path.is_file():
+            message = f"The bundled synthetic-demo archive was not found:\n{archive_path}"
+            logger.error(message)
+            if show_dialogs:
+                QMessageBox.critical(self.gui, "Demo Archive Missing", message)
+            return []
+
+        output_path = Path(self.gui.output_path)
+        conflicting_paths = [output_path / experiment_id for experiment_id in SYNTHETIC_DEMO_EXPERIMENT_IDS if (output_path / experiment_id).exists()]
+        if conflicting_paths:
+            names = "\n".join(f"• {path.name}" for path in conflicting_paths)
+            message = (
+                "Demo experiments are already installed (or folders with the same names already exist):\n\n"
+                f"{names}\n\nNo files were changed. Delete or rename those folders before installing a fresh copy."
+            )
+            if show_dialogs:
+                QMessageBox.information(self.gui, "Synthetic Demos Already Present", message)
+            return []
+
+        output_path.mkdir(parents=True, exist_ok=True)
+        installed_paths: list[Path] = []
+        try:
+            with tempfile.TemporaryDirectory(prefix="monstim-synthetic-demos-", dir=output_path.parent) as temporary_directory:
+                staging_root = Path(temporary_directory)
+                with ZipFile(archive_path) as archive:
+                    members = [member for member in archive.infolist() if not member.is_dir()]
+                    roots = set()
+                    for member in members:
+                        member_path = PurePosixPath(member.filename)
+                        if member_path.is_absolute() or ".." in member_path.parts or not member_path.parts:
+                            raise ValueError(f"The bundled archive contains an unsafe path: {member.filename!r}")
+                        roots.add(member_path.parts[0])
+
+                    expected_roots = set(SYNTHETIC_DEMO_EXPERIMENT_IDS)
+                    if roots != expected_roots:
+                        raise ValueError("The bundled archive does not contain the expected demo experiments.")
+
+                    for member in members:
+                        destination = staging_root.joinpath(*PurePosixPath(member.filename).parts)
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(member) as source, destination.open("wb") as target:
+                            shutil.copyfileobj(source, target)
+
+                for experiment_id in SYNTHETIC_DEMO_EXPERIMENT_IDS:
+                    source = staging_root / experiment_id
+                    if not (source / "experiment.annot.json").is_file():
+                        raise ValueError(f"The bundled archive is missing metadata for '{experiment_id}'.")
+                    destination = output_path / experiment_id
+                    shutil.move(str(source), str(destination))
+                    installed_paths.append(destination)
+        except Exception as exc:
+            logger.exception("Could not install bundled demo experiments")
+            # Only folders created by this operation are removed on a partial move.
+            for installed_path in installed_paths:
+                if installed_path.exists():
+                    shutil.rmtree(installed_path, ignore_errors=True)
+            message = f"Could not install the bundled demo experiments:\n{exc}"
+            if show_dialogs:
+                QMessageBox.critical(self.gui, "Demo Installation Failed", message)
+            return []
+
+        try:
+            self.refresh_data_views(*installed_paths)
+        except Exception as exc:
+            # The native data are safely installed even if a derived catalog cannot
+            # be built now.  Preserve them so the user can retry a normal refresh.
+            logger.exception("Demo experiments installed but their catalog refresh failed")
+            message = (
+                "The demo experiments were installed, but MonStim could not refresh their catalogs:\n"
+                f"{exc}\n\nUse File > Refresh Experiments list to retry."
+            )
+            if show_dialogs:
+                QMessageBox.warning(self.gui, "Demo Experiments Need Refresh", message)
+            return installed_paths
+
+        message = f"Installed {len(installed_paths)} demo experiments."
+        status_bar = getattr(self.gui, "status_bar", None)
+        if status_bar is not None:
+            status_bar.showMessage(message, 8000)
+        if show_dialogs:
+            QMessageBox.information(
+                self.gui,
+                "Demo Experiments Installed",
+                f"{message}\n\nThey are now listed with your experiments and have fresh local catalogs. "
+                "You can remove them at any time with File > Delete Current Experiment.",
+            )
+        return installed_paths
 
     def refresh_data_views(self, *experiment_paths: Path, rebuild_catalogs: bool = True) -> None:
         """Refresh both application data views, rebuilding selected catalogs when needed."""

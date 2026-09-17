@@ -28,7 +28,7 @@ Dataset and Experiment scope copy the draft to every affected active child sessi
 
 ## Implausible relative-to-M-max values
 
-Confirm the M-wave window and amplitude method, then inspect the M-max plot and its plateau/fallback. If the protocol does not reach a stable high-stimulus response, do not interpret a fallback estimate as a confirmed physiological plateau. Review [M-max algorithm](../science/mmax_estimation.md) and [Configuration reference](../science/configuration_reference.md).
+Confirm the M-wave window and amplitude method, then inspect the M-max plot and its detected plateau. If MonStim reports M-max unavailable, the protocol did not provide a qualifying stable high-stimulus response; do not use automatic relative-to-M-max normalization. Review [M-max algorithm](../science/mmax_estimation.md) and [Configuration reference](../science/configuration_reference.md).
 
 ## Import or interface problems
 

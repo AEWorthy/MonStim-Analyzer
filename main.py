@@ -6,10 +6,11 @@ import sys
 import traceback
 from logging.handlers import RotatingFileHandler
 
-from PySide6.QtCore import QStandardPaths, QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QStandardPaths
+from PySide6.QtWidgets import QApplication, QSplashScreen
 
-from monstim_gui.core.splash import SPLASH_INFO
+from monstim_gui.core.splash import SPLASH_INFO, SplashScreen
+from monstim_gui.core.ui_theme import apply_application_theme
 
 LOG_FILE = "app.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -133,7 +134,7 @@ def qt_message_handler(mode, context, message):
         logger.info(f"Qt Info: {message}")
 
 
-def main(is_frozen: bool, app: QApplication | None = None) -> int:
+def main(is_frozen: bool, app: QApplication | None = None, splash: QSplashScreen | None = None) -> int:
     try:
         if is_frozen:
             from monstim_gui.updates import launch_selected_update
@@ -149,6 +150,9 @@ def main(is_frozen: bool, app: QApplication | None = None) -> int:
             app.setApplicationName(APP_NAME)
             app.setApplicationVersion(SPLASH_INFO["version"])
 
+        # Install the shared palette before constructing application windows.
+        apply_application_theme(app)
+
         # Install Qt message handler to catch Qt internal errors
         from PySide6.QtCore import qInstallMessageHandler
 
@@ -161,19 +165,17 @@ def main(is_frozen: bool, app: QApplication | None = None) -> int:
         app_state.reinitialize_settings()
         get_logger().info(f"QSettings initialized with org={app.organizationName()}, app={app.applicationName()}")
 
-        if is_frozen:  # Display splash screen if running as a frozen executable.
-            from monstim_gui.core.splash import SplashScreen
-
-            splash = SplashScreen()
-            splash.show()
-            QTimer.singleShot(3000, splash.close)
         gui = MonstimGUI()
         gui.show()
+        if splash is not None:
+            splash.finish(gui)
         gui.schedule_initial_load()
         get_logger().debug("Application launched successfully.")
         return app.exec()
 
     except Exception as e:
+        if splash is not None:
+            splash.close()
         logger = get_logger()
         logger.error(f"Error in main function: {e!s}")
         logger.error(traceback.format_exc())
@@ -193,6 +195,15 @@ if __name__ == "__main__":
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(SPLASH_INFO["version"])
 
+    startup_splash = None
+    if IS_FROZEN:
+        # Paint the real Qt splash before importing MonstimGUI, whose import
+        # transitively loads the plotting and analysis stack.
+        apply_application_theme(app)
+        startup_splash = SplashScreen()
+        startup_splash.show()
+        app.processEvents()
+
     if IS_FROZEN:
         log_dir = setup_logging(debug=args.debug, log_dir=args.log_dir)
         get_logger().info("Logger initialized. Running via frozen executable.")
@@ -208,4 +219,4 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     get_logger().info("Initialization complete. Starting application.")
-    sys.exit(main(IS_FROZEN, app))
+    sys.exit(main(IS_FROZEN, app, startup_splash))

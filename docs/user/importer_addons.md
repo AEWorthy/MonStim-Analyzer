@@ -2,7 +2,7 @@
 
 ## Purpose and trust boundary
 
-MonStim directly supports MonStim V3D/V3H CSV exports. Other acquisition systems often encode sampling, channels, stimulus metadata, and recording hierarchy differently; treating them as MonStim files would risk incorrect analysis. An importer add-on maps a reviewed foreign format to MonStim’s managed format.
+MonStim directly supports MonStim V3D/V3H CSV exports. Other acquisition systems often encode sampling, channels, stimulus metadata, and recording hierarchy differently; treating them as MonStim files would risk incorrect analysis. An importer add-on maps a reviewed foreign format to MonStim’s managed format. See [Understanding the data hierarchy](data_hierarchy.md) for the destination recording, session, dataset, and experiment meanings; follow each add-on's instructions for its source-layout requirements.
 
 Importer add-ons contain executable Python code. Install only packs obtained from the official MonStim GitHub Releases page.
 
@@ -36,7 +36,7 @@ Importer API 2.x uses this normalized contract. Older direct-write add-ons are i
 
 ## Request an importer
 
-[:octicons-issue-opened-16: Request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml){ .md-button .md-button--primary }
+[Request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml)
 
 You do not need to know GitHub or programming to use this form. Select the button, sign in or create a free GitHub account if prompted, answer the first three short questions, and submit it. The form asks only for the acquisition system, file type, and what you want to do; every other detail is optional.
 

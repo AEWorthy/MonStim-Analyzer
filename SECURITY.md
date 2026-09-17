@@ -2,12 +2,8 @@
 
 ## Supported Versions
 
-We actively support the following versions of MonStim Analyzer with security updates:
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.6.x (beta) | :white_check_mark: |
-| < 0.6   | :x:                |
+Security fixes are provided only in the newest released version of MonStim
+Analyzer. We do not backport security fixes to earlier versions.
 
 ## Reporting a Vulnerability
 
@@ -83,7 +79,7 @@ When security issues are identified:
 1. **Assessment:** We evaluate the severity and impact
 2. **Fix development:** We develop and test security patches
 3. **Testing:** We conduct thorough testing of security fixes
-4. **Release:** We release security updates as patch versions
+4. **Release:** We include security fixes in the next new version; fixes are not backported to earlier versions
 5. **Communication:** We notify users through multiple channels
 6. **Documentation:** We update security documentation as needed
 

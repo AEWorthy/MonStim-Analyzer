@@ -1,8 +1,8 @@
-# Using MonStim Analyzer 0.7.0
+# Using MonStim Analyzer 0.7.1
 
 ## Purpose
 
-MonStim organizes stimulation recordings as **experiment > dataset > session > recording**. Select the level you want to inspect or plot, then choose a plot type and its options. This guide describes the normal workflow and the main actions available in the current application; linked topics provide detailed instructions. If you are new to the workflow, begin with [Quick start](getting_started.md).
+MonStim organizes stimulation recordings as **experiment > dataset > session > recording**. [Understanding the data hierarchy](data_hierarchy.md) defines these levels and what each stores. Select the level you want to inspect or plot, then choose a plot type and its options. MonStim can be an all-in-one curation, plotting, and export suite, or a structured curation step before you export to a separate analysis pipeline. This guide describes the normal workflow and the main actions available in the current application; linked topics provide detailed instructions. If you are new to the workflow, begin with [Quick start](getting_started.md).
 
 ## Before you begin
 
@@ -16,7 +16,7 @@ Import an experiment and select a session. Inspect at least one raw and filtered
 4. **Select the analysis profile.** Use the main-window **Analysis Profile** selector to activate a profile. Use **File > Settings Center > Profiles** to create, duplicate, import, export, or edit profiles. See [Analysis profiles](analysis_profiles.md).
 5. **Choose the amplitude method.** Use the method specified by the analysis plan. Review the equations, units, and limitations in [Analysis methods](../science/analysis_methods.md).
 6. **Review quality and exclusions.** Read diagnostic notices and exclude recordings only with a documented reason. Use [Recording exclusion editor](recording_exclusion_editor.md) for previewed, reviewable bulk decisions.
-7. **Review M-max before normalization.** Confirm the M-wave window and method, then check whether the estimate came from a detected plateau or the high-stimulus fallback. See [M-max estimation and review](../science/mmax_estimation.md).
+7. **Review M-max before normalization.** Confirm the M-wave window and method, then confirm that MonStim detected a plateau. See [M-max estimation and review](../science/mmax_estimation.md).
 8. **Plot, export, and document.** Inspect the plot or report, then retain the profile, method, windows, exclusions, bin size, and M-max choices with any export. See [Exporting results](exporting_results.md).
 
 ## Detailed guides
@@ -65,6 +65,12 @@ The following reproducible demo views use synthetic data only. A single-recordin
 ![A synthetic single-recording view shows editable display controls, the recording cycler, M-wave and H-reflex windows, and selected extrema.](../assets/demo/single-recording.png)
 
 ![Synthetic dataset-level recruitment curves show M-wave saturation and H-reflex recruitment across stimulus intensity.](../assets/demo/recruitment-curves.png)
+
+The bundled synthetic protocol archive also includes a TA/LG 100 Hz vibration series and a TA/LG/force/length stretch ramp-hold-release series. These images show the real plotting interface with fictional signals at a representative intensity.
+
+![A synthetic 100 Hz vibration in-app EMG view shows the larger synthetic LG response relative to TA.](../assets/demo/vibration-emg.png)
+
+![A synthetic stretch ramp-hold-release in-app EMG view shows sparse TA activity and a synthetic LG-dominant response.](../assets/demo/stretch-emg.png)
 
 ## Latency-window and M-wave rules
 

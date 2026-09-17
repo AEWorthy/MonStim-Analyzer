@@ -21,6 +21,10 @@ from tools.catalog_signing import atomic_write_text, sha256_file, signed_wrapper
 REPOSITORY = "AEWorthy/MonStim-Analyzer"
 VALID_CHANNELS = {"beta", "stable"}
 VALID_PLATFORMS = {"windows-x86_64"}
+# PyInstaller places application data files beneath ``_internal`` in the
+# one-folder Windows bundle. The synthetic demo archive is collected as part
+# of ``docs``, so this is its path relative to the release directory.
+DEMO_ARCHIVE_MEMBER = "_internal/docs/resources/demo_experiments/monstim-synthetic-protocol-demos.zip"
 
 
 def _https_url(value: str, name: str) -> str:
@@ -39,7 +43,7 @@ def _github_release_url(value: str, name: str) -> str:
 
 
 def validate_archive(archive: Path, version: str) -> None:
-    """Check that a release ZIP contains the updater-compatible manifest."""
+    """Check that a release ZIP contains required updater and demo resources."""
     try:
         with zipfile.ZipFile(archive) as zip_file:
             bad_member = zip_file.testzip()
@@ -49,17 +53,29 @@ def validate_archive(archive: Path, version: str) -> None:
             if len(manifests) != 1:
                 raise ValueError("release ZIP must contain exactly one monstim-release.json manifest")
             manifest_name = manifests[0]
+            manifest_suffix = "_internal/monstim-release.json"
+            if not manifest_name.endswith(manifest_suffix):
+                raise ValueError("release ZIP manifest must be stored in _internal")
             manifest = json.loads(zip_file.read(manifest_name).decode("utf-8"))
             if str(manifest.get("version")) != version:
                 raise ValueError(f"release manifest version is {manifest.get('version')!r}, not {version!r}")
             executable = manifest.get("executable")
             if not isinstance(executable, str) or not executable.endswith(".exe"):
                 raise ValueError("release manifest must name a Windows executable")
-            prefix = manifest_name.removesuffix("monstim-release.json")
+            prefix = manifest_name.removesuffix(manifest_suffix)
             if prefix + executable not in zip_file.namelist():
                 raise ValueError(f"release ZIP is missing the manifest executable {executable!r}")
-            if prefix + "MonStim Updater.exe" not in zip_file.namelist():
-                raise ValueError("release ZIP is missing MonStim Updater.exe")
+            updater_member = prefix + "_internal/MonStim Updater.exe"
+            if updater_member not in zip_file.namelist():
+                raise ValueError("release ZIP is missing the internal MonStim Updater.exe helper")
+            if prefix + "_internal/LICENSE" not in zip_file.namelist():
+                raise ValueError("release ZIP is missing the internal LICENSE file")
+            if prefix + "monstim-release.json" in zip_file.namelist():
+                raise ValueError("release ZIP must not contain a root-level monstim-release.json")
+            if prefix + "MonStim Updater.exe" in zip_file.namelist():
+                raise ValueError("release ZIP must not contain a root-level MonStim Updater.exe")
+            if prefix + DEMO_ARCHIVE_MEMBER not in zip_file.namelist():
+                raise ValueError("release ZIP is missing the bundled synthetic-demo archive")
     except zipfile.BadZipFile as exc:
         raise ValueError("release archive is not a valid ZIP file") from exc
 

@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.7.1] - 2026-09-16
+
+### Added
+- **Bundled synthetic protocol demos**: Added an opt-in installer for three native synthetic experiments: H-reflex recruitment, 100 Hz vibration, and stretch ramp-hold-release. New empty libraries are offered the demos once at startup, and they can also be installed later from **File > Install Demo Experiments…**. Installed demos use the normal managed-data folder, receive fresh local catalogs, and can be removed like any other experiment.
+- **Safe, release-validated demo distribution**: Added deterministic tools and regression coverage to generate the synthetic demo archive, reject unsafe archive paths and name conflicts, and verify that every distributable Windows ZIP includes the archive.
+- **Expanded visual documentation**: Added real-UI synthetic screenshots for reflex curves, M-max, vibration, and stretch workflows, plus a documentation-site carousel and the supporting screenshot-capture tooling.
+- **Importer request support**: Added a plain-language GitHub issue form for requesting an importer for another acquisition system.
+
+### Changed
+- **Default force/length display coverage**: Extended the shipped global and vibration/stretch profile time windows to show the full bundled synthetic force/length protocols, including their pre-stimulus baselines.
+- **In-app help image handling**: Local documentation images now resolve from the bundled docs tree and scale to the Help window without horizontal scrolling; resizing preserves the reader’s position.
+- **Application information presentation**: Applied the shared dark theme consistently to the splash and About dialogs; About is now a modal dialog with an explicit Close button.
+- **Release and contributor documentation**: Updated publishing validation, testing guidance, help/documentation maintenance guides, support links, security-support policy, and project-site navigation. The Windows release validator now requires the bundled synthetic-demo archive.
+
+### Fixed
+- **M-max plateau validity**: Removed the high-stimulus fallback heuristic, so an automatic M-max is unavailable when no qualifying plateau is detected rather than estimated from the upper quarter of the recruitment curve.
+- **M-max plateau scaling**: Replaced the fixed absolute variation limit with a threshold scaled to the filtered M-wave recruitment curve's robust amplitude, making plateau detection consistent across amplitude units and uniform gain changes.
+- Prevented a Help-window resize from rebuilding the page and unexpectedly moving the reading position.
+- Ensured the shared application palette is installed before splash or program-information UI is displayed.
+
+### Testing and maintenance
+- Added coverage for native synthetic demo contents and installation, archive traversal protection, release-archive demo validation, responsive Help images, reading-position preservation, and themed application-information dialogs.
+- Updated user-facing version references to 0.7.1 and refreshed release assets, citation metadata, issue templates, and packaging resources.
+
+
 ## [0.7.0] - 2026-09-15
 
 ### Added
@@ -318,7 +343,5 @@ Note: This is a patch release with incremental UX and stability improvements ove
 ---
 
 For detailed technical information, see the [User Guide](docs/readme.md) and other documentation in the `docs/` directory.
-
-
 
 

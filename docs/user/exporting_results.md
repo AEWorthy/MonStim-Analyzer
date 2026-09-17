@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Use exports to move an analysis result into a spreadsheet, statistics workflow, or figure pipeline. Exported values are only interpretable with the selections and analysis choices that produced them.
+Use exports to move curated data or an analysis result into a spreadsheet, statistics workflow, or figure pipeline. MonStim can produce and review results itself, but it does not require you to complete analysis in the application: exports are also a traceable handoff to your own custom pipeline. Exported values are only interpretable with the selections and analysis choices that produced them.
 
 ![The Bulk Data Export dialog shows a selected synthetic experiment, output directory, data type, calculation method, channel, and the readiness summary required before Export is enabled.](../assets/bulk-export-dialog.png)
 
@@ -22,7 +22,7 @@ Use exports to move an analysis result into a spreadsheet, statistics workflow, 
 
 ## Data Export Level and completion filtering
 
-**Data Export Level** controls what one output workbook represents. **Dataset** writes one workbook for each selected animal replicate; its summary values aggregate that dataset's active sessions. **Experiment** writes one workbook for each selected experiment; its summary values aggregate the active datasets and sessions within it. Longform output remains one row per recording, channel, latency window, and method at either level.
+**Data Export Level** controls what one output workbook represents. **Dataset** writes one workbook for each selected biological unit x condition; its summary values aggregate that dataset's active sessions. **Experiment** writes one workbook for each selected experiment; its summary values aggregate the active datasets and sessions within it when the selected export uses summaries. An experiment may represent one condition across biological units or simply be an organizational container. Longform output remains one row per recording, channel, latency window, and method at either level. See [Understanding the data hierarchy](data_hierarchy.md) for the intended roles of these levels.
 
 **Completed data only** is a strict data filter, not just a chooser convenience. When selected, exports include only experiments, datasets, and sessions each marked **Complete**. Incomplete or unknown experiment cards and dataset rows are hidden, and data at any incomplete level cannot contribute to the export. The selector flags a dataset with active sessions that are still incomplete (excluded sessions do not count), names them in a tooltip, and the export log records the sessions omitted for that reason.
 

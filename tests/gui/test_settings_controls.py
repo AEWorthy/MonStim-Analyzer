@@ -3,9 +3,10 @@
 from PySide6.QtCore import QEvent, QSettings, Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QComboBox, QSpinBox, QStyle, QStyleOptionSpinBox, QWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QDialogButtonBox, QPushButton, QSpinBox, QStyle, QStyleOptionSpinBox, QWidget
 
 from monstim_gui.core.keyboard_shortcuts import SHORTCUT_DEFINITIONS, KeyboardShortcutController, default_shortcuts, normalize_shortcuts
+from monstim_gui.core.splash import SplashScreen
 from monstim_gui.core.ui_theme import (
     APPLICATION_STYLESHEET,
     SpinBoxControlStyle,
@@ -13,6 +14,8 @@ from monstim_gui.core.ui_theme import (
     apply_application_theme,
     install_wheel_change_guard,
 )
+from monstim_gui.dialogs import help_about
+from monstim_gui.dialogs.help_about import AboutDialog
 from monstim_gui.dialogs.settings_center import SettingsCenter
 from monstim_gui.io.config_repository import ConfigRepository
 from monstim_gui.managers.profile_manager import ProfileRecord
@@ -116,6 +119,56 @@ def test_popup_menus_define_dark_surfaces_and_readable_text():
     assert "QMenu {\n        background: #242629;\n        color: #e6e0db;" in APPLICATION_STYLESHEET
     assert "QMenu::item:selected { color: #ffffff; background: #633b26; }" in APPLICATION_STYLESHEET
     assert "QMenu::item:disabled { color: #8d9296; }" in APPLICATION_STYLESHEET
+
+
+def test_application_info_popups_use_the_shared_dark_theme():
+    apply_application_theme(QApplication.instance())
+
+    about = AboutDialog()
+    splash = SplashScreen()
+
+    assert about.metaObject().className() == "AboutDialog"
+    assert about.objectName() == "aboutDialog"
+    assert about.palette().color(QPalette.ColorRole.Window).name() == "#20252b"
+    assert about.findChild(QDialogButtonBox) is not None
+    assert about.findChild(QPushButton, "aboutLicenseButton") is not None
+    assert splash.objectName() == "splashScreen"
+    assert splash.pixmap().toImage().pixelColor(0, 0).name() == "#20252b"
+    assert "background-color: white" not in about.styleSheet()
+    about.close()
+    splash.close()
+
+
+def test_frozen_license_path_uses_the_internal_bundle_copy(monkeypatch, tmp_path):
+    monkeypatch.setattr(help_about, "get_base_path", lambda: tmp_path)
+    monkeypatch.setattr(help_about.sys, "frozen", True, raising=False)
+
+    assert help_about._license_path() == tmp_path / "_internal" / "LICENSE"
+
+
+def test_about_license_opens_the_bundled_text_in_the_help_viewer(monkeypatch, tmp_path):
+    license_text = "# Example License\n\nTerms apply."
+    (tmp_path / "LICENSE").write_text(license_text, encoding="utf-8")
+    monkeypatch.setattr(help_about, "get_base_path", lambda: tmp_path)
+    monkeypatch.delattr(help_about.sys, "frozen", raising=False)
+    opened = {}
+
+    class FakeHelpWindow:
+        def exec(self):
+            opened["executed"] = True
+
+    def create_fake_help_window(markdown_content, title, parent):
+        opened.update(markdown_content=markdown_content, title=title, parent=parent)
+        return FakeHelpWindow()
+
+    monkeypatch.setattr(help_about, "create_help_window", create_fake_help_window)
+    about = AboutDialog()
+    try:
+        about._open_license()
+    finally:
+        about.close()
+
+    assert opened == {"markdown_content": license_text, "title": "MonStim Analyzer License", "parent": about, "executed": True}
 
 
 def test_settings_center_uses_the_warm_application_selection_colors(tmp_path):

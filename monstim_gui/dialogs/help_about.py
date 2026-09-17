@@ -4,6 +4,7 @@ import io
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 
 import markdown
@@ -16,11 +17,22 @@ from matplotlib.figure import Figure
 from mdx_math import MathExtension
 from PIL import Image
 from PySide6.QtCore import QEvent, QStandardPaths, Qt, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QFont, QIcon, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTextBrowser, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QDesktopServices, QFont, QIcon, QPalette, QPixmap, QTextCursor
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTextBrowser,
+    QToolButton,
+    QVBoxLayout,
+)
 
 from monstim_gui.core.splash import SPLASH_INFO
-from monstim_signals.core import get_source_path
+from monstim_signals.core import get_base_path, get_source_path
 
 # Cache stores tuples of (path, render_w, render_h, display_w, display_h)
 _IMG_CACHE: dict[str, tuple[str, int, int, int, int]] = {}
@@ -58,6 +70,7 @@ def _get_display_dpi() -> int:
 _DISPLAY_DPI = _get_display_dpi()
 # Scale factor to convert from render size to display size
 _DPI_SCALE = _DISPLAY_DPI / _RENDER_DPI
+_HELP_IMAGE_VIEWPORT_GUTTER_PX = 48
 
 
 def _is_dark_mode() -> bool:
@@ -321,6 +334,77 @@ def _normalise_help_tables(html: str) -> str:
     return re.sub(r"<table>.*?</table>", replace_table, html, flags=re.DOTALL | re.IGNORECASE)
 
 
+def _resolve_local_help_images(html: str, help_repository, source_file: str | None) -> str:
+    """Give local Markdown images absolute file URLs for Qt rich text.
+
+    MkDocs resolves image URLs against the current Markdown page. QTextBrowser
+    receives standalone HTML, so those same relative URLs otherwise resolve
+    against the process working directory. Keep external image URLs untouched
+    and ask ``HelpFileRepository`` to enforce the bundled-docs boundary.
+    """
+    if help_repository is None or not source_file:
+        return html
+
+    def replace_src(match: re.Match[str]) -> str:
+        prefix, src, suffix = match.groups()
+        asset = help_repository.resolve_help_asset(source_file, html_lib.unescape(src))
+        if asset is None:
+            return match.group(0)
+        return f"{prefix}{QUrl.fromLocalFile(str(asset)).toString()}{suffix}"
+
+    return re.sub(r'(<img\b[^>]*\bsrc=["\'])([^"\']+)(["\'])', replace_src, html, flags=re.IGNORECASE)
+
+
+def _fit_local_help_images(html: str, docs_path: Path, max_width: int) -> str:
+    """Constrain bundled documentation images to a Qt help viewport.
+
+    Qt rich text does not reliably honour responsive CSS rules.  Its native
+    image dimensions therefore need explicit HTML attributes.  Only local
+    files beneath the bundled documentation tree are changed; externally
+    hosted images and generated math images keep their existing behaviour.
+    """
+    if max_width < 1:
+        return html
+
+    docs_root = docs_path.resolve()
+
+    def replace_image(match: re.Match[str]) -> str:
+        image_tag = match.group(0)
+        source_match = re.search(r'\bsrc=["\']([^"\']+)["\']', image_tag, flags=re.IGNORECASE)
+        if source_match is None:
+            return image_tag
+        source_url = QUrl(html_lib.unescape(source_match.group(1)))
+        if not source_url.isLocalFile():
+            return image_tag
+
+        try:
+            image_path = Path(source_url.toLocalFile()).resolve()
+            image_path.relative_to(docs_root)
+            with Image.open(image_path) as image:
+                native_width, native_height = image.size
+        except OSError, ValueError:
+            return image_tag
+
+        display_width = min(native_width, max_width)
+        if display_width == native_width:
+            return image_tag
+        display_height = max(1, round(native_height * display_width / native_width))
+        image_tag = re.sub(r'\s(?:width|height)=["\'][^"\']*["\']', "", image_tag, flags=re.IGNORECASE)
+        return f'{image_tag[:-1]} width="{display_width}" height="{display_height}">'
+
+    return re.sub(r"<img\b[^>]*>", replace_image, html, flags=re.IGNORECASE)
+
+
+def _available_help_image_width(viewport_width: int) -> int:
+    """Return a conservative content width for Qt rich-text images.
+
+    The viewport includes document and paragraph layout space that image HTML
+    cannot use.  Reserve 24 px on each side so a scaled image remains inside
+    the wrapped reading column on different DPI and widget styles.
+    """
+    return max(1, viewport_width - _HELP_IMAGE_VIEWPORT_GUTTER_PX)
+
+
 class HelpWindow(QDialog):
     """Help window that renders Markdown with LaTeX math as images.
 
@@ -348,6 +432,8 @@ class HelpWindow(QDialog):
         self._text_zoom_level = 0  # Track text zoom level (0 = default)
         self._pending_text_zoom_delta = 0  # Accumulated text zoom delta
         self._html_template = ""  # HTML with placeholders
+        self._rendered_html = ""
+        self._last_image_fit_viewport_width: int | None = None
         self._math_items: list[tuple[str, bool]] = []
         self._dark_mode = _is_dark_mode()  # Cache dark mode state
 
@@ -371,12 +457,21 @@ class HelpWindow(QDialog):
         self._zoom_timer.setInterval(50)  # 50ms debounce
         self._zoom_timer.timeout.connect(self._apply_pending_zoom)
 
+        # Resizing changes the available width for native-size documentation
+        # screenshots.  Apply image formats in-place after layout settles: do
+        # not rebuild the document while the user is scrolling or resizing.
+        self._image_fit_timer = QTimer(self)
+        self._image_fit_timer.setSingleShot(True)
+        self._image_fit_timer.setInterval(50)
+        self._image_fit_timer.timeout.connect(self._refresh_image_fit)
+
         layout = QVBoxLayout(self)
 
         # Create text browser
         self.text_browser = QTextBrowser()
         self.text_browser.setOpenLinks(False)
         self.text_browser.setOpenExternalLinks(False)
+        self.text_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_browser.anchorClicked.connect(self._open_link)
 
         # Install event filter on the viewport (where wheel events actually go)
@@ -444,8 +539,10 @@ class HelpWindow(QDialog):
         html = md.convert(self._markdown_content)
 
         # Extract math and replace with placeholders (only done once)
+        html = _resolve_local_help_images(html, self._help_repository, self._source_file)
         html = _normalise_help_tables(html)
         self._html_template, self._math_items = _replace_math_with_placeholders(html)
+        self._last_image_fit_viewport_width = None
 
         # Render at current scale
         self._update_html()
@@ -453,6 +550,13 @@ class HelpWindow(QDialog):
     def _update_html(self):
         """Update HTML with math images at current scale."""
         final_html = _replace_placeholders_with_images(self._html_template, self._math_items, self._zoom_scale, self._dark_mode)
+        if self._help_repository is not None:
+            viewport_width = self.text_browser.viewport().width()
+            final_html = _fit_local_help_images(
+                final_html,
+                self._help_repository.docs_path,
+                max_width=_available_help_image_width(viewport_width),
+            )
 
         # Store scroll position (as fraction of total)
         scrollbar = self.text_browser.verticalScrollBar()
@@ -460,6 +564,7 @@ class HelpWindow(QDialog):
         scroll_frac = scrollbar.value() / scroll_max if scroll_max > 0 else 0
 
         self.text_browser.document().setDefaultStyleSheet(_help_document_stylesheet(self._dark_mode))
+        self._rendered_html = final_html
         self.text_browser.setHtml(final_html)
 
         # Restore scroll position (as fraction of new total), unless navigating.
@@ -471,6 +576,55 @@ class HelpWindow(QDialog):
             self._pending_anchor = ""
             QTimer.singleShot(0, lambda: self.text_browser.scrollToAnchor(anchor))
         self._reset_scroll = False
+
+    def _refresh_image_fit(self) -> None:
+        """Resize bundled image objects in-place without replacing the page."""
+        if self._help_repository is None:
+            return
+
+        viewport_width = self.text_browser.viewport().width()
+        if viewport_width < 1 or viewport_width == self._last_image_fit_viewport_width:
+            return
+        self._last_image_fit_viewport_width = viewport_width
+
+        docs_root = self._help_repository.docs_path.resolve()
+        max_width = _available_help_image_width(viewport_width)
+        scrollbar = self.text_browser.verticalScrollBar()
+        scroll_value = scrollbar.value()
+        document = self.text_browser.document()
+        block = document.begin()
+
+        while block.isValid():
+            iterator = block.begin()
+            while not iterator.atEnd():
+                fragment = iterator.fragment()
+                image_format = fragment.charFormat().toImageFormat()
+                if image_format.isValid():
+                    source_url = QUrl(image_format.name())
+                    try:
+                        image_path = Path(source_url.toLocalFile()).resolve()
+                        image_path.relative_to(docs_root)
+                        with Image.open(image_path) as image:
+                            native_width, native_height = image.size
+                    except OSError, ValueError:
+                        pass
+                    else:
+                        display_width = min(native_width, max_width)
+                        display_height = max(1, round(native_height * display_width / native_width))
+                        if image_format.width() != display_width or image_format.height() != display_height:
+                            image_format.setWidth(display_width)
+                            image_format.setHeight(display_height)
+                            cursor = QTextCursor(document)
+                            cursor.setPosition(fragment.position())
+                            cursor.setPosition(fragment.position() + fragment.length(), QTextCursor.MoveMode.KeepAnchor)
+                            cursor.setCharFormat(image_format)
+                iterator += 1
+            block = block.next()
+
+        # Changing an inline image's format relayouts the document but must
+        # never turn a resize into navigation. Restore the exact reading
+        # position (clamped only if a now-shorter document makes that needed).
+        scrollbar.setValue(min(scroll_value, scrollbar.maximum()))
 
     def _update_zoom(self, delta: int):
         """Queue a zoom update (debounced to prevent lag during rapid scrolling).
@@ -519,6 +673,9 @@ class HelpWindow(QDialog):
         # Note: application palette changes are handled via the
         # `paletteChanged` signal when available. Keep this method focused on
         # intercepting Ctrl+wheel on the text browser viewport.
+
+        if watched is self.text_browser.viewport() and event.type() == QEvent.Type.Resize:
+            self._image_fit_timer.start()
 
         # Then handle Ctrl+wheel for zooming inside the text browser viewport.
         if watched is self.text_browser.viewport() and event.type() == QEvent.Type.Wheel:
@@ -569,16 +726,16 @@ def clear_math_cache():
         logger.exception("Failed to clear math cache.")
 
 
-class AboutDialog(QWidget):
+class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Program Information")
+        self.setObjectName("aboutDialog")
+        self.setWindowTitle("About MonStim Analyzer")
         self.setWindowIcon(QIcon(os.path.join(get_source_path(), "icon.png")))
         self.setFixedSize(400, 400)
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog)
-
-        # Set white background
-        self.setStyleSheet("background-color: white;")
+        self.setWindowFlags(
+            Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint | Qt.WindowType.WindowCloseButtonHint
+        )
 
         layout = QVBoxLayout(self)
 
@@ -601,27 +758,51 @@ class AboutDialog(QWidget):
         font.setPointSize(12)
 
         program_name = QLabel(SPLASH_INFO["program_name"])
-        program_name.setStyleSheet("font-weight: bold; color: #333333;")
+        program_name.setObjectName("applicationInfoTitle")
         program_name.setFont(font)
         program_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(program_name)
 
         version = QLabel(SPLASH_INFO["version"])
-        version.setStyleSheet("color: #666666;")
+        version.setObjectName("applicationInfoSecondary")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version)
 
         description = QLabel(SPLASH_INFO["description"])
-        description.setStyleSheet("color: #666666;")
+        description.setObjectName("applicationInfoSecondary")
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        description.setWordWrap(True)
         layout.addWidget(description)
 
         copyright = QLabel(SPLASH_INFO["copyright"])
-        copyright.setStyleSheet("color: #999999;")
+        copyright.setObjectName("applicationInfoMuted")
         copyright.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
         layout.addWidget(copyright)
 
-        self.setLayout(layout)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        license_button = buttons.addButton("View License", QDialogButtonBox.ButtonRole.ActionRole)
+        license_button.setObjectName("aboutLicenseButton")
+        license_button.clicked.connect(self._open_license)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 
-    def mousePressEvent(self, event):
-        self.close()
+    def _open_license(self) -> None:
+        """Render the bundled license in MonStim's in-app help viewer."""
+        license_path = _license_path()
+        try:
+            license_text = license_path.read_text(encoding="utf-8")
+        except OSError:
+            logger.exception("Could not read the MonStim license from %s", license_path)
+            QMessageBox.warning(self, "License unavailable", "The bundled license file could not be opened.")
+            return
+
+        license_window = create_help_window(license_text, title="MonStim Analyzer License", parent=self)
+        license_window.exec()
+
+
+def _license_path() -> Path:
+    """Return the authoritative license bundled for the current runtime."""
+    installation_root = Path(get_base_path())
+    if getattr(sys, "frozen", False):
+        return installation_root / "_internal" / "LICENSE"
+    return installation_root / "LICENSE"

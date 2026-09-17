@@ -37,6 +37,10 @@ class MenuBar(QMenuBar):
         import_addon_action.triggered.connect(self.parent.data_manager.import_with_addon)
         import_addon_action.setStatusTip("Import a supported non-MonStim data stream using an installed official add-on")
 
+        install_demos_action = file_menu.addAction("Install Demo Experiments…")
+        install_demos_action.triggered.connect(self.parent.data_manager.install_synthetic_demo_experiments)
+        install_demos_action.setStatusTip("Install the bundled fictional H-reflex, vibration, and stretch experiments")
+
         rename_experiment_action = file_menu.addAction("Rename Current Experiment")
         rename_experiment_action.triggered.connect(self.parent.data_manager.rename_experiment)
         rename_experiment_action.setStatusTip("Change the name of the currently selected experiment")

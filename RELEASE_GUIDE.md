@@ -27,7 +27,7 @@ conda run -n monstim pyinstaller --clean win-main.spec
 - [ ] Verify version number appears correctly in the application
 - [ ] Check that all required files are included in the distribution
 - [ ] Test basic functionality (import, plot, export)
-- [ ] Verify `MonStim Updater.exe` and `monstim-release.json` are present in the release folder.
+- [ ] Verify `_internal\\MonStim Updater.exe`, `_internal\\monstim-release.json`, and `_internal\\LICENSE` are present in the release folder, and that neither updater nor manifest is at the release root.
 - [ ] Test a staged update and rollback with a disposable per-user update root; confirm a sentinel experiment, settings file, and plug-in folder remain byte-for-byte unchanged.
 
 ### 5. Release Distribution

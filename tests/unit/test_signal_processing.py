@@ -297,7 +297,7 @@ class TestPlateauDetection:
     def test_detect_plateau_success(self):
         """Test successful plateau detection."""
         # Use clean amplitudes for reliable plateau detection
-        plateau_start, plateau_end = detect_plateau(self.clean_amplitudes, max_window_size=15, min_window_size=3, threshold=0.3)
+        plateau_start, plateau_end = detect_plateau(self.clean_amplitudes, max_window_size=15, min_window_size=3, threshold=0.15)
 
         assert plateau_start is not None, "Should detect plateau in clean sigmoidal data"
         assert plateau_end is not None, "Should detect plateau in clean sigmoidal data"
@@ -320,12 +320,21 @@ class TestPlateauDetection:
             noisy_linear,
             max_window_size=8,
             min_window_size=3,
-            threshold=0.1,  # Smaller window  # Stricter threshold
+            threshold=0.03,  # 3% of the curve amplitude: a strict relative threshold
         )
 
         # Should not find a plateau in very noisy linear data with strict threshold
         assert plateau_start is None, "Should not detect plateau in noisy linear data"
         assert plateau_end is None, "Should not detect plateau in noisy linear data"
+
+    def test_detect_plateau_is_invariant_to_uniform_amplitude_scaling(self):
+        """A relative threshold should select the same plateau after unit/gain scaling."""
+        kwargs = {"max_window_size": 15, "min_window_size": 3, "threshold": 0.1}
+
+        plateau = detect_plateau(self.clean_amplitudes, **kwargs)
+        scaled_plateau = detect_plateau(self.clean_amplitudes * 1000, **kwargs)
+
+        assert scaled_plateau == plateau
 
     def test_get_avg_mmax_with_plateau(self):
         """Test M-max calculation when plateau is detected."""
@@ -334,7 +343,7 @@ class TestPlateauDetection:
             self.clean_amplitudes,
             max_window_size=15,
             min_window_size=3,
-            threshold=0.3,
+            threshold=0.15,
             validation_tolerance=1.05,
         )
 
@@ -345,23 +354,13 @@ class TestPlateauDetection:
         assert mmax > 0.9 * self.max_amplitude, f"M-max ({mmax}) should be close to max amplitude ({self.max_amplitude})"
         assert mmax <= 1.1 * self.max_amplitude, f"M-max ({mmax}) should not exceed reasonable bounds"
 
-    def test_get_avg_mmax_fallback_method(self):
-        """Test M-max calculation fallback when no plateau detected."""
-        # Linear data without plateau - should use fallback method
+    def test_get_avg_mmax_without_plateau_is_unavailable(self):
+        """M-max is unavailable rather than estimated from a non-plateau curve."""
         linear_voltages = np.linspace(0, 10, 30)
         linear_amplitudes = np.linspace(0, 2, 30)  # No plateau
 
-        mmax = get_avg_mmax(linear_voltages, linear_amplitudes, max_window_size=20, min_window_size=3, threshold=0.3, validation_tolerance=1.05)
-
-        assert mmax is not None, "Should calculate M-max using fallback method"
-        assert isinstance(mmax, (int, float)), "M-max should be numeric"
-
-        # Should be based on high-stimulus region (top 25%)
-        high_stim_threshold = np.percentile(linear_voltages, 75)
-        high_stim_indices = linear_voltages >= high_stim_threshold
-        expected_range = (np.min(linear_amplitudes[high_stim_indices]), np.max(linear_amplitudes[high_stim_indices]))
-
-        assert expected_range[0] <= mmax <= expected_range[1], f"M-max should be in high-stimulus range {expected_range}"
+        with pytest.raises(NoCalculableMmaxError, match="M-max unavailable: no plateau detected"):
+            get_avg_mmax(linear_voltages, linear_amplitudes, max_window_size=20, min_window_size=3, threshold=0.0, validation_tolerance=1.05)
 
     def test_get_avg_mmax_insufficient_data(self):
         """Test M-max calculation with insufficient data."""
@@ -372,13 +371,12 @@ class TestPlateauDetection:
         with pytest.raises(NoCalculableMmaxError):
             get_avg_mmax(empty_voltages, empty_amplitudes)
 
-        # The algorithm is robust and handles single data points via fallback
-        # Let's test that it actually works with minimal data
+        # Fewer than five levels cannot support the minimum S-G window.
         single_voltage = np.array([5.0])
         single_amplitude = np.array([1.0])
 
-        result = get_avg_mmax(single_voltage, single_amplitude)
-        assert result == 1.0, "Single data point should return that amplitude"
+        with pytest.raises(NoCalculableMmaxError, match="at least five stimulus levels"):
+            get_avg_mmax(single_voltage, single_amplitude)
 
     def test_get_avg_mmax_with_stimulus_range(self):
         """Test M-max calculation with stimulus range return."""
@@ -479,7 +477,7 @@ class TestSignalProcessingIntegration:
         assert mmax > np.max(m_wave_amplitudes) * 0.8, "M-max should be in upper range of responses"
 
         # Test plateau detection on the curve
-        plateau_start, plateau_end = detect_plateau(m_wave_amplitudes, max_window_size=8, min_window_size=3, threshold=0.3)
+        plateau_start, plateau_end = detect_plateau(m_wave_amplitudes, max_window_size=8, min_window_size=3, threshold=0.15)
 
         # Depending on noise, plateau might or might not be detected
         if plateau_start is not None:

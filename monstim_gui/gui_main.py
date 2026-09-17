@@ -141,8 +141,29 @@ class MonstimGUI(QMainWindow):
     def schedule_initial_load(self, delay_ms: int = 100) -> None:
         """Restore the last session after the main window has had time to render."""
         QTimer.singleShot(delay_ms, self._restore_last_session)
+        QTimer.singleShot(delay_ms + 300, self._offer_synthetic_demos_for_empty_library)
         QTimer.singleShot(delay_ms + 1500, self._check_official_addons)
         QTimer.singleShot(delay_ms + 2500, self._check_application_updates)
+
+    def _offer_synthetic_demos_for_empty_library(self) -> None:
+        """Offer synthetic demos whenever the managed-data library is empty."""
+        if getattr(self, "headless", False) or self.expts_dict_keys:
+            return
+        if not self.data_manager.bundled_synthetic_demo_archive().is_file():
+            logger.warning("Bundled synthetic-demo archive is unavailable; skipping empty-library offer")
+            return
+
+        choice = QMessageBox.question(
+            self,
+            "Explore MonStim with Synthetic Data",
+            "No experiments are installed yet. Would you like to install MonStim's bundled synthetic demos?\n\n"
+            "They include H-reflex recruitment, 100 Hz vibration, and stretch ramp-hold-release experiments. "
+            "They are installed in your normal data folder, work like ordinary experiments, and can be deleted at any time.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if choice == QMessageBox.StandardButton.Yes:
+            self.data_manager.install_synthetic_demo_experiments()
 
     def _check_application_updates(self) -> None:
         """Check the signed application catalog daily without delaying startup."""
@@ -853,7 +874,7 @@ class MonstimGUI(QMainWindow):
 
     def show_about_screen(self):
         dialog = AboutDialog(self)
-        dialog.show()
+        dialog.exec()
 
     def show_help_dialog(self, topic=None):
         """Show help dialog using HelpFileRepository."""

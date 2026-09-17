@@ -51,7 +51,14 @@ def test_session_notice_codes():
         _make_recording("r0", 0.5, stim_delay=1.0),
         _make_recording("r1", 1.0, stim_delay=1.0),
     ]
-    sess = Session(session_id="S-notices", recordings=recs, annot=SessionAnnot.create_empty())
+    # Keep the acquisition bound explicit: the application-wide default may be
+    # wider than this synthetic recording's latency-window scenario.
+    sess = Session(
+        session_id="S-notices",
+        recordings=recs,
+        annot=SessionAnnot.create_empty(),
+        config={"time_window": 100.0},
+    )
     # Inject custom windows after construction to avoid default parameter effects
     sess.annot.latency_windows = windows
     sess.update_latency_window_parameters()

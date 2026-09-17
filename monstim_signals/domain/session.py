@@ -1356,8 +1356,8 @@ class Session:
                 channel_m_max = self.get_m_max(self.default_method, i, return_mmax_stim_range=False)
                 line = f"- {channel_name}: M-max amplitude ({self.default_method}) = {channel_m_max:.2f} V"
                 report.append(line)
-            except TypeError:
-                line = f"- Channel {i} does not have a valid M-max amplitude."
+            except NoCalculableMmaxError as exc:
+                line = f"- {channel_name}: {exc}"
                 report.append(line)
 
         for line in report:

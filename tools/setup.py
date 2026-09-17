@@ -51,14 +51,14 @@ setup(
     long_description_content_type="text/markdown",
     author="Andrew Worthy",
     author_email="aeworth@emory.edu",
-    url="https://github.com/AEWorthy/MonStim_Analysis",
-    license="BSD-2-Clause",
+    url="https://github.com/AEWorthy/MonStim-Analyzer",
+    license="PolyForm Noncommercial 1.0.0",
+    license_files=["LICENSE"],
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=load_install_requires(),
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
 )

@@ -4,6 +4,8 @@
 
 Use **File > Import an Experiment** to import one experiment folder. Use **File > Import Multiple Experiments** when one parent folder contains several experiment folders. Import copies the source recordings into MonStim's managed data store; keep the original acquisition files as your archive.
 
+Before arranging folders, read [Understanding the data hierarchy](data_hierarchy.md). It defines the recording, session, dataset, and experiment units that this layout represents.
+
 This page covers native MonStim V3D/V3H CSV exports. For another acquisition system, do not rename files to resemble MonStim CSVs; use **File > Import using Add-on…** and follow [Importer add-ons](importer_addons.md). If no add-on recognizes your source, [request an importer](https://github.com/AEWorthy/MonStim-Analyzer/issues/new?template=importer_request.yml).
 
 ## Folder layout
@@ -35,9 +37,10 @@ Each dataset folder contains recording CSV files. Files with the same session id
 ## Before you begin
 
 - Use descriptive experiment and dataset folder names.
+- Make each dataset folder one biological unit x one condition (for example, one animal under one treatment); place that unit's repeated sessions inside it.
 - Verify that the CSV files use the expected MonStim export format and represent the intended channel mapping.
 - Confirm that recordings grouped into one session belong to the same acquisition run and have compatible timing and channels.
-- Keep each biological/experimental unit in the hierarchy you intend to analyze: experiment > dataset > session > recording.
+- Keep each biological/experimental unit in the hierarchy you intend to analyze: experiment > dataset > session > recording. See [Understanding the data hierarchy](data_hierarchy.md) if you need to decide which level a measurement or condition belongs to.
 
 ## Steps and review
 
