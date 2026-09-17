@@ -30,10 +30,7 @@ logger = logging.getLogger(__name__)
 
 def get_splash_asset_path(asset_name: str) -> str:
     """Resolve a bundled splash asset without importing the analysis package."""
-    if getattr(sys, "frozen", False):
-        resource_root = Path(sys._MEIPASS)
-    else:
-        resource_root = Path(__file__).resolve().parents[2]
+    resource_root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
     return str(resource_root / "assets" / asset_name)
 
 

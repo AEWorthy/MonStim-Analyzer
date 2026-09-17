@@ -80,8 +80,7 @@ def detect_plateau(
             plateau_end_idx = None
     if plateau_start_idx is not None and plateau_end_idx is not None:
         logger.debug(
-            "Plateau region detected with window size %s. Relative variation "
-            "threshold: %s; reference amplitude: %s; variation limit: %s.",
+            "Plateau region detected with window size %s. Relative variation threshold: %s; reference amplitude: %s; variation limit: %s.",
             max_window_size,
             threshold,
             reference_amplitude,

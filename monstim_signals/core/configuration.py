@@ -211,7 +211,7 @@ class ResolvedConfig(Mapping[str, Any]):
             raise ValueError("m_max_args requires 1 <= min_window_size <= max_window_size")
         if "savgol_window_ratio" in mmax and not 0 < float(mmax["savgol_window_ratio"]) <= 1:
             raise ValueError("m_max_args.savgol_window_ratio must be in (0, 1]")
-        if "threshold" in mmax and not 0 <= float(mmax["threshold"]):
+        if "threshold" in mmax and not float(mmax["threshold"]) >= 0:
             raise ValueError("m_max_args.threshold must be non-negative")
         for key in ("max_window_size", "min_window_size", "savgol_window_length"):
             if key in mmax and mmax[key] is not None:
