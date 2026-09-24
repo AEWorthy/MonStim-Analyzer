@@ -64,6 +64,30 @@ def test_automatic_preview_preserves_exclusion_added_after_dialog_open(qapplicat
     assert states["rec-1"]["status"] == "Existing exclusion"
 
 
+def test_preview_uses_live_exclusion_state_after_dialog_open(qapplication):
+    editor = make_editor()
+    editor.current_session.excluded_recordings.add("rec-1")
+    editor.update_preview()
+    assert editor._last_recordings_data[0]["currently_excluded"] is True
+
+    editor.current_session.excluded_recordings.remove("rec-1")
+    editor.update_preview()
+
+    states = {entry["recording"].id: entry for entry in editor._last_recordings_data}
+    assert states["rec-1"]["currently_excluded"] is False
+    assert states["rec-1"]["will_exclude"] is False
+    assert states["rec-1"]["status"] == "Included"
+
+
+def test_external_exclusion_change_invalidates_preview(qapplication):
+    editor = make_editor()
+    original_signature = editor._last_preview_signature
+
+    editor.current_session.excluded_recordings.add("rec-1")
+
+    assert editor._preview_signature() != original_signature
+
+
 def test_changing_apply_scope_rebuilds_the_recording_preview(qapplication):
     parent = QWidget()
     first_session = DummySession()

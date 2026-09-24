@@ -62,11 +62,6 @@ class RecordingExclusionEditor(QDialog):
         self.current_dataset = parent.current_dataset
         self.current_experiment = parent.current_experiment
 
-        # Snapshot exclusions at dialog-open time.  They are a protected baseline
-        # until the user explicitly marks a recording included in this dialog.
-        self.initial_exclusion_states: dict[tuple[str, str], bool] = {}
-        self._capture_initial_exclusion_states()
-
         # Track preview exclusions (not yet applied)
         self.preview_excluded_recordings: set[str] = set()
 
@@ -771,8 +766,10 @@ class RecordingExclusionEditor(QDialog):
         return detail_dialog
 
     def _preview_signature(self) -> tuple[Any, ...]:
-        """Return the settings whose committed values produced the table."""
+        """Return the settings and live inclusion state behind the table."""
+        inclusion_state = tuple((str(session.id), tuple(sorted(map(str, session.excluded_recordings)))) for session in self.get_sessions_for_level())
         return (
+            inclusion_state,
             self.level_combo.currentData(),
             self.stimulus_group.isChecked(),
             self.threshold_type_combo.currentData(),
@@ -844,22 +841,6 @@ class RecordingExclusionEditor(QDialog):
             return
 
         self.update_preview()
-
-    def _capture_initial_exclusion_states(self) -> None:
-        """Capture the opening state for every session the dialog may review."""
-        sessions = []
-        if self.current_experiment is not None:
-            for dataset in self.current_experiment.datasets:
-                sessions.extend(dataset.sessions)
-        elif self.current_dataset is not None:
-            sessions.extend(self.current_dataset.sessions)
-        elif self.current_session is not None:
-            sessions.append(self.current_session)
-
-        for session in sessions:
-            excluded = session.excluded_recordings
-            for recording in session.get_all_recordings(include_excluded=True):
-                self.initial_exclusion_states[(str(session.id), str(recording.id))] = recording.id in excluded
 
     def get_sessions_for_level(self) -> list[Session]:
         """Get list of sessions based on selected application level."""
@@ -1308,14 +1289,11 @@ class RecordingExclusionEditor(QDialog):
                     evaluation["flagged"] = True
                     evaluation["severity"] = "high"
                 current_status = recording.id in session.excluded_recordings
-                initial_excluded = self.initial_exclusion_states.setdefault(key, current_status)
                 manual_decision = self.manual_decisions.get(key)
-                # Automatic criteria are additive: an exclusion that was
-                # present when the dialog opened, or that appeared while the
-                # dialog was open, must not become an inclusion merely because
-                # the current criteria do not flag that recording.  An
-                # explicit Mark Included decision remains the only override.
-                existing_exclusion = initial_excluded or current_status
+                # Automatic criteria are additive to the live session state.
+                # Only an explicit Mark Included decision overrides an existing
+                # exclusion or an automatic flag.
+                existing_exclusion = current_status
                 will_exclude = manual_decision if manual_decision is not None else (existing_exclusion or evaluation["flagged"])
 
                 if will_exclude:
@@ -1514,8 +1492,10 @@ class RecordingExclusionEditor(QDialog):
             recording = entry["recording"]
             session = entry["session"]
             key = self._recording_key(recording, session)
-            current_status = entry["currently_excluded"]
-            existing_exclusion = self.initial_exclusion_states.setdefault(key, current_status) or current_status
+            current_status = entry["session"].excluded_recordings
+            currently_excluded = recording.id in current_status
+            entry["currently_excluded"] = currently_excluded
+            existing_exclusion = currently_excluded
             manual_decision = self.manual_decisions.get(key)
             will_exclude = manual_decision if manual_decision is not None else (existing_exclusion or entry["evaluation"]["flagged"])
 
@@ -1892,7 +1872,8 @@ class RecordingExclusionEditor(QDialog):
         self._set_apply_busy_cursor()
 
         try:
-            if self._preview_is_stale:
+            if self._preview_is_stale or self._preview_signature() != self._last_preview_signature:
+                self._mark_preview_stale()
                 self._restore_apply_busy_cursor()
                 QMessageBox.information(
                     self,
