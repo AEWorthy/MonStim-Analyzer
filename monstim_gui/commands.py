@@ -1248,7 +1248,6 @@ class ToggleDatasetInclusionCommand(Command):
         # Load annot minimally through repo.load or by reading file
         # To keep it lightweight, read annot JSON and write back
         import json
-        from dataclasses import asdict
 
         from monstim_signals.core import ExperimentAnnot
 
@@ -1269,7 +1268,7 @@ class ToggleDatasetInclusionCommand(Command):
                 if self.dataset_id in annot.excluded_datasets:
                     annot.excluded_datasets = [d for d in annot.excluded_datasets if d != self.dataset_id]
 
-            repo.expt_js.write_text(json.dumps(asdict(annot), indent=2))
+            repo.save_annotation(annot)
         except Exception as e:
             logger.exception(f"Failed to update dataset inclusion: {e!s}")
             raise Exception(f"Failed to update dataset inclusion: {e!s}") from e
@@ -1354,11 +1353,11 @@ class ToggleCompletionStatusCommand(Command):
         self.command_name = f"Mark {level.title()} '{obj_name}' as {action}"
 
     def _apply_status(self, status: bool):
-        """Apply completion status by directly modifying annotation JSON files."""
-        from dataclasses import asdict
+        """Apply completion status through the hierarchy repositories."""
         from pathlib import Path
 
         from monstim_signals.core import DatasetAnnot, ExperimentAnnot, SessionAnnot
+        from monstim_signals.io.repositories import ExperimentRepository, SessionRepository
 
         try:
             match self.level:
@@ -1367,7 +1366,8 @@ class ToggleCompletionStatusCommand(Command):
                         logger.error(f"Experiment '{self.experiment_id}' not found in expts_dict")
                         return
                     exp_path = Path(self.gui.expts_dict[self.experiment_id])
-                    annot_file = exp_path / "experiment.annot.json"
+                    repo = ExperimentRepository(exp_path)
+                    annot_file = repo.expt_js
 
                     if annot_file.exists():
                         annot_dict = json.loads(annot_file.read_text())
@@ -1376,7 +1376,7 @@ class ToggleCompletionStatusCommand(Command):
                         annot = ExperimentAnnot.create_empty()
 
                     annot.is_completed = status
-                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
+                    repo.save_annotation(annot)
 
                     # Also update the in-memory object if it's currently loaded so UI updates immediately
                     try:
@@ -1413,12 +1413,9 @@ class ToggleCompletionStatusCommand(Command):
                         annot = DatasetAnnot.create_empty()
 
                     annot.is_completed = status
-                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
+                    from monstim_signals.io.repositories import DatasetRepository
 
-                    if self.refresh_catalog:
-                        from monstim_signals.io.experiment_catalog import refresh_dataset_annotation
-
-                        refresh_dataset_annotation(dataset_path)
+                    DatasetRepository(dataset_path).save_annotation(annot, refresh_catalog=self.refresh_catalog)
 
                     # Update in-memory dataset object if present
                     try:
@@ -1429,7 +1426,8 @@ class ToggleCompletionStatusCommand(Command):
                         ):
                             for ds in self.gui.current_experiment.datasets:
                                 if getattr(ds, "id", None) == self.dataset_id:
-                                    ds.is_completed = status
+                                    ds.annot.is_completed = status
+                                    ds.annot.date_modified = annot.date_modified
                                     break
                     except Exception:
                         logger.exception(f"Failed to update in-memory dataset object for dataset '{self.dataset_id}'", exc_info=True)
@@ -1459,18 +1457,15 @@ class ToggleCompletionStatusCommand(Command):
                         annot = SessionAnnot.create_empty()
 
                     annot.is_completed = status
-                    annot_file.write_text(json.dumps(asdict(annot), indent=2))
-
-                    from monstim_signals.io.experiment_catalog import refresh_session_annotation
-
-                    refresh_session_annotation(session_path)
+                    SessionRepository(session_path).save_annotation(annot)
 
                     # Update in-memory session object if present
                     try:
                         if hasattr(self.gui, "current_dataset") and self.gui.current_dataset and getattr(self.gui.current_dataset, "sessions", None):
                             for s in self.gui.current_dataset.sessions:
                                 if getattr(s, "id", None) == self.target_id:
-                                    s.is_completed = status
+                                    s.annot.is_completed = status
+                                    s.annot.date_modified = annot.date_modified
                                     break
                     except Exception:
                         logger.exception(f"Failed to update in-memory session object for session '{self.target_id}'", exc_info=True)
@@ -1538,9 +1533,6 @@ class SetChildCompletionStatusCommand(Command):
 
     def _persist(self, statuses: dict[int, bool]) -> None:
         """Apply and persist statuses, rolling back partial annotation writes on failure."""
-        from dataclasses import asdict
-        from datetime import UTC, datetime
-
         from monstim_signals.io.experiment_catalog import refresh_dataset_annotations, refresh_session_annotations
         from monstim_signals.io.repositories import SessionRepository
 
@@ -1550,6 +1542,7 @@ class SetChildCompletionStatusCommand(Command):
         annotation_paths = [repository.session_js if self.child_level == "session" else repository.dataset_js for repository in repositories]
         original_contents = {path: path.read_bytes() for path in annotation_paths}
         previous_statuses = {id(child): bool(getattr(child, "is_completed", False)) for child in self._children}
+        previous_modified = {id(child): child.annot.date_modified for child in self._children}
 
         changed: list[object] = []
         try:
@@ -1565,16 +1558,18 @@ class SetChildCompletionStatusCommand(Command):
                     repository = getattr(dataset, "repo", None)
                     if repository is None:
                         raise RuntimeError(f"Dataset '{dataset.id}' cannot be saved because it has no repository")
-                    dataset.annot.date_modified = datetime.now(UTC).isoformat(timespec="seconds")
-                    repository.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
+                    repository.save_annotation(dataset.annot, refresh_catalog=False)
                     dataset_paths.append(repository.folder)
                 refresh_dataset_annotations(dataset_paths)
         except Exception:
             for child in changed:
                 child.annot.is_completed = previous_statuses[id(child)]
+                child.annot.date_modified = previous_modified[id(child)]
+            from monstim_signals.io.repositories import restore_annotation_file
+
             for path, contents in original_contents.items():
                 try:
-                    path.write_bytes(contents)
+                    restore_annotation_file(path, contents)
                 except OSError:
                     logger.exception("Could not restore completion annotation after failed batch update: %s", path)
             try:

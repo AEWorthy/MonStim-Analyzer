@@ -9,7 +9,6 @@ plotting without exposing research data.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import tempfile
@@ -22,6 +21,12 @@ import numpy as np
 
 from monstim_signals.core import DatasetAnnot, ExperimentAnnot, LatencyWindow, RecordingAnnot, SessionAnnot, SignalChannel, StimCluster
 from monstim_signals.io.experiment_catalog import build_catalog
+from monstim_signals.io.repositories import (
+    DatasetRepository,
+    ExperimentRepository,
+    RecordingRepository,
+    SessionRepository,
+)
 
 SCAN_RATE_HZ = 8_000
 PRE_STIM_MS = 250
@@ -126,7 +131,7 @@ def _write_h_reflex_experiment(root: Path) -> None:
     """Write the third native demo using the same layout as the other protocols."""
     experiment = root / "Synthetic H-reflex Recruitment"
     experiment.mkdir(parents=True)
-    (experiment / "experiment.annot.json").write_text(json.dumps(asdict(ExperimentAnnot.create_empty()), indent=2), encoding="utf-8")
+    ExperimentRepository(experiment).save_annotation(ExperimentAnnot.create_empty())
     scan_rate, pre_stim_ms, post_stim_ms = 8_000, 10, 40
     time_ms = np.arange(int((pre_stim_ms + post_stim_ms) * scan_rate / 1_000)) * 1_000 / scan_rate - pre_stim_ms
     channels = [SignalChannel(name="TA", unit="mV", type_override="EMG"), SignalChannel(name="LG", unit="mV", type_override="EMG")]
@@ -136,7 +141,7 @@ def _write_h_reflex_experiment(root: Path) -> None:
         dataset.mkdir()
         annotation = DatasetAnnot.create_empty()
         annotation.date, annotation.animal_id, annotation.condition = "260101", f"SYN-HREFLEX-C{condition_index}", condition_name
-        (dataset / "dataset.annot.json").write_text(json.dumps(asdict(annotation), indent=2), encoding="utf-8")
+        DatasetRepository(dataset).save_annotation(annotation, refresh_catalog=False)
         for session_index, session_id in enumerate(SESSION_IDS):
             session = dataset / session_id
             session.mkdir()
@@ -146,7 +151,7 @@ def _write_h_reflex_experiment(root: Path) -> None:
                 LatencyWindow(name="M-wave", color="#dc2626", start_times=[3.5, 3.5], durations=[5.0, 5.0]),
                 LatencyWindow(name="H-reflex", color="#2563eb", start_times=[23.0, 23.0], durations=[8.0, 8.0]),
             ]
-            (session / "session.annot.json").write_text(json.dumps(asdict(session_annotation), indent=2), encoding="utf-8")
+            SessionRepository(session).save_annotation(session_annotation, refresh_catalog=False)
             for index, nominal_intensity in enumerate(intensities):
                 rng = np.random.default_rng(80_000 + condition_index * 10_000 + session_index * 100 + index)
                 intensity = float(np.clip(nominal_intensity * rng.normal(1.0, 0.025), 0.1, 9.0))
@@ -168,15 +173,16 @@ def _write_h_reflex_experiment(root: Path) -> None:
                     "primary_stim": 1,
                     "num_samples": raw.shape[0],
                 }
-                stem.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-                stem.with_suffix(".annot.json").write_text(json.dumps(asdict(RecordingAnnot.create_empty()), indent=2), encoding="utf-8")
+                recording_repository = RecordingRepository(stem)
+                recording_repository.save_metadata(meta)
+                recording_repository.save_annotation(RecordingAnnot.create_empty(), refresh_catalog=False)
     build_catalog(experiment)
 
 
 def _write_experiment(root: Path, *, name: str, protocol: str, seed: int) -> None:
     experiment = root / name
     experiment.mkdir(parents=True)
-    (experiment / "experiment.annot.json").write_text(json.dumps(asdict(ExperimentAnnot.create_empty()), indent=2), encoding="utf-8")
+    ExperimentRepository(experiment).save_annotation(ExperimentAnnot.create_empty())
     time_ms = np.arange(int((PRE_STIM_MS + POST_STIM_MS) * SCAN_RATE_HZ / 1_000)) * 1_000 / SCAN_RATE_HZ - PRE_STIM_MS
     is_stretch = protocol == "stretch"
     stim_kind = "Motor Length" if is_stretch else "Vibration"
@@ -195,7 +201,7 @@ def _write_experiment(root: Path, *, name: str, protocol: str, seed: int) -> Non
         annotation.date = "260101"
         annotation.animal_id = f"SYN-{protocol.upper()}-C{condition_index}"
         annotation.condition = condition_name
-        (dataset / "dataset.annot.json").write_text(json.dumps(asdict(annotation), indent=2), encoding="utf-8")
+        DatasetRepository(dataset).save_annotation(annotation, refresh_catalog=False)
         for session_index, session_id in enumerate(SESSION_IDS):
             session = dataset / session_id
             session.mkdir()
@@ -205,7 +211,7 @@ def _write_experiment(root: Path, *, name: str, protocol: str, seed: int) -> Non
                 LatencyWindow(name="Background", color="#6b7280", start_times=[-200.0] * len(channels), durations=[150.0] * len(channels)),
                 LatencyWindow(name="Response", color="#2563eb", start_times=[0.0] * len(channels), durations=[duration] * len(channels)),
             ]
-            (session / "session.annot.json").write_text(json.dumps(asdict(session_annotation), indent=2), encoding="utf-8")
+            SessionRepository(session).save_annotation(session_annotation, refresh_catalog=False)
             for index, nominal_intensity in enumerate(INTENSITIES):
                 rng = np.random.default_rng(seed + condition_index * 10_000 + session_index * 100 + index)
                 intensity = float(np.clip(nominal_intensity * rng.normal(1.0, 0.035), 0.05, 1.0))
@@ -231,8 +237,9 @@ def _write_experiment(root: Path, *, name: str, protocol: str, seed: int) -> Non
                     "primary_stim": 1,
                     "num_samples": raw.shape[0],
                 }
-                stem.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-                stem.with_suffix(".annot.json").write_text(json.dumps(asdict(RecordingAnnot.create_empty()), indent=2), encoding="utf-8")
+                recording_repository = RecordingRepository(stem)
+                recording_repository.save_metadata(meta)
+                recording_repository.save_annotation(RecordingAnnot.create_empty(), refresh_catalog=False)
     build_catalog(experiment)
 
 

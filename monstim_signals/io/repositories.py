@@ -41,6 +41,23 @@ from monstim_signals.io.experiment_catalog import (
 )
 
 
+def _stamp_annotation(annot) -> None:
+    modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+    if isinstance(annot, dict):
+        annot["date_modified"] = modified
+    else:
+        annot.date_modified = modified
+
+
+def _annotation_payload(annot) -> dict:
+    return annot if isinstance(annot, dict) else asdict(annot)
+
+
+def restore_annotation_file(path: Path, contents: bytes) -> None:
+    """Restore exact annotation bytes during rollback without changing its timestamp."""
+    path.write_bytes(contents)
+
+
 def _close_loaded_objects(objects) -> None:
     """Best-effort close for partially loaded domain objects."""
     for obj in list(objects):
@@ -115,7 +132,7 @@ class RecordingRepository:
         try:
             report = migrate_meta_dict(meta_dict, strict_version=strict_version)
             if report.changed and allow_write and catalog_record is None:
-                self.meta_js.write_text(json.dumps(meta_dict, indent=2))
+                self.save_metadata(meta_dict)
         except FutureVersionError:
             raise
         meta = RecordingMeta.from_dict(meta_dict)
@@ -131,7 +148,7 @@ class RecordingRepository:
                     logger.warning(f"Annotation file '{self.annot_js}' is empty. Recreating empty annotation.")
                     annot_dict = asdict(RecordingAnnot.create_empty())
                     if allow_write:
-                        self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+                        self.save_annotation(annot_dict, refresh_catalog=False)
                 else:
                     try:
                         annot_dict = json.loads(text)
@@ -153,13 +170,13 @@ class RecordingRepository:
                             logger.exception(f"Failed to move corrupt annotation file {self.annot_js}")
                         annot_dict = asdict(RecordingAnnot.create_empty())
                         if allow_write:
-                            self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+                            self.save_annotation(annot_dict, refresh_catalog=False)
 
                 try:
                     report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
                         logger.debug(f"Recording annotation migrated {report.original_version}->{report.final_version} for {self.annot_js.name}")
-                        self.annot_js.write_text(json.dumps(annot_dict, indent=2))
+                        self.save_annotation(annot_dict, refresh_catalog=False)
                 except FutureVersionError as e:
                     logger.error(str(e))
                     raise
@@ -173,7 +190,7 @@ class RecordingRepository:
             logger.warning(f"Annotation file '{self.annot_js}' not found. Using a new empty annotation in-memory.")
             annot = RecordingAnnot.create_empty()
             if allow_write:
-                self.annot_js.write_text(json.dumps(asdict(annot), indent=2))
+                self.save_annotation(annot, refresh_catalog=False)
 
         # 3) Optionally avoid opening the HDF5 file here to speed up initial loads.
         #    If the config specifies `lazy_open_h5=True` we will not open the
@@ -213,12 +230,19 @@ class RecordingRepository:
         Only rewrite the annot JSON (we assume meta/raw never change).
         This is called when the user edits the recording's annotation.
         """
-        try:
-            recording.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
-        except Exception:
-            logger.debug("Failed to set date_modified on RecordingAnnot", exc_info=True)
-        self.annot_js.write_text(json.dumps(asdict(recording.annot), indent=2))
-        refresh_recording_annotation(self.stem)
+        self.save_annotation(recording.annot)
+
+    def save_metadata(self, metadata: dict) -> None:
+        """Persist recording metadata through its repository-owned file path."""
+        self.meta_js.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+    def save_annotation(self, annot: RecordingAnnot | dict, *, refresh_catalog: bool = True, update_modified: bool = True) -> None:
+        """Persist recording annotation data and consistently update its timestamp."""
+        if update_modified:
+            _stamp_annotation(annot)
+        self.annot_js.write_text(json.dumps(_annotation_payload(annot), indent=2), encoding="utf-8")
+        if refresh_catalog:
+            refresh_recording_annotation(self.stem)
 
     def rename(self, new_stem: Path, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename recording files to a new stem atomically with retries on Windows locks.
@@ -301,6 +325,14 @@ class SessionRepository:
         # Ensure the session_id reflects the new folder name
         self.session_id = new_folder.name
 
+    def save_annotation(self, annot: SessionAnnot | dict, *, refresh_catalog: bool = True, update_modified: bool = True) -> None:
+        """Write a session annotation and consistently update its modification time."""
+        if update_modified:
+            _stamp_annotation(annot)
+        self.session_js.write_text(json.dumps(_annotation_payload(annot), indent=2), encoding="utf-8")
+        if refresh_catalog:
+            refresh_session_annotations([self.folder])
+
     def load(
         self,
         config=None,
@@ -351,7 +383,7 @@ class SessionRepository:
                     logger.warning(f"Session annotation file '{self.session_js}' is empty. Creating empty session annotation.")
                     session_annot_dict = asdict(SessionAnnot.create_empty())
                     if allow_write:
-                        self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                        self.save_annotation(session_annot_dict)
                 else:
                     try:
                         session_annot_dict = json.loads(text)
@@ -373,13 +405,13 @@ class SessionRepository:
                             logger.exception(f"Failed to move corrupt session annotation file {self.session_js}")
                         session_annot_dict = asdict(SessionAnnot.create_empty())
                         if allow_write:
-                            self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                            self.save_annotation(session_annot_dict)
 
                 try:
                     report = migrate_annotation_dict(session_annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
                         logger.debug(f"Session annotation migrated {report.original_version}->{report.final_version} for {self.session_js.name}")
-                        self.session_js.write_text(json.dumps(session_annot_dict, indent=2))
+                        self.save_annotation(session_annot_dict)
                 except FutureVersionError as e:
                     logger.error(e)
                     raise
@@ -399,7 +431,7 @@ class SessionRepository:
                     logger.warning(f"Session annotation file '{self.session_js}' not found. Creating a new empty one.")
                     session_annot = SessionAnnot.create_empty()
                 if allow_write:
-                    self.session_js.write_text(json.dumps(asdict(session_annot), indent=2))
+                    self.save_annotation(session_annot)
             except Exception:
                 _close_loaded_objects(recordings)
                 raise
@@ -441,11 +473,7 @@ class SessionRepository:
             repository = session.repo
             if repository is None:
                 continue
-            try:
-                session.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
-            except Exception:
-                logger.exception("Failed to set date_modified on SessionAnnot", exc_info=True)
-            repository.session_js.write_text(json.dumps(asdict(session.annot), indent=2))
+            repository.save_annotation(session.annot, refresh_catalog=False)
             saved_paths.append(repository.folder)
         refresh_session_annotations(saved_paths)
 
@@ -578,7 +606,7 @@ class DatasetRepository:
                     logger.warning(f"Dataset annotation file '{self.dataset_js}' is empty. Creating empty dataset annotation.")
                     dataset_annot_dict = asdict(DatasetAnnot.from_ds_name(self.dataset_id))
                     if allow_write:
-                        self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                        self.save_annotation(dataset_annot_dict, refresh_catalog=False)
                 else:
                     try:
                         dataset_annot_dict = json.loads(text)
@@ -600,13 +628,13 @@ class DatasetRepository:
                             logger.exception(f"Failed to move corrupt dataset annotation file {self.dataset_js}")
                         dataset_annot_dict = asdict(DatasetAnnot.from_ds_name(self.dataset_id))
                         if allow_write:
-                            self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                            self.save_annotation(dataset_annot_dict, refresh_catalog=False)
 
                 try:
                     report = migrate_annotation_dict(dataset_annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
                         logger.debug(f"Dataset annotation migrated {report.original_version}->{report.final_version} for {self.dataset_js.name}")
-                        self.dataset_js.write_text(json.dumps(dataset_annot_dict, indent=2))
+                        self.save_annotation(dataset_annot_dict, refresh_catalog=False)
                 except FutureVersionError as e:
                     logger.error(e)
                     raise
@@ -622,7 +650,7 @@ class DatasetRepository:
                 logger.info(f"Session annotation file '{self.dataset_js}' not found. Using the dataset name to create a new one (in-memory).")
                 dataset_annot = DatasetAnnot.from_ds_name(self.dataset_id)
                 if allow_write:
-                    self.dataset_js.write_text(json.dumps(asdict(dataset_annot), indent=2))
+                    self.save_annotation(dataset_annot, refresh_catalog=False)
             except Exception:
                 _close_loaded_objects(sessions)
                 raise
@@ -647,12 +675,15 @@ class DatasetRepository:
         Session and recording mutations save their own annotation files. This
         avoids turning a dataset-only change into a full recursive write.
         """
-        try:
-            dataset.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
-        except Exception:
-            logger.debug("Failed to set date_modified on DatasetAnnot", exc_info=True)
-        self.dataset_js.write_text(json.dumps(asdict(dataset.annot), indent=2))
-        refresh_dataset_annotation(self.folder)
+        self.save_annotation(dataset.annot)
+
+    def save_annotation(self, annot: DatasetAnnot | dict, *, refresh_catalog: bool = True, update_modified: bool = True) -> None:
+        """Persist dataset annotation data and consistently update its timestamp."""
+        if update_modified:
+            _stamp_annotation(annot)
+        self.dataset_js.write_text(json.dumps(_annotation_payload(annot), indent=2), encoding="utf-8")
+        if refresh_catalog:
+            refresh_dataset_annotation(self.folder)
 
     def rename(self, new_folder: Path, dataset=None, attempts: int = 3, wait: float = 0.5) -> None:
         """Rename the dataset folder, retrying on transient Windows locks.
@@ -1015,7 +1046,7 @@ class ExperimentRepository:
                     logger.warning(f"Experiment annotation file '{self.expt_js}' is empty. Creating a new one.")
                     annot_dict = asdict(ExperimentAnnot.create_empty())
                     if allow_write:
-                        self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                        self.save_annotation(annot_dict)
                 else:
                     try:
                         annot_dict = json.loads(text)
@@ -1037,13 +1068,13 @@ class ExperimentRepository:
                             logger.exception(f"Failed to move corrupt experiment annotation file {self.expt_js}")
                         annot_dict = asdict(ExperimentAnnot.create_empty())
                         if allow_write:
-                            self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                            self.save_annotation(annot_dict)
 
                 try:
                     report = migrate_annotation_dict(annot_dict, strict_version=strict_version)
                     if report.changed and allow_write:
                         logger.debug(f"Experiment annotation migrated {report.original_version}->{report.final_version} for {self.expt_js.name}")
-                        self.expt_js.write_text(json.dumps(annot_dict, indent=2))
+                        self.save_annotation(annot_dict)
                 except FutureVersionError as e:
                     logger.error(str(e))
                     raise
@@ -1059,7 +1090,7 @@ class ExperimentRepository:
                 logger.info(f"Experiment annotation file '{self.expt_js}' not found. Using a new empty annotation in-memory.")
                 annot = ExperimentAnnot.create_empty()
                 if allow_write:
-                    self.expt_js.write_text(json.dumps(asdict(annot), indent=2))
+                    self.save_annotation(annot)
             except Exception:
                 _close_loaded_objects(datasets)
                 raise
@@ -1124,8 +1155,31 @@ class ExperimentRepository:
         Child objects persist themselves when changed, so experiment exclusion
         and metadata edits must not rewrite the complete experiment tree.
         """
-        try:
-            expt.annot.date_modified = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
-        except Exception:
-            logger.debug("Failed to set date_modified on ExperimentAnnot", exc_info=True)
-        self.expt_js.write_text(json.dumps(asdict(expt.annot), indent=2))
+        self.save_annotation(expt.annot)
+
+    def save_annotation(self, annot: ExperimentAnnot | dict, *, update_modified: bool = True) -> None:
+        """Persist experiment annotation data and consistently update its timestamp."""
+        if update_modified:
+            _stamp_annotation(annot)
+        self.expt_js.write_text(json.dumps(_annotation_payload(annot), indent=2), encoding="utf-8")
+
+
+def save_annotation_file(
+    path: Path,
+    annot: dict,
+    *,
+    update_modified: bool = True,
+    refresh_catalog: bool = True,
+) -> None:
+    """Route an annotation path to its hierarchy repository save function."""
+    if path.name == "session.annot.json":
+        SessionRepository(path.parent).save_annotation(annot, refresh_catalog=refresh_catalog, update_modified=update_modified)
+    elif path.name == "dataset.annot.json":
+        DatasetRepository(path.parent).save_annotation(annot, refresh_catalog=refresh_catalog, update_modified=update_modified)
+    elif path.name == "experiment.annot.json":
+        ExperimentRepository(path.parent).save_annotation(annot, update_modified=update_modified)
+    elif path.name.endswith(".annot.json"):
+        stem_name = path.name[: -len(".annot.json")]
+        RecordingRepository(path.with_name(stem_name)).save_annotation(annot, refresh_catalog=refresh_catalog, update_modified=update_modified)
+    else:
+        raise ValueError(f"Unrecognized annotation path: {path}")

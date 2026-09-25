@@ -7,13 +7,12 @@ atomically activates the managed-store representation.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
 import uuid
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ import h5py
 import numpy as np
 
 from monstim_signals.core import RecordingAnnot
+from monstim_signals.io.repositories import RecordingRepository
 from monstim_signals.version import DATA_VERSION
 
 
@@ -126,8 +126,8 @@ def write_recording(recording: NormalizedRecording, destination: Path, *, overwr
     }
     if provenance["importer"] or provenance["source"]:
         metadata["import_provenance"] = provenance
-    targets[1].write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    targets[2].write_text(json.dumps(asdict(RecordingAnnot.create_empty()), indent=2), encoding="utf-8")
+    RecordingRepository(stem).save_metadata(metadata)
+    RecordingRepository(stem).save_annotation(RecordingAnnot.create_empty(), refresh_catalog=False)
     return stem
 
 

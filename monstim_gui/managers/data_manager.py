@@ -2083,11 +2083,10 @@ class DataManager:
 
     def create_experiment(self, exp_name: str):
         """Create a new empty experiment directory with annotation file."""
-        import json
-        from dataclasses import asdict
         from pathlib import Path
 
         from monstim_signals.core import ExperimentAnnot, get_output_path
+        from monstim_signals.io.repositories import ExperimentRepository
 
         try:
             # Create experiment directory
@@ -2097,8 +2096,7 @@ class DataManager:
 
             # Create empty experiment annotation
             annot = ExperimentAnnot.create_empty()
-            annot_file = exp_path / "experiment.annot.json"
-            annot_file.write_text(json.dumps(asdict(annot), indent=2))
+            ExperimentRepository(exp_path).save_annotation(annot)
 
             # Add to GUI's experiment dictionary
             self.gui.expts_dict[exp_name] = str(exp_path)
@@ -2393,7 +2391,9 @@ class DataManager:
                         # while making the duplicate's display name distinct.
                         suffix = dest_path.name[len(dataset_folder_name) :]
                         annotation["condition"] = f"{annotation['condition']}{suffix}"
-                    annotation_path.write_text(json.dumps(annotation, indent=2))
+                    from monstim_signals.io.repositories import DatasetRepository
+
+                    DatasetRepository(dest_path).save_annotation(annotation, refresh_catalog=False)
             from monstim_signals.io.experiment_catalog import copy_catalog_dataset
 
             if not copy_catalog_dataset(from_exp_path, to_exp_path, source_path, dest_path):

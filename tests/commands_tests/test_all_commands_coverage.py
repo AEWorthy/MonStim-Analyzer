@@ -386,6 +386,7 @@ class TestSetChildCompletionStatusCommand:
 
     def test_marks_all_experiment_datasets(self, tmp_path):
         from monstim_signals.core import DatasetAnnot
+        from monstim_signals.io.repositories import DatasetRepository
 
         def make_dataset(dataset_id: str, completed: bool):
             folder = tmp_path / dataset_id
@@ -398,7 +399,7 @@ class TestSetChildCompletionStatusCommand:
             class Dataset:
                 def __init__(self):
                     self.id = dataset_id
-                    self.repo = SimpleNamespace(folder=folder, dataset_js=annotation_path)
+                    self.repo = DatasetRepository(folder)
                     self.annot = annot
 
                 @property

@@ -1,11 +1,9 @@
-import json
 import logging
 
 logger = logging.getLogger(__name__)
 import traceback
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -15,6 +13,7 @@ import numpy as np
 
 from monstim_signals.core import RecordingAnnot
 from monstim_signals.io.csv_parser import parse
+from monstim_signals.io.repositories import RecordingRepository
 from monstim_signals.version import DATA_VERSION
 
 lock = Lock()
@@ -118,8 +117,7 @@ def csv_to_store(
     else:
         if meta_path.exists() and overwrite_meta:
             logger.warning(f"Meta file {meta_path} already exists. Overwriting it.")
-        with meta_path.open("w") as f:
-            json.dump(meta_dict, f, indent=4)
+        RecordingRepository(output_fp).save_metadata(meta_dict)
 
     # Write annotation JSON
     annot_path = output_fp.with_suffix(".annot.json")
@@ -128,9 +126,8 @@ def csv_to_store(
     else:
         if annot_path.exists() and overwrite_annot:
             logger.warning(f"Annotation file {annot_path} already exists. Overwriting it.")
-        with annot_path.open("w") as f:
-            annot = RecordingAnnot.create_empty()
-            json.dump(asdict(annot), f, indent=2)
+        annot = RecordingAnnot.create_empty()
+        RecordingRepository(output_fp).save_annotation(annot, refresh_catalog=False)
 
 
 def get_dataset_session_dict(dataset_path: Path) -> dict[str, list[Path]]:

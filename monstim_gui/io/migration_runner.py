@@ -16,6 +16,13 @@ from monstim_signals.io.data_migrations import (
 logger = logging.getLogger(__name__)
 
 
+def _save_migrated_annotation(path: Path, annotation: dict) -> None:
+    """Persist a migrated annotation through its hierarchy repository."""
+    from monstim_signals.io.repositories import save_annotation_file
+
+    save_annotation_file(path, annotation)
+
+
 class MigrationRunner(QThread):
     finished = Signal(int)  # number of files migrated
     error = Signal(str)
@@ -73,7 +80,7 @@ class MigrationRunner(QThread):
                     report = migrate_annotation_dict(data, in_place=True, strict_version=False)
                     if report.changed:
                         try:
-                            path.write_text(json.dumps(data, indent=2))
+                            _save_migrated_annotation(path, data)
                             migrated += 1
                         except Exception:
                             logger.exception("Failed to write migrated annotation: %s", path)

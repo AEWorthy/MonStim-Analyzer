@@ -24,6 +24,8 @@ from pathlib import Path
 
 from packaging.version import parse as parse_version
 
+from monstim_signals.io.repositories import save_annotation_file
+
 TARGET_VERSION = parse_version("2.1.0")  # 2.1.0 is first version with date fields
 TARGET_DIR = Path(__file__).parent.parent / "data"  # Set to data folder of root
 
@@ -68,7 +70,7 @@ def process_file(path: Path, now_iso: str) -> bool:
 
     if changed:  # Write updated JSON back to file
         try:
-            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            save_annotation_file(path, data, update_modified=False)
             logger.info(f"Updated dates in {path}")
             return True
         except Exception as e:

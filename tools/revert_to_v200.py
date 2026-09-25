@@ -4,6 +4,8 @@ import logging
 import sys
 from pathlib import Path
 
+from monstim_signals.io.repositories import save_annotation_file
+
 """
 Revert annotations under a folder to data_version '2.0.0' and remove catalog files.
 
@@ -58,11 +60,7 @@ def rewrite_annotation_version(path: Path, dry_run: bool) -> bool:
 
     if changed and not dry_run:
         try:
-            tmp = path.with_suffix(path.suffix + ".tmp")
-            with tmp.open("w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-                f.write("\n")
-            tmp.replace(path)
+            save_annotation_file(path, data, update_modified=False)
         except Exception:
             logger.exception(f"Failed to write updated annotation: {path}")
             return False
